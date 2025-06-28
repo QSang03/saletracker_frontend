@@ -3,6 +3,7 @@ export interface Role {
   id: number;
   name: string;
   permissions: Permission[];
+  role_permissions?: RolePermission[];
 }
 
 export interface Department {
@@ -30,3 +31,9 @@ export interface User {
   updatedAt?: Date;
   lastLogin?: Date;
 }
+
+export type RolePermission = {
+  role_id: string;
+  permission_id: string;
+  is_active: boolean;
+};

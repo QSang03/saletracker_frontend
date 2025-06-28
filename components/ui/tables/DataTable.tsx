@@ -11,9 +11,10 @@ import {
 
 interface DataTableProps {
   headers: string[];
-  rows: (string | number)[][];
+  rows: any[][];
   startIndex?: number;
   expectedRowCount?: number;
+  renderCell?: (rowIndex: number, colIndex: number, value: any) => React.ReactNode;
 }
 
 export default function DataTable({
@@ -21,6 +22,7 @@ export default function DataTable({
   rows,
   startIndex = 0,
   expectedRowCount = rows.length,
+  renderCell,
 }: DataTableProps) {
   return (
     <div
@@ -63,7 +65,7 @@ export default function DataTable({
                 </TableCell>
                 {headers.map((_, i) => (
                   <TableCell key={i} className="whitespace-pre-wrap px-3 py-2">
-                    {row[i]}
+                    {renderCell ? renderCell(index, i, row[i]) : row[i]}
                   </TableCell>
                 ))}
               </TableRow>

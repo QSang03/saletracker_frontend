@@ -4,6 +4,7 @@ import './globals.css'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { Providers } from './providers'
+import { ThemeToggle } from "../components/theme-toggle";
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
@@ -23,6 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           {children}
           <Toaster position="top-center" richColors />
+          <div className="fixed z-50 bottom-10 right-6">
+            <ThemeToggle />
+          </div>
         </Providers>
       </body>
     </html>
