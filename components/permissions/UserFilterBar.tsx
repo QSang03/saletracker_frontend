@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,13 +10,8 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-interface FilterParams {
-  search?: string;
-  role?: string;
-  department?: string;
-  status?: string;
-}
+import { FilterParams } from "../../types";
+import { useState } from "react";
 
 const ALL_VALUE = "all";
 const statuses = ["active", "inactive"];

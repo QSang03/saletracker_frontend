@@ -1,11 +1,7 @@
 "use client";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -14,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState, useEffect } from "react";
+import { MultiSelect, MultiSelectTrigger, MultiSelectValue, MultiSelectContent, MultiSelectItem } from "@/components/ui/multi-select";
 import { Role, User, Department } from "@/types";
 
 interface PermissionEditorModalProps {
@@ -38,16 +34,24 @@ export function PermissionEditorModal({
     setEditUser({ ...user });
   }, [user]);
 
-  const handleSave = () => {
-    onSave(editUser);
-  };
-
-  // Hàm xử lý cập nhật department
-  const handleDepartmentChange = (value: string) => {
+  // Cập nhật role (chọn một)
+  const handleRoleChange = (value: string) => {
     setEditUser(prev => ({
       ...prev,
-      department: { name: value } as Department
+      roles: [{ name: value } as Role]
     }));
+  };
+
+  // Cập nhật departments (chọn nhiều)
+  const handleDepartmentsChange = (selected: string[]) => {
+    setEditUser(prev => ({
+      ...prev,
+      departments: selected.map(name => ({ name } as Department))
+    }));
+  };
+
+  const handleSave = () => {
+    onSave(editUser);
   };
 
   return (
@@ -62,43 +66,48 @@ export function PermissionEditorModal({
         <div className="space-y-4">
           <div className="flex gap-4">
             {/* Select Vai trò */}
-            <Select
-              value={editUser.roles[0]?.name || ""}
-              onValueChange={(value) => {
-                setEditUser(prev => ({
-                  ...prev,
-                  roles: [{ name: value } as Role]
-                }));
-              }}
-            >
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Vai trò" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableRoles.map(role => (
-                  <SelectItem key={role} value={role}>
-                    {role}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex-1">
+              <label className="text-sm font-medium text-muted-foreground mb-1 block">
+                Vai trò
+              </label>
+              <Select
+                value={editUser.roles[0]?.name || ""}
+                onValueChange={handleRoleChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Vai trò" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableRoles.map(role => (
+                    <SelectItem key={role} value={role}>
+                      {role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            {/* Select Phòng ban */}
-            <Select
-              value={editUser.department?.name || ""}
-              onValueChange={handleDepartmentChange}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Phòng ban" />
-              </SelectTrigger>
-              <SelectContent>
-                {departments.map(dep => (
-                  <SelectItem key={dep} value={dep}>
-                    {dep}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Select Phòng ban (nhiều lựa chọn) */}
+            <div className="flex-1">
+              <label className="text-sm font-medium text-muted-foreground mb-1 block">
+                Phòng ban
+              </label>
+              <MultiSelect
+                values={editUser.departments.map(d => d.name)}
+                onValuesChange={handleDepartmentsChange}
+              >
+                <MultiSelectTrigger>
+                  <MultiSelectValue placeholder="Chọn phòng ban" />
+                </MultiSelectTrigger>
+                <MultiSelectContent>
+                  {departments.map(dep => (
+                    <MultiSelectItem key={dep} value={dep}>
+                      {dep}
+                    </MultiSelectItem>
+                  ))}
+                </MultiSelectContent>
+              </MultiSelect>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

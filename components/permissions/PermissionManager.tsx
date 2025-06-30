@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import UserFilterBar from "@/components/permissions/UserFilterBar";
 import { PermissionEditorModal } from "@/components/permissions/PermissionEditorModal";
-import { User } from "../../types";
+import { User } from "@/types";
 import DataTable from "../ui/tables/DataTable";
 import { Settings } from "lucide-react";
 import { RolePermissionModal } from "@/components/permissions/RolePermissionModal";
@@ -33,20 +33,29 @@ export default function PermissionManager({
     const searchLower = filters.search?.toLowerCase() || "";
     
     const filtered = users.filter(user => {
+      // Lọc theo tìm kiếm
       if (searchLower && 
           !user.username.toLowerCase().includes(searchLower) &&
           !(user.fullName && user.fullName.toLowerCase().includes(searchLower))) {
         return false;
       }
+      
+      // Lọc theo role
       if (filters.role && !user.roles.some(r => r.name === filters.role)) {
         return false;
       }
-      if (filters.department && user.department?.name !== filters.department) {
+      
+      // Lọc theo department (kiểm tra trong mảng departments)
+      if (filters.department && 
+          !user.departments.some(d => d.name === filters.department)) {
         return false;
       }
+      
+      // Lọc theo status
       if (filters.status && user.status !== filters.status) {
         return false;
       }
+      
       return true;
     });
 
@@ -58,8 +67,10 @@ export default function PermissionManager({
   );
   
   const availableDepartments = Array.from(
-    new Set(users.map(user => user.department?.name).filter(Boolean))
-  ) as string[];
+    new Set(users.flatMap(user => 
+      user.departments.map(d => d.name)
+    ))
+  );
 
   // Chuẩn bị headers và rows cho DataTable
   const headers = [
@@ -76,8 +87,8 @@ export default function PermissionManager({
     user.username,
     user.email || "-",
     user.roles.map((role) => role.name).join(", "),
-    user.department?.name || "-",
-    user, // Truyền nguyên user để lát render nút Chỉnh sửa
+    user.departments.map(d => d.name).join(", ") || "-", // Hiển thị danh sách phòng ban
+    user,
   ]);
 
   return (
@@ -136,17 +147,11 @@ export default function PermissionManager({
         )}
       </CardContent>
       
-      {/* Modal phân quyền role */}
       {showRolePermissionModal && (
         <RolePermissionModal
           onClose={() => setShowRolePermissionModal(false)}
           onSave={(permissions) => {
             console.log("Permissions updated:", permissions);
-            // Gọi API để lưu phân quyền vào database
-            // fetch("/api/role-permissions", {
-            //   method: "POST",
-            //   body: JSON.stringify(permissions)
-            // });
             setShowRolePermissionModal(false);
           }}
         />

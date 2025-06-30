@@ -1,31 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { RolePermission } from "@/types";
 
-// Danh sách các quyền
 const PERMISSIONS = [
-  { id: "create", name: "Tạo mới" },
-  { id: "read", name: "Xem" },
-  { id: "update", name: "Sửa" },
-  { id: "delete", name: "Xóa" },
-  { id: "import", name: "Nhập dữ liệu" },
-  { id: "export", name: "Xuất dữ liệu" },
+  { id: 1, action: "create" },
+  { id: 2, action: "read" },
+  { id: 3, action: "update" },
+  { id: 4, action: "delete" },
+  { id: 5, action: "import" },
+  { id: 6, action: "export" },
 ];
 
-// Các role cần phân quyền
 const ROLES = [
-  { id: "user", name: "Người dùng thường" },
-  { id: "manager", name: "Quản lý" },
-  { id: "admin", name: "Quản trị viên" },
+  { id: 1, name: "Người dùng thường" },
+  { id: 2, name: "Quản lý" },
+  { id: 3, name: "Quản trị viên" },
 ];
 
 interface PermissionState {
-  [roleId: string]: {
-    [permissionId: string]: boolean;
+  [roleId: number]: {
+    [permissionId: number]: boolean;
   };
 }
 
@@ -34,51 +37,53 @@ export function RolePermissionModal({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (permissions: any) => void;
+  onSave: (permissions: RolePermission[]) => void;
 }) {
-  // Khởi tạo state với các quyền mặc định
   const [permissions, setPermissions] = useState<PermissionState>(() => {
     const initialState: PermissionState = {};
-    
-    ROLES.forEach(role => {
+
+    ROLES.forEach((role) => {
       initialState[role.id] = {};
-      PERMISSIONS.forEach(permission => {
-        // Mặc định: Admin có tất cả quyền, Manager có CRUD, User chỉ có Read
-        initialState[role.id][permission.id] = 
-          role.id === "admin" ? true :
-          role.id === "manager" ? ["create", "read", "update", "delete"].includes(permission.id) :
-          permission.id === "read";
+      PERMISSIONS.forEach((permission) => {
+        initialState[role.id][permission.id] =
+          role.id === 3
+            ? true // Admin
+            : role.id === 2
+            ? ["create", "update", "delete"].includes(permission.action) // Manager
+            : permission.action === "read"; // User
       });
     });
-    
+
     return initialState;
   });
 
-  // Xử lý thay đổi trạng thái
-  const handlePermissionChange = (roleId: string, permissionId: string, checked: boolean) => {
-    setPermissions(prev => ({
+  const handlePermissionChange = (
+    roleId: number,
+    permissionId: number,
+    checked: boolean
+  ) => {
+    setPermissions((prev) => ({
       ...prev,
       [roleId]: {
         ...prev[roleId],
         [permissionId]: checked,
-      }
+      },
     }));
   };
 
-  // Chuẩn bị dữ liệu để lưu
-  const prepareSaveData = () => {
-    const result: any[] = [];
-    
-    ROLES.forEach(role => {
-      PERMISSIONS.forEach(permission => {
+  const prepareSaveData = (): RolePermission[] => {
+    const result: RolePermission[] = [];
+
+    ROLES.forEach((role) => {
+      PERMISSIONS.forEach((permission) => {
         result.push({
-          role_id: role.id,
-          permission_id: permission.id,
-          is_active: permissions[role.id][permission.id]
+          roleId: role.id,
+          permissionId: permission.id,
+          isActive: permissions[role.id][permission.id],
         });
       });
     });
-    
+
     return result;
   };
 
@@ -88,16 +93,17 @@ export function RolePermissionModal({
         <DialogHeader>
           <DialogTitle>Phân quyền cho Role</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Bật/tắt quyền cho từng role. Quyền được bật sẽ có hiệu lực ngay lập tức.
+            Bật/tắt quyền cho từng role. Quyền được bật sẽ có hiệu lực ngay lập
+            tức.
           </p>
         </DialogHeader>
-        
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr>
                 <th className="text-left p-2 border-b">Quyền</th>
-                {ROLES.map(role => (
+                {ROLES.map((role) => (
                   <th key={role.id} className="text-center p-2 border-b">
                     {role.name}
                   </th>
@@ -105,17 +111,25 @@ export function RolePermissionModal({
               </tr>
             </thead>
             <tbody>
-              {PERMISSIONS.map(permission => (
+              {PERMISSIONS.map((permission) => (
                 <tr key={permission.id} className="border-b hover:bg-muted/50">
-                  <td className="p-3">{permission.name}</td>
-                  {ROLES.map(role => (
-                    <td key={`${role.id}-${permission.id}`} className="text-center p-3">
+                  <td className="p-3">{permission.action}</td>
+                  {ROLES.map((role) => (
+                    <td
+                      key={`${role.id}-${permission.id}`}
+                      className="text-center p-3"
+                    >
                       <div className="flex justify-center">
                         <Checkbox
-                          id={`${role.id}-${permission.id}`}
-                          checked={permissions[role.id]?.[permission.id] || false}
-                          onCheckedChange={(checked) => 
-                            handlePermissionChange(role.id, permission.id, !!checked)
+                          checked={
+                            permissions[role.id]?.[permission.id] || false
+                          }
+                          onCheckedChange={(checked) =>
+                            handlePermissionChange(
+                              role.id,
+                              permission.id,
+                              !!checked
+                            )
                           }
                         />
                       </div>
@@ -126,15 +140,12 @@ export function RolePermissionModal({
             </tbody>
           </table>
         </div>
-        
+
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={onClose}>
             Hủy
           </Button>
-          <Button 
-            variant="gradient"
-            onClick={() => onSave(prepareSaveData())}
-          >
+          <Button variant="gradient" onClick={() => onSave(prepareSaveData())}>
             Lưu phân quyền
           </Button>
         </div>
