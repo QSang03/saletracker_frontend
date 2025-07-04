@@ -172,6 +172,11 @@ export function ChartBarDeals() {
   } | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
 
+  // Phân trang cho bảng trong modal
+  const [page, setPage] = useState(1);
+  const pageSize = 5;
+  const total = fakeTableData.length;
+
   const allData = fakeTableData.map((_, i) => ({
     timestamp: Date.parse(
       "2025-06-" + (19 + i).toString().padStart(2, "0") + "T17:45:04"
@@ -208,6 +213,12 @@ export function ChartBarDeals() {
     setOpen(true);
   };
 
+  // Lấy dữ liệu trang hiện tại cho bảng
+  const paginatedRows = fakeTableData.slice(
+    (page - 1) * pageSize,
+    page * pageSize
+  );
+
   return (
     <>
       <Card>
@@ -226,7 +237,7 @@ export function ChartBarDeals() {
             />
           </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <DateRangePicker
               locale="vi"
               initialDateRange={dateRange}
@@ -241,7 +252,7 @@ export function ChartBarDeals() {
             >
               Đặt lại bộ lọc
             </Button>
-            </div>
+          </div>
 
           <div className="w-full max-h-93">
             <GenericBarChart
@@ -297,7 +308,12 @@ export function ChartBarDeals() {
                 "Giá",
                 "Trạng thái",
               ]}
-              rows={fakeTableData}
+              rows={paginatedRows}
+              page={page}
+              total={fakeTableData.length}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              emptyText="Không có dữ liệu."
             />
           </div>
         </DialogContent>

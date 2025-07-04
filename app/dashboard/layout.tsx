@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import {
   Breadcrumb,
@@ -18,9 +18,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { NavUserInline } from "@/components/dashboard/nav-user-inline";
-import { getAccessToken } from "@/lib/auth";
+import { getAccessToken, clearAccessToken } from "@/lib/auth";
 import { toast } from "sonner";
 import type { User } from "@/types";
+import { LoginSocket } from "@/components/auth/LoginSocket";
 
 export default function DashboardLayout({
   children,
@@ -28,6 +29,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [activeUrl, setActiveUrl] = useState(pathname);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +71,16 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider>
+      {currentUser && (
+        <LoginSocket
+          userId={currentUser.id}
+          onBlocked={() => {
+            clearAccessToken();
+            toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
+            router.push("/login");
+          }}
+        />
+      )}
       <AppSidebar activeUrl={activeUrl} setActiveUrl={setActiveUrl} />
       <SidebarInset>
         <div className="flex flex-col bg-background text-foreground transition-colors">

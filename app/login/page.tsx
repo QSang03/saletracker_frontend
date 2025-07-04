@@ -42,7 +42,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
 
-      if (res.ok && data.access_token) {
+      if (res.ok && data.access_token && data.user && !data.user.isBlock) {
         const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         document.cookie = `access_token=${
           data.access_token
@@ -51,14 +51,21 @@ export default function LoginPage() {
         }`;
 
         toast.success("🎉 Đăng nhập thành công!");
-
         window.location.href = callbackUrl;
+      } else if (data.user && data.user.isBlock) {
+        document.cookie =
+          "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
+        toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
       } else {
+        document.cookie =
+          "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
         toast.error("Đăng nhập thất bại", {
           description: data.message || "Sai tên đăng nhập hoặc mật khẩu",
         });
       }
     } catch (err) {
+      document.cookie =
+        "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
       toast.error("Lỗi hệ thống", { description: String(err) });
     }
     setLoading(false);
@@ -102,7 +109,7 @@ export default function LoginPage() {
             </CardTitle>
           </CardHeader>
 
-          <CardContent className="space-y-4" onKeyDown={handleKeyDown}>
+          <CardContent className="space-y-4">
             <Input
               type="text"
               placeholder="👤 Tên đăng nhập"
@@ -111,6 +118,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-[300px] mx-auto px-4 py-2 rounded-xl bg-white/60 dark:bg-gray-900/60 text-sm shadow-inner backdrop-blur-md border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-400 transition-all duration-300"
               autoComplete="username"
+              onKeyDown={handleKeyDown}
             />
 
             <div className="relative w-[300px] mx-auto">
@@ -122,6 +130,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full px-4 py-2 rounded-xl bg-white/60 dark:bg-gray-900/60 text-sm shadow-inner backdrop-blur-md border border-transparent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 transition-all duration-300"
                 autoComplete="current-password"
+                onKeyDown={handleKeyDown}
               />
               <motion.button
                 type="button"

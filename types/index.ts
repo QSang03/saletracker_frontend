@@ -4,7 +4,7 @@
 export interface Role {
   id: number;
   name: string;
-  rolePermissions: RolePermission[];
+  rolePermissions?: RolePermission[];
   users?: User[];
 }
 
@@ -12,16 +12,24 @@ export interface Role {
 export interface Department {
   id: number;
   name: string;
+  slug: string;
   users?: User[];
-  departmentPermissions?: DepartmentPermission[];
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  deletedAt?: Date | string;
+  manager?: {
+    id: number;
+    fullName: string;
+    username: string;
+  };
 }
 
 // Permission Entity
 export interface Permission {
   id: number;
+  name: string; // Thêm trường name cho đồng bộ backend (đại diện cho department/module)
   action: string;
   rolePermissions?: RolePermission[];
-  departmentPermissions?: DepartmentPermission[];
 }
 
 // User Entity
@@ -29,17 +37,18 @@ export interface User {
   id: number;
   username: string;
   fullName?: string;
+  nickName?: string;
   email?: string;
-  phone?: string;
-  avatar?: string;
+  employeeCode?: string;
   status: "active" | "inactive";
+  isBlock: boolean;
   password?: string;
   roles: Role[];
   departments: Department[];
-  lastLogin?: Date;
-  createdAt?: Date;
-  updatedAt?: Date;
-  deletedAt?: Date;
+  lastLogin?: Date | string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+  deletedAt?: Date | string;
 }
 
 // RolePermission Entity (bảng trung gian)
@@ -49,18 +58,6 @@ export interface RolePermission {
   permissionId: number;
   isActive: boolean;
   role?: Role;
-  permission?: Permission;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-// DepartmentPermission Entity (bảng trung gian)
-export interface DepartmentPermission {
-  id: number;
-  departmentId: number;
-  permissionId: number;
-  isActive: boolean;
-  department?: Department;
   permission?: Permission;
   createdAt?: Date;
   updatedAt?: Date;
@@ -84,14 +81,22 @@ export interface CreateUserDto {
   username: string;
   password: string;
   fullName?: string;
+  nickName?: string;
   email?: string;
-  phone?: string;
-  avatar?: string;
+  employeeCode?: string;
   status?: "active" | "inactive";
   departmentIds?: number[];
   roleIds?: number[];
 }
 
-export interface UpdateUserDto extends Omit<CreateUserDto, 'password'> {
+export interface ChangeUserLog {
+  id: number;
+  userId: number;
+  fullNames: string[];
+  timeChanges: string[];
+  changerIds: number[];
+}
+
+export interface UpdateUserDto extends Omit<CreateUserDto, "password"> {
   password?: string;
 }

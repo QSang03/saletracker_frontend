@@ -4,24 +4,16 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const publicPaths = ['/login'];
 
-  // Cho phép truy cập public paths
-  if (publicPaths.includes(pathname)) {
-    return NextResponse.next();
-  }
-
-  // Kiểm tra token từ cookie
+  // Lấy token từ cookie
   const token = request.cookies.get('access_token')?.value;
-  
+
   let isValid = false;
-  
+
   if (token) {
     try {
-      // Giải mã payload để lấy thời hạn (không cần verify)
       const payload = JSON.parse(atob(token.split('.')[1]));
       const exp = payload.exp;
-      
       if (exp && typeof exp === 'number' && exp > 0) {
-        // Kiểm tra thời gian hết hạn
         isValid = Date.now() < exp * 1000;
       }
     } catch (error) {
@@ -29,16 +21,22 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Nếu không hợp lệ, chuyển hướng về login
+  // Nếu đã đăng nhập, vào / hoặc /login thì chuyển sang dashboard/transactions
+  if (isValid && (pathname === '/' || pathname === '/login')) {
+    return NextResponse.redirect(new URL('/dashboard/transactions', request.url));
+  }
+
+  // Nếu là public path thì cho qua
+  if (publicPaths.includes(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Nếu chưa đăng nhập hoặc token hết hạn thì chuyển về login
   if (!isValid) {
     const loginUrl = new URL('/login', request.url);
-    
-    // Chỉ set callbackUrl nếu không phải là trang login
-    if (!request.nextUrl.pathname.startsWith('/login')) {
+    if (!pathname.startsWith('/login')) {
       loginUrl.searchParams.set('callbackUrl', request.nextUrl.href);
     }
-    
-    // Xóa cookie token nếu có
     const response = NextResponse.redirect(loginUrl);
     response.cookies.delete('access_token');
     return response;
