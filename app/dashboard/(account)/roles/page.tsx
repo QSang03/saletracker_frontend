@@ -139,7 +139,7 @@ export default function RolesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem-2rem)]">
+    <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
       <Card className="w-full flex-1">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-bold">

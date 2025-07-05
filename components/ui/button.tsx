@@ -18,20 +18,15 @@ const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+          "bg-transparent text-gray-700 dark:text-gray-200 shadow-xs hover:bg-muted/40",
         link: "text-primary underline-offset-4 hover:underline",
-
-        /**
-         * ✅ THÊM kiểu gradient mới theo mẫu ResetFilterButton
-         */
         gradient: "relative overflow-hidden text-white group",
-        // Custom action variants
-        add: "bg-green-600 text-white shadow-xs hover:bg-green-700",
-        edit: "bg-yellow-500 text-white shadow-xs hover:bg-yellow-600",
-        delete: "bg-red-600 text-white shadow-xs hover:bg-red-700",
-        import: "bg-blue-500 text-white shadow-xs hover:bg-blue-600",
-        export: "bg-indigo-600 text-white shadow-xs hover:bg-indigo-700",
-        view: "bg-gray-500 text-white shadow-xs hover:bg-gray-600",
+        add: "bg-gradient-to-r from-green-400 via-lime-400 to-green-600 text-white shadow-xs hover:opacity-90",
+        edit: "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 text-white shadow-xs hover:opacity-90",
+        delete: "bg-gradient-to-r from-red-500 via-pink-500 to-yellow-500 text-white shadow-xs hover:opacity-90",
+        import: "bg-gradient-to-r from-blue-500 via-cyan-400 to-green-400 text-white shadow-xs hover:opacity-90",
+        export: "bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white shadow-xs hover:opacity-90",
+        view: "bg-gradient-to-r from-gray-400 via-gray-200 to-gray-400 text-white shadow-xs hover:opacity-90",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
@@ -47,9 +42,30 @@ const buttonVariants = cva(
   }
 );
 
+// Map màu gradient cho từng variant đặc biệt
+const gradientClassMap: Record<string, string> = {
+  gradient: "bg-gradient-to-r from-fuchsia-600 via-pink-400 to-rose-500",
+  add: "bg-gradient-to-r from-green-400 via-lime-400 to-green-600",
+  edit: "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400",
+  delete: "bg-gradient-to-r from-red-500 via-pink-500 to-yellow-500",
+  import: "bg-gradient-to-r from-blue-500 via-cyan-400 to-green-400",
+  export: "bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500",
+  view: "bg-gradient-to-r from-gray-400 via-gray-200 to-gray-400",
+};
+
+const gradientVariants = [
+  "gradient",
+  "add",
+  "edit",
+  "delete",
+  "import",
+  "export",
+  "view",
+];
+
 function Button({
   className,
-  variant,
+  variant = "default",
   size,
   asChild = false,
   children,
@@ -59,23 +75,31 @@ function Button({
     asChild?: boolean;
   }) {
   const Comp = asChild ? Slot : "button";
-
-  const isGradient = variant === "gradient";
+  const variantKey = (variant ?? "default") as keyof typeof gradientClassMap;
+  const showGradient = gradientVariants.includes(variantKey);
+  const gradientClass = gradientClassMap[variantKey];
 
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size }), className)}
+      className={cn(
+        buttonVariants({ variant, size }),
+        className,
+        showGradient && "relative overflow-hidden group"
+      )}
       {...props}
     >
-      {isGradient ? (
-        <>
-          <span className="absolute inset-0 bg-gradient-to-r from-fuchsia-500 via-pink-500 to-rose-500 transition-all duration-200 group-hover:blur-sm group-hover:scale-125 z-0 rounded-md" />
-          <span className="relative z-10">{children}</span>
-        </>
-      ) : (
-        children
+      {showGradient && (
+        <span
+          className={
+            "absolute inset-0 animate-gradient-x transition-all duration-200 group-hover:blur-sm group-hover:scale-125 z-0 rounded-md " +
+            gradientClass
+          }
+        />
       )}
+      <span className={showGradient ? "relative z-10" : undefined}>
+        {children}
+      </span>
     </Comp>
   );
 }

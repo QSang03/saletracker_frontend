@@ -97,6 +97,34 @@ export interface ChangeUserLog {
   changerIds: number[];
 }
 
+export interface SystemConfig {
+  id: number;
+  name: string;
+  display_name?: string;
+  value: string;
+  type?: string;
+  section?: string;
+  status?: number;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+}
+
+export interface CreateSystemConfigDto {
+  name: string;
+  display_name?: string;
+  value: string;
+  type?: string;
+  section?: string;
+  status?: number;
+}
+
+export interface UpdateSystemConfigDto {
+  value: string;
+  display_name?: string;
+  type?: string;
+  status?: number;
+}
+
 export interface UpdateUserDto extends Omit<CreateUserDto, "password"> {
   password?: string;
 }

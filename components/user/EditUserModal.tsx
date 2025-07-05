@@ -66,7 +66,10 @@ export default function EditUserModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentUserRole === "ADMIN" && !formData.fullName?.trim()) {
+    if (
+      (currentUserRole === "ADMIN" || currentUserRole.startsWith("MANAGER")) &&
+      !formData.fullName?.trim()
+    ) {
       alert("Họ tên không được để trống");
       return;
     }
@@ -75,12 +78,7 @@ export default function EditUserModal({
 
   const handleConfirm = () => {
     let updatedUser: any;
-    if (currentUserRole === "MANAGER") {
-      updatedUser = {
-        id: user.id,
-        employeeCode: formData.employeeCode,
-      };
-    } else {
+    if (currentUserRole === "ADMIN") {
       updatedUser = {
         id: user.id,
         username: formData.username,
@@ -90,10 +88,25 @@ export default function EditUserModal({
         employeeCode: formData.employeeCode,
         departmentIds: formData.departmentIds,
       };
+    } else if (currentUserRole.startsWith("MANAGER")) {
+      updatedUser = {
+        id: user.id,
+        fullName: formData.fullName,
+        nickName: formData.nickName,
+        employeeCode: formData.employeeCode,
+      };
+    } else {
+      updatedUser = {
+        id: user.id,
+        employeeCode: formData.employeeCode,
+      };
     }
     onUpdateUser(updatedUser);
     setShowConfirm(false);
   };
+
+  const canEditFullNameAndNickName =
+    currentUserRole === "ADMIN" || currentUserRole.startsWith("MANAGER");
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -140,20 +153,7 @@ export default function EditUserModal({
               className="mt-1"
             />
           </div>
-          <div>
-            <Label htmlFor="nickName" className="mb-1 block">
-              Tên thể hiện (nick name)
-            </Label>
-            <Input
-              id="nickName"
-              name="nickName"
-              value={formData.nickName}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              className="mt-1"
-            />
-          </div>
-          {currentUserRole === "ADMIN" && (
+          {canEditFullNameAndNickName && (
             <>
               <div>
                 <Label htmlFor="fullName" className="mb-1 block">
@@ -169,6 +169,23 @@ export default function EditUserModal({
                   className="mt-1"
                 />
               </div>
+              <div>
+                <Label htmlFor="nickName" className="mb-1 block">
+                  Tên thể hiện (nick name)
+                </Label>
+                <Input
+                  id="nickName"
+                  name="nickName"
+                  value={formData.nickName}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  className="mt-1"
+                />
+              </div>
+            </>
+          )}
+          {currentUserRole === "ADMIN" && (
+            <>
               <div>
                 <Label htmlFor="email" className="mb-1 block">
                   Email

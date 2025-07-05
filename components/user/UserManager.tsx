@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import UserTable from "@/components/user/UserTable";
-import { DateRange } from "@/components/ui/date-range-picker";
 import ChangeLogManager from "@/components/user/ChangeLogManager";
 
 export default function UserManager() {
@@ -60,13 +59,11 @@ export default function UserManager() {
     departments: (string | number)[];
     roles: (string | number)[];
     statuses: (string | number)[];
-    dateRange: DateRange;
   }>({
     search: "",
     departments: [],
     roles: [],
     statuses: [],
-    dateRange: { from: undefined, to: undefined },
   });
 
   const handleUserLogin = useCallback(() => {

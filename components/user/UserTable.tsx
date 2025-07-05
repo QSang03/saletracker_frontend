@@ -233,7 +233,7 @@ export default function UserTable({
                     </Button>
                   ) : (
                     (currentUserRole === "ADMIN" ||
-                      currentUserRole === "MANAGER") && (
+                      currentUserRole.startsWith("MANAGER")) && (
                       <div className="flex items-center justify-center gap-2">
                         <Button
                           variant="edit"

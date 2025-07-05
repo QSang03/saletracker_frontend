@@ -93,8 +93,8 @@ export function AppSidebar({
       title: "Cài đặt",
       icon: Wrench,
       items: [
-        { title: "Cấu hình hệ thống", url: "/settings/system" },
-        { title: "Cấu hình lịch nghỉ", url: "/settings/holiday" },
+        { title: "Cấu hình hệ thống", url: "/dashboard/config-system" },
+        { title: "Cấu hình lịch nghỉ", url: "/dashboard/holiday" },
       ],
     },
   ];
