@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { getAccessToken } from "@/lib/auth"; // Đảm bảo bạn có hàm này, hoặc sửa lại cho đúng dự án của bạn
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function DepartmentCreateModal({
   open,
@@ -18,6 +19,7 @@ export default function DepartmentCreateModal({
   const [newSlug, setNewSlug] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const slugify = (str: string) =>
     str
@@ -62,45 +64,57 @@ export default function DepartmentCreateModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Tạo phòng ban mới</DialogTitle>
-          <DialogDescription>
-            Nhập tên phòng ban, slug sẽ tự sinh. Khi tạo sẽ tự sinh các quyền cho phòng ban này.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div>
-            <label className="block text-sm font-medium mb-1">Tên phòng ban</label>
-            <Input
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="Nhập tên phòng ban"
-              autoFocus
-            />
+    <>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tạo phòng ban mới</DialogTitle>
+            <DialogDescription>
+              Nhập tên phòng ban, slug sẽ tự sinh. Khi tạo sẽ tự sinh các quyền cho phòng ban này.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Tên phòng ban</label>
+              <Input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="Nhập tên phòng ban"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Slug</label>
+              <Input value={newSlug} readOnly />
+            </div>
+            {error && (
+              <div className="text-red-500 text-sm mt-1">{error}</div>
+            )}
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Slug</label>
-            <Input value={newSlug} readOnly />
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={onClose}>
+              Hủy
+            </Button>
+            <Button
+              variant="gradient"
+              onClick={() => setShowConfirm(true)}
+              disabled={isSubmitting || !newName.trim()}
+            >
+              {isSubmitting ? <LoadingSpinner size={18} /> : "Tạo"}
+            </Button>
           </div>
-          {error && (
-            <div className="text-red-500 text-sm mt-1">{error}</div>
-          )}
-        </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button
-            variant="gradient"
-            onClick={handleCreate}
-            disabled={isSubmitting || !newName.trim()}
-          >
-            {isSubmitting ? <LoadingSpinner size={18} /> : "Tạo"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        isOpen={showConfirm}
+        title="Xác nhận tạo phòng ban"
+        message={`Bạn có chắc chắn muốn tạo phòng ban mới với tên "${newName}"?`}
+        onConfirm={() => {
+          setShowConfirm(false);
+          handleCreate();
+        }}
+        onCancel={() => setShowConfirm(false)}
+      />
+    </>
   );
 }

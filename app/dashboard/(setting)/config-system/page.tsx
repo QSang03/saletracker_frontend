@@ -11,6 +11,7 @@ import ToolScheduleConfigModal from "@/components/config-system/ToolScheduleConf
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken } from "@/lib/auth";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function ConfigSystemPage() {
   const [openDebt, setOpenDebt] = useState(false);
@@ -26,6 +27,11 @@ export default function ConfigSystemPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Confirm dialog state for ConfigSystemMainPanel
+  const [confirmState, setConfirmState] = useState<{ open: boolean; onConfirm?: () => void; message?: string }>(
+    { open: false }
+  );
 
   // Fetch toàn bộ system_config khi vào page
   useEffect(() => {
@@ -80,7 +86,7 @@ export default function ConfigSystemPage() {
       setOpenToolSchedule(false);
       setOpenTool(false);
       setOpenDebt(false);
-      setOpenHoliday(false);
+      // setOpenHoliday(false); // Không tự động đóng modal HolidayConfigModal nữa
       // Refetch lại toàn bộ config để cập nhật UI
       setLoadingAllConfigs(true);
       const token = getAccessToken
@@ -110,6 +116,11 @@ export default function ConfigSystemPage() {
   const toolScheduleData = toolScheduleConfig?.value
     ? JSON.parse(toolScheduleConfig.value)
     : null;
+
+  // Pass confirm dialog handler to ConfigSystemMainPanel
+  const handlePanelConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmState({ open: true, onConfirm, message });
+  };
 
   return (
     <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
@@ -148,14 +159,24 @@ export default function ConfigSystemPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <ConfigSystemMainPanel allConfigs={allConfigs} />
+          <ConfigSystemMainPanel
+            allConfigs={allConfigs}
+            onConfirm={handlePanelConfirm}
+            onSaved={handleAnyConfigSaved}
+          />
         </CardContent>
       </Card>
-      <DebtConfigModal open={openDebt} onClose={() => setOpenDebt(false)} />
+      <DebtConfigModal
+        open={openDebt}
+        onClose={() => setOpenDebt(false)}
+        allConfigs={allConfigs}
+        onSaved={handleAnyConfigSaved}
+      />
       <HolidayConfigModal
         open={openHoliday}
         allConfigs={allConfigs}
         onClose={() => setOpenHoliday(false)}
+        onSaved={handleAnyConfigSaved}
       />
       <ToolToggleConfigModal
         open={openTool}
@@ -168,6 +189,16 @@ export default function ConfigSystemPage() {
         onClose={() => setOpenToolSchedule(false)}
         allConfigs={allConfigs}
         onSaved={handleAnyConfigSaved}
+      />
+      <ConfirmDialog
+        isOpen={confirmState.open}
+        title="Xác nhận lưu cấu hình"
+        message={confirmState.message || "Bạn có chắc chắn muốn lưu cấu hình này?"}
+        onConfirm={() => {
+          setConfirmState({ open: false });
+          confirmState.onConfirm && confirmState.onConfirm();
+        }}
+        onCancel={() => setConfirmState({ open: false })}
       />
     </div>
   );

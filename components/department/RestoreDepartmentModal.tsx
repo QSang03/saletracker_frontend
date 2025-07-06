@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { getAccessToken } from "@/lib/auth";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function RestoreDepartmentModal({
   open,
@@ -18,6 +19,7 @@ export default function RestoreDepartmentModal({
   >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [confirmRestoreId, setConfirmRestoreId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchDeletedDepartments = async () => {
@@ -77,56 +79,72 @@ export default function RestoreDepartmentModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Khôi phục phòng ban đã xóa</DialogTitle>
-        </DialogHeader>
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <LoadingSpinner size={32} />
-          </div>
-        ) : (
-          <div>
-            {error && <div className="text-red-500 mb-2">{error}</div>}
-            {departments.length === 0 ? (
-              <div className="text-center text-gray-500 py-4">Không có phòng ban nào đã xóa.</div>
-            ) : (
-              <table className="w-full text-sm border">
-                <thead>
-                  <tr>
-                    <th className="px-2 py-1 border">Tên phòng ban</th>
-                    <th className="px-2 py-1 border">Slug</th>
-                    <th className="px-2 py-1 border">Ngày xóa</th>
-                    <th className="px-2 py-1 border">Khôi phục</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(Array.isArray(departments) ? departments : []).map(dep => (
-                    <tr key={dep.id}>
-                      <td className="px-2 py-1 border">{dep.name}</td>
-                      <td className="px-2 py-1 border">{dep.slug}</td>
-                      <td className="px-2 py-1 border">
-                        {dep.deletedAt ? new Date(dep.deletedAt).toLocaleString() : "-"}
-                      </td>
-                      <td className="px-2 py-1 border text-center">
-                        <Button
-                          size="sm"
-                          variant="gradient"
-                          disabled={restoringId === dep.id}
-                          onClick={() => handleRestore(dep.id)}
-                        >
-                          {restoringId === dep.id ? <LoadingSpinner size={16} /> : "Khôi phục"}
-                        </Button>
-                      </td>
+    <>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Khôi phục phòng ban đã xóa</DialogTitle>
+          </DialogHeader>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner size={32} />
+            </div>
+          ) : (
+            <div>
+              {error && <div className="text-red-500 mb-2">{error}</div>}
+              {departments.length === 0 ? (
+                <div className="text-center text-gray-500 py-4">Không có phòng ban nào đã xóa.</div>
+              ) : (
+                <table className="w-full text-sm border">
+                  <thead>
+                    <tr>
+                      <th className="px-2 py-1 border">Tên phòng ban</th>
+                      <th className="px-2 py-1 border">Slug</th>
+                      <th className="px-2 py-1 border">Ngày xóa</th>
+                      <th className="px-2 py-1 border">Khôi phục</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+                  </thead>
+                  <tbody>
+                    {(Array.isArray(departments) ? departments : []).map(dep => (
+                      <tr key={dep.id}>
+                        <td className="px-2 py-1 border">{dep.name}</td>
+                        <td className="px-2 py-1 border">{dep.slug}</td>
+                        <td className="px-2 py-1 border">
+                          {dep.deletedAt ? new Date(dep.deletedAt).toLocaleString() : "-"}
+                        </td>
+                        <td className="px-2 py-1 border text-center">
+                          <Button
+                            size="sm"
+                            variant="gradient"
+                            disabled={restoringId === dep.id}
+                            onClick={() => setConfirmRestoreId(dep.id)}
+                          >
+                            {restoringId === dep.id ? <LoadingSpinner size={16} /> : "Khôi phục"}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        isOpen={confirmRestoreId !== null}
+        title="Xác nhận khôi phục"
+        message={
+          confirmRestoreId !== null
+            ? `Bạn có chắc chắn muốn khôi phục phòng ban này?`
+            : ""
+        }
+        onConfirm={() => {
+          if (confirmRestoreId !== null) handleRestore(confirmRestoreId);
+          setConfirmRestoreId(null);
+        }}
+        onCancel={() => setConfirmRestoreId(null)}
+      />
+    </>
   );
 }
