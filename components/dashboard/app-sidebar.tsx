@@ -84,7 +84,6 @@ export function AppSidebar({
       title: "Thông tin",
       icon: UserCircle,
       items: [
-        { title: "Thông tin cá nhân", url: "/profile/info" },
         { title: "Liên kết tài khoản", url: "/profile/link-account" },
         { title: "Zalo NKC", url: "/profile/zalo-nkc" },
       ],

@@ -27,6 +27,7 @@ export default function AddUserModal({
   const [formData, setFormData] = useState<CreateUserDto>({
     username: "",
     fullName: "",
+    nickName: "",
     email: "",
     password: "",
     employeeCode: "",
@@ -40,6 +41,7 @@ export default function AddUserModal({
       setFormData({
         username: "",
         fullName: "",
+        nickName: "",
         email: "",
         password: "",
         employeeCode: "",
@@ -151,6 +153,19 @@ export default function AddUserModal({
               value={formData.fullName}
               onChange={handleChange}
               required
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="nickName" className="mb-1 block">
+              Tên thể hiện (nickname)
+            </Label>
+            <Input
+              id="nickName"
+              name="nickName"
+              autoComplete="off"
+              value={formData.nickName || ""}
+              onChange={handleChange}
               className="mt-1"
             />
           </div>

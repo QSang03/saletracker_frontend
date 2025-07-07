@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { ProfileModal } from "@/components/dashboard/ProfileModal";
+import type { User } from "@/types";
 
 // Hàm lấy cookie từ client-side
 function getCookie(name: string): string | null {
@@ -44,6 +47,8 @@ export function NavUserInline({
   };
 }) {
   const router = useRouter();
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileUser, setProfileUser] = useState<User | null>(null);
 
   const handleLogout = async () => {
     try {
@@ -103,7 +108,22 @@ export function NavUserInline({
         align="end"
         sideOffset={6}
       >
-        <DropdownMenuLabel className="p-0 font-normal cursor-pointer">
+        <DropdownMenuLabel className="p-0 font-normal cursor-pointer" onClick={async () => {
+          setShowProfile(true);
+          // Lấy lại thông tin user chi tiết từ API để truyền vào modal
+          try {
+            const token = getCookie('access_token');
+            if (token) {
+              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/profile`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                setProfileUser(data);
+              }
+            }
+          } catch {}
+        }}>
           <div className="flex items-center gap-2 px-3 py-3">
             <Avatar className="h-9 w-9 border border-white dark:border-gray-700 cursor-pointer">
               <AvatarImage alt={user.name} />
@@ -119,6 +139,15 @@ export function NavUserInline({
             </div>
           </div>
         </DropdownMenuLabel>
+        <ProfileModal
+          open={showProfile}
+          onOpenChange={setShowProfile}
+          userData={profileUser}
+          onUserUpdate={(u) => {
+            setProfileUser(u);
+            // Nếu muốn cập nhật lại user info ở NavUserInline, cần truyền prop hoặc reload lại
+          }}
+        />
 
         <DropdownMenuSeparator />
 
