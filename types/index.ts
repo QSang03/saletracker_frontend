@@ -128,3 +128,22 @@ export interface UpdateSystemConfigDto {
 export interface UpdateUserDto extends Omit<CreateUserDto, "password"> {
   password?: string;
 }
+
+// Product Entity
+export interface Category {
+  id: number;
+  catName: string;
+}
+
+export interface Brand {
+  id: number;
+  name: string;
+  descriptions: string;
+}
+
+export interface Product {
+  id: number;
+  productName: string;
+  categories?: Category[];
+  brand?: Brand;
+}

@@ -1,5 +1,10 @@
 import * as React from "react";
-import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import {
+  Command,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 
 export interface Option {
@@ -12,6 +17,7 @@ interface MultiSelectComboboxProps {
   value: (string | number)[];
   onChange: (value: (string | number)[]) => void;
   placeholder?: string;
+  className?: string; // ✅ Cho phép truyền className từ bên ngoài
 }
 
 export function MultiSelectCombobox({
@@ -19,6 +25,7 @@ export function MultiSelectCombobox({
   value,
   onChange,
   placeholder = "Chọn...",
+  className = "", // ✅ Mặc định rỗng
 }: MultiSelectComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -31,7 +38,7 @@ export function MultiSelectCombobox({
   };
 
   return (
-    <div className="relative">
+    <div className={`relative ${className}`}>
       <Button
         type="button"
         variant="outline"
@@ -46,6 +53,7 @@ export function MultiSelectCombobox({
               .join(", ")}
         <span className="ml-2">&#9662;</span>
       </Button>
+
       {open && (
         <div className="absolute z-50 mt-2 w-full bg-white border rounded shadow">
           <Command>
@@ -70,25 +78,28 @@ export function MultiSelectCombobox({
           </Command>
         </div>
       )}
-      <div className="flex flex-wrap gap-1 mt-2">
-        {options
-          .filter((opt) => value.includes(opt.value))
-          .map((opt) => (
-            <span
-              key={opt.value}
-              className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs flex items-center"
-            >
-              {opt.label}
-              <button
-                type="button"
-                className="ml-1 text-xs"
-                onClick={() => handleSelect(opt.value)}
+
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {options
+            .filter((opt) => value.includes(opt.value))
+            .map((opt) => (
+              <span
+                key={opt.value}
+                className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs flex items-center"
               >
-                ×
-              </button>
-            </span>
-          ))}
-      </div>
+                {opt.label}
+                <button
+                  type="button"
+                  className="ml-1 text-xs"
+                  onClick={() => handleSelect(opt.value)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+        </div>
+      )}
     </div>
   );
 }

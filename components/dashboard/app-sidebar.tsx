@@ -67,7 +67,8 @@ export function AppSidebar({
       title: "Product Manager",
       icon: Terminal,
       items: [
-        { title: "Quản lý giao dịch cho PM", url: "/pm/transactions" },
+        { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-products" },
+        { title: "Quản lý sản phẩm", url: "/dashboard/products" },
       ],
     },
     {
