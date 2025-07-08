@@ -22,6 +22,7 @@ import { getAccessToken, clearAccessToken } from "@/lib/auth";
 import { toast } from "sonner";
 import type { User } from "@/types";
 import { LoginSocket } from "@/components/auth/LoginSocket";
+import { CurrentUserContext } from "@/contexts/CurrentUserContext";
 
 export default function DashboardLayout({
   children,
@@ -71,48 +72,45 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider>
-      {currentUser && (
-        <LoginSocket
-          userId={currentUser.id}
-          onBlocked={() => {
-            clearAccessToken();
-            toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
-            router.push("/login");
-          }}
-        />
-      )}
-      <AppSidebar activeUrl={activeUrl} setActiveUrl={setActiveUrl} />
-      <SidebarInset>
-        <div className="flex flex-col bg-background text-foreground transition-colors">
-          <header className="flex h-16 shrink-0 items-center justify-between px-4 gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="-ml-1" />
-              <Separator
-                orientation="vertical"
-                className="mr-2 data-[orientation=vertical]:h-4"
-              />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem className="hidden md:block">
-                    <BreadcrumbLink href="#">Trang chính</BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator className="hidden md:block" />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>{activeUrl}</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
-            </div>
-            <NavUserInline user={userInfo} />
-          </header>
-          {React.isValidElement(children) && typeof children.type !== "string"
-            ? React.cloneElement(children as React.ReactElement<any>, {
-                activeUrl,
-                setActiveUrl,
-              })
-            : children}
-        </div>
-      </SidebarInset>
+      <CurrentUserContext.Provider value={{ currentUser, setCurrentUser }}>
+        {currentUser && (
+          <LoginSocket
+            userId={currentUser.id}
+            onBlocked={() => {
+              clearAccessToken();
+              toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
+              router.push("/login");
+            }}
+          />
+        )}
+        <AppSidebar activeUrl={activeUrl} setActiveUrl={setActiveUrl} currentUser={currentUser}/>
+        <SidebarInset>
+          <div className="flex flex-col bg-background text-foreground transition-colors">
+            <header className="flex h-16 shrink-0 items-center justify-between px-4 gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger className="-ml-1" />
+                <Separator
+                  orientation="vertical"
+                  className="mr-2 data-[orientation=vertical]:h-4"
+                />
+                <Breadcrumb>
+                  <BreadcrumbList>
+                    <BreadcrumbItem className="hidden md:block">
+                      <BreadcrumbLink href="#">Trang chính</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>{activeUrl}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+              </div>
+              <NavUserInline user={userInfo} />
+            </header>
+            {children}
+          </div>
+        </SidebarInset>
+      </CurrentUserContext.Provider>
     </SidebarProvider>
   );
 }

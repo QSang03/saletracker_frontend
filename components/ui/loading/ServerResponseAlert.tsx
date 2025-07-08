@@ -11,7 +11,18 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export type AlertType = "success" | "error" | "warning" | "confirm" | "loading";
+export type AlertType =
+  | "success"
+  | "error"
+  | "warning"
+  | "confirm"
+  | "loading"
+  | "info"
+  | "default"
+  | "qr_expired"
+  | "qr_scanned"
+  | "processing"
+  | "qr_available";
 
 interface ServerResponseAlertProps {
   type: AlertType;
@@ -26,6 +37,12 @@ const iconMap = {
   warning: <AlertTriangle className="h-6 w-6 text-yellow-500 animate-pop" />,
   confirm: <HelpCircle className="h-6 w-6 text-blue-500 animate-pop" />,
   loading: <Loader2 className="h-6 w-6 text-gray-500 animate-spin" />,
+  info: <HelpCircle className="h-6 w-6 text-sky-500 animate-pop" />,
+  default: <HelpCircle className="h-6 w-6 text-gray-400 animate-pop" />,
+  qr_expired: <XCircle className="h-6 w-6 text-orange-500 animate-pop" />,
+  qr_scanned: <CheckCircle className="h-6 w-6 text-blue-500 animate-pop" />,
+  processing: <Loader2 className="h-6 w-6 text-indigo-500 animate-spin" />,
+  qr_available: <HelpCircle className="h-6 w-6 text-green-500 animate-pop" />,
 };
 
 const titleMap = {
@@ -34,6 +51,12 @@ const titleMap = {
   warning: "Cảnh báo",
   confirm: "Xác nhận",
   loading: "Đang xử lý",
+  info: "Thông báo",
+  default: "Thông tin",
+  qr_expired: "QR hết hạn",
+  qr_scanned: "Đã quét QR",
+  processing: "Đang xử lý",
+  qr_available: "QR mới",
 };
 
 const styleMap = {
@@ -42,6 +65,12 @@ const styleMap = {
   warning: "bg-yellow-100 text-yellow-800 border-yellow-300",
   confirm: "bg-blue-100 text-blue-800 border-blue-300",
   loading: "bg-gray-100 text-gray-800 border-gray-300",
+  info: "bg-sky-100 text-sky-800 border-sky-300",
+  default: "bg-gray-100 text-gray-800 border-gray-300",
+  qr_expired: "bg-orange-100 text-orange-800 border-orange-300",
+  qr_scanned: "bg-blue-100 text-blue-800 border-blue-300",
+  processing: "bg-indigo-100 text-indigo-800 border-indigo-300",
+  qr_available: "bg-green-100 text-green-800 border-green-300",
 };
 
 const bgPulseMap = {
@@ -50,6 +79,12 @@ const bgPulseMap = {
   warning: "animate-pulse bg-yellow-50",
   confirm: "animate-pulse bg-blue-50",
   loading: "animate-pulse bg-gray-50",
+  info: "animate-pulse bg-sky-50",
+  default: "animate-pulse bg-gray-50",
+  qr_expired: "animate-pulse bg-orange-50",
+  qr_scanned: "animate-pulse bg-blue-50",
+  processing: "animate-pulse bg-indigo-50",
+  qr_available: "animate-pulse bg-green-50",
 };
 
 export function ServerResponseAlert({

@@ -132,17 +132,25 @@ export default function PaginatedTable({
   const totalRows = total ?? 0;
   const totalPages = Math.ceil(totalRows / currentPageSize);
 
+  // Tách effect gọi onFilterChange và reset page
   useEffect(() => {
     if (onFilterChange) onFilterChange(filters);
+    // Không reset page ở đây
   }, [filters, onFilterChange]);
 
+  // Chỉ reset page khi filter thực sự thay đổi, không reset khi chỉ page thay đổi
   const updateFilter = useCallback(
     <K extends keyof Filters>(key: K, value: Filters[K]) => {
-      setFilters((prev) => ({ ...prev, [key]: value }));
-      if (onPageChange) onPageChange(1);
-      else setInternalPage(0);
+      setFilters((prev) => {
+        // Nếu giá trị filter không đổi thì không làm gì
+        if (prev[key] === value) return prev;
+        // Reset page về 1 khi filter thực sự thay đổi (nếu đang không ở page 1)
+        if (onPageChange && (page === undefined || page > 1)) onPageChange(1);
+        else setInternalPage(0);
+        return { ...prev, [key]: value };
+      });
     },
-    [onPageChange]
+    [onPageChange, page]
   );
 
   const handleResetFilter = useCallback(() => {
@@ -156,9 +164,9 @@ export default function PaginatedTable({
       dateRange: { from: undefined, to: undefined },
     };
     setFilters(reset);
-    if (onPageChange) onPageChange(1);
+    if (onPageChange && (page === undefined || page > 1)) onPageChange(1);
     else setInternalPage(0);
-  }, [onPageChange]);
+  }, [onPageChange, page]);
 
   const handleExportCSV = useCallback(() => {
     alert("Phát triển sau!");

@@ -1,13 +1,34 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { navItems } from './lib/nav-items';
+
+function getFirstAccessibleUrl(roles: string[]): string | null {
+  for (const group of navItems) {
+    for (const item of group.items) {
+      if (!item.roles || item.roles.some((r: string) => roles.includes(r))) {
+        return item.url;
+      }
+    }
+  }
+  return null;
+}
+
+function isAccessible(roles: string[], url: string): boolean {
+  for (const group of navItems) {
+    for (const item of group.items) {
+      if (item.url === url && (!item.roles || item.roles.some((r: string) => roles.includes(r)))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const publicPaths = ['/login'];
-
-  // Lấy token từ cookie
   const token = request.cookies.get('access_token')?.value;
-
   let isValid = false;
+  let userRoles: string[] = [];
 
   if (token) {
     try {
@@ -16,22 +37,25 @@ export async function middleware(request: NextRequest) {
       if (exp && typeof exp === 'number' && exp > 0) {
         isValid = Date.now() < exp * 1000;
       }
+      if (payload.roles && Array.isArray(payload.roles)) {
+        userRoles = payload.roles;
+      }
     } catch (error) {
       console.error('Token decode error:', error);
     }
   }
 
-  // Nếu đã đăng nhập, vào / hoặc /login thì chuyển sang dashboard/transactions
   if (isValid && (pathname === '/' || pathname === '/login')) {
-    return NextResponse.redirect(new URL('/dashboard/transactions', request.url));
+    const firstUrl = getFirstAccessibleUrl(userRoles);
+    if (firstUrl) {
+      return NextResponse.redirect(new URL(firstUrl, request.url));
+    }
   }
 
-  // Nếu là public path thì cho qua
   if (publicPaths.includes(pathname)) {
     return NextResponse.next();
   }
 
-  // Nếu chưa đăng nhập hoặc token hết hạn thì chuyển về login
   if (!isValid) {
     const loginUrl = new URL('/login', request.url);
     if (!pathname.startsWith('/login')) {
@@ -40,6 +64,14 @@ export async function middleware(request: NextRequest) {
     const response = NextResponse.redirect(loginUrl);
     response.cookies.delete('access_token');
     return response;
+  }
+
+  const allUrls = navItems.flatMap((g: any) => g.items.map((i: any) => i.url));
+  if (allUrls.includes(pathname) && !isAccessible(userRoles, pathname)) {
+    const firstUrl = getFirstAccessibleUrl(userRoles);
+    if (firstUrl) {
+      return NextResponse.redirect(new URL(firstUrl, request.url));
+    }
   }
 
   return NextResponse.next();

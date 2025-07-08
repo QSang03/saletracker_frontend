@@ -174,7 +174,8 @@
 }
 
 @keyframes gradient-x {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {
@@ -184,4 +185,30 @@
 .animate-gradient-x {
   background-size: 200% 200%;
   animation: gradient-x 4s ease-in-out infinite;
+}
+
+.animate-gradient-border {
+  background: linear-gradient(135deg, #3b82f6, #22d3ee, #facc15);
+  background-size: 200% 200%;
+  animation: gradient-border 3s ease infinite;
+}
+
+.avatar-gradient-border {
+  padding: 4px;
+  background: linear-gradient(270deg, #3b82f6, #22d3ee, #facc15, #3b82f6);
+  background-size: 400% 400%;
+  animation: avatar-gradient-animate 4s linear infinite;
+  border-radius: 9999px;
+}
+
+@keyframes avatar-gradient-animate {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }

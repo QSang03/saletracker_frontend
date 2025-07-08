@@ -1,0 +1,69 @@
+// Định nghĩa navItems dùng chung cho sidebar, middleware, layout
+export const navItems = [
+  {
+    title: "Thống kê",
+    icon: "FileBarChart2",
+    items: [
+      { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin"] },
+      { title: "Thống kê công nợ", url: "/dashboard/debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+    ],
+  },
+  {
+    title: "Giao dịch",
+    icon: "ListOrdered",
+    items: [
+      { title: "Quản lý giao dịch", url: "/dashboard/orders", roles: ["admin"] },
+      { title: "Giao dịch đã xóa", url: "/dashboard/trashed", roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Công nợ",
+    icon: "Briefcase",
+    items: [
+      { title: "Quản lý công nợ", url: "/dashboard/debt", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Công nợ đã xóa", url: "/dashboard/trashed", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Cấu hình công nợ", url: "/dashboard/settings", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+    ],
+  },
+  {
+    title: "Kinh doanh",
+    icon: "MessageCircle",
+    items: [
+      { title: "Cấu hình gửi tin nhắn", url: "/dashboard/message-config", roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Product Manager",
+    icon: "Terminal",
+    items: [
+      { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-products", roles: ["admin"] },
+      { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Tài khoản",
+    icon: "UserCog",
+    items: [
+      { title: "Quản lý tài khoản", url: "/dashboard/manage", roles: ["admin"] },
+      { title: "Quản lý bộ phận", url: "/dashboard/department", roles: ["admin"] },
+      { title: "Quản lý zalo", url: "/dashboard/zalo", roles: ["admin"] },
+      { title: "Phân quyền", url: "/dashboard/roles", roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Thông tin",
+    icon: "UserCircle",
+    items: [
+      { title: "Liên kết tài khoản", url: "/dashboard/link-account", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Cài đặt",
+    icon: "Wrench",
+    items: [
+      { title: "Cấu hình hệ thống", url: "/dashboard/config-system", roles: ["admin"] },
+      { title: "Cấu hình lịch nghỉ", url: "/dashboard/holiday", roles: ["admin"] },
+    ],
+  },
+];

@@ -49,6 +49,9 @@ export interface User {
   createdAt?: Date | string;
   updatedAt?: Date | string;
   deletedAt?: Date | string;
+  zaloLinkStatus?: number; // 0: chưa liên kết, 1: đã liên kết, 2: lỗi liên kết
+  zaloName?: string;
+  avatarZalo?: string;
 }
 
 // RolePermission Entity (bảng trung gian)

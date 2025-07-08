@@ -21,84 +21,37 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { hasRole } from "@/lib/role";
+import type { User } from "@/types";
+import { navItems as navItemsRaw } from "@/lib/nav-items";
+
+const iconMap = {
+  FileBarChart2,
+  ListOrdered,
+  Briefcase,
+  MessageCircle,
+  Terminal,
+  UserCog,
+  UserCircle,
+  Wrench,
+  GalleryVerticalEnd,
+};
+
+const navItems = navItemsRaw.map(item => ({
+  ...item,
+  icon: item.icon ? iconMap[item.icon as keyof typeof iconMap] : undefined,
+}));
 
 export function AppSidebar({
   activeUrl,
   setActiveUrl,
+  currentUser, // thêm prop này
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   activeUrl: string;
   setActiveUrl: (url: string) => void;
+  currentUser: User | null;
 }) {
-  const navItems = [
-    {
-      title: "Thống kê",
-      icon: FileBarChart2,
-      items: [
-        { title: "Thống kê giao dịch", url: "/dashboard/transactions" },
-        { title: "Thống kê công nợ", url: "/dashboard/debts" },
-      ],
-    },
-    {
-      title: "Giao dịch",
-      icon: ListOrdered,
-      items: [
-        { title: "Quản lý giao dịch", url: "/transactions/manage" },
-        { title: "Giao dịch đã xóa", url: "/transactions/trashed" },
-      ],
-    },
-    {
-      title: "Công nợ",
-      icon: Briefcase,
-      items: [
-        { title: "Quản lý công nợ", url: "/debt/manage" },
-        { title: "Công nợ đã xóa", url: "/debt/trashed" },
-        { title: "Cấu hình công nợ", url: "/debt/settings" },
-      ],
-    },
-    {
-      title: "Kinh doanh",
-      icon: MessageCircle,
-      items: [
-        { title: "Cấu hình gửi tin nhắn", url: "/business/message-config" },
-      ],
-    },
-    {
-      title: "Product Manager",
-      icon: Terminal,
-      items: [
-        { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-products" },
-        { title: "Quản lý sản phẩm", url: "/dashboard/products" },
-      ],
-    },
-    {
-      title: "Tài khoản",
-      icon: UserCog,
-      items: [
-        { title: "Quản lý tài khoản", url: "/dashboard/manage" },
-        { title: "Quản lý bộ phận", url: "/dashboard/department" },
-        { title: "Quản lý zalo", url: "/dashboard/zalo" },
-        { title: "Phân quyền", url: "/dashboard/roles" },
-      ],
-    },
-    {
-      title: "Thông tin",
-      icon: UserCircle,
-      items: [
-        { title: "Liên kết tài khoản", url: "/profile/link-account" },
-        { title: "Zalo NKC", url: "/profile/zalo-nkc" },
-      ],
-    },
-    {
-      title: "Cài đặt",
-      icon: Wrench,
-      items: [
-        { title: "Cấu hình hệ thống", url: "/dashboard/config-system" },
-        { title: "Cấu hình lịch nghỉ", url: "/dashboard/holiday" },
-      ],
-    },
-  ];
-
   const teams = [
     {
       name: "SaleTracker",
@@ -107,6 +60,14 @@ export function AppSidebar({
     },
   ];
 
+  // Lọc navItems và từng item con theo role
+  const filteredNavItems = navItems
+    .map(item => ({
+      ...item,
+      items: item.items.filter(subItem => !subItem.roles || hasRole(currentUser, subItem.roles)),
+    }))
+    .filter(item => item.items.length > 0);
+
   return (
     <Sidebar className="bg-white text-black border-r border-border" {...props}>
       <SidebarHeader>
@@ -114,7 +75,7 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <NavMain
-          items={navItems}
+          items={filteredNavItems}
           activeUrl={activeUrl}
           setActiveUrl={setActiveUrl}
         />

@@ -212,9 +212,10 @@ export default function UserManager() {
     }
   };
 
+  // Sửa effect fetch users: chỉ fetch khi userPage hoặc userFilters đổi
   useEffect(() => {
-    fetchUsers(userPage);
-  }, [router, userPage]);
+    fetchUsers(userPage, userFilters);
+  }, [userPage, userFilters]);
 
   const availableRoles = roles.map((role) => role.name);
   const availableDepartments = Array.from(
@@ -438,10 +439,7 @@ export default function UserManager() {
             page={userPage}
             total={userTotal}
             pageSize={userLimit}
-            onPageChange={(page) => {
-              setUserPage(page);
-              fetchUsers(page, userFilters);
-            }}
+            onPageChange={setUserPage}
             emptyText="Không có người dùng nào."
             enableSearch
             enableRoleFilter
@@ -453,7 +451,6 @@ export default function UserManager() {
             onFilterChange={(filters) => {
               setUserFilters(filters);
               setUserPage(1);
-              fetchUsers(1, filters);
             }}
           >
             <UserTable
