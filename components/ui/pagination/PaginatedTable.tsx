@@ -8,6 +8,7 @@ import {
   Option,
 } from "@/components/ui/MultiSelectCombobox";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DatePicker } from "@/components/ui/date-picker";
 import type { DateRange } from "react-day-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -18,6 +19,8 @@ interface PaginatedTableProps {
   enableRoleFilter?: boolean;
   enableStatusFilter?: boolean;
   enableDateRangeFilter?: boolean;
+  enableSingleDateFilter?: boolean; // Thêm prop để bật filter 1 ngày
+  singleDateLabel?: string;
   enablePageSize?: boolean;
   availableDepartments?: string[];
   availableRoles?: string[];
@@ -59,6 +62,7 @@ interface Filters {
   categories: (string | number)[];
   brands: (string | number)[];
   dateRange: DateRange;
+  singleDate?: Date;
 }
 
 export default function PaginatedTable({
@@ -68,6 +72,8 @@ export default function PaginatedTable({
   enableRoleFilter,
   enableStatusFilter,
   enableDateRangeFilter,
+  enableSingleDateFilter,
+  singleDateLabel = "Ngày tạo phiếu",
   enablePageSize,
   availableDepartments = [],
   availableRoles = [],
@@ -123,6 +129,7 @@ export default function PaginatedTable({
     categories: [],
     brands: [],
     dateRange: { from: undefined, to: undefined },
+    singleDate: undefined,
   });
 
   const [internalPage, setInternalPage] = useState(0);
@@ -162,6 +169,7 @@ export default function PaginatedTable({
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
+      singleDate: undefined,
     };
     setFilters(reset);
     if (onPageChange && (page === undefined || page > 1)) onPageChange(1);
@@ -211,15 +219,6 @@ export default function PaginatedTable({
               onChange={(vals) => updateFilter("departments", vals)}
             />
           )}
-          {enableRoleFilter && (
-            <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.roles ?? ''}`}
-              placeholder="Vai trò"
-              value={filters.roles}
-              options={roleOptions}
-              onChange={(vals) => updateFilter("roles", vals)}
-            />
-          )}
           {enableStatusFilter && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.statuses ?? ''}`}
@@ -228,6 +227,16 @@ export default function PaginatedTable({
               options={statusOptions}
               onChange={(vals) => updateFilter("statuses", vals)}
             />
+          )}
+          {enableSingleDateFilter && (
+            <div className="min-w-0 w-full flex items-center">
+              <DatePicker
+                value={filters.singleDate}
+                onChange={(date) => updateFilter("singleDate", date)}
+                placeholder={singleDateLabel}
+                className="w-full"
+              />
+            </div>
           )}
           <Button
             variant="gradient"

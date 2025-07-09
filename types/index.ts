@@ -150,3 +150,58 @@ export interface Product {
   categories?: Category[];
   brand?: Brand;
 }
+
+// DebtConfig Entity
+export interface DebtConfig {
+  id: number;
+  configName: string;
+  value: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+// Debt Entity
+export interface Debt {
+  id: number;
+  customer_code: string;
+  customer_name: string;
+  employee_name?: string;
+  sale_name?: string;
+  sale_name_raw?: string;
+  invoice_code?: string;
+  bill_code?: string;
+  issue_date?: string | Date;
+  due_date?: string | Date;
+  pay_date?: string | Date;
+  total_amount?: number;
+  remaining?: number;
+  status?: string;
+  note?: string;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+}
+
+// DebtLog Entity
+export interface DebtLog {
+  id: number;
+  debt_id: number;
+  action: string;
+  log_date: string | Date;
+  user_id?: number;
+  note?: string;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+}
+
+// DebtHistory Entity
+export interface DebtHistory {
+  id: number;
+  debt_id: number;
+  action: string;
+  change_date: string | Date;
+  old_value?: string;
+  new_value?: string;
+  user_id?: number;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+}

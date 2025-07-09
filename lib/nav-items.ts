@@ -5,7 +5,7 @@ export const navItems = [
     icon: "FileBarChart2",
     items: [
       { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin"] },
-      { title: "Thống kê công nợ", url: "/dashboard/debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Thống kê công nợ", url: "/dashboard/transactions-debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
     ],
   },
   {
@@ -20,9 +20,9 @@ export const navItems = [
     title: "Công nợ",
     icon: "Briefcase",
     items: [
-      { title: "Quản lý công nợ", url: "/dashboard/debt", roles: ["admin", "manager-cong-no", "user-cong-no"] },
-      { title: "Công nợ đã xóa", url: "/dashboard/trashed", roles: ["admin", "manager-cong-no", "user-cong-no"] },
-      { title: "Cấu hình công nợ", url: "/dashboard/settings", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Quản lý công nợ", url: "/dashboard/manager-debt", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Công nợ đã xóa", url: "/dashboard/debt-trashed", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Cấu hình công nợ", url: "/dashboard/debt-settings", roles: ["admin", "manager-cong-no", "user-cong-no"] },
     ],
   },
   {
