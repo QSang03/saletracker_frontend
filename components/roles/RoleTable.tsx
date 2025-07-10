@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import type { User, Department, Permission } from "@/types";
+import type { User, Department, Permission, RolePermission } from "@/types";
 import UserRoleAndPermissionModal from "./UserRoleAndPermissionModal";
 
 interface RoleTableProps {
@@ -22,6 +22,7 @@ interface RoleTableProps {
   expectedRowCount: number;
   startIndex: number;
   onReload: () => Promise<void>;
+  allRolePermissions: RolePermission[];
   onUpdateUserRolesPermissions: (
     userId: number,
     data: { departmentIds: number[]; roleIds: number[]; permissionIds: number[] }
@@ -36,6 +37,7 @@ export default function RoleTable({
   expectedRowCount,
   startIndex,
   onReload,
+  allRolePermissions,
   onUpdateUserRolesPermissions,
 }: RoleTableProps) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -123,6 +125,7 @@ export default function RoleTable({
           rolesGrouped={rolesGrouped}
           departments={departments}
           permissions={permissions}
+          rolePermissions={allRolePermissions.filter(rp => selectedUser.roles.some(role => role.id === rp.roleId))}
           onClose={() => setShowModal(false)}
           onSave={(data) =>
             onUpdateUserRolesPermissions(selectedUser.id, data)

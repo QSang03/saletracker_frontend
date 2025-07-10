@@ -8,8 +8,13 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import RoleManagement from "@/components/roles/RoleManagement";
 import AddMainRoleModal from "@/components/roles/AddMainRoleModal";
-import type { User, Department, Permission } from "@/types";
+import type { User, Department, Permission, RolePermission } from "@/types";
 import { getAccessToken } from "@/lib/auth";
+
+// Thêm type cho role-permissions
+interface UserRolePermissionsMap {
+  [userId: number]: { roleId: number; permissionId: number; isActive: boolean }[];
+}
 
 export default function RolesPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -30,6 +35,12 @@ export default function RolesPage() {
   // Modal state cho thêm vai trò chính
   const [showAddMainRole, setShowAddMainRole] = useState(false);
 
+  // Thêm state cho role-permissions của từng user
+  const [userRolePermissions, setUserRolePermissions] = useState<UserRolePermissionsMap>({});
+
+  // Thêm state cho toàn bộ roles_permissions
+  const [allRolePermissions, setAllRolePermissions] = useState<RolePermission[]>([]);
+
   // Hàm fetch có header và token
   const fetchWithToken = async (url: string) => {
     const token = getAccessToken
@@ -48,16 +59,19 @@ export default function RolesPage() {
   const fetchAll = async () => {
     setIsLoading(true);
     try {
-      const [usersData, rolesGroupedData, departmentsData, permissionsData] = await Promise.all([
+      const [usersData, rolesGroupedData, departmentsData, permissionsData, allRolePermsData] = await Promise.all([
         fetchWithToken("/users/for-permission-management"),
         fetchWithToken("/roles/grouped"),
         fetchWithToken("/departments"),
         fetchWithToken("/permissions"),
+        fetchWithToken("/roles-permissions/all"),
       ]);
-      setUsers(Array.isArray(usersData) ? usersData : usersData.data || []);
+      const usersList = Array.isArray(usersData) ? usersData : usersData.data || [];
+      setUsers(usersList);
       setRolesGrouped(rolesGroupedData || { main: [], sub: [] });
       setDepartments(Array.isArray(departmentsData) ? departmentsData : departmentsData.data || []);
       setPermissions(Array.isArray(permissionsData) ? permissionsData : permissionsData.data || []);
+      setAllRolePermissions(Array.isArray(allRolePermsData) ? allRolePermsData : allRolePermsData.data || []);
     } catch {
       setAlert({ type: "error", message: "Lỗi tải dữ liệu phân quyền!" });
     }
@@ -184,7 +198,8 @@ export default function RolesPage() {
                 expectedRowCount={pageSize}
                 startIndex={(page - 1) * pageSize}
                 onReload={fetchAll}
-                // Truyền callback cập nhật phân quyền user xuống
+                // Truyền toàn bộ allRolePermissions xuống
+                allRolePermissions={allRolePermissions}
                 onUpdateUserRolesPermissions={handleUpdateUserRolesPermissions}
               />
             </PaginatedTable>

@@ -18,9 +18,10 @@ interface PaginatedTableProps {
   enableDepartmentFilter?: boolean;
   enableRoleFilter?: boolean;
   enableStatusFilter?: boolean;
+  enableEmployeeFilter?: boolean;
+  availableEmployees?: Option[];
   enableDateRangeFilter?: boolean;
-  enableSingleDateFilter?: boolean; // Thêm prop để bật filter 1 ngày
-  singleDateLabel?: string;
+  enableSingleDateFilter?: boolean;
   enablePageSize?: boolean;
   availableDepartments?: string[];
   availableRoles?: string[];
@@ -28,6 +29,7 @@ interface PaginatedTableProps {
   availableCategories?: string[];
   availableBrands?: string[];
   dateRangeLabel?: string;
+  singleDateLabel?: string;
   defaultPageSize?: number;
   pageSizeOptions?: number[];
   page?: number;
@@ -63,6 +65,7 @@ interface Filters {
   brands: (string | number)[];
   dateRange: DateRange;
   singleDate?: Date;
+  employees: (string | number)[];
 }
 
 export default function PaginatedTable({
@@ -71,9 +74,11 @@ export default function PaginatedTable({
   enableDepartmentFilter,
   enableRoleFilter,
   enableStatusFilter,
+  enableEmployeeFilter,
+  availableEmployees = [],
   enableDateRangeFilter,
   enableSingleDateFilter,
-  singleDateLabel = "Ngày tạo phiếu",
+  singleDateLabel,
   enablePageSize,
   availableDepartments = [],
   availableRoles = [],
@@ -120,6 +125,10 @@ export default function PaginatedTable({
     () => availableBrands.map((b) => ({ label: b, value: b })),
     [availableBrands]
   );
+  const employeeOptions = useMemo(
+    () => availableEmployees.map((e) => ({ label: e.label, value: e.value })),
+    [availableEmployees]
+  );
 
   const [filters, setFilters] = useState<Filters>({
     search: "",
@@ -130,6 +139,7 @@ export default function PaginatedTable({
     brands: [],
     dateRange: { from: undefined, to: undefined },
     singleDate: undefined,
+    employees: [],
   });
 
   const [internalPage, setInternalPage] = useState(0);
@@ -170,6 +180,7 @@ export default function PaginatedTable({
       brands: [],
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
+      employees: [],
     };
     setFilters(reset);
     if (onPageChange && (page === undefined || page > 1)) onPageChange(1);
@@ -210,6 +221,15 @@ export default function PaginatedTable({
               onChange={(e) => updateFilter("search", e.target.value)}
             />
           )}
+          {enableEmployeeFilter && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full`}
+              placeholder="Nhân viên"
+              value={filters.employees}
+              options={employeeOptions}
+              onChange={(vals) => updateFilter("employees", vals)}
+            />
+          )}
           {enableDepartmentFilter && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.departments ?? ''}`}
@@ -217,6 +237,15 @@ export default function PaginatedTable({
               value={filters.departments}
               options={departmentOptions}
               onChange={(vals) => updateFilter("departments", vals)}
+            />
+          )}
+          {enableRoleFilter && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full ${filterClassNames.roles ?? ''}`}
+              placeholder="Vai trò"
+              value={filters.roles}
+              options={roleOptions}
+              onChange={(vals) => updateFilter("roles", vals)}
             />
           )}
           {enableStatusFilter && (
@@ -229,14 +258,12 @@ export default function PaginatedTable({
             />
           )}
           {enableSingleDateFilter && (
-            <div className="min-w-0 w-full flex items-center">
-              <DatePicker
-                value={filters.singleDate}
-                onChange={(date) => updateFilter("singleDate", date)}
-                placeholder={singleDateLabel}
-                className="w-full"
-              />
-            </div>
+            <DatePicker
+              value={filters.singleDate}
+              onChange={(date) => updateFilter("singleDate", date)}
+              placeholder={singleDateLabel || "Chọn ngày"}
+              className="min-w-0 w-full"
+            />
           )}
           <Button
             variant="gradient"
@@ -255,7 +282,10 @@ export default function PaginatedTable({
             Xoá filter
           </Button>
         </div>
-
+        {/* Tổng số dòng dưới filter */}
+        <div className="mt-4 ml-0.5 text font-medium">
+          Tổng số dòng: <span className="text-red-500">{totalRows}</span>
+        </div>
         <div className="grid grid-cols-3 gap-3 mt-3">
           {availableCategories.length > 0 && (
             <MultiSelectCombobox
@@ -299,9 +329,10 @@ export default function PaginatedTable({
               <Skeleton key={idx} className="h-10 w-full" />
             ))}
           </div>
-        ) : (
-          children
-        )}
+        ) :
+          (
+            children
+          )}
       </div>
 
       <div className="flex justify-center gap-2 pt-2 mt-2">

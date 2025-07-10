@@ -154,41 +154,59 @@ export interface Product {
 // DebtConfig Entity
 export interface DebtConfig {
   id: number;
-  configName: string;
-  value: string;
-  createdAt?: Date | string;
-  updatedAt?: Date | string;
+  customer_code: string;
+  customer_name: string;
+  customer_type: string;
+  day_of_week?: number;
+  gap_day?: number;
+  is_send?: boolean;
+  is_repeat?: boolean;
+  send_last_at?: string | Date;
+  last_update_at?: string | Date;
+  actor_id?: number;
+  employee_id?: number;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+  deleted_at?: string | Date;
 }
 
 // Debt Entity
 export interface Debt {
   id: number;
-  customer_code: string;
-  customer_name: string;
-  employee_name?: string;
-  sale_name?: string;
-  sale_name_raw?: string;
-  invoice_code?: string;
-  bill_code?: string;
+  customer_raw_code: string;
+  invoice_code: string;
+  bill_code: string;
+  total_amount: number;
+  remaining: number;
   issue_date?: string | Date;
   due_date?: string | Date;
-  pay_date?: string | Date;
-  total_amount?: number;
-  remaining?: number;
+  pay_later?: boolean;
   status?: string;
+  sale_id?: number;
+  sale_name_raw?: string;
+  employee_code_raw?: string;
   note?: string;
   created_at?: string | Date;
   updated_at?: string | Date;
+  deleted_at?: string | Date;
+  debt_config_id?: number;
 }
 
 // DebtLog Entity
 export interface DebtLog {
   id: number;
-  debt_id: number;
-  action: string;
-  log_date: string | Date;
-  user_id?: number;
-  note?: string;
+  debt_config_id: number;
+  debt_msg: string;
+  send_at: string | Date;
+  first_remind?: string;
+  first_remind_at?: string | Date;
+  second_remind?: string;
+  second_remind_at?: string | Date;
+  sale_msg?: string;
+  conv_id?: string;
+  debt_img?: string;
+  remind_status?: string;
+  render?: string;
   created_at?: string | Date;
   updated_at?: string | Date;
 }
@@ -196,12 +214,24 @@ export interface DebtLog {
 // DebtHistory Entity
 export interface DebtHistory {
   id: number;
-  debt_id: number;
-  action: string;
-  change_date: string | Date;
-  old_value?: string;
-  new_value?: string;
-  user_id?: number;
-  created_at?: string | Date;
-  updated_at?: string | Date;
+  debt_log_id: number;
+  debt_msg: string;
+  send_at: string | Date;
+  first_remind?: string;
+  first_remind_at?: string | Date;
+  second_remind?: string;
+  second_remind_at?: string | Date;
+  sale_msg?: string;
+  conv_id?: string;
+  debt_img?: string;
+  remind_status?: string;
+  render?: string;
+}
+
+// DTO cho Update User Roles and Permissions
+export interface UpdateUserRolesPermissionsDto {
+  departmentIds: number[];
+  roleIds: number[];
+  permissionIds: number[];
+  rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
 }

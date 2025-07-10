@@ -1,4 +1,4 @@
-import type { User, Department, Permission } from "@/types";
+import type { User, Department, Permission, RolePermission } from "@/types";
 import RoleTable from "./RoleTable";
 
 export interface RoleManagementProps {
@@ -12,6 +12,7 @@ export interface RoleManagementProps {
   expectedRowCount: number;
   startIndex: number;
   onReload: () => Promise<void>;
+  allRolePermissions: RolePermission[];
   onUpdateUserRolesPermissions: (
     userId: number,
     data: { departmentIds: number[]; roleIds: number[]; permissionIds: number[] }
@@ -26,6 +27,7 @@ export default function RoleManagement({
   expectedRowCount,
   startIndex,
   onReload,
+  allRolePermissions,
   onUpdateUserRolesPermissions,
 }: RoleManagementProps) {
   return (
@@ -37,6 +39,7 @@ export default function RoleManagement({
       expectedRowCount={expectedRowCount}
       startIndex={startIndex}
       onReload={onReload}
+      allRolePermissions={allRolePermissions}
       onUpdateUserRolesPermissions={onUpdateUserRolesPermissions}
     />
   );

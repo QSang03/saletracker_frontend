@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { motion } from "framer-motion";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import type { User, Department, Permission } from "@/types";
+import type { User, Department, Permission, RolePermission } from "@/types";
 
-interface UserRoleAndPermissionModalProps {
+export interface UserRoleAndPermissionModalProps {
   user: User;
   rolesGrouped: {
     main: { id: number; name: string }[];
@@ -23,11 +23,13 @@ interface UserRoleAndPermissionModalProps {
   };
   departments: Department[];
   permissions: Permission[];
+  rolePermissions: RolePermission[];
   onClose: () => void;
   onSave: (data: {
     departmentIds: number[];
     roleIds: number[];
     permissionIds: number[];
+    rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
   }) => Promise<void>;
 }
 
@@ -36,6 +38,7 @@ export default function UserRoleAndPermissionModal({
   rolesGrouped,
   departments,
   permissions,
+  rolePermissions,
   onClose,
   onSave,
 }: UserRoleAndPermissionModalProps) {
@@ -76,6 +79,7 @@ export default function UserRoleAndPermissionModal({
   );
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
   const prevDepartments = useRef<number[]>(selectedDepartments);
   const departmentOptions: Option[] = departments.map((dep) => ({
     label: dep.name,
@@ -210,37 +214,154 @@ export default function UserRoleAndPermissionModal({
     permissions,
     departments,
   ]);
+  // KHÔNG fetch API nữa, chỉ dùng rolePermissions prop
+  const [rolePermissionsState, setRolePermissionsState] = useState<{ roleId: number; permissionId: number; isActive: boolean }[]>(rolePermissions);
+  useEffect(() => {
+    setRolePermissionsState(rolePermissions);
+    const activePermissions = rolePermissions.filter((rp) => rp.isActive).map((rp) => rp.permissionId);
+    setSelectedPermissions(activePermissions);
+  }, [rolePermissions, rolesGrouped.main, rolesGrouped.sub]);
+
+  // Khi user prop thay đổi (user khác), set lại các state phòng ban, vai trò chính, vai trò phụ đúng thực tế
+  useEffect(() => {
+    setSelectedDepartments(user.departments?.map((d) => d.id) || []);
+    setSelectedMainRoles(
+      user.roles?.filter((r) => rolesGrouped.main.some((m) => m.id === r.id)).map((r) => r.id) || []
+    );
+    setSelectedSubRoles(
+      user.roles?.filter((r) => rolesGrouped.sub.some((s) => s.id === r.id)).map((r) => r.id) || []
+    );
+  }, [user.id, rolesGrouped.main, rolesGrouped.sub]);
+
+  // Helper: kiểm tra quyền này có đang active với vai trò đang chọn không
+  const isPermissionActive = (permissionId: number, roleId: number) => {
+    return rolePermissionsState.some(
+      (rp) => rp.roleId === roleId && rp.permissionId === permissionId && rp.isActive
+    );
+  };
+
+  // Helper: lấy tất cả roleId hiện tại (main + sub) đang chọn
+  const currentRoleIds = useMemo(() => {
+    return [...selectedMainRoles, ...selectedSubRoles];
+  }, [selectedMainRoles, selectedSubRoles]);
+
+  // Khi click checkbox quyền, chỉ cập nhật rolePermissionsState
+  const handlePermissionChange = (permissionId: number, roleId: number, checked: boolean) => {
+    setRolePermissionsState((prev) => {
+      let found = false;
+      const updated = prev.map((rp) => {
+        if (rp.roleId === roleId && rp.permissionId === permissionId) {
+          found = true;
+          return { ...rp, isActive: checked };
+        }
+        return rp;
+      });
+      if (!found) {
+        updated.push({ roleId, permissionId, isActive: checked });
+      }
+      return updated;
+    });
+  };
+
   const handleDepartmentChange = (vals: (string | number)[]) => {
     setSelectedDepartments(vals.map(Number));
     const adminRole = rolesGrouped.main.find((r) => r.name === "admin");
     if (adminRole && selectedMainRoles.includes(adminRole.id)) {
-      setSelectedMainRoles(
-        selectedMainRoles.filter((id) => id !== adminRole.id)
-      );
+      setSelectedMainRoles(selectedMainRoles.filter((id) => id !== adminRole.id));
+    }
+    // Nếu đang chọn manager thì active full quyền theo phòng ban
+    const managerRole = rolesGrouped.main.find((r) => r.name === "manager");
+    if (managerRole && selectedMainRoles.includes(managerRole.id)) {
+      const depSlugs = departments.filter((dep) => vals.map(Number).includes(dep.id)).map((dep) => dep.slug);
+      setRolePermissionsState((prev) => {
+        let updated = [...prev];
+        permissions.forEach((p) => {
+          if (depSlugs.includes(p.name)) {
+            // Tìm tất cả roleId manager và sub manager của các phòng ban này
+            const roleIds = [managerRole.id, ...rolesGrouped.sub.filter((r) => r.name === `manager-${p.name}`).map((r) => r.id)];
+            roleIds.forEach((roleId) => {
+              const idx = updated.findIndex(rp => rp.roleId === roleId && rp.permissionId === p.id);
+              if (idx !== -1) {
+                updated[idx] = { ...updated[idx], isActive: true };
+              } else {
+                updated.push({ roleId, permissionId: p.id, isActive: true });
+              }
+            });
+          }
+        });
+        return updated;
+      });
     }
   };
   const handleMainRoleChange = (vals: (string | number)[]) => {
     setSelectedMainRoles(vals.map(Number));
+    const adminRole = rolesGrouped.main.find((r) => r.name === "admin");
+    const managerRole = rolesGrouped.main.find((r) => r.name === "manager");
+    if (adminRole && vals.includes(adminRole.id)) {
+      // Nếu chọn admin thì active full quyền
+      setRolePermissionsState((prev) => {
+        let updated = [...prev];
+        permissions.forEach((p) => {
+          // Tìm tất cả roleId admin và sub admin (nếu có)
+          const roleIds = [adminRole.id, ...rolesGrouped.sub.filter((r) => r.name.startsWith("admin")).map((r) => r.id)];
+          roleIds.forEach((roleId) => {
+            const idx = updated.findIndex(rp => rp.roleId === roleId && rp.permissionId === p.id);
+            if (idx !== -1) {
+              updated[idx] = { ...updated[idx], isActive: true };
+            } else {
+              updated.push({ roleId, permissionId: p.id, isActive: true });
+            }
+          });
+        });
+        return updated;
+      });
+      setSelectedDepartments([]); // clear phòng ban khi chọn admin
+      setSelectedSubRoles([]); // clear sub role khi chọn admin
+    } else if (managerRole && vals.includes(managerRole.id)) {
+      // Nếu chọn manager thì active full quyền theo phòng ban đã chọn
+      const depSlugs = departments.filter((dep) => selectedDepartments.includes(dep.id)).map((dep) => dep.slug);
+      setRolePermissionsState((prev) => {
+        let updated = [...prev];
+        permissions.forEach((p) => {
+          if (depSlugs.includes(p.name)) {
+            // Tìm tất cả roleId manager và sub manager của các phòng ban này
+            const roleIds = [managerRole.id, ...rolesGrouped.sub.filter((r) => r.name === `manager-${p.name}`).map((r) => r.id)];
+            roleIds.forEach((roleId) => {
+              const idx = updated.findIndex(rp => rp.roleId === roleId && rp.permissionId === p.id);
+              if (idx !== -1) {
+                updated[idx] = { ...updated[idx], isActive: true };
+              } else {
+                updated.push({ roleId, permissionId: p.id, isActive: true });
+              }
+            });
+          }
+        });
+        return updated;
+      });
+    }
   };
   const handleSubRoleChange = (vals: (string | number)[]) => {
     setSelectedSubRoles(vals.map(Number));
-  };
-  const handlePermissionChange = (permissionId: number, checked: boolean) => {
-    setSelectedPermissions((prev) =>
-      checked
-        ? [...prev, permissionId]
-        : prev.filter((id) => id !== permissionId)
-    );
   };
   const handleSave = async () => {
     setShowConfirm(true);
   };
   const handleConfirm = async () => {
     setSaving(true);
+    // Lấy các role phụ thực tế của user (roleId thuộc rolesGrouped.sub)
+    const subRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
+    // Lấy tất cả permissionId đang active từ rolePermissionsState, chỉ cho role phụ
+    const uniqueRolePermissions = rolePermissionsState.filter(
+      (rp) => subRoleIds.includes(rp.roleId)
+    );
+    const permissionIds = Array.from(
+      new Set(uniqueRolePermissions.filter(rp => rp.isActive).map(rp => rp.permissionId))
+    );
     await onSave({
       departmentIds: selectedDepartments,
       roleIds: [...selectedMainRoles, ...selectedSubRoles],
-      permissionIds: selectedPermissions,
+      permissionIds,
+      rolePermissions: uniqueRolePermissions,
     });
     setSaving(false);
     setShowConfirm(false);
@@ -278,6 +399,9 @@ export default function UserRoleAndPermissionModal({
       {children}
     </motion.span>
   );
+  // Lấy đúng vai trò chính/phụ thực tế của user để xác định quyền
+  const userMainRoleIds = user.roles.filter(r => rolesGrouped.main.some(m => m.id === r.id)).map(r => r.id);
+  const userSubRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
   return (
     <>
       <Dialog
@@ -297,81 +421,95 @@ export default function UserRoleAndPermissionModal({
           <DialogTitle className="text-2xl font-bold mb-4 text-center">
             Quản lý quyền cho {user.fullName}
           </DialogTitle>
-          <div className="mb-4">
-            <GradientTitle className="text-lg mb-2 block">
-              CHỌN PHÒNG BAN
-            </GradientTitle>
-            <MultiSelectCombobox
-              options={departmentOptions}
-              value={selectedDepartments}
-              onChange={handleDepartmentChange}
-              placeholder="Chọn phòng ban..."
-            />
-          </div>
-          <div className="mb-4">
-            <GradientTitle className="text-lg mb-2 block">
-              VAI TRÒ CHÍNH
-            </GradientTitle>
-            <MultiSelectCombobox
-              options={mainRoleOptions}
-              value={selectedMainRoles}
-              onChange={handleMainRoleChange}
-              placeholder="Chọn vai trò chính..."
-            />
-            <GradientTitle className="text-base mb-2 mt-4 block">
-              VAI TRÒ PHỤ
-            </GradientTitle>
-            <MultiSelectCombobox
-              options={subRoleOptions}
-              value={selectedSubRoles}
-              onChange={handleSubRoleChange}
-              placeholder="Chọn vai trò phụ..."
-            />
-          </div>
-          <div className="mb-4">
-            <GradientTitle className="text-lg mb-2 block">
-              QUYỀN HẠN
-            </GradientTitle>
-            <div>
-              {departments.map((dep) => {
-                const depPermissions = permissions.filter(
-                  (p) => p.name === dep.slug
-                );
-                if (depPermissions.length === 0) return null;
-                return (
-                  <div key={dep.id} className="mb-3">
-                    <div className="font-semibold text-lg mb-1">{dep.name}</div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
-                      {depPermissions.map((permission) => (
-                        <label
-                          key={permission.id}
-                          className="flex items-center gap-2"
-                        >
-                          <Checkbox
-                            checked={selectedPermissions.includes(
-                              permission.id
-                            )}
-                            onCheckedChange={(checked) =>
-                              handlePermissionChange(permission.id, !!checked)
-                            }
-                          />
-                          {permission.name} ({permission.action})
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="gradient" onClick={handleSave} disabled={saving}>
-              {saving ? "Đang lưu..." : "Lưu"}
-            </Button>
-            <Button variant="outline" onClick={onClose} disabled={saving}>
-              Đóng
-            </Button>
-          </DialogFooter>
+          {loadingPermissions ? (
+            <div className="text-center py-8">Đang tải quyền thực tế...</div>
+          ) : (
+            <>
+              <div className="mb-4">
+                <GradientTitle className="text-lg mb-2 block">
+                  CHỌN PHÒNG BAN
+                </GradientTitle>
+                <MultiSelectCombobox
+                  options={departmentOptions}
+                  value={selectedDepartments}
+                  onChange={handleDepartmentChange}
+                  placeholder="Chọn phòng ban..."
+                />
+              </div>
+              <div className="mb-4">
+                <GradientTitle className="text-lg mb-2 block">
+                  VAI TRÒ CHÍNH
+                </GradientTitle>
+                <MultiSelectCombobox
+                  options={mainRoleOptions}
+                  value={selectedMainRoles}
+                  onChange={handleMainRoleChange}
+                  placeholder="Chọn vai trò chính..."
+                />
+                <GradientTitle className="text-base mb-2 mt-4 block">
+                  VAI TRÒ PHỤ
+                </GradientTitle>
+                <MultiSelectCombobox
+                  options={subRoleOptions}
+                  value={selectedSubRoles}
+                  onChange={handleSubRoleChange}
+                  placeholder="Chọn vai trò phụ..."
+                />
+              </div>
+              <div className="mb-4">
+                <GradientTitle className="text-lg mb-2 block">
+                  QUYỀN HẠN
+                </GradientTitle>
+                <div>
+                  {departments.map((dep) => {
+                    const depPermissions = permissions.filter((p) => p.name === dep.slug);
+                    if (depPermissions.length === 0) return null;
+                    return (
+                      <div key={dep.id} className="mb-3">
+                        <div className="font-semibold text-lg mb-1">{dep.name}</div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
+                          {depPermissions.map((permission) => {
+                            // Dùng đúng roleId hiện tại (main + sub) đang chọn
+                            const isActive = currentRoleIds.some(roleId => isPermissionActive(permission.id, roleId));
+                            return (
+                              <label key={permission.id} className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={isActive}
+                                  onCheckedChange={(checked) => {
+                                    setRolePermissionsState((prev) => {
+                                      const updated = [...prev];
+                                      currentRoleIds.forEach((roleId) => {
+                                        const idx = updated.findIndex(rp => rp.roleId === roleId && rp.permissionId === permission.id);
+                                        if (idx !== -1) {
+                                          updated[idx] = { ...updated[idx], isActive: !!checked };
+                                        } else {
+                                          updated.push({ roleId, permissionId: permission.id, isActive: !!checked });
+                                        }
+                                      });
+                                      return updated;
+                                    });
+                                  }}
+                                />
+                                {permission.name} ({permission.action})
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="gradient" onClick={handleSave} disabled={saving}>
+                  {saving ? "Đang lưu..." : "Lưu"}
+                </Button>
+                <Button variant="outline" onClick={onClose} disabled={saving}>
+                  Đóng
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
       <ConfirmDialog

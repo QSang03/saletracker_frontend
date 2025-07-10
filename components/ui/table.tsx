@@ -10,6 +10,16 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
       data-slot="table-container"
       className="relative w-full overflow-x-auto"
     >
+      {/* Ẩn scrollbar ngang nhưng vẫn cho phép cuộn */}
+      <style>{`
+        .scrollbar-hide {
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE 10+ */
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none; /* Chrome, Safari, Opera */
+        }
+      `}</style>
       <table
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}
