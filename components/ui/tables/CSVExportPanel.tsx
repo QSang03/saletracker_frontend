@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import React from "react";
 
 interface CSVExportPanelProps {
   open: boolean;
@@ -24,6 +25,7 @@ interface CSVExportPanelProps {
   headers: string[];
   data: (string | number)[][];
   filtersDescription?: React.ReactNode;
+  defaultExportCount?: number; // thêm prop mới
 }
 
 export default function CSVExportPanel({
@@ -32,9 +34,21 @@ export default function CSVExportPanel({
   headers,
   data,
   filtersDescription,
+  defaultExportCount = 50, // mặc định 50 nếu không truyền
 }: CSVExportPanelProps) {
   const [mode, setMode] = useState<"rows" | "all">("rows");
-  const [rowCount, setRowCount] = useState(50);
+  const [rowCount, setRowCount] = useState(defaultExportCount);
+
+  // Khi modal mở lại, reset rowCount về defaultExportCount
+  // Đảm bảo khi đổi số dòng/trang thì modal cũng cập nhật
+  React.useEffect(() => {
+    if (open)
+      setRowCount(
+        defaultExportCount > 0
+          ? Math.min(defaultExportCount, data.length)
+          : 1
+      );
+  }, [open, defaultExportCount, data.length]);
 
   const handleExport = () => {
     let exportData: (string | number)[][] = [];
@@ -74,7 +88,9 @@ export default function CSVExportPanel({
         </DialogHeader>
 
         {filtersDescription && (
-          <div className="text-sm text-muted-foreground">{filtersDescription}</div>
+          <div className="text-sm text-muted-foreground">
+            {filtersDescription}
+          </div>
         )}
 
         <div className="space-y-3">
@@ -99,7 +115,12 @@ export default function CSVExportPanel({
               max={data.length}
               value={rowCount}
               onChange={(e) =>
-                setRowCount(Math.min(Math.max(1, Number(e.target.value)), data.length))
+                setRowCount(
+                  Math.min(
+                    Math.max(1, Number(e.target.value)),
+                    data.length
+                  )
+                )
               }
             />
           </div>
@@ -113,18 +134,4 @@ export default function CSVExportPanel({
   );
 }
 
-// CÁCH SỬ DỤNG:
-// const [openExport, setOpenExport] = useState(false);
-
-// <CSVExportPanel
-//   open={openExport}
-//   onClose={() => setOpenExport(false)}
-//   headers={["Ngày", "Người đặt", "Chi nhánh", "Sản phẩm", "Giá"]}
-//   data={filteredData} // dữ liệu sau khi áp dụng tất cả filter
-//   filtersDescription={
-//     <span>
-//       Nhân viên: <strong>Anh Hùng</strong> - Trạng thái: <strong>Chưa chốt</strong>
-//     </span>
-//   }
-// />
 

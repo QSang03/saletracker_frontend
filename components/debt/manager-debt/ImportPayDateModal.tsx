@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Button } from "@/components/ui/button";
 import { MultiSelectCombobox, Option } from "@/components/ui/MultiSelectCombobox";
 import { DatePicker } from "@/components/ui/date-picker";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 interface ImportPayDateModalProps {
   open: boolean;
@@ -15,6 +16,7 @@ export default function ImportPayDateModal({ open, onClose, customerOptions, onS
   const [selectedCustomers, setSelectedCustomers] = useState<(string|number)[]>([]);
   const [payDate, setPayDate] = useState<Date|null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -26,6 +28,7 @@ export default function ImportPayDateModal({ open, onClose, customerOptions, onS
   }, [open]);
 
   const handleConfirm = async () => {
+    setShowConfirm(false);
     setSubmitting(true);
     // Chuyển ngày về yyyy-MM-dd local, không dùng toISOString để tránh lệch ngày
     let payDateStr: string | null = null;
@@ -83,13 +86,20 @@ export default function ImportPayDateModal({ open, onClose, customerOptions, onS
           <Button
             variant="add"
             type="button"
-            onClick={handleConfirm}
+            onClick={() => setShowConfirm(true)}
             disabled={submitting || !payDate || selectedCustomers.length === 0}
           >
             Lưu
           </Button>
         </DialogFooter>
       </DialogContent>
+      <ConfirmDialog
+        isOpen={showConfirm}
+        title="Xác nhận cập nhật ngày hẹn thanh toán"
+        message={`Bạn có chắc chắn muốn cập nhật ngày hẹn cho ${selectedCustomers.length} khách hàng?`}
+        onConfirm={handleConfirm}
+        onCancel={() => setShowConfirm(false)}
+      />
     </Dialog>
   );
 }

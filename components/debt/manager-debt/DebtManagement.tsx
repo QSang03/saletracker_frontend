@@ -8,6 +8,9 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import EditDebtModal from "./EditDebtModal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { getAccessToken } from "@/lib/auth";
 
 // Thêm prop cho phép custom align từng cột
 interface DebtManagementProps {
@@ -16,6 +19,8 @@ interface DebtManagementProps {
   startIndex: number;
   onReload: () => void;
   columnAligns?: ("left" | "center" | "right")[];
+  onEdit?: (debt: any, data: { note: string; status: string }) => Promise<void>;
+  onDelete?: (debt: any) => Promise<void>; // Thêm prop onDelete
 }
 
 function getDaysBetween(date1?: string | Date, date2?: string | Date) {
@@ -25,13 +30,69 @@ function getDaysBetween(date1?: string | Date, date2?: string | Date) {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export default function DebtManagement({ debts, expectedRowCount, startIndex, onReload, columnAligns }: DebtManagementProps) {
+export default function DebtManagement({ debts, expectedRowCount, startIndex, onReload, columnAligns, onEdit, onDelete }: DebtManagementProps) {
   const today = new Date();
   // CSS cho cell, giữ nguyên như ban đầu
   const cellClass = "px-3 py-2";
   const cellCenterClass = "text-center px-3 py-2";
   const cellLeftClass = "text-left px-3 py-2";
   const cellRightClass = "text-right px-3 py-2";
+  
+  const [editModalOpen, setEditModalOpen] = React.useState(false);
+  const [editingDebt, setEditingDebt] = React.useState<any>(null);
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [debtToDelete, setDebtToDelete] = React.useState<any>(null);
+  const [pendingEditData, setPendingEditData] = React.useState<{ note: string; status: string } | null>(null);
+  const [isProcessing, setIsProcessing] = React.useState(false);
+
+  // Lấy danh sách trạng thái unique từ dữ liệu nợ
+  const statusOptions = React.useMemo(() => {
+    const statuses = debts.map(d => d.status).filter(Boolean);
+    return Array.from(new Set(statuses)).map(s => ({ label: s, value: s }));
+  }, [debts]);
+
+  // Hàm xử lý khi bấm Lưu trong EditDebtModal
+  const handleModalSave = (data: { note: string; status: string }) => {
+    setPendingEditData(data);
+    setShowConfirm(true);
+  };
+
+  // Hàm xử lý khi xác nhận trong ConfirmDialog
+  const handleConfirmEdit = async () => {
+    if (!onEdit || !editingDebt || !pendingEditData) return;
+    
+    setIsProcessing(true);
+    try {
+      await onEdit(editingDebt, pendingEditData);
+      // Chỉ đóng modal và reset state sau khi API thành công
+      setShowConfirm(false);
+      setEditModalOpen(false);
+      setEditingDebt(null);
+      setPendingEditData(null);
+    } catch (error) {
+      console.error('Error updating debt:', error);
+      // Nếu có lỗi, chỉ đóng confirm dialog, giữ nguyên edit modal
+      setShowConfirm(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Hàm xử lý khi hủy trong ConfirmDialog
+  const handleCancelEdit = () => {
+    setShowConfirm(false);
+    setPendingEditData(null);
+    // Không đóng edit modal, để user có thể chỉnh sửa lại
+  };
+
+  // Hàm xử lý khi đóng edit modal
+  const handleCloseEditModal = () => {
+    setEditModalOpen(false);
+    setEditingDebt(null);
+    setPendingEditData(null);
+  };
+
   return (
     <div className="border rounded-xl shadow-inner overflow-x-auto always-show-scrollbar">
       <Table className="min-w-[700px]">
@@ -73,7 +134,7 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
               <TableRow
                 key={debt.id || idx}
                 className={
-                  (isAnyFallback ? "bg-yellow-100" : idx % 2 === 0 ? "bg-gray-50" : "")
+                  (isAnyFallback ? "bg-yellow-100" : idx % 2 === 0 ? "bg-gray-200" : "")
                 }
               >
                 <TableCell className={cellCenterClass}>{startIndex + idx + 1}</TableCell>
@@ -91,21 +152,50 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
                 <TableCell className={cellCenterClass}>{debt.remaining ? Number(debt.remaining).toLocaleString() : ""}</TableCell>
                 <TableCell className={cellCenterClass}>
                   <span className={
-                    debt.status === "Đã thanh toán"
+                    debt.status === "paid"
+                      ? "text-green-600 font-semibold"
+                      : debt.status === "pay_later"
+                      ? "text-blue-600 font-semibold"
+                      : debt.status === "no_information_available"
+                      ? "text-gray-500 font-semibold"
+                      : debt.status === "Đã thanh toán"
                       ? "text-green-600 font-semibold"
                       : debt.status === "Chưa thanh toán"
                       ? "text-red-600 font-semibold"
                       : "text-yellow-600 font-semibold"
                   }>
-                    {debt.status}
+                    {debt.status === "paid"
+                      ? "Đã thanh toán"
+                      : debt.status === "pay_later"
+                      ? "Đã hẹn thanh toán"
+                      : debt.status === "no_information_available"
+                      ? "Không có thông tin"
+                      : debt.status}
                   </span>
                 </TableCell>
                 <TableCell className={cellCenterClass}>{note}</TableCell>
                 <TableCell className={cellCenterClass + " flex gap-2 justify-center"}>
-                  <Button size="sm" variant="edit" onClick={() => {}}>
+                  <Button 
+                    size="sm" 
+                    variant="edit" 
+                    onClick={() => {
+                      // Lưu object debt đầy đủ vào state riêng biệt
+                      setEditingDebt({ ...debt });
+                      setEditModalOpen(true);
+                    }}
+                    disabled={isProcessing}
+                  >
                     Chỉnh sửa
                   </Button>
-                  <Button size="sm" variant="delete" onClick={() => {}}>
+                  <Button 
+                    size="sm" 
+                    variant="delete" 
+                    onClick={() => { 
+                      setDebtToDelete(debt); 
+                      setShowDeleteConfirm(true); 
+                    }}
+                    disabled={isProcessing}
+                  >
                     Xóa
                   </Button>
                 </TableCell>
@@ -125,6 +215,49 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
           })}
         </TableBody>
       </Table>
+
+      {/* Modal chỉnh sửa */}
+      <EditDebtModal
+        open={editModalOpen}
+        onClose={handleCloseEditModal}
+        initialNote={editingDebt?.note || ""}
+        initialStatus={editingDebt?.status || ""}
+        statusOptions={statusOptions}
+        onSave={handleModalSave}
+      />
+
+      {/* Confirm dialog cho edit */}
+      <ConfirmDialog
+        isOpen={showConfirm}
+        title="Xác nhận cập nhật phiếu công nợ"
+        message="Bạn có chắc chắn muốn lưu thay đổi ghi chú và trạng thái cho phiếu này?"
+        onConfirm={handleConfirmEdit}
+        onCancel={handleCancelEdit}
+      />
+
+      {/* Confirm dialog cho delete */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Xác nhận xóa phiếu công nợ"
+        message="Bạn có chắc chắn muốn xóa mềm phiếu công nợ này?"
+        onConfirm={async () => {
+          if (onDelete && debtToDelete) {
+            setIsProcessing(true);
+            try {
+              await onDelete(debtToDelete);
+              setShowDeleteConfirm(false);
+              setDebtToDelete(null);
+              onReload();
+            } finally {
+              setIsProcessing(false);
+            }
+          }
+        }}
+        onCancel={() => { 
+          setShowDeleteConfirm(false); 
+          setDebtToDelete(null); 
+        }}
+      />
     </div>
   );
 }

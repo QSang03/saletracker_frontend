@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +11,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { DatePicker } from "@/components/ui/date-picker";
 import type { DateRange } from "react-day-picker";
 import { Skeleton } from "@/components/ui/skeleton";
+import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
 
 interface PaginatedTableProps {
   emptyText?: string;
@@ -36,6 +37,7 @@ interface PaginatedTableProps {
   total?: number;
   pageSize?: number;
   onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
   children: React.ReactNode;
   onFilterChange?: (filters: Filters) => void;
   loading?: boolean;
@@ -54,6 +56,8 @@ interface PaginatedTableProps {
     prev?: string;
     next?: string;
   };
+  getExportData?: () => { headers: string[]; data: (string | number)[][] };
+  onResetFilter?: () => void;
 }
 
 interface Filters {
@@ -94,11 +98,14 @@ export default function PaginatedTable({
   total,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   children,
   onFilterChange,
   loading = false,
   filterClassNames = {},
   buttonClassNames = {},
+  getExportData,
+  onResetFilter,
 }: PaginatedTableProps) {
   const departmentOptions = useMemo(
     () => availableDepartments.map((d) => ({ label: d, value: d })),
@@ -110,11 +117,22 @@ export default function PaginatedTable({
   );
   const statusOptions = useMemo(
     () =>
-      availableStatuses.map((s) =>
-        typeof s === "string"
-          ? { label: s, value: s }
-          : { label: s.label, value: s.value }
-      ),
+      availableStatuses.map((s) => {
+        let label: string;
+        let value: string;
+        if (typeof s === "string") {
+          value = s;
+        } else {
+          value = s.value;
+        }
+        // Map lại label cho các trạng thái đặc biệt
+        if (value === "paid") label = "Đã thanh toán";
+        else if (value === "pay_later") label = "Đã hẹn thanh toán";
+        else if (value === "no_infomation_available") label = "Không có thông tin";
+        else if (typeof s === "string") label = s;
+        else label = s.label;
+        return { label, value };
+      }),
     [availableStatuses]
   );
   const categoryOptions = useMemo(
@@ -142,34 +160,50 @@ export default function PaginatedTable({
     employees: [],
   });
 
-  const [internalPage, setInternalPage] = useState(0);
+  // Xác định chế độ phân trang: backend (có page, pageSize, total) hay frontend (không có)
+  const isBackendPaging = page !== undefined && pageSize !== undefined && total !== undefined;
+
+  // State cho frontend pagination
+  const [internalPage, setInternalPage] = useState(0); // 0-based
   const [internalPageSize, setInternalPageSize] = useState(defaultPageSize);
-  const currentPage = page !== undefined ? page - 1 : internalPage;
-  const currentPageSize = pageSize ?? internalPageSize;
-  const totalRows = total ?? 0;
-  const totalPages = Math.ceil(totalRows / currentPageSize);
 
-  // Tách effect gọi onFilterChange và reset page
+  // Tính toán page/pageSize hiện tại
+  const currentPage = isBackendPaging ? page! : internalPage + 1; // 1-based
+  const currentPageSize = isBackendPaging ? pageSize! : internalPageSize;
+  const totalRows = isBackendPaging ? total! : children && Array.isArray(children) ? children.length : 0;
+  const totalPages = Math.max(1, Math.ceil(totalRows / currentPageSize));
+
+  // State tạm cho input pageSize (chỉ áp dụng cho input nhập số dòng/trang)
+  const [pendingPageSize, setPendingPageSize] = useState<number | "">(currentPageSize);
   useEffect(() => {
-    if (onFilterChange) onFilterChange(filters);
-    // Không reset page ở đây
-  }, [filters, onFilterChange]);
+    setPendingPageSize(currentPageSize);
+  }, [currentPageSize]);
 
-  // Chỉ reset page khi filter thực sự thay đổi, không reset khi chỉ page thay đổi
+  // Debounce filter cho backend: chỉ gọi onFilterChange sau 500ms khi user dừng nhập/chọn
+  const filterTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const debouncedSetFilters = useCallback((newFilters: Filters) => {
+    if (filterTimeout.current) clearTimeout(filterTimeout.current);
+    filterTimeout.current = setTimeout(() => {
+      if (onFilterChange) onFilterChange(newFilters);
+    }, 500);
+  }, [onFilterChange]);
+
+  // updateFilter chỉ cập nhật filter, không reset page
   const updateFilter = useCallback(
     <K extends keyof Filters>(key: K, value: Filters[K]) => {
       setFilters((prev) => {
-        // Nếu giá trị filter không đổi thì không làm gì
         if (prev[key] === value) return prev;
-        // Reset page về 1 khi filter thực sự thay đổi (nếu đang không ở page 1)
-        if (onPageChange && (page === undefined || page > 1)) onPageChange(1);
-        else setInternalPage(0);
-        return { ...prev, [key]: value };
+        const next = { ...prev, [key]: value };
+        debouncedSetFilters(next);
+        return next;
       });
     },
-    [onPageChange, page]
+    [debouncedSetFilters]
   );
 
+  // useEffect này KHÔNG gọi onFilterChange trực tiếp nữa
+  // handleResetFilter: reset filter, đồng thời reset page về 1 nếu là backend paging
   const handleResetFilter = useCallback(() => {
     const reset: Filters = {
       search: "",
@@ -183,31 +217,54 @@ export default function PaginatedTable({
       employees: [],
     };
     setFilters(reset);
-    if (onPageChange && (page === undefined || page > 1)) onPageChange(1);
+    if (onPageChange) onPageChange(1);
     else setInternalPage(0);
-  }, [onPageChange, page]);
+    setPendingPageSize("");
+    // Gọi callback reset filter ở trang cha nếu có
+    if (typeof onResetFilter === 'function') {
+      onResetFilter();
+    }
+  }, [onPageChange, onResetFilter]);
 
-  const handleExportCSV = useCallback(() => {
-    alert("Phát triển sau!");
-  }, []);
+  // State cho panel xuất CSV
+  const [openExport, setOpenExport] = useState(false);
 
-  const goToPage = useCallback(
-    (newPage: number) => {
-      if (onPageChange) onPageChange(newPage + 1);
-      else setInternalPage(newPage);
-    },
-    [onPageChange]
-  );
-
+  // Đổi page size
   const handlePageSizeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newSize = Number(e.target.value);
-      if (onPageChange) onPageChange(1);
-      if (pageSize === undefined) setInternalPage(0);
-      if (pageSize === undefined) setInternalPageSize(newSize);
+      if (isBackendPaging && onPageSizeChange) {
+        onPageSizeChange(newSize);
+      } else {
+        setInternalPage(0);
+        setInternalPageSize(newSize);
+      }
     },
-    [onPageChange, pageSize]
+    [isBackendPaging, onPageSizeChange]
   );
+
+  // Chuyển trang
+  const goToPage = useCallback(
+    (newPage: number) => {
+      if (isBackendPaging && onPageChange) {
+        onPageChange(newPage);
+      } else {
+        setInternalPage(newPage - 1);
+      }
+    },
+    [isBackendPaging, onPageChange]
+  );
+
+  // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định
+  useEffect(() => {
+    if (pendingPageSize === "") {
+      if (isBackendPaging && onPageSizeChange) onPageSizeChange(defaultPageSize);
+      else setInternalPageSize(defaultPageSize);
+      if (onPageChange) onPageChange(1);
+      else setInternalPage(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPageSize]);
 
   return (
     <div className="flex flex-col h-full min-h-[500px] space-y-4">
@@ -265,22 +322,51 @@ export default function PaginatedTable({
               className="min-w-0 w-full"
             />
           )}
-          <Button
-            variant="gradient"
-            size="sm"
-            className={`min-w-0 w-full ${buttonClassNames.export ?? ''}`}
-            onClick={handleExportCSV}
-          >
-            Xuất CSV
-          </Button>
-          <Button
-            variant="delete"
-            size="sm"
-            className={`min-w-0 w-full ${buttonClassNames.reset ?? ''}`}
-            onClick={handleResetFilter}
-          >
-            Xoá filter
-          </Button>
+          {/* Số dòng/trang nằm ngang hàng filter */}
+          {enablePageSize && (
+            <Input
+              type="number"
+              min={1}
+              className="min-w-0 w-full border rounded px-2 py-1 text-sm"
+              value={pendingPageSize}
+              placeholder="Số dòng/trang"
+              onChange={e => {
+                const val = Number(e.target.value);
+                setPendingPageSize(e.target.value === "" ? "" : (val > 0 ? val : ""));
+              }}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  const val = Number(pendingPageSize);
+                  if (!isNaN(val) && val > 0) {
+                    if (isBackendPaging && onPageSizeChange) onPageSizeChange(val);
+                    else {
+                      setInternalPage(0);
+                      setInternalPageSize(val);
+                    }
+                  }
+                }
+              }}
+            />
+          )}
+          {/* Nút Xuất và Xoá filter chia đôi 1 cột */}
+          <div className="flex gap-2 min-w-0 w-full">
+            <Button
+              variant="export"
+              className={`min-w-0 w-1/2 ${buttonClassNames.export ?? ''}`}
+              onClick={() => setOpenExport(true)}
+              disabled={!getExportData}
+            >
+              Xuất CSV
+            </Button>
+            <Button
+              type="button"
+              variant="delete"
+              className={`w-1/2 ${buttonClassNames.reset ?? ''}`}
+              onClick={handleResetFilter}
+            >
+              Xóa filter
+            </Button>
+          </div>
         </div>
         {/* Tổng số dòng dưới filter */}
         <div className="mt-4 ml-0.5 text font-medium">
@@ -329,10 +415,10 @@ export default function PaginatedTable({
               <Skeleton key={idx} className="h-10 w-full" />
             ))}
           </div>
-        ) :
-          (
-            children
-          )}
+        ) : (
+          // Khi backend paging, luôn render nguyên vẹn children (không slice/cắt)
+          children
+        )}
       </div>
 
       <div className="flex justify-center gap-2 pt-2 mt-2">
@@ -340,24 +426,39 @@ export default function PaginatedTable({
           variant="gradient"
           size="sm"
           className={buttonClassNames.prev ?? ''}
-          onClick={() => goToPage(Math.max(currentPage - 1, 0))}
-          disabled={currentPage === 0}
+          onClick={() => {
+            goToPage(Math.max(currentPage - 1, 1));
+          }}
+          disabled={currentPage === 1}
         >
           Trước
         </Button>
         <span className="text-sm px-2 mt-1.5">
-          Trang {currentPage + 1} / {totalPages || 1}
+          Trang {currentPage} / {totalPages || 1}
         </span>
         <Button
           variant="gradient"
           size="sm"
           className={buttonClassNames.next ?? ''}
-          onClick={() => goToPage(Math.min(currentPage + 1, totalPages - 1))}
-          disabled={currentPage >= totalPages - 1}
+          onClick={() => {
+            goToPage(Math.min(currentPage + 1, totalPages));
+          }}
+          disabled={currentPage >= totalPages}
         >
           Sau
         </Button>
       </div>
+
+      {/* Panel xuất CSV */}
+      {getExportData && (
+        <CSVExportPanel
+          open={openExport}
+          onClose={() => setOpenExport(false)}
+          // Truyền thêm defaultExportCount là currentPageSize (số dòng/trang hiện tại)
+          defaultExportCount={currentPageSize}
+          {...getExportData()}
+        />
+      )}
     </div>
   );
 }
