@@ -84,8 +84,8 @@ export default function DashboardLayout({
           />
         )}
         <AppSidebar activeUrl={activeUrl} setActiveUrl={setActiveUrl} currentUser={currentUser}/>
-        <SidebarInset>
-          <div className="flex flex-col bg-background text-foreground transition-colors">
+        <SidebarInset className="overflow-hidden">
+          <div className="flex flex-col bg-background text-foreground transition-colors overflow-hidden">
             <header className="flex h-16 shrink-0 items-center justify-between px-4 gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
               <div className="flex items-center gap-2">
                 <SidebarTrigger className="-ml-1" />
@@ -107,7 +107,9 @@ export default function DashboardLayout({
               </div>
               <NavUserInline user={userInfo} />
             </header>
-            {children}
+            <div className="flex-1 overflow-hidden">
+              {children}
+            </div>
           </div>
         </SidebarInset>
       </CurrentUserContext.Provider>

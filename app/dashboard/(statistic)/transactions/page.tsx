@@ -14,7 +14,7 @@ export default function Page({ activeUrl }: PageProps) {
     return () => clearTimeout(timer);
   }, []);
   return (
-    <main className="flex flex-col gap-4 pt-0 pb-4">
+    <main className="flex flex-col gap-4 pt-0 pb-0">
       <div className="bg-muted text-muted-foreground rounded-xl md:min-h-min">
         <div className="rounded-xl border bg-background p-4 shadow-sm h-auto overflow-hidden">
           <h1 className="text-xl font-bold mb-4">📊 Thống kê giao dịch</h1>

@@ -5,7 +5,7 @@ export const navItems = [
     icon: "FileBarChart2",
     items: [
       { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin"] },
-      { title: "Thống kê công nợ", url: "/dashboard/transactions-debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Thống kê công nợ", url: "/dashboard/debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
     ],
   },
   {

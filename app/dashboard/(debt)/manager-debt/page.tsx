@@ -435,8 +435,9 @@ export default function ManagerDebtPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 pt-0 pb-4 py-6">
-      <Card className="w-full flex-1">
+    <div className="h-full overflow-hidden">
+      <div className="h-full overflow-y-auto overflow-x-hidden p-6">
+        <Card className="w-full max-w-full">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-bold">
             💰 Quản lý công nợ
@@ -471,7 +472,7 @@ export default function ManagerDebtPage() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6 space-y-4">
           {/* Accordion thống kê */}
           <Accordion type="single" collapsible defaultValue="stats">
             <AccordionItem value="stats">
@@ -486,9 +487,9 @@ export default function ManagerDebtPage() {
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-          <div className="max-w-[calc(100vw-20rem)]">
-            {/* Tổng số dòng dưới filter */}
-            <PaginatedTable
+          <div className="overflow-x-auto -mx-6">
+            <div className="min-w-full px-6">
+              <PaginatedTable
               enableSearch={true}
               enableStatusFilter={true}
               enableSingleDateFilter={true}
@@ -518,6 +519,7 @@ export default function ManagerDebtPage() {
                 onDelete={handleDeleteDebt}
               />
             </PaginatedTable>
+            </div>
           </div>
           {alert && (
             <ServerResponseAlert
@@ -568,6 +570,7 @@ export default function ManagerDebtPage() {
           setIsLoading(false);
         }}
       />
+      </div>
     </div>
   );
 }

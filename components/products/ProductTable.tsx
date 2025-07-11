@@ -171,7 +171,7 @@ export default function ProductTable() {
           buttonClassNames={{ export: "ml-2", reset: "ml-2" }}
         >
           <Table className="min-w-[400px]">
-            <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+            <TableHeader className="sticky top-0 z-10 shadow-sm">
               <TableRow>
                 <TableHead className="px-3 py-2 text-left w-12">#</TableHead>
                 <TableHead className="px-3 py-2 text-left">Tên sản phẩm</TableHead>

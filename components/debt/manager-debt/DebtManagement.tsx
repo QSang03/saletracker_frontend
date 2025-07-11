@@ -96,7 +96,7 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
   return (
     <div className="border rounded-xl shadow-inner overflow-x-auto always-show-scrollbar">
       <Table className="min-w-[700px]">
-        <TableHeader className="sticky top-0 z-[8] bg-background shadow-sm">
+        <TableHeader className="sticky top-0 z-[8] shadow-sm">
           <TableRow>
             <TableHead className="w-12 text-center px-3 py-2">#</TableHead>
             <TableHead className="px-3 py-2 text-left">Tên khách hàng</TableHead>

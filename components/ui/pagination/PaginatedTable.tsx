@@ -60,7 +60,7 @@ interface PaginatedTableProps {
   onResetFilter?: () => void;
 }
 
-interface Filters {
+export type Filters = {
   search: string;
   departments: (string | number)[];
   roles: (string | number)[];
@@ -70,7 +70,7 @@ interface Filters {
   dateRange: DateRange;
   singleDate?: Date;
   employees: (string | number)[];
-}
+};
 
 export default function PaginatedTable({
   emptyText,
@@ -267,7 +267,7 @@ export default function PaginatedTable({
   }, [pendingPageSize]);
 
   return (
-    <div className="flex flex-col h-full min-h-[500px] space-y-4">
+    <div className="flex flex-col h-full min-h-[500px] space-y-4 w-full">
       <div className="mb-4">
         <div className="grid grid-cols-6 gap-3">
           {enableSearch && (

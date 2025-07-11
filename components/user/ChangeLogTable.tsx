@@ -36,7 +36,7 @@ export default function ChangeLogTable({
   return (
     <div className="overflow-x-auto">
       <Table className="w-full max-w-7xl mx-auto border border-gray-200 rounded-lg shadow-sm">
-        <TableHeader className="bg-gray-50">
+        <TableHeader>
           <TableRow>
             <TableHead className="w-12 text-center px-3 py-2.5">#</TableHead>
             <TableHead className="px-3 py-2.5 text-left">User ID</TableHead>
