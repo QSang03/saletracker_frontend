@@ -384,6 +384,7 @@ interface DebtModalProps {
   onClose: () => void;
   category: string;
   debts: Debt[];
+  loading?: boolean;
 }
 
 const DebtModal: React.FC<DebtModalProps> = ({
@@ -391,6 +392,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   onClose,
   category,
   debts,
+  loading = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
@@ -409,7 +411,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
   }, [debts]);
 
   const filteredDebts: Debt[] = useMemo(() => {
-    return debts.filter((debt) => {
+    console.log('All debts in modal:', debts);
+    console.log('Filter criteria:', { searchTerm, selectedEmployees, selectedDate });
+    
+    const filtered = debts.filter((debt) => {
       const matchesSearch =
         debt.customer_raw_code
           .toLowerCase()
@@ -423,13 +428,17 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
       const matchesDate =
         !selectedDate ||
-        (debt.due_date && selectedDate
-          ? new Date(debt.due_date).toISOString().split("T")[0] ===
-            new Date(selectedDate).toISOString().split("T")[0]
-          : true);
+        (debt.pay_later && typeof debt.pay_later === 'string'
+          ? new Date(debt.pay_later).toDateString() === selectedDate.toDateString()
+          : debt.due_date 
+            ? new Date(debt.due_date).toDateString() === selectedDate.toDateString()
+            : false);
 
       return matchesSearch && matchesEmployee && matchesDate;
     });
+    
+    console.log('Filtered debts:', filtered);
+    return filtered;
   }, [debts, searchTerm, selectedEmployees, selectedDate]);
 
   const formatCurrency = useCallback((amount: number): string => {
@@ -451,6 +460,39 @@ const DebtModal: React.FC<DebtModalProps> = ({
       no_info: "Chưa có thông tin",
     };
     return labels[cat as keyof typeof labels] || cat;
+  };
+
+  // Function to get debt status based on category and debt data
+  const getDebtStatus = (debt: Debt, modalCategory: string): string => {
+    // If this is paid category, all debts should show as paid
+    if (modalCategory === 'paid') {
+      return 'paid';
+    }
+    
+    // For other categories, determine status based on debt data
+    const remaining = Number(debt.remaining) || 0;
+    const payLater = debt.pay_later;
+    
+    // Check if actually paid (remaining very small)
+    if (remaining < 1000) {
+      return 'paid';
+    }
+    
+    // Check if has promise date
+    if (payLater) {
+      if (typeof payLater === 'string' && payLater.trim() !== '') {
+        return 'promised';
+      }
+      if (typeof payLater === 'boolean' && payLater === true) {
+        return 'promised';
+      }
+      if (payLater instanceof Date) {
+        return 'promised';
+      }
+    }
+    
+    // Default to no info
+    return 'no_info';
   };
 
   const handleSearch = useCallback(() => {
@@ -485,14 +527,31 @@ const DebtModal: React.FC<DebtModalProps> = ({
     setSelectedEmployees((prev) => prev.filter((e) => e !== employee));
   };
 
-  // Calculate totals
+  // Calculate totals with proper null/undefined handling and category-specific logic
   const totalAmount = useMemo(() => {
-    return filteredDebts.reduce((sum, debt) => sum + debt.total_amount, 0);
-  }, [filteredDebts]);
+    const total = filteredDebts.reduce((sum, debt) => {
+      const amount = Number(debt.total_amount) || 0;
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0);
+    console.log(`Total amount for category ${category}:`, total, 'from', filteredDebts.length, 'debts');
+    return total;
+  }, [filteredDebts, category]);
 
   const totalRemaining = useMemo(() => {
-    return filteredDebts.reduce((sum, debt) => sum + debt.remaining, 0);
-  }, [filteredDebts]);
+    // For "paid" category, remaining should always be 0
+    if (category === 'paid') {
+      console.log('Category is paid, returning 0 for remaining');
+      return 0;
+    }
+    
+    // For other categories, calculate actual remaining
+    const remaining = filteredDebts.reduce((sum, debt) => {
+      const remainingAmount = Number(debt.remaining) || 0;
+      return sum + (isNaN(remainingAmount) ? 0 : remainingAmount);
+    }, 0);
+    console.log(`Total remaining for category ${category}:`, remaining, 'from', filteredDebts.length, 'debts');
+    return remaining;
+  }, [filteredDebts, category]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -574,10 +633,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
                       {formatCurrency(debt.remaining)}
                     </TableCell>
                     <TableCell className="h-14 px-4 text-sm text-center text-gray-700">
-                      {formatDate(debt.due_date)}
+                      {formatDate(typeof debt.pay_later === 'string' ? debt.pay_later : debt.due_date)}
                     </TableCell>
                     <TableCell className="h-14 px-4 text-center">
-                      <StatusBadge status={debt.status || "no_info"} />
+                      <StatusBadge status={getDebtStatus(debt, category)} />
                     </TableCell>
                     <TableCell className="h-14 px-4 text-sm text-gray-700">
                       {debt.employee_code_raw || "-"}
@@ -594,7 +653,14 @@ const DebtModal: React.FC<DebtModalProps> = ({
             </Table>
           </div>
 
-          {filteredDebts.length === 0 && (
+          {loading && (
+            <div className="text-center py-16">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Đang tải dữ liệu...</p>
+            </div>
+          )}
+
+          {!loading && filteredDebts.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">
               <AlertCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="text-xl font-medium mb-2">

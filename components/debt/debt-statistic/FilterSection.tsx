@@ -72,17 +72,28 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
     },
   ],
 }) => {
+  const initializedRef = React.useRef(false);
+
+  // Initialize only once
   React.useEffect(() => {
-    setTimeRange("week");
-    const defaultPreset = presets.find((p) => p.key === "week");
-    if (defaultPreset) setRange(defaultPreset.calc());
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      const defaultPreset = presets.find((p) => p.key === "week");
+      if (defaultPreset && !range) {
+        setTimeRange("week");
+        setRange(defaultPreset.calc());
+      }
+    }
   }, []);
 
-  // Khi thay đổi timeRange, tự động sync lại range
-  React.useEffect(() => {
-    const preset = presets.find((p) => p.key === timeRange);
-    if (preset) setRange(preset.calc());
-  }, [timeRange]);
+  // Handle timeRange changes with proper memoization
+  const handleTimeRangeChange = React.useCallback((newTimeRange: "week" | "month" | "quarter") => {
+    const preset = presets.find((p) => p.key === newTimeRange);
+    if (preset) {
+      setTimeRange(newTimeRange);
+      setRange(preset.calc());
+    }
+  }, [presets, setTimeRange, setRange]);
 
   // Function để clear selection
   const handleClearSelection = () => {
@@ -168,7 +179,7 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
                       {presets.map((p) => (
                         <CommandItem
                           key={p.key}
-                          onSelect={() => setTimeRange(p.key)}
+                          onSelect={() => handleTimeRangeChange(p.key)}
                         >
                           {p.label}
                         </CommandItem>

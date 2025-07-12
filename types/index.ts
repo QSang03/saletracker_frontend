@@ -180,7 +180,7 @@ export interface Debt {
   remaining: number;
   issue_date?: string | Date;
   due_date?: string | Date;
-  pay_later?: boolean;
+  pay_later?: boolean | string | Date; // Can be boolean, date string, or Date
   status?: string;
   sale_id?: number;
   sale_name_raw?: string;
