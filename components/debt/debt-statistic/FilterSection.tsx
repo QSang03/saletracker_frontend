@@ -18,7 +18,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { Label } from "@/components/ui/label";
-import { Calendar as CalendarIcon, Filter } from "lucide-react";
+import { Calendar as CalendarIcon, Filter, X } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +84,12 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
     if (preset) setRange(preset.calc());
   }, [timeRange]);
 
+  // Function để clear selection
+  const handleClearSelection = () => {
+    setRange(undefined);
+    setTimeRange("week");
+  };
+
   const isInvalid = range?.from && range?.to && range.from > range.to;
 
   return (
@@ -136,7 +142,7 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
               </Popover>
               {isInvalid && (
                 <p className="text-sm text-red-600 mt-1">
-                  Ngày “Từ” phải trước hoặc bằng ngày “Đến”.
+                  Ngày "Từ" phải trước hoặc bằng ngày "Đến".
                 </p>
               )}
             </div>
@@ -174,19 +180,26 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
             </div>
           </div>
 
-          {/* Presets (bên phải trên lg) */}
-          <div className="flex flex-wrap gap-2 lg:w-1/2">
-            {presets.map((p) => (
+            <div className="flex justify-center">
               <Button
-                key={p.label}
-                variant={p.key === timeRange ? "default" : "outline"}
+                variant="ghost"
                 size="sm"
-                onClick={() => setTimeRange(p.key)}
+                onClick={handleClearSelection}
+                className="
+                  h-8 px-3 
+                  text-muted-foreground hover:text-destructive
+                  hover:bg-destructive/10
+                  transition-all duration-200
+                  rounded-md
+                  flex items-center gap-1.5
+                "
               >
-                {p.label}
+                <span className="flex items-center gap-1.5">
+                  <X className="h-4 w-4" />
+                  <span className="text-xs font-medium">Xóa bộ lọc</span>
+                </span>
               </Button>
-            ))}
-          </div>
+            </div>
         </div>
       </CardContent>
     </Card>

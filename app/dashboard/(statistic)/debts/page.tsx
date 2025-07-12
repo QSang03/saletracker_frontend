@@ -78,7 +78,6 @@ import DebtModal from "@/components/debt/debt-statistic/DebtModal";
 import { Debt } from "@/types";
 import { DateRange } from "react-day-picker";
 
-
 type StatusType = "paid" | "promised" | "no_info";
 type BadgeVariant = ComponentProps<typeof Badge>["variant"];
 
@@ -194,7 +193,9 @@ const mockDebts: Debt[] = [
 // Main Dashboard Component
 const DebtStatisticsDashboard: React.FC = () => {
   const [chartType, setChartType] = useState<string>("bar");
-  const [timeRange, setTimeRange] = React.useState<"week" | "month" | "quarter">("week");
+  const [timeRange, setTimeRange] = React.useState<
+    "week" | "month" | "quarter"
+  >("week");
   const [range, setRange] = React.useState<DateRange | undefined>({
     from: new Date(),
     to: new Date(),
@@ -278,7 +279,14 @@ const DebtStatisticsDashboard: React.FC = () => {
     // Ví dụ: gọi API fetch dữ liệu theo khoảng ngày
     const fromStr = range.from.toISOString().slice(0, 10);
     const toStr = range.to.toISOString().slice(0, 10);
-    console.log("Áp dụng lọc từ", fromStr, "đến", toStr, "với timeRange:", timeRange);
+    console.log(
+      "Áp dụng lọc từ",
+      fromStr,
+      "đến",
+      toStr,
+      "với timeRange:",
+      timeRange
+    );
     // fetchData({ from: fromStr, to: toStr, preset: timeRange });
   }, [range, timeRange]);
 
@@ -287,14 +295,24 @@ const DebtStatisticsDashboard: React.FC = () => {
       <div className="bg-muted text-muted-foreground rounded-xl md:min-h-min">
         <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              📊 Thống kê công nợ
-            </h1>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8 pb-6 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl">
+                📊
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Thống kê công nợ
+                </h1>
+                <p className="text-sm text-gray-600 mt-1">
+                  Theo dõi và phân tích tình trạng công nợ khách hàng
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Stats Cards - Chỉ 4 card theo yêu cầu */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          {/* Stats Cards - Card nhỏ hơn, padding thoải mái hơn */}
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4 mb-6">
             <StatsCard
               title="Tổng số phiếu nợ"
               value={stats.total}

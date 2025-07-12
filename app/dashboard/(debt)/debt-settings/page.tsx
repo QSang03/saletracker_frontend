@@ -194,6 +194,12 @@ export default function DebtSettingsPage() {
       setApiData(prev => prev.map(item => item.id === id ? updatedRow : item));
     }
   };
+  
+  // Handler để cập nhật row trong apiData
+  const handleUpdateRow = (id: string, updatedData: any) => {
+    setApiData(prev => prev.map(item => item.id === id ? { ...item, ...updatedData } : item));
+  };
+  
   // Callback xóa
   const handleDelete = (id: string) => {
     setApiData(prev => prev.filter(item => item.id !== id));
@@ -300,6 +306,7 @@ export default function DebtSettingsPage() {
               onEdit={handleEdit}
               onRefresh={fetchData}
               onShowAlert={setAlert}
+              onUpdateRow={handleUpdateRow}
             />
           </PaginatedTable>
         </CardContent>
@@ -323,6 +330,7 @@ export default function DebtSettingsPage() {
           if (success) {
             setAlert({ type: "success", message: "Thêm công nợ thủ công thành công!" });
             setShowAddManualModal(false);
+            fetchData(); // Refresh data sau khi thêm thành công
           } else {
             setAlert({ type: "error", message: "Thêm công nợ thủ công thất bại!" });
           }

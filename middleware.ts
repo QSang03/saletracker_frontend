@@ -1,10 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { navItems } from './lib/nav-items';
+import type { User } from './types';
 
-function getFirstAccessibleUrl(roles: string[]): string | null {
+function hasRole(userRoles: string[], requiredRoles: string[]): boolean {
+  return requiredRoles.some(role => userRoles.includes(role));
+}
+
+function getFirstAccessibleUrl(userRoles: string[]): string | null {
   for (const group of navItems) {
     for (const item of group.items) {
-      if (!item.roles || item.roles.some((r: string) => roles.includes(r))) {
+      if (!item.roles || hasRole(userRoles, item.roles)) {
         return item.url;
       }
     }
@@ -12,10 +17,10 @@ function getFirstAccessibleUrl(roles: string[]): string | null {
   return null;
 }
 
-function isAccessible(roles: string[], url: string): boolean {
+function isAccessible(userRoles: string[], url: string): boolean {
   for (const group of navItems) {
     for (const item of group.items) {
-      if (item.url === url && (!item.roles || item.roles.some((r: string) => roles.includes(r)))) {
+      if (item.url === url && (!item.roles || hasRole(userRoles, item.roles))) {
         return true;
       }
     }
@@ -37,15 +42,17 @@ export async function middleware(request: NextRequest) {
       if (exp && typeof exp === 'number' && exp > 0) {
         isValid = Date.now() < exp * 1000;
       }
+      
+      // Lấy roles từ payload - backend trả về array objects với name
       if (payload.roles && Array.isArray(payload.roles)) {
-        userRoles = payload.roles;
+        userRoles = payload.roles.map((role: any) => role.name || role);
       }
     } catch (error) {
       console.error('Token decode error:', error);
     }
   }
 
-  if (isValid && (pathname === '/' || pathname === '/login')) {
+  if (isValid && (pathname === '/' || pathname === '/login' || pathname === '/dashboard')) {
     const firstUrl = getFirstAccessibleUrl(userRoles);
     if (firstUrl) {
       return NextResponse.redirect(new URL(firstUrl, request.url));

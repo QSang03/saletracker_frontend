@@ -192,23 +192,70 @@ export interface Debt {
   debt_config_id?: number;
 }
 
-// DebtLog Entity
+// DebtLog Entity - Updated to match API response structure
 export interface DebtLog {
   id: number;
-  debt_config_id: number;
-  debt_msg: string;
-  send_at: string | Date;
+  debt_config_id?: number;
+  
+  // Customer information
+  customer_code?: string;
+  customer_name?: string;
+  customer_type?: string;
+  customer_gender?: string;
+  
+  // Debt messages and image
+  image_url?: string;
+  debt_message?: string;
+  remind_message_1?: string;
+  remind_message_2?: string;
+  business_remind_message?: string;
+  
+  // Timing information
+  send_time?: string | Date;
+  remind_time_1?: string | Date;
+  remind_time_2?: string | Date;
+  
+  // Configuration
+  is_send?: boolean;
+  is_repeat?: boolean;
+  day_of_week?: number;
+  gap_day?: number;
+  
+  // Status and tracking
+  remind_status?: string;
+  send_last_at?: string | Date;
+  last_update_at?: string | Date;
+  
+  // Related entities
+  actor?: {
+    id?: number;
+    fullName: string;
+    username: string;
+  };
+  employee?: {
+    id?: number;
+    fullName: string;
+    username: string;
+  };
+  
+  // Additional fields
+  conv_id?: string;
+  render?: string;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+  
+  // Legacy fields (for backward compatibility)
+  debt_msg?: string;
+  send_at?: string | Date;
   first_remind?: string;
   first_remind_at?: string | Date;
   second_remind?: string;
   second_remind_at?: string | Date;
   sale_msg?: string;
-  conv_id?: string;
   debt_img?: string;
-  remind_status?: string;
-  render?: string;
-  created_at?: string | Date;
-  updated_at?: string | Date;
+  
+  // API Response structure - nested debt_logs array
+  debt_logs?: DebtLog[];
 }
 
 // DebtHistory Entity

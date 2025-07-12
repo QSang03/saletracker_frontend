@@ -9,6 +9,7 @@ import axios from "axios";
 import { getAccessToken } from "@/lib/auth";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import EditDebtConfigModal from "./EditDebtConfigModal";
+import DebtDetailDialog from "./DebtDetailDialog";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -21,6 +22,7 @@ interface DebtSettingManagementProps {
   onEdit?: (row: any) => void;
   onRefresh?: () => void;
   onShowAlert?: (alert: { type: 'success' | 'error'; message: string }) => void;
+  onUpdateRow?: (id: string, updatedData: any) => void; // Thêm prop mới để cập nhật row
 }
 
 export default function DebtSettingManagement({
@@ -32,6 +34,7 @@ export default function DebtSettingManagement({
   onEdit,
   onRefresh,
   onShowAlert,
+  onUpdateRow,
 }: DebtSettingManagementProps) {
   // Map loại khách hàng
   const customerTypeMap: Record<string, string> = {
@@ -59,52 +62,142 @@ export default function DebtSettingManagement({
     "Not Sent": { label: "Chưa Gửi", color: "text-gray-500 font-semibold" },
     "Error Send": { label: "Gửi Không Thành Công", color: "text-red-600 font-semibold" },
   };
-  // Tạo mảng đủ số dòng (dữ liệu thật + dòng ảo)
-  const rows = Array.from({ length: pageSize }).map((_, idx) => data[idx] || null);
+  
+  // State để lưu data local để cập nhật ngay lập tức
+  const [localData, setLocalData] = useState(data);
+  
+  // Cập nhật localData khi data props thay đổi
+  React.useEffect(() => {
+    setLocalData(data);
+  }, [data]);
+  
+  // Tạo mảng đủ số dòng (dữ liệu thật + dòng ảo) từ localData
+  const rows = Array.from({ length: pageSize }).map((_, idx) => localData[idx] || null);
   const [confirmState, setConfirmState] = useState({
     open: false,
     type: undefined as 'send' | 'repeat' | undefined,
     row: null as any,
     nextValue: false,
+    loading: false, // Thêm loading state
   });
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   // State xác nhận xóa
   const [deleteState, setDeleteState] = useState<{ open: boolean; row: any }>({ open: false, row: null });
   const [editModal, setEditModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  // State cho dialog xem chi tiết công nợ
+  const [detailDialog, setDetailDialog] = useState<{ open: boolean; debtConfigId: string | null }>({ open: false, debtConfigId: null });
+
+  // Debug useEffect để theo dõi state changes
+  React.useEffect(() => {
+    console.log('🔍 detailDialog state changed:', detailDialog);
+  }, [detailDialog]);
+
+  // Utility function để format date an toàn
+  const formatUpdateInfo = (actor: any, lastUpdateAt: any) => {
+    try {
+      if (!actor || !lastUpdateAt) return null;
+      
+      let updateDate: Date;
+      
+      // Thử parse theo nhiều format
+      if (typeof lastUpdateAt === 'string') {
+        // Thử parse ISO string trước
+        updateDate = new Date(lastUpdateAt);
+        
+        // Nếu không thành công, thử parse DD/MM/YYYY HH:mm:ss
+        if (isNaN(updateDate.getTime())) {
+          const parts = lastUpdateAt.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
+          if (parts) {
+            const [, day, month, year, hour, minute, second] = parts;
+            updateDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second));
+          }
+        }
+      } else {
+        updateDate = new Date(lastUpdateAt);
+      }
+      
+      if (isNaN(updateDate.getTime())) {
+        console.warn('Invalid date detected:', lastUpdateAt);
+        return `${actor.fullName} đã thay đổi`;
+      }
+      
+      return `${actor.fullName} đã thay đổi lúc ${updateDate.toLocaleDateString('vi-VN')} ${updateDate.toLocaleTimeString('vi-VN')}`;
+    } catch (error) {
+      console.error('formatUpdateInfo error:', error, 'lastUpdateAt:', lastUpdateAt);
+      return actor?.fullName ? `${actor.fullName} đã thay đổi` : null;
+    }
+  };
 
   const handleSwitchClick = (row: any, type: 'send' | 'repeat', nextValue: boolean) => {
-    setConfirmState({ open: true, type, row, nextValue });
+    setConfirmState({ open: true, type, row, nextValue, loading: false });
   };
 
   const handleConfirm = async () => {
     if (!confirmState.row) return;
+    
+    // Cập nhật local state ngay lập tức để UI không bị lag
+    const optimisticUpdate = (rowId: string, updates: any) => {
+      setLocalData(prevData => 
+        prevData.map(item => 
+          item?.id === rowId ? { ...item, ...updates } : item
+        )
+      );
+    };
+    
     try {
       const token = getAccessToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       let res, updatedRow;
+      
       if (confirmState.type === 'send') {
+        // Optimistic update
+        const updates = { 
+          is_send: confirmState.nextValue,
+          // Nếu tắt send thì cũng tắt repeat
+          ...(confirmState.nextValue ? {} : { is_repeat: false })
+        };
+        optimisticUpdate(confirmState.row.id, updates);
+        
         res = await axios.patch(`${API_BASE_URL}/debt-configs/${confirmState.row.id}/toggle-send`, { is_send: confirmState.nextValue }, { headers });
         updatedRow = res.data;
-        if (!confirmState.nextValue) {
-          updatedRow.is_repeat = false;
-        }
+        
+        // Cập nhật với data thực từ server (bao gồm actor, last_update_at)
+        optimisticUpdate(confirmState.row.id, updatedRow);
+        
         if (onToggle) onToggle(confirmState.row.id, 'send', confirmState.nextValue, updatedRow);
+        if (onUpdateRow) onUpdateRow(confirmState.row.id, updatedRow);
         setAlert({ type: 'success', message: 'Cập nhật trạng thái gửi tự động thành công!' });
+        
       } else if (confirmState.type === 'repeat') {
+        // Optimistic update
+        optimisticUpdate(confirmState.row.id, { is_repeat: confirmState.nextValue });
+        
         res = await axios.patch(`${API_BASE_URL}/debt-configs/${confirmState.row.id}/toggle-repeat`, { is_repeat: confirmState.nextValue }, { headers });
         updatedRow = res.data;
+        
+        // Cập nhật với data thực từ server (bao gồm actor, last_update_at)
+        optimisticUpdate(confirmState.row.id, updatedRow);
+        
         if (onToggle) onToggle(confirmState.row.id, 'repeat', confirmState.nextValue, updatedRow);
+        if (onUpdateRow) onUpdateRow(confirmState.row.id, updatedRow);
         setAlert({ type: 'success', message: 'Cập nhật trạng thái gửi nhắc lại thành công!' });
       }
     } catch (e) {
+      // Rollback optimistic update on error
+      setLocalData(data);
       setAlert({ type: 'error', message: 'Cập nhật trạng thái thất bại!' });
     }
-    setConfirmState({ open: false, type: undefined, row: null, nextValue: false });
+    setConfirmState({ open: false, type: undefined, row: null, nextValue: false, loading: false });
   };
 
-  const handleCancel = () => setConfirmState({ open: false, type: undefined, row: null, nextValue: false });
+  const handleCancel = () => setConfirmState({ open: false, type: undefined, row: null, nextValue: false, loading: false });
   const handleEdit = (row: any) => {
     setEditModal({ open: true, id: row.id });
+  };
+  // Mở dialog xem chi tiết công nợ
+  const handleViewDetail = (row: any) => {
+    console.log('🔍 handleViewDetail called with row:', row);
+    setDetailDialog({ open: true, debtConfigId: row.id });
   };
 
   return (
@@ -205,13 +298,35 @@ export default function DebtSettingManagement({
                       <TableCell className="px-3 py-2 text-center">{remindSchedule}</TableCell>
                       <TableCell className="px-3 py-2 text-center">{row.send_last_at ? (<><div>{lastRemindedDateStr}</div><div className="text-xs text-gray-500">{lastRemindedDateTime}</div></>) : <span className="text-gray-400 italic">Chưa Nhắc Nợ</span>}</TableCell>
                       <TableCell className={`px-3 py-2 text-center ${remindStatusColor}`}>{remindStatus}</TableCell>
-                      <TableCell className="px-3 py-2 text-center">{row.actor && row.last_update_at ? (<Tooltip><TooltipTrigger asChild><span className="inline-flex items-center justify-center relative"><WrenchIcon className="w-5 h-5 text-blue-500 cursor-pointer" /><span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white shadow"></span></span></TooltipTrigger><TooltipContent>{`${row.actor.fullName} đã thay đổi lúc ${new Date(row.last_update_at).toLocaleDateString('vi-VN')} ${new Date(row.last_update_at).toLocaleTimeString('vi-VN')}`}</TooltipContent></Tooltip>) : (<span className="text-gray-400">--</span>)}</TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        {(() => {
+                          const updateInfo = formatUpdateInfo(row.actor, row.last_update_at);
+                          return updateInfo ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center justify-center relative">
+                                  <WrenchIcon className="w-5 h-5 text-blue-500 cursor-pointer" />
+                                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white shadow"></span>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>{updateInfo}</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-gray-400">--</span>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell className="px-3 py-2 text-center"><span className={row.is_send && row.is_repeat ? "font-semibold text-green-600" : row.is_send && !row.is_repeat ? "font-semibold text-blue-600" : !row.is_send && row.is_repeat ? "font-semibold text-orange-500" : "font-semibold text-gray-500"}>{row.is_send && row.is_repeat ? "Đang Hoạt Động" : row.is_send && !row.is_repeat ? "Chỉ Nhắc Nợ" : !row.is_send && row.is_repeat ? "Chỉ Gửi Sau 15 Phút" : "Không Gửi Nhắc"}</span></TableCell>
                       <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
                         {/* Icon con mắt xem chi tiết */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button type="button" className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer" aria-label="Xem Chi Tiết Công Nợ">
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
+                              aria-label="Xem Chi Tiết Công Nợ"
+                              onClick={() => handleViewDetail(row)}
+                            >
                               <EyeIcon className="w-5 h-5 text-blue-500" />
                             </button>
                           </TooltipTrigger>
@@ -276,21 +391,22 @@ export default function DebtSettingManagement({
                 </TableCell>
                 <TableCell className={`px-3 py-2 text-center ${remindStatusColor}`}>{remindStatus}</TableCell>
                 <TableCell className="px-3 py-2 text-center">
-                  {row.actor && row.last_update_at ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex items-center justify-center relative">
-                          <WrenchIcon className="w-5 h-5 text-blue-500 cursor-pointer" />
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white shadow"></span>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {`${row.actor.fullName} đã thay đổi lúc ${new Date(row.last_update_at).toLocaleDateString('vi-VN')} ${new Date(row.last_update_at).toLocaleTimeString('vi-VN')}`}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <span className="text-gray-400">--</span>
-                  )}
+                  {(() => {
+                    const updateInfo = formatUpdateInfo(row.actor, row.last_update_at);
+                    return updateInfo ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center justify-center relative">
+                            <WrenchIcon className="w-5 h-5 text-blue-500 cursor-pointer" />
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white shadow"></span>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{updateInfo}</TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-gray-400">--</span>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell className="px-3 py-2 text-center">
                   {/* Trạng thái hoạt động */}
@@ -318,7 +434,12 @@ export default function DebtSettingManagement({
                   {/* Icon con mắt xem chi tiết */}
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button type="button" className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer" aria-label="Xem Chi Tiết Công Nợ">
+                      <button 
+                        type="button" 
+                        className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer" 
+                        aria-label="Xem Chi Tiết Công Nợ"
+                        onClick={() => handleViewDetail(row)}
+                      >
                         <EyeIcon className="w-5 h-5 text-blue-500" />
                       </button>
                     </TooltipTrigger>
@@ -406,6 +527,13 @@ export default function DebtSettingManagement({
           onClose={() => setAlert(null)}
         />
       )}
+      {/* Dialog xem chi tiết công nợ */}
+      <DebtDetailDialog
+        open={detailDialog.open}
+        onClose={() => setDetailDialog({ open: false, debtConfigId: null })}
+        debtConfigId={detailDialog.debtConfigId}
+        onShowAlert={onShowAlert}
+      />
     </div>
   );
 }

@@ -184,11 +184,11 @@ const ChartSection: React.FC<ChartSectionProps> = ({
   );
 
   const content = useMemo(() => {
-    if (loading) return <div className="flex items-center justify-center h-96">Đang tải...</div>;
-    if (error) return <div className="flex items-center justify-center h-96 text-red-500">{error}</div>;
+    if (loading) return <div className="flex items-center justify-center h-96 w-full">Đang tải...</div>;
+    if (error) return <div className="flex items-center justify-center h-96 w-full text-red-500">{error}</div>;
     return (
       <Tabs value={chartType} onValueChange={handleChartTypeChange} className="w-[90%]">
-        <TabsList className="grid grid-cols-3 mb-6">
+        <TabsList className="grid grid-cols-3 mb-6 w-full">
           <TabsTrigger value="bar">Biểu đồ cột</TabsTrigger>
           <TabsTrigger value="line">Biểu đồ đường</TabsTrigger>
           <TabsTrigger value="radial">Biểu đồ thanh tròn</TabsTrigger>
@@ -224,7 +224,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({
           </SelectContent>
         </Select>
       </CardHeader>
-      <CardContent className="px-0">{content}</CardContent>
+      <CardContent className="px-0 flex items-center justify-center">{content}</CardContent>
     </Card>
   );
 };

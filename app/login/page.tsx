@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
+import { setAccessToken, clearAccessToken } from "@/lib/auth";
 
 import { Input } from "@/components/ui/custom/input";
 import { Button } from "@/components/ui/buttons/LoginButton";
@@ -43,29 +44,20 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok && data.access_token && data.user && !data.user.isBlock) {
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        document.cookie = `access_token=${
-          data.access_token
-        }; expires=${expires.toUTCString()}; path=/; SameSite=Lax${
-          location.protocol === "https:" ? "; Secure" : ""
-        }`;
-
+        setAccessToken(data.access_token);
         toast.success("🎉 Đăng nhập thành công!");
         window.location.href = callbackUrl;
       } else if (data.user && data.user.isBlock) {
-        document.cookie =
-          "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
+        clearAccessToken();
         toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
       } else {
-        document.cookie =
-          "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
+        clearAccessToken();
         toast.error("Đăng nhập thất bại", {
           description: data.message || "Sai tên đăng nhập hoặc mật khẩu",
         });
       }
     } catch (err) {
-      document.cookie =
-        "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
+      clearAccessToken();
       toast.error("Lỗi hệ thống", { description: String(err) });
     }
     setLoading(false);
