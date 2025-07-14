@@ -27,11 +27,14 @@ import {
   debtStatisticsAPI, 
   DebtStatsOverview, 
   AgingData, 
-  TrendData, 
+  TrendData,
   EmployeePerformance,
   StatisticsFilters,
   DebtListFilters 
 } from "@/lib/debt-statistics-api";
+import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
+import { PDynamic } from "@/components/common/PDynamic";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -99,13 +102,11 @@ const useCircuitBreaker = () => {
     
     // Prevent simultaneous calls
     if (isCallInProgress.current) {
-      console.warn('Circuit breaker: Call already in progress');
       return;
     }
     
     // Circuit is open and cooling down
     if (isOpen.current && now - lastFailure.current < 10000) {
-      console.warn('Circuit breaker is open, skipping API call');
       return;
     }
 
@@ -126,7 +127,6 @@ const useCircuitBreaker = () => {
       
       if (attempts.current >= 3) {
         isOpen.current = true;
-        console.error('Circuit breaker opened due to repeated failures');
       }
       throw error;
     } finally {
@@ -141,6 +141,15 @@ const useCircuitBreaker = () => {
 const DebtStatisticsDashboard: React.FC = () => {
   const { call: callWithCircuitBreaker, isCallInProgress } = useCircuitBreaker();
   
+  // Check permissions for debt statistics
+  const { 
+    canReadDepartment, 
+    user 
+  } = useDynamicPermission();
+
+  // Check if user has read access to debt department
+  const canAccessDebtStatistics = canReadDepartment('cong-no');
+
   const [chartType, setChartTypeState] = useState<'bar' | 'line' | 'radial'>("bar");
   const [timeRange, setTimeRangeState] = React.useState<"week" | "month" | "quarter">("week");
   
@@ -241,7 +250,9 @@ const DebtStatisticsDashboard: React.FC = () => {
         }
       });
     } catch (error) {
-      console.error('Error fetching debt statistics:', error);
+      if (isComponentMounted.current) {
+        setSelectedDebts([]);
+      }
     } finally {
       fetchingRef.current = false;
       if (isComponentMounted.current && !silent) {
@@ -250,27 +261,35 @@ const DebtStatisticsDashboard: React.FC = () => {
     }
   }, [debouncedFilters, callWithCircuitBreaker, isCallInProgress]);
 
-  // Auto-refresh every 30 seconds for silent updates
   useEffect(() => {
     const startAutoRefresh = () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
       refreshIntervalRef.current = setInterval(() => {
-        if (isComponentMounted.current && initialFetchDone.current) {
-          fetchData(true); // silent refresh
+        if (isComponentMounted.current && initialFetchDone.current && !document.hidden) {
+          fetchData(true); // silent refresh only when tab is visible
         }
-      }, 30000); // 30 seconds
+      }, 60000); // 60 seconds - reduced frequency
     };
 
     if (initialFetchDone.current) {
       startAutoRefresh();
     }
 
+    const handleVisibilityChange = () => {
+      if (!document.hidden && initialFetchDone.current && isComponentMounted.current) {
+        fetchData(true); // refresh when tab becomes visible
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [fetchData, initialFetchDone.current]);
 
@@ -332,8 +351,6 @@ const DebtStatisticsDashboard: React.FC = () => {
 
     setLoadingModalData(true);
     try {
-      console.log('Fetching debts for modal:', { category, filters: debouncedFilters });
-      
       // First try to get all debts and filter by status on frontend
       const modalFilters: DebtListFilters = {
         ...debouncedFilters,
@@ -342,27 +359,13 @@ const DebtStatisticsDashboard: React.FC = () => {
 
       const response = await debtStatisticsAPI.getDetailedDebts(modalFilters);
       
-      console.log('All debts response:', response);
-      
       // Filter by category on frontend based on debt properties
       let filteredData: Debt[] = [];
       
       if (response.data && Array.isArray(response.data)) {
-        console.log('=== ANALYZING ALL DEBTS ===');
-        console.log('Total debts received:', response.data.length);
-        
         // Sample first few debts to understand structure
         response.data.slice(0, 5).forEach((debt: any, index: number) => {
-          console.log(`Sample Debt ${index + 1}:`, {
-            bill_code: debt.bill_code,
-            invoice_code: debt.invoice_code,
-            total_amount: debt.total_amount,
-            remaining: debt.remaining,
-            pay_later: debt.pay_later,
-            customer_raw_code: debt.customer_raw_code,
-            typeof_remaining: typeof debt.remaining,
-            typeof_pay_later: typeof debt.pay_later
-          });
+          // Debt structure analysis removed for performance
         });
         
         // Count by categories for verification
@@ -380,18 +383,7 @@ const DebtStatisticsDashboard: React.FC = () => {
           }
         });
         
-        console.log('Category counts:', { paidCount, promisedCount, noInfoCount });
-        console.log('=== END ANALYSIS ===');
-        
         filteredData = response.data.filter((debt: any) => {
-          console.log('Checking debt for category:', category);
-          console.log('Debt data:', {
-            bill_code: debt.bill_code || debt.invoice_code,
-            remaining: debt.remaining,
-            total_amount: debt.total_amount,
-            pay_later: debt.pay_later
-          });
-          
           // Get relevant fields with proper type checking
           const remaining = Number(debt.remaining) || 0;
           const totalAmount = Number(debt.total_amount) || 0;
@@ -402,7 +394,6 @@ const DebtStatisticsDashboard: React.FC = () => {
             case 'paid':
               // Đã thanh toán - remaining = 0 (hoặc < 1000 để account cho rounding)
               const isPaid = remaining < 1000; // Small threshold for rounding errors
-              console.log(`Debt ${billCode}: isPaid=${isPaid} (remaining=${remaining})`);
               return isPaid;
               
             case 'promised':
@@ -411,7 +402,6 @@ const DebtStatisticsDashboard: React.FC = () => {
               const hasPayLaterDate = payLater && payLater.trim && payLater.trim() !== '';
               const hasDebt = remaining >= 1000;
               const isPromised = hasPayLaterDate && hasDebt;
-              console.log(`Debt ${billCode}: isPromised=${isPromised} (has_date=${hasPayLaterDate}, has_debt=${hasDebt}, pay_later="${payLater}", remaining=${remaining})`);
               return isPromised;
               
             case 'no_info':
@@ -419,7 +409,6 @@ const DebtStatisticsDashboard: React.FC = () => {
               const hasNoPayLaterDate = !payLater || (typeof payLater === 'string' && payLater.trim() === '');
               const hasDebtNoInfo = remaining >= 1000;
               const isNoInfo = hasNoPayLaterDate && hasDebtNoInfo;
-              console.log(`Debt ${billCode}: isNoInfo=${isNoInfo} (no_date=${hasNoPayLaterDate}, has_debt=${hasDebtNoInfo}, pay_later="${payLater}", remaining=${remaining})`);
               return isNoInfo;
               
             default:
@@ -427,16 +416,12 @@ const DebtStatisticsDashboard: React.FC = () => {
           }
         });
         
-        console.log(`Filtered data for category ${category}:`, filteredData.length, 'items');
       }
-      
-      console.log('Filtered data for category', category, ':', filteredData);
       
       if (isComponentMounted.current) {
         setSelectedDebts(filteredData);
       }
     } catch (error) {
-      console.error('Error fetching debts for modal:', error);
       if (isComponentMounted.current) {
         setSelectedDebts([]);
       }
@@ -469,6 +454,37 @@ const DebtStatisticsDashboard: React.FC = () => {
       currency: "VND",
     }).format(amount);
   }, []);
+
+  if (!user) {
+    return (
+      <main className="flex flex-col gap-4 pt-0 pb-0">
+        <div className="bg-muted text-muted-foreground rounded-xl md:min-h-min">
+          <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
+            <div className="flex items-center justify-center h-64">
+              <LoadingSpinner size={32} />
+              <span className="ml-2">Đang kiểm tra quyền truy cập...</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!canAccessDebtStatistics) {
+    return (
+      <main className="flex flex-col gap-4 pt-0 pb-0">
+        <div className="bg-muted text-muted-foreground rounded-xl md:min-h-min">
+          <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="text-6xl">🚫</div>
+              <div className="text-xl font-semibold text-red-600">Không có quyền truy cập</div>
+              <div className="text-gray-600">Bạn không có quyền xem thống kê công nợ</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (loading) {
     return (
@@ -586,7 +602,6 @@ const DebtStatisticsDashboard: React.FC = () => {
                 data={agingData}
                 loading={loading}
                 onBarClick={(data) => {
-                  console.log('Aging chart clicked:', data);
                   // You can implement drill-down here
                 }}
               />
@@ -597,7 +612,6 @@ const DebtStatisticsDashboard: React.FC = () => {
                 data={employeeData}
                 loading={loading}
                 onEmployeeClick={(employee) => {
-                  console.log('Employee clicked:', employee);
                   // You can implement drill-down here
                 }}
               />
@@ -630,7 +644,6 @@ const SafeDebtStatisticsDashboard: React.FC = () => {
   useEffect(() => {
     if (errorCount > 3) {
       setHasError(true);
-      console.error('Too many errors, disabling component');
     }
   }, [errorCount]);
 
@@ -671,7 +684,6 @@ const SafeDebtStatisticsDashboard: React.FC = () => {
   try {
     return <DebtStatisticsDashboard />;
   } catch (error) {
-    console.error('Caught error in SafeDebtStatisticsDashboard:', error);
     handleError();
     return (
       <div className="flex items-center justify-center min-h-screen">

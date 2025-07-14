@@ -22,6 +22,7 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import EditDebtConfigModal from "./EditDebtConfigModal";
 import DebtDetailDialog from "./DebtDetailDialog";
 import { P } from "@/components/common/P";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -134,9 +135,6 @@ export default function DebtSettingManagement({
   }>({ open: false, debtConfigId: null });
 
   // Debug useEffect để theo dõi state changes
-  React.useEffect(() => {
-    console.log("🔍 detailDialog state changed:", detailDialog);
-  }, [detailDialog]);
 
   // Utility function để format date an toàn
   const formatUpdateInfo = (actor: any, lastUpdateAt: any) => {
@@ -333,7 +331,6 @@ export default function DebtSettingManagement({
   };
   // Mở dialog xem chi tiết công nợ
   const handleViewDetail = (row: any) => {
-    console.log("🔍 handleViewDetail called with row:", row);
     setDetailDialog({ open: true, debtConfigId: row.id });
   };
 
@@ -607,7 +604,7 @@ export default function DebtSettingManagement({
                       >
                         <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
                           {/* Icon con mắt xem chi tiết */}
-                          <P name="debt-config-table" fallback={null}>
+                          <P permission={{ departmentSlug: 'cong-no', action: 'read' }} fallback={null}>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button
@@ -625,7 +622,7 @@ export default function DebtSettingManagement({
                             </Tooltip>
                           </P>
                           {/* Switch gửi tự động */}
-                          <P name="debt-config-edit" fallback={null}>
+                          <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
@@ -646,7 +643,7 @@ export default function DebtSettingManagement({
                             </Tooltip>
                           </P>
                           {/* Switch gửi nhắc lại - Chỉ bật được khi gửi tự động đã bật */}
-                          <P name="debt-config-edit" fallback={null}>
+                          <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
@@ -674,7 +671,7 @@ export default function DebtSettingManagement({
                               </TooltipContent>
                             </Tooltip>
                           </P>
-                          <P name="debt-config-edit" fallback={null}>
+                          <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
                             <Button
                               size="sm"
                               variant="edit"
@@ -683,7 +680,7 @@ export default function DebtSettingManagement({
                               Sửa
                             </Button>
                           </P>
-                          <P name="debt-config-delete" fallback={null}>
+                          <P permission={{ departmentSlug: 'cong-no', action: 'delete' }} fallback={null}>
                             <Button
                               size="sm"
                               variant="delete"
@@ -828,7 +825,7 @@ export default function DebtSettingManagement({
                 >
                   <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
                     {/* Icon con mắt xem chi tiết */}
-                    <P name="debt-config-table" fallback={null}>
+                    <P permission={{ departmentSlug: 'cong-no', action: 'read' }} fallback={null}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
@@ -844,7 +841,7 @@ export default function DebtSettingManagement({
                       </Tooltip>
                     </P>
                     {/* Switch gửi tự động */}
-                    <P name="debt-config-edit" fallback={null}>
+                    <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
@@ -861,7 +858,7 @@ export default function DebtSettingManagement({
                       </Tooltip>
                     </P>
                     {/* Switch gửi nhắc lại - Chỉ bật được khi gửi tự động đã bật */}
-                    <P name="debt-config-edit" fallback={null}>
+                    <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
@@ -885,7 +882,7 @@ export default function DebtSettingManagement({
                         </TooltipContent>
                       </Tooltip>
                     </P>
-                    <P name="debt-config-edit" fallback={null}>
+                    <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
                       <Button
                         size="sm"
                         variant="edit"
@@ -894,7 +891,7 @@ export default function DebtSettingManagement({
                         Sửa
                       </Button>
                     </P>
-                    <P name="debt-config-delete" fallback={null}>
+                    <P permission={{ departmentSlug: 'cong-no', action: 'delete' }} fallback={null}>
                       <Button
                         size="sm"
                         variant="delete"

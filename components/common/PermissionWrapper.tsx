@@ -27,12 +27,6 @@ export const PermissionWrapper: React.FC<PermissionWrapperProps> = ({
         perm.actions.every(action => canAccess(perm.departmentSlug, action))
       );
 
-  // Log permission check details
-  React.useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[PermissionWrapper] mode:', mode, 'permissions:', permissions, 'hasPermission:', hasPermission);
-  }, [mode, permissions, hasPermission]);
-
   if (!hasPermission) {
     return <>{fallback}</>;
   }

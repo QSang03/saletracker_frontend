@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import type { Product, Brand } from "@/types";
 import { getAccessToken } from "@/lib/auth";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 function getAuthHeaders(): HeadersInit {
   const token = getAccessToken();
@@ -24,6 +25,7 @@ function getAuthHeaders(): HeadersInit {
 }
 
 export default function ProductTable() {
+  const { canExportInDepartment } = useDynamicPermission();
   const [products, setProducts] = useState<Product[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [productFilter, setProductFilter] = useState({ search: "", brandIds: [] as (string|number)[], categoryIds: [] as (string|number)[], parentOnly: false });
@@ -71,7 +73,7 @@ export default function ProductTable() {
     try {
       const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers: getAuthHeaders() });
       const json = await r.json();
-      console.log("Fetched brands:", json);
+
       
       if (!isComponentMounted.current) return;
       
@@ -199,7 +201,7 @@ export default function ProductTable() {
     }
   }, []);
   
-  console.log("Brands state:", brands);
+
 
   return (
     <div className="flex flex-row gap-8 w-full">
@@ -216,6 +218,7 @@ export default function ProductTable() {
           availableCategories={[]}
           availableBrands={brands.map((b) => b.name)}
           onFilterChange={handleProductFilterChange}
+          canExport={canExportInDepartment('san-pham')}
           buttonClassNames={{ export: "ml-2", reset: "ml-2" }}
         >
           <Table className="min-w-[400px]">
@@ -262,6 +265,7 @@ export default function ProductTable() {
           onPageChange={setBrandPage}
           emptyText="Không có brand nào phù hợp."
           onFilterChange={handleBrandFilterChange}
+          canExport={canExportInDepartment('san-pham')}
           buttonClassNames={{ export: "ml-2", reset: "ml-2" }}
         >
           <Table className="min-w-[400px]">

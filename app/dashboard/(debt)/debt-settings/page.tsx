@@ -11,7 +11,8 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { getAccessToken } from "@/lib/auth";
 import { useApiState } from "@/hooks/useApiState";
-import { P } from "@/components/common/P";
+import { PDynamic } from "@/components/common/PDynamic";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 export default function DebtSettingsPage() {
   const [page, setPage] = useState(1);
@@ -29,10 +30,18 @@ export default function DebtSettingsPage() {
   });
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showAddManualModal, setShowAddManualModal] = useState(false);
-  const [alert, setAlert] = useState<{ type: any; message: string } | null>(
-    null
-  );
+  const [alert, setAlert] = useState<{ type: any; message: string } | null>(null);
   const [importing, setImporting] = useState(false);
+
+  // Check permissions for debt configuration access
+  const { 
+    canReadDepartment, 
+    canCreateInDepartment, 
+    canImportInDepartment,
+    canExportInDepartment,
+    getPermissionsByDepartment,
+    user 
+  } = useDynamicPermission();
 
   // Fetch function for debt configs
   const fetchDebtConfigs = useCallback(async (): Promise<any[]> => {
@@ -40,8 +49,6 @@ export default function DebtSettingsPage() {
     if (!token) {
       throw new Error("No token available");
     }
-
-    console.log("fetchDebtConfigs: Starting API call");
 
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/debt-configs`, {
       credentials: "include",
@@ -56,8 +63,6 @@ export default function DebtSettingsPage() {
     }
 
     const data = await res.json();
-    console.log("fetchDebtConfigs completed:", { configsCount: data.length });
-
     return data;
   }, []);
 
@@ -210,7 +215,6 @@ export default function DebtSettingsPage() {
           setAlert({ type: "error", message: "Cập nhật thất bại!" });
         }
       } catch (error) {
-        console.error("Toggle error:", error);
         setAlert({ type: "error", message: "Lỗi khi cập nhật!" });
       }
     },
@@ -241,7 +245,6 @@ export default function DebtSettingsPage() {
           setAlert({ type: "error", message: "Xóa thất bại!" });
         }
       } catch (error) {
-        console.error("Delete error:", error);
         setAlert({ type: "error", message: "Lỗi khi xóa!" });
       }
     },
@@ -251,7 +254,6 @@ export default function DebtSettingsPage() {
   // Edit handler - simplified to match component expectations
   const handleEditWrapper = useCallback((row: any) => {
     // This will be handled by the component itself
-    console.log("Edit row:", row);
   }, []);
 
   // Import Excel handler
@@ -285,13 +287,9 @@ export default function DebtSettingsPage() {
           });
           forceUpdate(); // Refresh data
         } else {
-          setAlert({
-            type: "error",
-            message: result.message || "Import thất bại!",
-          });
+          setAlert({ type: "error", message: result.message || "Import thất bại!" });
         }
       } catch (error) {
-        console.error("Import error:", error);
         setAlert({ type: "error", message: "Lỗi khi import file!" });
       } finally {
         setImporting(false);
@@ -301,7 +299,7 @@ export default function DebtSettingsPage() {
   );
 
   // Export Excel handler - simplified to avoid complex type matching
-  const handleExportExcel = () => {
+  const handleExportExcel = useCallback(() => {
     // Simple export format to avoid type errors
     const data = filteredData.map((item, index) => [
       index + 1,
@@ -329,7 +327,7 @@ export default function DebtSettingsPage() {
       ],
       data,
     };
-  };
+  }, [filteredData]);
 
   // Update alert when there's an error
   useEffect(() => {
@@ -340,6 +338,30 @@ export default function DebtSettingsPage() {
       });
     }
   }, [error]);
+
+  // Check if user has read access to debt department
+  const canAccessDebtConfig = canReadDepartment('cong-no');
+
+  // Loading state for permissions
+  if (!user) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner size={32} />
+        <span className="ml-2">Đang kiểm tra quyền truy cập...</span>
+      </div>
+    );
+  }
+
+  // Access denied state
+  if (!canAccessDebtConfig) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="text-6xl">🚫</div>
+        <div className="text-xl font-semibold text-red-600">Không có quyền truy cập</div>
+        <div className="text-gray-600">Bạn không có quyền xem cấu hình công nợ</div>
+      </div>
+    );
+  }
 
   if (isLoading && apiData.length === 0) {
     return (
@@ -358,14 +380,14 @@ export default function DebtSettingsPage() {
             ⚙️ Cấu hình công nợ
           </CardTitle>
           <div className="flex gap-2">
-            <P name="debt-config-export" mode="any">
+            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'export' }}>
               <Button
                 variant="export"
                 type="button"
                 onClick={() => {
-                  const link = document.createElement("a");
-                  link.href = "/file_mau_cau_hinh_cong_no.xlsx";
-                  link.download = "file_mau_cau_hinh_cong_no.xlsx";
+                  const link = document.createElement('a');
+                  link.href = '/file_mau_cau_hinh_cong_no.xlsx';
+                  link.download = 'file_mau_cau_hinh_cong_no.xlsx';
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
@@ -374,21 +396,22 @@ export default function DebtSettingsPage() {
               >
                 📁 Tải file mẫu Excel
               </Button>
-            </P>
-            <form id="excel-upload-form" style={{ display: "inline" }}>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                id="excel-upload-input"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files && e.target.files[0];
-                  if (file) {
-                    handleImportExcel(file);
-                  }
-                }}
-              />
-              <P name="debt-config-import" mode="all">
+            </PDynamic>
+            
+            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'import' }}>
+              <form id="excel-upload-form" style={{ display: "inline" }}>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  id="excel-upload-input"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files && e.target.files[0];
+                    if (file) {
+                      handleImportExcel(file);
+                    }
+                  }}
+                />
                 <Button
                   variant="import"
                   type="button"
@@ -402,21 +425,21 @@ export default function DebtSettingsPage() {
                 >
                   {importing ? "Đang import..." : "+ Nhập file Excel"}
                 </Button>
-              </P>
-            </form>
-            <P name="debt-config-create"  mode="all">
+              </form>
+            </PDynamic>
+            
+            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'create' }}>
               <Button variant="add" onClick={() => setShowConfigModal(true)}>
-                + Cấu hình công nợ
+                + Thêm cấu hình
               </Button>
-            </P>
-            <P name="debt-config-create" mode="all">
-              <Button
-                variant="gradient"
-                onClick={() => setShowAddManualModal(true)}
-              >
+            </PDynamic>
+            
+            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'create' }}>
+              <Button variant="gradient" onClick={() => setShowAddManualModal(true)}>
                 + Thêm thủ công
               </Button>
-            </P>
+            </PDynamic>
+            
             <Button
               onClick={() => forceUpdate()}
               variant="outline"
@@ -452,6 +475,7 @@ export default function DebtSettingsPage() {
             onFilterChange={handleFilterChange}
             onResetFilter={handleResetFilter}
             getExportData={handleExportExcel}
+            canExport={canExportInDepartment('cong-no')}
             pageSizeOptions={[5, 10, 20, 50]}
           >
             <DebtSettingManagement

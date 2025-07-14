@@ -26,13 +26,6 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
     y: 0
   });
   
-  // Debug log để kiểm tra dữ liệu
-  console.log('🔍 DebtDetailDialog props:', { open, debtConfigId });
-  console.log('🔍 debtDetail from state:', debtDetail);
-  console.log('🔍 debtDetail?.debt_message:', debtDetail?.debt_message);
-  console.log('🔍 debtDetail?.image_url:', debtDetail?.image_url);
-  console.log('🔍 debtDetail?.remind_status:', debtDetail?.remind_status);
-  
   // Fetch data khi dialog mở và có debtConfigId
   useEffect(() => {
     const fetchDebtDetail = async () => {

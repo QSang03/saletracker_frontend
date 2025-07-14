@@ -38,7 +38,7 @@ export default function ConfigSystemPage() {
       throw new Error("No token available");
     }
 
-    console.log('fetchAllConfigs: Starting API call');
+
 
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/system-config`,
@@ -55,7 +55,7 @@ export default function ConfigSystemPage() {
     }
 
     const data = await res.json();
-    console.log('fetchAllConfigs completed:', { configsCount: data.length });
+
     
     return data;
   }, []);

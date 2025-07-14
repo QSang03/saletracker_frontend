@@ -17,7 +17,7 @@ export function getAccessToken(): string | null {
 export function getUserFromToken(token: string): any | null {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    console.log("Decoded token payload:", payload);
+
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {

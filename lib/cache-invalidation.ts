@@ -34,7 +34,7 @@ class CacheInvalidationService {
 
   // Trigger cache invalidation
   invalidate(event: CacheInvalidationEvent) {
-    console.log(`🗑️ Cache invalidation triggered: ${event}`);
+
     
     // Notify specific event listeners
     const eventListeners = this.listeners.get(event);

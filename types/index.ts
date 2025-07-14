@@ -1,6 +1,3 @@
-// types/index.ts
-
-// Role Entity
 export interface Role {
   id: number;
   name: string;
@@ -8,7 +5,6 @@ export interface Role {
   users?: User[];
 }
 
-// Department Entity
 export interface Department {
   id: number;
   name: string;
@@ -24,15 +20,13 @@ export interface Department {
   };
 }
 
-// Permission Entity
 export interface Permission {
   id: number;
-  name: string; // Thêm trường name cho đồng bộ backend (đại diện cho department/module)
+  name: string;
   action: string;
   rolePermissions?: RolePermission[];
 }
 
-// User Entity
 export interface User {
   id: number;
   username: string;
@@ -49,7 +43,7 @@ export interface User {
   createdAt?: Date | string;
   updatedAt?: Date | string;
   deletedAt?: Date | string;
-  zaloLinkStatus?: number; // 0: chưa liên kết, 1: đã liên kết, 2: lỗi liên kết
+  zaloLinkStatus?: number;
   zaloName?: string;
   avatarZalo?: string;
 }
@@ -58,7 +52,6 @@ export interface UserWithPermissions extends User {
   permissions: Permission[];
 }
 
-// RolePermission Entity (bảng trung gian)
 export interface RolePermission {
   id?: number;
   roleId: number;
@@ -71,7 +64,6 @@ export interface RolePermission {
   deleted_at?: string | Date;
 }
 
-// Filter Params cho User
 export interface FilterParams {
   search?: string;
   role?: string;
@@ -79,12 +71,10 @@ export interface FilterParams {
   status?: string;
 }
 
-// DTO cho phân quyền
 export interface UpdatePermissionsDto {
   permissionIds: number[];
 }
 
-// DTO cho tạo/cập nhật User
 export interface CreateUserDto {
   username: string;
   password: string;

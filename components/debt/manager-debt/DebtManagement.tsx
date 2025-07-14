@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import EditDebtModal from "./EditDebtModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { getAccessToken } from "@/lib/auth";
+import { PDynamic } from "@/components/common/PDynamic";
 
 // Thêm prop cho phép custom align từng cột
 interface DebtManagementProps {
@@ -33,12 +34,6 @@ function getDaysBetween(date1?: string | Date, date2?: string | Date) {
 export default function DebtManagement({ debts, expectedRowCount, startIndex, onReload, columnAligns, onEdit, onDelete }: DebtManagementProps) {
   const today = new Date();
   
-  // Debug log
-  console.log('DebtManagement received debts:', debts);
-  console.log('DebtManagement expectedRowCount:', expectedRowCount);
-  console.log('DebtManagement debts length:', debts.length);
-  
-  // CSS cho cell, giữ nguyên như ban đầu
   const cellClass = "px-3 py-2";
   const cellCenterClass = "text-center px-3 py-2";
   const cellLeftClass = "text-left px-3 py-2";
@@ -181,29 +176,32 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
                 </TableCell>
                 <TableCell className={cellCenterClass}>{note}</TableCell>
                 <TableCell className={cellCenterClass + " flex gap-2 justify-center"}>
-                  <Button 
-                    size="sm" 
-                    variant="edit" 
-                    onClick={() => {
-                      // Lưu object debt đầy đủ vào state riêng biệt
-                      setEditingDebt({ ...debt });
-                      setEditModalOpen(true);
-                    }}
-                    disabled={isProcessing}
-                  >
-                    Chỉnh sửa
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="delete" 
-                    onClick={() => { 
-                      setDebtToDelete(debt); 
-                      setShowDeleteConfirm(true); 
-                    }}
-                    disabled={isProcessing}
-                  >
-                    Xóa
-                  </Button>
+                  <PDynamic permissions={[{ departmentSlug: 'cong-no', action: 'update' }]}>
+                    <Button 
+                      size="sm" 
+                      variant="edit" 
+                      onClick={() => {
+                        setEditingDebt({ ...debt });
+                        setEditModalOpen(true);
+                      }}
+                      disabled={isProcessing}
+                    >
+                      Chỉnh sửa
+                    </Button>
+                  </PDynamic>
+                  <PDynamic permissions={[{ departmentSlug: 'cong-no', action: 'delete' }]}>
+                    <Button 
+                      size="sm" 
+                      variant="delete" 
+                      onClick={() => { 
+                        setDebtToDelete(debt); 
+                        setShowDeleteConfirm(true); 
+                      }}
+                      disabled={isProcessing}
+                    >
+                      Xóa
+                    </Button>
+                  </PDynamic>
                 </TableCell>
               </TableRow>
             ) : (

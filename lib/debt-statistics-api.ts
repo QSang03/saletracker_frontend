@@ -221,8 +221,7 @@ class DebtStatisticsAPI {
     };
     
     const response = await api.get('/debts', { params: allFilters });
-    console.log('Raw API response structure:', response);
-    console.log('Response data:', response.data);
+
     
     // Handle different response structures
     if (response.data) {

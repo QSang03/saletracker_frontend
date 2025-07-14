@@ -11,6 +11,8 @@ import AddMainRoleModal from "@/components/roles/AddMainRoleModal";
 import type { User, Department, Permission, RolePermission } from "@/types";
 import { getAccessToken } from "@/lib/auth";
 import { useApiState } from "@/hooks/useApiState";
+import { PDynamic } from "@/components/common/PDynamic";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 // Thêm type cho role-permissions
 interface UserRolePermissionsMap {
@@ -18,6 +20,7 @@ interface UserRolePermissionsMap {
 }
 
 export default function RolesPage() {
+  const { canReadDepartment, canCreateInDepartment, canExportInDepartment } = useDynamicPermission();
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Pagination & filter state
@@ -35,7 +38,7 @@ export default function RolesPage() {
       throw new Error("No token available");
     }
 
-    console.log('fetchRolesData: Starting API calls');
+
 
     const [usersData, rolesGroupedData, departmentsData, permissionsData, allRolePermsData] = await Promise.all([
       fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/for-permission-management`, {
@@ -72,13 +75,6 @@ export default function RolesPage() {
 
     const usersList = Array.isArray(usersData) ? usersData : usersData.data || [];
     
-    console.log('fetchRolesData completed:', {
-      usersCount: usersList.length,
-      rolesGrouped: rolesGroupedData,
-      departmentsCount: Array.isArray(departmentsData) ? departmentsData.length : departmentsData.data?.length || 0,
-      permissionsCount: Array.isArray(permissionsData) ? permissionsData.length : permissionsData.data?.length || 0
-    });
-
     return {
       users: usersList,
       rolesGrouped: rolesGroupedData || { main: [], sub: [] },
@@ -185,18 +181,25 @@ export default function RolesPage() {
   }, [error]);
 
   return (
-    <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
-      <Card className="w-full flex-1">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-xl font-bold">
-            👥 Quản lý phân quyền
-          </CardTitle>
-          <div className="flex gap-2">
-            <Button variant="add" onClick={() => setShowAddMainRole(true)}>
-              + Tạo vai trò chính
-            </Button>
-          </div>
-        </CardHeader>
+    <PDynamic permissions={[{ departmentSlug: 'account', action: 'read' }]} fallback={
+      <div className="p-6 text-center">
+        <p className="text-gray-500">Bạn không có quyền truy cập trang này</p>
+      </div>
+    }>
+      <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
+        <Card className="w-full flex-1">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-xl font-bold">
+              👥 Quản lý phân quyền
+            </CardTitle>
+            <div className="flex gap-2">
+              <PDynamic permissions={[{ departmentSlug: 'account', action: 'create' }]}>
+                <Button variant="add" onClick={() => setShowAddMainRole(true)}>
+                  + Tạo vai trò chính
+                </Button>
+              </PDynamic>
+            </div>
+          </CardHeader>
         <CardContent>
           {alert && (
             <ServerResponseAlert
@@ -215,6 +218,7 @@ export default function RolesPage() {
               page={page}
               pageSize={pageSize}
               total={filteredUsers.length}
+              canExport={canExportInDepartment('account')}
               onPageChange={setPage}
               onFilterChange={({ search }) => {
                 setSearch(search);
@@ -243,6 +247,7 @@ export default function RolesPage() {
         onClose={() => setShowAddMainRole(false)}
         onSubmit={handleAddMainRole}
       />
-    </div>
+      </div>
+    </PDynamic>
   );
 }

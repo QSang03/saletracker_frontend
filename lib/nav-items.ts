@@ -44,7 +44,7 @@ export const navItems = [
     title: "Tài khoản",
     icon: "UserCog",
     items: [
-      { title: "Quản lý tài khoản", url: "/dashboard/manage", roles: ["admin"] },
+      { title: "Quản lý tài khoản", url: "/dashboard/manage", roles: ["admin", "manager-cong-no"] },
       { title: "Quản lý bộ phận", url: "/dashboard/department", roles: ["admin"] },
       { title: "Quản lý zalo", url: "/dashboard/zalo", roles: ["admin"] },
       { title: "Phân quyền", url: "/dashboard/roles", roles: ["admin"] },

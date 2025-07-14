@@ -14,8 +14,11 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { getAccessToken } from "@/lib/auth";
 import { useApiState } from "@/hooks/useApiState";
 import type { Department } from "@/types";
+import { PDynamic } from "@/components/common/PDynamic";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 export default function DepartmentPage() {
+  const { canReadDepartment, canCreateInDepartment, canExportInDepartment } = useDynamicPermission();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
@@ -36,7 +39,7 @@ export default function DepartmentPage() {
       throw new Error("No token available");
     }
 
-    console.log('fetchDepartments: Starting API call with page:', page, 'search:', search);
+
 
     let query = `?page=${page}&limit=${pageSize}`;
     if (search) {
@@ -55,7 +58,7 @@ export default function DepartmentPage() {
     }
 
     const result = await res.json();
-    console.log('fetchDepartments API response:', { dataLength: result.data?.length, total: result.total });
+
 
     return {
       data: result.data || [],
@@ -187,7 +190,11 @@ export default function DepartmentPage() {
   }
 
   return (
-    <>
+    <PDynamic permissions={[{ departmentSlug: 'account', action: 'read' }]} fallback={
+      <div className="p-6 text-center">
+        <p className="text-gray-500">Bạn không có quyền truy cập trang này</p>
+      </div>
+    }>
       {alert && (
         <ServerResponseAlert
           type={alert.type}
@@ -201,20 +208,24 @@ export default function DepartmentPage() {
           <CardTitle className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
             <span>Quản Lý Phòng Ban</span>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button
-                onClick={() => setIsRestoreModalOpen(true)}
-                variant="gradient"
-                className="text-sm"
-              >
-                Phòng ban đã xóa
-              </Button>
-              <Button
-                onClick={() => setIsAddModalOpen(true)}
-                variant="add"
-                className="text-sm"
-              >
-                + Thêm Phòng Ban
-              </Button>
+              <PDynamic permissions={[{ departmentSlug: 'account', action: 'read' }]}>
+                <Button
+                  onClick={() => setIsRestoreModalOpen(true)}
+                  variant="gradient"
+                  className="text-sm"
+                >
+                  Phòng ban đã xóa
+                </Button>
+              </PDynamic>
+              <PDynamic permissions={[{ departmentSlug: 'account', action: 'create' }]}>
+                <Button
+                  onClick={() => setIsAddModalOpen(true)}
+                  variant="add"
+                  className="text-sm"
+                >
+                  + Thêm Phòng Ban
+                </Button>
+              </PDynamic>
               <Button
                 onClick={() => forceUpdate()}
                 variant="outline"
@@ -232,6 +243,7 @@ export default function DepartmentPage() {
             total={total}
             pageSize={pageSize}
             onPageChange={setPage}
+            canExport={canExportInDepartment('account')}
             emptyText="Không có phòng ban nào."
             enableSearch
             onFilterChange={handleFilterChange}
@@ -308,6 +320,6 @@ export default function DepartmentPage() {
           }}
         />
       </Card>
-    </>
+    </PDynamic>
   );
 }

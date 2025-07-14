@@ -25,7 +25,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Lấy thông tin user từ token
     const fetchUser = async () => {
       try {
         const token = getAccessToken();

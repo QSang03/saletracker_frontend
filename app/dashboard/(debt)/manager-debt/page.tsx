@@ -10,6 +10,8 @@ import ImportPayDateModal from "../../../../components/debt/manager-debt/ImportP
 import { getAccessToken } from "@/lib/auth";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useApiState } from "@/hooks/useApiState";
+import { PDynamic } from "@/components/common/PDynamic";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
@@ -31,7 +33,18 @@ export default function ManagerDebtPage() {
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [showImportPayDate, setShowImportPayDate] = useState(false);
 
-  // Pagination & filter state
+  const { 
+    canReadDepartment, 
+    canCreateInDepartment, 
+    canUpdateInDepartment,
+    canDeleteInDepartment,
+    canImportInDepartment,
+    canExportInDepartment,
+    user 
+  } = useDynamicPermission();
+
+  const canAccessDebtManagement = canReadDepartment('cong-no');
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [filters, setFilters] = useState<DebtFilters>({
@@ -41,26 +54,20 @@ export default function ManagerDebtPage() {
     employees: []
   });
 
-  // Options for filters
   const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
   const [allEmployeeOptions, setAllEmployeeOptions] = useState<{ label: string; value: string }[]>([]);
 
-  // Fetch function for debts
   const fetchDebts = useCallback(async (): Promise<{ data: any[]; total: number }> => {
     const token = getAccessToken();
     if (!token) {
       throw new Error("No token available");
     }
 
-    console.log('fetchDebts: Starting API call with page:', page, 'filters:', filters);
-
-    // Build query parameters
     const params: Record<string, any> = {
       page,
       pageSize,
     };
 
-    // Set date - use filter date or default to today
     let queryDate: string;
     if (filters.singleDate) {
       queryDate = filters.singleDate instanceof Date 
@@ -71,7 +78,6 @@ export default function ManagerDebtPage() {
     }
     params.date = queryDate;
 
-    // Apply other filters
     if (filters.search) params.search = filters.search;
     if (filters.statuses && filters.statuses.length > 0) params.status = filters.statuses[0];
     if (filters.employees && filters.employees.length > 0) params.employee = filters.employees[0];
@@ -81,7 +87,7 @@ export default function ManagerDebtPage() {
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join('&');
 
-    console.log('API call:', `/debts?${queryStr}`);
+
 
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/debts?${queryStr}`, {
       headers: {
@@ -95,7 +101,7 @@ export default function ManagerDebtPage() {
     }
 
     const result = await res.json();
-    console.log('fetchDebts API response:', { dataLength: result.data?.length, total: result.total });
+
 
     return {
       data: result.data || [],
@@ -103,7 +109,6 @@ export default function ManagerDebtPage() {
     };
   }, [page, pageSize, filters]);
 
-  // Fetch function for statistics
   const fetchStats = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return { totalAmount: 0, totalBills: 0, totalCollected: 0, totalPaidAmount: 0, totalPaidBills: 0 };
@@ -120,7 +125,6 @@ export default function ManagerDebtPage() {
 
       const params: Record<string, any> = { date: queryDate, stats: 1 };
       
-      // Apply same filters as main data
       if (filters.search) params.search = filters.search;
       if (filters.statuses && filters.statuses.length > 0) params.status = filters.statuses[0];
       if (filters.employees && filters.employees.length > 0) params.employee = filters.employees[0];
@@ -147,7 +151,6 @@ export default function ManagerDebtPage() {
     return { totalAmount: 0, totalBills: 0, totalCollected: 0, totalPaidAmount: 0, totalPaidBills: 0 };
   }, [filters]);
 
-  // Use the custom hook for debts
   const {
     data: debtsData,
     isLoading,
@@ -157,7 +160,6 @@ export default function ManagerDebtPage() {
     autoRefreshInterval: 30000 // 30 seconds
   });
 
-  // Use the custom hook for stats
   const {
     data: stats,
     forceUpdate: refreshStats
@@ -165,11 +167,9 @@ export default function ManagerDebtPage() {
     autoRefreshInterval: 30000 // 30 seconds
   });
 
-  // Extract debts and total from data
   const debts = debtsData.data;
   const total = debtsData.total;
 
-  // Refetch when page or filters change
   useEffect(() => {
     forceUpdate();
     refreshStats();
@@ -253,7 +253,6 @@ export default function ManagerDebtPage() {
 
   // Handle filter changes
   const handleFilterChange = (newFilters: any) => {
-    console.log('Filter change:', newFilters);
     setFilters(newFilters);
     setPage(1); // Reset to first page when filters change
   };
@@ -391,6 +390,27 @@ export default function ManagerDebtPage() {
     }
   }, [error]);
 
+  // Loading state for permissions
+  if (!user) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner size={32} />
+        <span className="ml-2">Đang kiểm tra quyền truy cập...</span>
+      </div>
+    );
+  }
+
+  // Access denied state
+  if (!canAccessDebtManagement) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="text-6xl">🚫</div>
+        <div className="text-xl font-semibold text-red-600">Không có quyền truy cập</div>
+        <div className="text-gray-600">Bạn không có quyền quản lý công nợ</div>
+      </div>
+    );
+  }
+
   if (isLoading && debts.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -409,33 +429,38 @@ export default function ManagerDebtPage() {
               💰 Quản lý công nợ
             </CardTitle>
             <div className="flex gap-2 flex-wrap">
-              <form id="excel-upload-form" style={{ display: 'inline' }}>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  id="excel-upload-input"
-                  style={{ display: 'none' }}
-                  onChange={e => {
-                    const file = e.target.files && e.target.files[0];
-                    if (file) {
-                      handleExcelImport(file);
-                    }
-                  }}
-                />
-                <Button
-                  variant="import"
-                  type="button"
-                  onClick={() => {
-                    const input = document.getElementById('excel-upload-input') as HTMLInputElement | null;
-                    if (input) input.click();
-                  }}
-                >
-                  + Nhập file Excel
+              <PDynamic permission={{ departmentSlug: 'cong-no', action: 'import' }}>
+                <form id="excel-upload-form" style={{ display: 'inline' }}>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    id="excel-upload-input"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const file = e.target.files && e.target.files[0];
+                      if (file) {
+                        handleExcelImport(file);
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="import"
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById('excel-upload-input') as HTMLInputElement | null;
+                      if (input) input.click();
+                    }}
+                  >
+                    + Nhập file Excel
+                  </Button>
+                </form>
+              </PDynamic>
+              
+              <PDynamic permission={{ departmentSlug: 'cong-no', action: 'update' }}>
+                <Button variant="add" onClick={() => setShowImportPayDate(true)}>
+                  + Nhập ngày hẹn thanh toán
                 </Button>
-              </form>
-              <Button variant="add" onClick={() => setShowImportPayDate(true)}>
-                + Nhập ngày hẹn thanh toán
-              </Button>
+              </PDynamic>
               <Button
                 onClick={() => {
                   forceUpdate();
@@ -490,6 +515,7 @@ export default function ManagerDebtPage() {
                   availableStatuses={statusOptions}
                   enableEmployeeFilter={true}
                   availableEmployees={allEmployeeOptions}
+                  canExport={canExportInDepartment('cong-no')}
                   page={page}
                   pageSize={pageSize}
                   total={total}

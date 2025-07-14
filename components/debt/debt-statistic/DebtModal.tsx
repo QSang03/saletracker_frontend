@@ -417,8 +417,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   }, [debts]);
 
   const filteredDebts: Debt[] = useMemo(() => {
-    console.log('All debts in modal:', debts);
-    console.log('Filter criteria:', { searchTerm, selectedEmployees, selectedDate });
+
     
     const filtered = debts.filter((debt) => {
       const matchesSearch =
@@ -443,7 +442,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
       return matchesSearch && matchesEmployee && matchesDate;
     });
     
-    console.log('Filtered debts:', filtered);
+
     return filtered;
   }, [debts, searchTerm, selectedEmployees, selectedDate]);
 
@@ -564,16 +563,11 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   const handleSearch = useCallback(() => {
     // Search is already handled by useMemo, but this could trigger additional actions
-    console.log("Searching with filters:", {
-      searchTerm,
-      selectedEmployees,
-      selectedDate,
-    });
   }, [searchTerm, selectedEmployees, selectedDate]);
 
   const handleExport = useCallback(() => {
     // Export functionality could be implemented here
-    console.log("Exporting filtered data:", sortedDebts);
+
   }, [sortedDebts]);
 
   const clearFilters = () => {
@@ -601,14 +595,13 @@ const DebtModal: React.FC<DebtModalProps> = ({
       const amount = Number(debt.total_amount) || 0;
       return sum + (isNaN(amount) ? 0 : amount);
     }, 0);
-    console.log(`Total amount for category ${category}:`, total, 'from', sortedDebts.length, 'debts');
+
     return total;
   }, [sortedDebts, category]);
 
   const totalRemaining = useMemo(() => {
     // For "paid" category, remaining should always be 0
     if (category === 'paid') {
-      console.log('Category is paid, returning 0 for remaining');
       return 0;
     }
     
@@ -617,7 +610,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
       const remainingAmount = Number(debt.remaining) || 0;
       return sum + (isNaN(remainingAmount) ? 0 : remainingAmount);
     }, 0);
-    console.log(`Total remaining for category ${category}:`, remaining, 'from', sortedDebts.length, 'debts');
+
     return remaining;
   }, [filteredDebts, category]);
 

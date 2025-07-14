@@ -57,6 +57,7 @@ interface PaginatedTableProps {
     next?: string;
   };
   getExportData?: () => { headers: string[]; data: (string | number)[][] };
+  canExport?: boolean;
   onResetFilter?: () => void;
 }
 
@@ -105,6 +106,7 @@ export default function PaginatedTable({
   filterClassNames = {},
   buttonClassNames = {},
   getExportData,
+  canExport = true,
   onResetFilter,
 }: PaginatedTableProps) {
   const departmentOptions = useMemo(
@@ -350,18 +352,20 @@ export default function PaginatedTable({
           )}
           {/* Nút Xuất và Xoá filter chia đôi 1 cột */}
           <div className="flex gap-2 min-w-0 w-full">
-            <Button
-              variant="export"
-              className={`min-w-0 w-1/2 ${buttonClassNames.export ?? ''}`}
-              onClick={() => setOpenExport(true)}
-              disabled={!getExportData}
-            >
-              Xuất CSV
-            </Button>
+            {canExport && getExportData && (
+              <Button
+                variant="export"
+                className={`min-w-0 ${canExport ? 'w-1/2' : 'w-full'} ${buttonClassNames.export ?? ''}`}
+                onClick={() => setOpenExport(true)}
+                disabled={!getExportData}
+              >
+                Xuất CSV
+              </Button>
+            )}
             <Button
               type="button"
               variant="delete"
-              className={`w-1/2 ${buttonClassNames.reset ?? ''}`}
+              className={`min-w-0 ${canExport && getExportData ? 'w-1/2' : 'w-full'} ${buttonClassNames.reset ?? ''}`}
               onClick={handleResetFilter}
             >
               Xóa filter
@@ -450,11 +454,10 @@ export default function PaginatedTable({
       </div>
 
       {/* Panel xuất CSV */}
-      {getExportData && (
+      {canExport && getExportData && (
         <CSVExportPanel
           open={openExport}
           onClose={() => setOpenExport(false)}
-          // Truyền thêm defaultExportCount là currentPageSize (số dòng/trang hiện tại)
           defaultExportCount={currentPageSize}
           {...getExportData()}
         />

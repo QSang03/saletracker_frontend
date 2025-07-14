@@ -5,6 +5,7 @@ import ChangeLogTable from "./ChangeLogTable";
 import ChangeLogDetailTable from "./ChangeLogDetailTable";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 interface ChangeLog {
   id: number;
@@ -28,6 +29,7 @@ export default function ChangeLogManager({
   open: boolean;
   onClose: () => void;
 }) {
+  const { canExportInDepartment } = useDynamicPermission();
   const [allChangeLogs, setAllChangeLogs] = useState<ChangeLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLog, setSelectedLog] = useState<ChangeLog | null>(null);
@@ -121,6 +123,7 @@ export default function ChangeLogManager({
               enableDepartmentFilter
               availableDepartments={availableDepartments}
               emptyText="Không có lịch sử đổi tên nào."
+              canExport={canExportInDepartment('nguoi-dung')}
               onFilterChange={(newFilters: any) => {
                 setFilters(newFilters);
                 setPage(1);

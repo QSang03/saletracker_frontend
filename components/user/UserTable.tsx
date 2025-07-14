@@ -53,10 +53,8 @@ export default function UserTable({
     "Thao tác",
   ];
 
-  // Cột cần căn giữa
   const centerIndexes = [6, 7, 8, 9];
 
-  // CSS cho cell cắt text và tooltip
   const cellClass =
     "overflow-hidden text-ellipsis whitespace-nowrap max-w-[160px] px-3 py-2";
   const cellCenterClass = "text-center " + cellClass;

@@ -23,8 +23,10 @@ import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import UserTable from "@/components/user/UserTable";
 import ChangeLogManager from "@/components/user/ChangeLogManager";
 import { useApiState } from "@/hooks/useApiState";
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 export default function UserManager() {
+  const { canExportInDepartment } = useDynamicPermission();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -49,7 +51,6 @@ export default function UserManager() {
   const [restoringUserId, setRestoringUserId] = useState<number | null>(null);
   const [showChangeLogsModal, setShowChangeLogsModal] = useState(false);
 
-  // State filter cho bộ lọc
   const [userFilters, setUserFilters] = useState<{
     search: string;
     departments: (string | number)[];
@@ -64,7 +65,6 @@ export default function UserManager() {
 
   const router = useRouter();
 
-  // Fetch function for users
   const fetchUsers = useCallback(async (): Promise<{ data: User[]; total: number }> => {
     const token = getAccessToken();
     if (!token) {
@@ -72,7 +72,7 @@ export default function UserManager() {
       throw new Error("No token available");
     }
     
-    console.log('fetchUsers: Starting API call with page:', userPage, 'filters:', userFilters);
+
     
     let query = `?page=${userPage}&limit=${userLimit}`;
     if (userFilters.search)
@@ -100,7 +100,7 @@ export default function UserManager() {
     }
 
     const result = await res.json();
-    console.log('fetchUsers API response:', { dataLength: result.data?.length, total: result.total });
+
     
     return {
       data: result.data || [],
@@ -108,7 +108,6 @@ export default function UserManager() {
     };
   }, [userPage, userFilters, userLimit, router]);
 
-  // Use the custom hook for users
   const {
     data: usersData,
     isLoading,
@@ -119,16 +118,13 @@ export default function UserManager() {
     autoRefreshInterval: 45000 // 45 seconds
   });
 
-  // Extract users and total from data
   const users = usersData.data;
   const userTotal = usersData.total;
 
-  // Refetch when page or filters change
   useEffect(() => {
     forceUpdate();
   }, [userPage, userFilters, forceUpdate]);
 
-  // Socket event handlers
   const handleUserLogin = useCallback(() => {
     forceUpdate();
   }, [forceUpdate]);
@@ -146,7 +142,6 @@ export default function UserManager() {
     message: string;
   } | null>(null);
 
-  // Fetch current user profile
   useEffect(() => {
     const fetchProfile = async () => {
       const token = getAccessToken();
@@ -169,7 +164,6 @@ export default function UserManager() {
     fetchProfile();
   }, []);
 
-  // Fetch departments
   useEffect(() => {
     const fetchDepartments = async () => {
       const token = getAccessToken();
@@ -195,7 +189,6 @@ export default function UserManager() {
     fetchDepartments();
   }, []);
 
-  // Fetch roles
   useEffect(() => {
     const fetchRoles = async () => {
       const token = getAccessToken();
@@ -218,7 +211,6 @@ export default function UserManager() {
     fetchRoles();
   }, []);
 
-  // Fetch deleted users when modal opens
   useEffect(() => {
     if (showDeletedModal) {
       const fetchDeletedUsers = async () => {
@@ -237,7 +229,6 @@ export default function UserManager() {
     }
   }, [showDeletedModal, deletedPage]);
 
-  // Update alert when there's an error
   useEffect(() => {
     if (error) {
       setAlert({ type: "error", message: "Lỗi khi tải danh sách người dùng!" });
@@ -289,7 +280,6 @@ export default function UserManager() {
       );
       if (!res.ok) throw new Error("Xóa người dùng thất bại!");
       setAlert({ type: "success", message: "Xóa người dùng thành công!" });
-      // Nếu xóa hết trang hiện tại thì lùi về trang trước
       if (users.length === 1 && userPage > 1) {
         setUserPage(userPage - 1);
       } else {
@@ -388,7 +378,6 @@ export default function UserManager() {
       );
       if (!res.ok) throw new Error("Khôi phục thất bại!");
       setAlert({ type: "success", message: "Khôi phục thành công!" });
-      // Refresh deleted users list
       const fetchDeletedUsers = async () => {
         const token = getAccessToken();
         const res = await fetch(
@@ -490,6 +479,7 @@ export default function UserManager() {
             enableRoleFilter
             enableDepartmentFilter
             enableStatusFilter
+            canExport={canExportInDepartment('nguoi-dung')}
             availableRoles={availableRoles}
             availableDepartments={availableDepartments}
             availableStatuses={availableStatuses}
@@ -605,6 +595,7 @@ export default function UserManager() {
                   pageSize={deletedLimit}
                   onPageChange={setDeletedPage}
                   emptyText="Không có tài khoản nào bị xóa."
+                  canExport={canExportInDepartment('nguoi-dung')}
                 >
                   <UserTable
                     users={deletedUsers}
