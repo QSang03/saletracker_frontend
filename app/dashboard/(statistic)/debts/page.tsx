@@ -159,6 +159,20 @@ const DebtStatisticsDashboard: React.FC = () => {
   const [selectedDebts, setSelectedDebts] = useState<Debt[]>([]);
   const [loadingModalData, setLoadingModalData] = useState<boolean>(false);
 
+  // Thêm refs cho auto-refresh và component management
+  const isComponentMounted = useRef(true);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isComponentMounted.current = false;
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, []);
+
   // Memoized setters to prevent unnecessary re-renders
   const setChartType = useCallback((type: 'bar' | 'line' | 'radial') => {
     setChartTypeState(type);
@@ -178,15 +192,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   // Use ref to track if initial fetch is done and prevent duplicate calls
   const initialFetchDone = useRef(false);
   const lastFetchParams = useRef<string>('');
-  const isMounted = useRef(true);
   const fetchingRef = useRef(false);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
 
   // Stable filters for memoization with debounce
   const filters = useMemo(() => {
@@ -196,13 +202,13 @@ const DebtStatisticsDashboard: React.FC = () => {
     return apiFilters;
   }, [range?.from?.getTime(), range?.to?.getTime()]);
 
-  // Debounce filters to prevent too many API calls
-  const debouncedFilters = useDebounce(filters, 500);
+  // Debounce filters to prevent too many API calls - giảm từ 500ms xuống 300ms
+  const debouncedFilters = useDebounce(filters, 300);
 
-  // Fetch data function with proper memoization
-  const fetchData = useCallback(async () => {
+  // Fetch data function with proper memoization - cải thiện
+  const fetchData = useCallback(async (silent = false) => {
     // Prevent multiple simultaneous calls
-    if (!isMounted.current || fetchingRef.current || isCallInProgress) {
+    if (!isComponentMounted.current || fetchingRef.current || isCallInProgress) {
       return;
     }
 
@@ -210,13 +216,13 @@ const DebtStatisticsDashboard: React.FC = () => {
       fetchingRef.current = true;
       await callWithCircuitBreaker(async () => {
         const paramsKey = JSON.stringify(debouncedFilters);
-        if (lastFetchParams.current === paramsKey && initialFetchDone.current) {
+        if (lastFetchParams.current === paramsKey && initialFetchDone.current && silent) {
           return;
         }
 
-        if (!isMounted.current) return;
+        if (!isComponentMounted.current) return;
 
-        setLoading(true);
+        if (!silent) setLoading(true);
         lastFetchParams.current = paramsKey;
 
         const [overviewRes, agingRes, trendsRes, employeeRes] = await Promise.all([
@@ -226,7 +232,7 @@ const DebtStatisticsDashboard: React.FC = () => {
           debtStatisticsAPI.getEmployeePerformance(debouncedFilters),
         ]);
 
-        if (isMounted.current) {
+        if (isComponentMounted.current) {
           setOverview(overviewRes);
           setAgingData(agingRes);
           setTrendData(trendsRes);
@@ -238,15 +244,39 @@ const DebtStatisticsDashboard: React.FC = () => {
       console.error('Error fetching debt statistics:', error);
     } finally {
       fetchingRef.current = false;
-      if (isMounted.current) {
+      if (isComponentMounted.current && !silent) {
         setLoading(false);
       }
     }
   }, [debouncedFilters, callWithCircuitBreaker, isCallInProgress]);
 
+  // Auto-refresh every 30 seconds for silent updates
+  useEffect(() => {
+    const startAutoRefresh = () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+      refreshIntervalRef.current = setInterval(() => {
+        if (isComponentMounted.current && initialFetchDone.current) {
+          fetchData(true); // silent refresh
+        }
+      }, 30000); // 30 seconds
+    };
+
+    if (initialFetchDone.current) {
+      startAutoRefresh();
+    }
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [fetchData, initialFetchDone.current]);
+
   // Single effect for initial data loading only
   useEffect(() => {
-    if (!initialFetchDone.current && isMounted.current) {
+    if (!initialFetchDone.current && isComponentMounted.current) {
       fetchData();
     }
   }, []);
@@ -255,10 +285,15 @@ const DebtStatisticsDashboard: React.FC = () => {
   useEffect(() => {
     if (!initialFetchDone.current) return;
 
-    if (isMounted.current) {
+    if (isComponentMounted.current) {
       fetchData();
     }
   }, [debouncedFilters, fetchData]);
+
+  // Manual refresh handler
+  const handleRefresh = useCallback(async () => {
+    await fetchData();
+  }, [fetchData]);
 
   // Transform API data for existing components
   const chartData: ChartDataItem[] = useMemo(() => {
@@ -293,7 +328,7 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Fetch debts for modal based on category and current filters
   const fetchDebtsForModal = useCallback(async (category: string) => {
-    if (!isMounted.current) return;
+    if (!isComponentMounted.current) return;
 
     setLoadingModalData(true);
     try {
@@ -397,16 +432,16 @@ const DebtStatisticsDashboard: React.FC = () => {
       
       console.log('Filtered data for category', category, ':', filteredData);
       
-      if (isMounted.current) {
+      if (isComponentMounted.current) {
         setSelectedDebts(filteredData);
       }
     } catch (error) {
       console.error('Error fetching debts for modal:', error);
-      if (isMounted.current) {
+      if (isComponentMounted.current) {
         setSelectedDebts([]);
       }
     } finally {
-      if (isMounted.current) {
+      if (isComponentMounted.current) {
         setLoadingModalData(false);
       }
     }

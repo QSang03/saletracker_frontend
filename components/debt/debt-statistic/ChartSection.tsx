@@ -79,8 +79,8 @@ const BarChartComponent = React.memo<{ data: ChartDataItem[]; onChartClick: any;
               content={(legendProps) => (
                 <ChartLegendContent
                   nameKey="dataKey"
-                  payload={legendProps.payload}
-                  verticalAlign={legendProps.verticalAlign}
+                  payload={legendProps.payload ? [...legendProps.payload] : undefined}
+                  verticalAlign={legendProps.verticalAlign === "middle" ? "bottom" : legendProps.verticalAlign as "top" | "bottom"}
                 />
               )}
             />
@@ -130,8 +130,8 @@ const LineChartComponent = React.memo<{ data: ChartDataItem[]; chartKey: string 
             content={(legendProps) => (
               <ChartLegendContent
                 nameKey="dataKey"
-                payload={legendProps.payload}
-                verticalAlign={legendProps.verticalAlign}
+                payload={legendProps.payload ? [...legendProps.payload] : undefined}
+                verticalAlign={legendProps.verticalAlign === "middle" ? "bottom" : legendProps.verticalAlign as "top" | "bottom"}
               />
             )}
           />
@@ -178,8 +178,8 @@ const RadialBarChartComponent = React.memo<{ data: PieDataItem[]; onChartClick: 
               content={(props) => (
                 <ChartLegendContent
                   nameKey="name"
-                  payload={props.payload}
-                  verticalAlign={props.verticalAlign}
+                  payload={props.payload ? [...props.payload] : undefined}
+                  verticalAlign={props.verticalAlign === "middle" ? "bottom" : props.verticalAlign as "top" | "bottom"}
                 />
               )}
             />

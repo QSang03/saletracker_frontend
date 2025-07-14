@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ConfigSystemMainPanel from "@/components/config-system/ConfigSystemMainPanel";
@@ -12,15 +12,13 @@ import { LoadingSpinner } from "@/components/ui/loading/loading-spinner";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken } from "@/lib/auth";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useApiState } from "@/hooks/useApiState";
 
 export default function ConfigSystemPage() {
   const [openDebt, setOpenDebt] = useState(false);
   const [openHoliday, setOpenHoliday] = useState(false);
   const [openTool, setOpenTool] = useState(false);
   const [openToolSchedule, setOpenToolSchedule] = useState(false);
-
-  const [allConfigs, setAllConfigs] = useState<any[]>([]);
-  const [loadingAllConfigs, setLoadingAllConfigs] = useState(false);
 
   // Thông báo trạng thái fetch
   const [alert, setAlert] = useState<{
@@ -33,37 +31,44 @@ export default function ConfigSystemPage() {
     { open: false }
   );
 
-  const fetchAllConfigs = useCallback(async () => {
-    setLoadingAllConfigs(true);
-    try {
-      const token = getAccessToken
-        ? getAccessToken()
-        : localStorage.getItem("access_token");
-      if (!token) {
-        setLoadingAllConfigs(false);
-        return;
-      }
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || ""}/system-config`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      if (!res.ok) throw new Error("Lỗi server");
-      const data = await res.json();
-      setAllConfigs(data);
-    } catch (e) {
-      setAllConfigs([]);
+  // Fetch function for system configs
+  const fetchAllConfigs = useCallback(async (): Promise<any[]> => {
+    const token = getAccessToken();
+    if (!token) {
+      throw new Error("No token available");
     }
-    setLoadingAllConfigs(false);
+
+    console.log('fetchAllConfigs: Starting API call');
+
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/system-config`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch system configs");
+    }
+
+    const data = await res.json();
+    console.log('fetchAllConfigs completed:', { configsCount: data.length });
+    
+    return data;
   }, []);
 
-  useEffect(() => {
-    fetchAllConfigs();
-  }, [fetchAllConfigs]);
+  // Use the custom hook for configs
+  const {
+    data: allConfigs,
+    isLoading: loadingAllConfigs,
+    error,
+    forceUpdate
+  } = useApiState(fetchAllConfigs, [], {
+    autoRefreshInterval: 0 // No auto refresh for configs
+  });
 
   // Khi mở modal chỉ cần mở, không fetch lại
   const handleOpenToolSchedule = () => {
@@ -88,9 +93,16 @@ export default function ConfigSystemPage() {
       setOpenDebt(false);
       // setOpenHoliday(false); // Không tự động đóng modal HolidayConfigModal nữa
       // Refetch lại toàn bộ config để cập nhật UI
-      fetchAllConfigs();
+      forceUpdate();
     }
   };
+
+  // Update alert when there's an error
+  useEffect(() => {
+    if (error) {
+      setAlert({ type: "error", message: "Lỗi tải cấu hình hệ thống!" });
+    }
+  }, [error]);
 
   // Lọc dữ liệu cho từng modal
   const toolScheduleConfig = allConfigs.find(

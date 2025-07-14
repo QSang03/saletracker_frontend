@@ -22,12 +22,11 @@ import {
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import UserTable from "@/components/user/UserTable";
 import ChangeLogManager from "@/components/user/ChangeLogManager";
+import { useApiState } from "@/hooks/useApiState";
 
 export default function UserManager() {
-  const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -42,15 +41,12 @@ export default function UserManager() {
   const deletedLimit = 10;
   const [userPage, setUserPage] = useState(1);
   const userLimit = 10;
-  const [userTotal, setUserTotal] = useState(0);
   const [confirmAction, setConfirmAction] = useState<{
     type: "block" | null;
     user?: User;
     checked?: boolean;
   }>({ type: null });
   const [restoringUserId, setRestoringUserId] = useState<number | null>(null);
-
-  // Tách riêng state cho log manager
   const [showChangeLogsModal, setShowChangeLogsModal] = useState(false);
 
   // State filter cho bộ lọc
@@ -66,20 +62,91 @@ export default function UserManager() {
     statuses: [],
   });
 
-  const handleUserLogin = useCallback(() => {
-    fetchUsers(userPage, userFilters);
-  }, [userPage, userFilters]);
-
-  const handleUserLogout = useCallback(() => {
-    fetchUsers(userPage, userFilters);
-  }, [userPage, userFilters]);
-
-  const handleUserBlock = useCallback(() => {
-    fetchUsers(userPage, userFilters);
-  }, [userPage, userFilters]);
-
   const router = useRouter();
 
+  // Fetch function for users
+  const fetchUsers = useCallback(async (): Promise<{ data: User[]; total: number }> => {
+    const token = getAccessToken();
+    if (!token) {
+      router.push("/login");
+      throw new Error("No token available");
+    }
+    
+    console.log('fetchUsers: Starting API call with page:', userPage, 'filters:', userFilters);
+    
+    let query = `?page=${userPage}&limit=${userLimit}`;
+    if (userFilters.search)
+      query += `&search=${encodeURIComponent(userFilters.search)}`;
+    if (userFilters.departments.length)
+      query += `&departments=${userFilters.departments.join(",")}`;
+    if (userFilters.roles.length) query += `&roles=${userFilters.roles.join(",")}`;
+    if (userFilters.statuses.length)
+      query += `&statuses=${userFilters.statuses.join(",")}`;
+
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users${query}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    
+    if (res.status === 401) {
+      router.push("/login");
+      throw new Error("Unauthorized");
+    }
+    
+    if (!res.ok) {
+      throw new Error('Failed to fetch users');
+    }
+
+    const result = await res.json();
+    console.log('fetchUsers API response:', { dataLength: result.data?.length, total: result.total });
+    
+    return {
+      data: result.data || [],
+      total: result.total || 0
+    };
+  }, [userPage, userFilters, userLimit, router]);
+
+  // Use the custom hook for users
+  const {
+    data: usersData,
+    isLoading,
+    error,
+    refetch,
+    forceUpdate
+  } = useApiState(fetchUsers, { data: [], total: 0 }, {
+    autoRefreshInterval: 45000 // 45 seconds
+  });
+
+  // Extract users and total from data
+  const users = usersData.data;
+  const userTotal = usersData.total;
+
+  // Refetch when page or filters change
+  useEffect(() => {
+    forceUpdate();
+  }, [userPage, userFilters, forceUpdate]);
+
+  // Socket event handlers
+  const handleUserLogin = useCallback(() => {
+    forceUpdate();
+  }, [forceUpdate]);
+
+  const handleUserLogout = useCallback(() => {
+    forceUpdate();
+  }, [forceUpdate]);
+
+  const handleUserBlock = useCallback(() => {
+    forceUpdate();
+  }, [forceUpdate]);
+
+  const [alert, setAlert] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  // Fetch current user profile
   useEffect(() => {
     const fetchProfile = async () => {
       const token = getAccessToken();
@@ -102,6 +169,7 @@ export default function UserManager() {
     fetchProfile();
   }, []);
 
+  // Fetch departments
   useEffect(() => {
     const fetchDepartments = async () => {
       const token = getAccessToken();
@@ -127,6 +195,7 @@ export default function UserManager() {
     fetchDepartments();
   }, []);
 
+  // Fetch roles
   useEffect(() => {
     const fetchRoles = async () => {
       const token = getAccessToken();
@@ -149,6 +218,7 @@ export default function UserManager() {
     fetchRoles();
   }, []);
 
+  // Fetch deleted users when modal opens
   useEffect(() => {
     if (showDeletedModal) {
       const fetchDeletedUsers = async () => {
@@ -167,55 +237,12 @@ export default function UserManager() {
     }
   }, [showDeletedModal, deletedPage]);
 
-  const [alert, setAlert] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
-
-  const fetchUsers = async (page = 1, filters = userFilters) => {
-    const token = getAccessToken();
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    try {
-      let query = `?page=${page}&limit=${userLimit}`;
-      if (filters.search)
-        query += `&search=${encodeURIComponent(filters.search)}`;
-      if (filters.departments.length)
-        query += `&departments=${filters.departments.join(",")}`;
-      if (filters.roles.length) query += `&roles=${filters.roles.join(",")}`;
-      if (filters.statuses.length)
-        query += `&statuses=${filters.statuses.join(",")}`;
-
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/users${query}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      if (res.status === 401) {
-        router.push("/login");
-        return;
-      }
-      if (!res.ok) throw new Error("Failed to fetch users");
-      const { data, total } = await res.json();
-      setUsers(data);
-      setUserTotal(total);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Sửa effect fetch users: chỉ fetch khi userPage hoặc userFilters đổi
+  // Update alert when there's an error
   useEffect(() => {
-    fetchUsers(userPage, userFilters);
-  }, [userPage, userFilters]);
+    if (error) {
+      setAlert({ type: "error", message: "Lỗi khi tải danh sách người dùng!" });
+    }
+  }, [error]);
 
   const availableRoles = roles.map((role) => role.name);
   const availableDepartments = Array.from(
@@ -242,7 +269,7 @@ export default function UserManager() {
       if (!res.ok) throw new Error("Thêm người dùng thất bại!");
       setUserPage(1);
       setAlert({ type: "success", message: "Thêm người dùng thành công!" });
-      fetchUsers(1);
+      forceUpdate();
       setIsAddModalOpen(false);
     } catch (err) {
       setAlert({ type: "error", message: "Thêm người dùng thất bại!" });
@@ -266,7 +293,7 @@ export default function UserManager() {
       if (users.length === 1 && userPage > 1) {
         setUserPage(userPage - 1);
       } else {
-        fetchUsers(userPage);
+        forceUpdate();
       }
     } catch (err) {
       setAlert({ type: "error", message: "Xóa người dùng thất bại!" });
@@ -302,7 +329,7 @@ export default function UserManager() {
           ? "Đã khóa tài khoản thành công!"
           : "Đã mở khóa tài khoản thành công!",
       });
-      fetchUsers(userPage);
+      forceUpdate();
     } catch (err) {
       setAlert({
         type: "error",
@@ -338,7 +365,7 @@ export default function UserManager() {
       );
       if (!res.ok) throw new Error("Cập nhật thất bại");
       setAlert({ type: "success", message: "Cập nhật thành công!" });
-      fetchUsers(userPage);
+      forceUpdate();
       setIsEditModalOpen(false);
       setEditingUser(null);
     } catch (err) {
@@ -361,6 +388,7 @@ export default function UserManager() {
       );
       if (!res.ok) throw new Error("Khôi phục thất bại!");
       setAlert({ type: "success", message: "Khôi phục thành công!" });
+      // Refresh deleted users list
       const fetchDeletedUsers = async () => {
         const token = getAccessToken();
         const res = await fetch(
@@ -374,16 +402,26 @@ export default function UserManager() {
         }
       };
       fetchDeletedUsers();
-      fetchUsers(userPage, userFilters);
+      forceUpdate();
     } catch (err) {
       setAlert({ type: "error", message: "Khôi phục thất bại!" });
     }
   };
 
-  if (isLoading || !currentUser) {
+  if (!currentUser) {
     return (
       <div className="flex justify-center items-center h-screen">
         <LoadingSpinner size={48} />
+        <span className="ml-2">Đang tải thông tin người dùng...</span>
+      </div>
+    );
+  }
+
+  if (isLoading && users.length === 0) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <LoadingSpinner size={32} />
+        <span className="ml-2">Đang tải dữ liệu...</span>
       </div>
     );
   }
@@ -428,6 +466,13 @@ export default function UserManager() {
                   className="text-sm"
                 >
                   + Thêm User
+                </Button>
+                <Button
+                  onClick={() => forceUpdate()}
+                  variant="outline"
+                  className="text-sm"
+                >
+                  🔄 Làm mới
                 </Button>
               </div>
             )}

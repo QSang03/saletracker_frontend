@@ -3,11 +3,9 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import LinkAccountContent from "@/components/account/link-account/LinkAccountContent";
 import { Link2 } from "lucide-react";
-import type { User } from "@/types";
 
-// Nhận props từ layout (Next.js app router sẽ truyền currentUser qua cloneElement)
-export default function LinkAccountPage(props: { currentUser: User | null; debugLabel?: string }) {
-  const { currentUser, debugLabel } = props;
+// Next.js page components không nhận props tuỳ chỉnh
+export default function LinkAccountPage() {
   return (
     <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
       <Card className="w-full flex-1">
@@ -18,7 +16,7 @@ export default function LinkAccountPage(props: { currentUser: User | null; debug
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <LinkAccountContent debugLabel={debugLabel} />
+          <LinkAccountContent />
         </CardContent>
       </Card>
     </div>

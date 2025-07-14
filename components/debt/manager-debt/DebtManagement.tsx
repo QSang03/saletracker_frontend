@@ -32,6 +32,12 @@ function getDaysBetween(date1?: string | Date, date2?: string | Date) {
 
 export default function DebtManagement({ debts, expectedRowCount, startIndex, onReload, columnAligns, onEdit, onDelete }: DebtManagementProps) {
   const today = new Date();
+  
+  // Debug log
+  console.log('DebtManagement received debts:', debts);
+  console.log('DebtManagement expectedRowCount:', expectedRowCount);
+  console.log('DebtManagement debts length:', debts.length);
+  
   // CSS cho cell, giữ nguyên như ban đầu
   const cellClass = "px-3 py-2";
   const cellCenterClass = "text-center px-3 py-2";
@@ -109,7 +115,7 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
             <TableHead className="px-3 py-2 text-center">Số ngày công nợ</TableHead>
             <TableHead className="px-3 py-2 text-center">Số ngày quá hạn</TableHead>
             <TableHead className="px-3 py-2 text-center">Ngày hẹn thanh toán</TableHead>
-            <TableHead className="px-3 py-2 text-center">Số tiền chứng từ</TableHead>
+            <TableHead className="px-3 py-2 text-center">Thành tiền chứng từ</TableHead>
             <TableHead className="px-3 py-2 text-center">Số tiền còn lại</TableHead>
             <TableHead className="px-3 py-2 text-center">Trạng thái</TableHead>
             <TableHead className="px-3 py-2 text-center">Ghi chú</TableHead>

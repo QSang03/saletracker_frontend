@@ -77,29 +77,86 @@ export interface DebtListResponse {
 
 class DebtStatisticsAPI {
   private baseUrl = '/debts/stats';
+  private cache = new Map<string, { data: any; timestamp: number }>();
+  private readonly CACHE_DURATION = 30000; // 30 seconds cache
+
+  // Clear expired cache entries
+  private clearExpiredCache() {
+    const now = Date.now();
+    for (const [key, value] of this.cache.entries()) {
+      if (now - value.timestamp > this.CACHE_DURATION) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  // Get cached data if available and not expired
+  private getCachedData(key: string) {
+    this.clearExpiredCache();
+    const cached = this.cache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+      return cached.data;
+    }
+    return null;
+  }
+
+  // Set cache data
+  private setCacheData(key: string, data: any) {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
+  // Generate cache key from filters
+  private getCacheKey(endpoint: string, filters: any) {
+    return `${endpoint}_${JSON.stringify(filters)}`;
+  }
 
   async getOverview(filters: StatisticsFilters = {}): Promise<DebtStatsOverview> {
+    const cacheKey = this.getCacheKey('overview', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
     const response = await api.get(`${this.baseUrl}/overview`, { params: filters });
+    this.setCacheData(cacheKey, response.data);
     return response.data;
   }
 
   async getAgingAnalysis(filters: StatisticsFilters = {}): Promise<AgingData[]> {
+    const cacheKey = this.getCacheKey('aging', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
     const response = await api.get(`${this.baseUrl}/aging`, { params: filters });
+    this.setCacheData(cacheKey, response.data);
     return response.data;
   }
 
   async getTrends(filters: StatisticsFilters = {}): Promise<TrendData[]> {
+    const cacheKey = this.getCacheKey('trends', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
     const response = await api.get(`${this.baseUrl}/trends`, { params: filters });
+    this.setCacheData(cacheKey, response.data);
     return response.data;
   }
 
   async getEmployeePerformance(filters: StatisticsFilters = {}): Promise<EmployeePerformance[]> {
+    const cacheKey = this.getCacheKey('employee-performance', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
     const response = await api.get(`${this.baseUrl}/employee-performance`, { params: filters });
+    this.setCacheData(cacheKey, response.data);
     return response.data;
   }
 
   async getDepartmentBreakdown(filters: StatisticsFilters = {}): Promise<DepartmentBreakdown[]> {
+    const cacheKey = this.getCacheKey('department-breakdown', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
     const response = await api.get(`${this.baseUrl}/department-breakdown`, { params: filters });
+    this.setCacheData(cacheKey, response.data);
     return response.data;
   }
 
@@ -108,14 +165,15 @@ class DebtStatisticsAPI {
     filters: DebtListFilters = {}
   ): Promise<DebtListResponse> {
     try {
-      // Try the main debts endpoint with status filter first
-      const response = await api.get('/debts', { 
-        params: { 
-          ...filters, 
-          status,
-          limit: filters.limit || 50
-        } 
-      });
+      // For statistics, we need ALL data, not paginated results
+      const allFilters = {
+        ...filters,
+        status,
+        limit: 10000, // Get all records for accurate statistics
+        page: 1
+      };
+      
+      const response = await api.get('/debts', { params: allFilters });
       
       if (response.data && Array.isArray(response.data.data)) {
         return response.data;
@@ -127,7 +185,7 @@ class DebtStatisticsAPI {
           data: response.data,
           total: response.data.length,
           page: 1,
-          limit: filters.limit || 50,
+          limit: response.data.length,
           totalPages: 1
         };
       }
@@ -137,7 +195,7 @@ class DebtStatisticsAPI {
         data: [],
         total: 0,
         page: 1,
-        limit: filters.limit || 50,
+        limit: 10000,
         totalPages: 0
       };
       
@@ -148,14 +206,21 @@ class DebtStatisticsAPI {
         data: [],
         total: 0,
         page: 1,
-        limit: filters.limit || 50,
+        limit: 10000,
         totalPages: 0
       };
     }
   }
 
   async getDetailedDebts(filters: DebtListFilters = {}): Promise<DebtListResponse> {
-    const response = await api.get('/debts', { params: filters });
+    // For statistics, use large limit to get complete data
+    const allFilters = {
+      ...filters,
+      limit: filters.limit || 10000, // Get all records for accurate statistics
+      page: filters.page || 1
+    };
+    
+    const response = await api.get('/debts', { params: allFilters });
     console.log('Raw API response structure:', response);
     console.log('Response data:', response.data);
     
@@ -171,7 +236,7 @@ class DebtStatisticsAPI {
           data: response.data,
           total: response.data.length,
           page: 1,
-          limit: filters.limit || 50,
+          limit: response.data.length,
           totalPages: 1
         };
       }
@@ -181,7 +246,7 @@ class DebtStatisticsAPI {
       data: [],
       total: 0,
       page: 1,
-      limit: filters.limit || 50,
+      limit: allFilters.limit,
       totalPages: 0
     };
   }
@@ -190,6 +255,24 @@ class DebtStatisticsAPI {
   async getBasicStats(filters: StatisticsFilters = {}) {
     const response = await api.get('/debts/stats', { params: filters });
     return response.data;
+  }
+
+  // Invalidate cache for specific patterns
+  invalidateCache(pattern?: string) {
+    if (pattern) {
+      for (const key of this.cache.keys()) {
+        if (key.includes(pattern)) {
+          this.cache.delete(key);
+        }
+      }
+    } else {
+      this.cache.clear();
+    }
+  }
+
+  // Force refresh - bypass cache
+  async forceRefresh() {
+    this.cache.clear();
   }
 }
 

@@ -376,7 +376,8 @@ export default function LinkAccountContent({
     }
   }, [isLinked, refetchUser]);
 
-  if (!currentUser || !currentUser.username) {
+  // Đảm bảo hiển thị loading khi đang chờ currentUser
+  if (!currentUser) {
     return (
       <LoadingSpinner message="Đang tải thông tin tài khoản..." size={48} fullScreen={false} />
     );

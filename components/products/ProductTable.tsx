@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -37,30 +37,78 @@ export default function ProductTable() {
   const [brandPage, setBrandPage] = useState(1);
   const [brandPageSize, setBrandPageSize] = useState(10);
 
+  // Thêm refs cho component lifecycle
+  const isComponentMounted = useRef(true);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup on unmount
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products`, { headers: getAuthHeaders() });
-        const json = await r.json();
-        setProducts((json && Array.isArray(json.data)) ? json.data : []);
-      } catch (err) {
-        setProducts([]);
-        console.error("Lỗi fetch products:", err);
+    return () => {
+      isComponentMounted.current = false;
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
       }
     };
-    const fetchBrands = async () => {
-      try {
-        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers: getAuthHeaders() });
-        const json = await r.json();
-        console.log("Fetched brands:", json);
-        setBrands(Array.isArray(json) ? json : (json.data ?? []));
-      } catch (err) {
-        setBrands([]);
-        console.error("Lỗi fetch brands:", err);
-      }
-    };
+  }, []);
+
+  // Cải thiện fetch functions
+  const fetchProducts = async (silent = false) => {
+    try {
+      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products`, { headers: getAuthHeaders() });
+      const json = await r.json();
+      
+      if (!isComponentMounted.current) return;
+      
+      setProducts((json && Array.isArray(json.data)) ? json.data : []);
+    } catch (err) {
+      console.error("Lỗi fetch products:", err);
+      if (!isComponentMounted.current) return;
+      setProducts([]);
+    }
+  };
+
+  const fetchBrands = async (silent = false) => {
+    try {
+      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers: getAuthHeaders() });
+      const json = await r.json();
+      console.log("Fetched brands:", json);
+      
+      if (!isComponentMounted.current) return;
+      
+      setBrands(Array.isArray(json) ? json : (json.data ?? []));
+    } catch (err) {
+      console.error("Lỗi fetch brands:", err);
+      if (!isComponentMounted.current) return;
+      setBrands([]);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
     fetchProducts();
     fetchBrands();
+  }, []);
+
+  // Auto-refresh every 2 minutes
+  useEffect(() => {
+    const startAutoRefresh = () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+      refreshIntervalRef.current = setInterval(() => {
+        if (isComponentMounted.current) {
+          fetchProducts(true); // silent refresh
+          fetchBrands(true); // silent refresh
+        }
+      }, 120000); // 2 minutes
+    };
+
+    startAutoRefresh();
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
   }, []);
 
   // Lấy danh sách category_id duy nhất từ products (dựa trên categories array)

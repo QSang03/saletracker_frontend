@@ -1,3 +1,4 @@
+// lib/auth.ts
 export function getAccessToken(): string | null {
   if (typeof document === "undefined") return null;
 
@@ -16,6 +17,7 @@ export function getAccessToken(): string | null {
 export function getUserFromToken(token: string): any | null {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
+    console.log("Decoded token payload:", payload);
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
@@ -26,10 +28,11 @@ export function getUserFromToken(token: string): any | null {
       id: payload.sub,
       username: payload.username || "",
       fullName: payload.fullName || "",
-      status: "active" as const,
-      isBlock: false,
+      status: payload.status || "active",
+      isBlock: payload.isBlock ?? false,
       roles: payload.roles || [],
       departments: payload.departments || [],
+      permissions: payload.permissions || [],
     };
   } catch (error) {
     console.error("Token decode error:", error);

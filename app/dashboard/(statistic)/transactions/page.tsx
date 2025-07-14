@@ -3,11 +3,8 @@
 import { useState, useEffect } from "react";
 import { ChartBarDeals } from "@/components/dashboard/ChartBarDeals";
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner";
-interface PageProps {
-  activeUrl: string;
-}
 
-export default function Page({ activeUrl }: PageProps) {
+export default function TransactionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 1000);

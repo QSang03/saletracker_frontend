@@ -58,7 +58,7 @@ export default function AddManualDebtModal({
 				data.gap_day = null;
 			} else {
 				const gap = Math.min(Number(schedule) || 0, MAX_GAP_DAY);
-				data.gap_day = gap > 0 ? gap : null;
+				data.gap_day = gap >= 0 ? gap : null;
 				data.day_of_week = null;
 			}
 			const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/debt-configs`, {
@@ -144,9 +144,10 @@ export default function AddManualDebtModal({
 						) : (
 							<Input
 								type="number"
-								placeholder="Nhập lịch thanh toán (số ngày, tối đa 10)"
+								placeholder="Nhập lịch thanh toán (0 = Nhắc Mỗi Ngày, 1-10 = Cách X ngày)"
 								value={typeof schedule === "string" ? schedule : ""}
 								onChange={e => setSchedule(e.target.value)}
+								min={0}
 								max={MAX_GAP_DAY}
 							/>
 						)}

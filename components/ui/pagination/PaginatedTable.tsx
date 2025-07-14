@@ -179,14 +179,14 @@ export default function PaginatedTable({
     setPendingPageSize(currentPageSize);
   }, [currentPageSize]);
 
-  // Debounce filter cho backend: chỉ gọi onFilterChange sau 500ms khi user dừng nhập/chọn
+  // Debounce filter cho backend: giảm thời gian từ 500ms xuống 300ms để responsive hơn
   const filterTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const debouncedSetFilters = useCallback((newFilters: Filters) => {
     if (filterTimeout.current) clearTimeout(filterTimeout.current);
     filterTimeout.current = setTimeout(() => {
       if (onFilterChange) onFilterChange(newFilters);
-    }, 500);
+    }, 300); // giảm từ 500ms xuống 300ms
   }, [onFilterChange]);
 
   // updateFilter chỉ cập nhật filter, không reset page

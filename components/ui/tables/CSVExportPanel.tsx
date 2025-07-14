@@ -62,7 +62,24 @@ export default function CSVExportPanel({
     const csvContent = [
       headers.join(","),
       ...exportData.map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+        row.map((cell) => {
+          // Convert everything to string safely, handle objects and arrays
+          let cellValue = "";
+          if (cell === null || cell === undefined) {
+            cellValue = "";
+          } else if (typeof cell === 'object') {
+            // For objects and arrays, convert to JSON string or extract meaningful values
+            if (Array.isArray(cell)) {
+              cellValue = (cell as any[]).join(', ');
+            } else {
+              cellValue = JSON.stringify(cell);
+            }
+          } else {
+            cellValue = String(cell);
+          }
+          // Escape quotes properly for CSV
+          return `"${cellValue.replace(/"/g, '""')}"`;
+        }).join(",")
       ),
     ].join("\n");
 

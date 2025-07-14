@@ -398,6 +398,12 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [sortField, setSortField] = useState<keyof Debt>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Extract unique employees from debts data
   const uniqueEmployees = useMemo(() => {
@@ -440,6 +446,67 @@ const DebtModal: React.FC<DebtModalProps> = ({
     console.log('Filtered debts:', filtered);
     return filtered;
   }, [debts, searchTerm, selectedEmployees, selectedDate]);
+
+  // Sort filtered debts
+  const sortedDebts = useMemo(() => {
+    return [...filteredDebts].sort((a, b) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
+      
+      let comparison = 0;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        comparison = aVal.localeCompare(bVal);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal).localeCompare(String(bVal));
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredDebts, sortField, sortDirection]);
+
+  // Paginate sorted debts
+  const paginatedDebts = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return sortedDebts.slice(startIndex, endIndex);
+  }, [sortedDebts, currentPage, pageSize]);
+
+  // Calculate pagination info
+  const totalItems = sortedDebts.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startItem = totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+
+  // Reset page when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedEmployees, selectedDate]);
+
+  // Handle sorting
+  const handleSort = useCallback((field: keyof Debt) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  }, [sortField]);
+
+  // Handle pagination
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  }, []);
 
   const formatCurrency = useCallback((amount: number): string => {
     return new Intl.NumberFormat("vi-VN", {
@@ -506,13 +573,14 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   const handleExport = useCallback(() => {
     // Export functionality could be implemented here
-    console.log("Exporting filtered data:", filteredDebts);
-  }, [filteredDebts]);
+    console.log("Exporting filtered data:", sortedDebts);
+  }, [sortedDebts]);
 
   const clearFilters = () => {
     setSearchTerm("");
     setSelectedEmployees([]);
     setSelectedDate(undefined);
+    setCurrentPage(1); // Reset pagination when clearing filters
   };
 
   const toggleEmployee = (employee: string) => {
@@ -529,13 +597,13 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   // Calculate totals with proper null/undefined handling and category-specific logic
   const totalAmount = useMemo(() => {
-    const total = filteredDebts.reduce((sum, debt) => {
+    const total = sortedDebts.reduce((sum, debt) => {
       const amount = Number(debt.total_amount) || 0;
       return sum + (isNaN(amount) ? 0 : amount);
     }, 0);
-    console.log(`Total amount for category ${category}:`, total, 'from', filteredDebts.length, 'debts');
+    console.log(`Total amount for category ${category}:`, total, 'from', sortedDebts.length, 'debts');
     return total;
-  }, [filteredDebts, category]);
+  }, [sortedDebts, category]);
 
   const totalRemaining = useMemo(() => {
     // For "paid" category, remaining should always be 0
@@ -545,11 +613,11 @@ const DebtModal: React.FC<DebtModalProps> = ({
     }
     
     // For other categories, calculate actual remaining
-    const remaining = filteredDebts.reduce((sum, debt) => {
+    const remaining = sortedDebts.reduce((sum, debt) => {
       const remainingAmount = Number(debt.remaining) || 0;
       return sum + (isNaN(remainingAmount) ? 0 : remainingAmount);
     }, 0);
-    console.log(`Total remaining for category ${category}:`, remaining, 'from', filteredDebts.length, 'debts');
+    console.log(`Total remaining for category ${category}:`, remaining, 'from', sortedDebts.length, 'debts');
     return remaining;
   }, [filteredDebts, category]);
 
@@ -576,7 +644,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
             handleSearch={handleSearch}
             clearFilters={clearFilters}
             handleExport={handleExport}
-            totalCount={filteredDebts.length}
+            totalCount={totalItems}
             totalAmount={formatCurrency(totalAmount)}
             totalRemaining={formatCurrency(totalRemaining)}
           />
@@ -613,7 +681,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredDebts.map((debt, index) => (
+                {paginatedDebts.map((debt, index) => (
                   <TableRow
                     key={debt.id}
                     className={`hover:bg-blue-50 transition-colors border-b border-gray-100 ${
@@ -653,6 +721,90 @@ const DebtModal: React.FC<DebtModalProps> = ({
             </Table>
           </div>
 
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Hiển thị {startItem}-{endItem} trên {totalItems} kết quả</span>
+                <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(Number(value))}>
+                  <SelectTrigger className="w-20 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="200">200</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span>mỗi trang</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                >
+                  Đầu
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Trước
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        className="w-8 h-8 p-0"
+                        onClick={() => handlePageChange(pageNum)}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Tiếp
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  Cuối
+                </Button>
+              </div>
+            </div>
+          )}
+
           {loading && (
             <div className="text-center py-16">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -660,7 +812,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
             </div>
           )}
 
-          {!loading && filteredDebts.length === 0 && (
+          {!loading && totalItems === 0 && (
             <div className="text-center py-16 text-muted-foreground">
               <AlertCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="text-xl font-medium mb-2">

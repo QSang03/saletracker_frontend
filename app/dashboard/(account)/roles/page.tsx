@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
@@ -10,6 +10,7 @@ import RoleManagement from "@/components/roles/RoleManagement";
 import AddMainRoleModal from "@/components/roles/AddMainRoleModal";
 import type { User, Department, Permission, RolePermission } from "@/types";
 import { getAccessToken } from "@/lib/auth";
+import { useApiState } from "@/hooks/useApiState";
 
 // Thêm type cho role-permissions
 interface UserRolePermissionsMap {
@@ -17,14 +18,6 @@ interface UserRolePermissionsMap {
 }
 
 export default function RolesPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [rolesGrouped, setRolesGrouped] = useState<{
-    main: { id: number; name: string }[];
-    sub: { id: number; name: string; display_name: string }[];
-  }>({ main: [], sub: [] });
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Pagination & filter state
@@ -35,52 +28,84 @@ export default function RolesPage() {
   // Modal state cho thêm vai trò chính
   const [showAddMainRole, setShowAddMainRole] = useState(false);
 
-  // Thêm state cho role-permissions của từng user
-  const [userRolePermissions, setUserRolePermissions] = useState<UserRolePermissionsMap>({});
-
-  // Thêm state cho toàn bộ roles_permissions
-  const [allRolePermissions, setAllRolePermissions] = useState<RolePermission[]>([]);
-
-  // Hàm fetch có header và token
-  const fetchWithToken = async (url: string) => {
-    const token = getAccessToken
-      ? getAccessToken()
-      : localStorage.getItem("access_token");
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${url}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    return res.ok ? res.json() : [];
-  };
-
-  // Fetch all data
-  const fetchAll = async () => {
-    setIsLoading(true);
-    try {
-      const [usersData, rolesGroupedData, departmentsData, permissionsData, allRolePermsData] = await Promise.all([
-        fetchWithToken("/users/for-permission-management"),
-        fetchWithToken("/roles/grouped"),
-        fetchWithToken("/departments"),
-        fetchWithToken("/permissions"),
-        fetchWithToken("/roles-permissions/all"),
-      ]);
-      const usersList = Array.isArray(usersData) ? usersData : usersData.data || [];
-      setUsers(usersList);
-      setRolesGrouped(rolesGroupedData || { main: [], sub: [] });
-      setDepartments(Array.isArray(departmentsData) ? departmentsData : departmentsData.data || []);
-      setPermissions(Array.isArray(permissionsData) ? permissionsData : permissionsData.data || []);
-      setAllRolePermissions(Array.isArray(allRolePermsData) ? allRolePermsData : allRolePermsData.data || []);
-    } catch {
-      setAlert({ type: "error", message: "Lỗi tải dữ liệu phân quyền!" });
+  // Fetch function for all roles data
+  const fetchRolesData = useCallback(async () => {
+    const token = getAccessToken();
+    if (!token) {
+      throw new Error("No token available");
     }
-    setIsLoading(false);
-  };
 
-  useEffect(() => {
-    fetchAll();
+    console.log('fetchRolesData: Starting API calls');
+
+    const [usersData, rolesGroupedData, departmentsData, permissionsData, allRolePermsData] = await Promise.all([
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/for-permission-management`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).then(res => res.ok ? res.json() : []),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/roles/grouped`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).then(res => res.ok ? res.json() : { main: [], sub: [] }),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/departments`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).then(res => res.ok ? res.json() : []),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/permissions`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).then(res => res.ok ? res.json() : []),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/roles-permissions/all`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).then(res => res.ok ? res.json() : [])
+    ]);
+
+    const usersList = Array.isArray(usersData) ? usersData : usersData.data || [];
+    
+    console.log('fetchRolesData completed:', {
+      usersCount: usersList.length,
+      rolesGrouped: rolesGroupedData,
+      departmentsCount: Array.isArray(departmentsData) ? departmentsData.length : departmentsData.data?.length || 0,
+      permissionsCount: Array.isArray(permissionsData) ? permissionsData.length : permissionsData.data?.length || 0
+    });
+
+    return {
+      users: usersList,
+      rolesGrouped: rolesGroupedData || { main: [], sub: [] },
+      departments: Array.isArray(departmentsData) ? departmentsData : departmentsData.data || [],
+      permissions: Array.isArray(permissionsData) ? permissionsData : permissionsData.data || [],
+      allRolePermissions: Array.isArray(allRolePermsData) ? allRolePermsData : allRolePermsData.data || []
+    };
   }, []);
+
+  // Use the custom hook for roles data
+  const {
+    data: rolesData,
+    isLoading,
+    error,
+    forceUpdate
+  } = useApiState(fetchRolesData, {
+    users: [],
+    rolesGrouped: { main: [], sub: [] },
+    departments: [],
+    permissions: [],
+    allRolePermissions: []
+  }, {
+    autoRefreshInterval: 60000 // 1 minute
+  });
+
+  // Extract data from the response
+  const { users, rolesGrouped, departments, permissions, allRolePermissions } = rolesData;
 
   // Filter & phân trang ở frontend
   const filteredUsers = useMemo(() => {
@@ -118,7 +143,7 @@ export default function RolesPage() {
         throw new Error("Thêm vai trò thất bại");
       }
       setAlert({ type: "success", message: "Thêm vai trò thành công!" });
-      await fetchAll();
+      forceUpdate();
     } catch {
       setAlert({ type: "error", message: "Thêm vai trò thất bại!" });
     }
@@ -146,11 +171,18 @@ export default function RolesPage() {
       );
       if (!res.ok) throw new Error("Cập nhật phân quyền thất bại");
       setAlert({ type: "success", message: "Cập nhật phân quyền thành công!" });
-      await fetchAll();
+      forceUpdate();
     } catch {
       setAlert({ type: "error", message: "Cập nhật phân quyền thất bại!" });
     }
   };
+
+  // Update alert when there's an error
+  useEffect(() => {
+    if (error) {
+      setAlert({ type: "error", message: "Lỗi tải dữ liệu phân quyền!" });
+    }
+  }, [error]);
 
   return (
     <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
@@ -197,7 +229,7 @@ export default function RolesPage() {
                 permissions={permissions}
                 expectedRowCount={pageSize}
                 startIndex={(page - 1) * pageSize}
-                onReload={fetchAll}
+                onReload={async () => forceUpdate()}
                 // Truyền toàn bộ allRolePermissions xuống
                 allRolePermissions={allRolePermissions}
                 onUpdateUserRolesPermissions={handleUpdateUserRolesPermissions}

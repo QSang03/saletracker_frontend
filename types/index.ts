@@ -54,6 +54,10 @@ export interface User {
   avatarZalo?: string;
 }
 
+export interface UserWithPermissions extends User {
+  permissions: Permission[];
+}
+
 // RolePermission Entity (bảng trung gian)
 export interface RolePermission {
   id?: number;
@@ -64,6 +68,7 @@ export interface RolePermission {
   permission?: Permission;
   createdAt?: Date;
   updatedAt?: Date;
+  deleted_at?: string | Date;
 }
 
 // Filter Params cho User
@@ -281,4 +286,10 @@ export interface UpdateUserRolesPermissionsDto {
   roleIds: number[];
   permissionIds: number[];
   rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
+}
+
+
+export interface PermissionCheckParams {
+  departmentSlug: string;
+  action: string;
 }

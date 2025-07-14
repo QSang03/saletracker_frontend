@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { DateRangePicker, DateRange } from "@/components/ui/date-range-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DateRange } from "react-day-picker";
 import {
   Dialog,
   DialogContent,
@@ -241,9 +242,8 @@ export function ChartBarDeals() {
             <DateRangePicker
               locale="vi"
               initialDateRange={dateRange}
-              onUpdate={(range) => setDateRange(range.range)}
+              onUpdate={(range) => setDateRange(range.range || dateRange)}
               align="start"
-              showCompare={false}
             />
             <Button
               variant="gradient"
@@ -298,23 +298,69 @@ export function ChartBarDeals() {
           </DialogHeader>
 
           <div className="mt-6">
-            <PaginatedTable
-              headers={[
-                "Ngày",
-                "Người đặt",
-                "Chi nhánh",
-                "Sản phẩm",
-                "Số lượng",
-                "Giá",
-                "Trạng thái",
-              ]}
-              rows={paginatedRows}
-              page={page}
-              total={fakeTableData.length}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              emptyText="Không có dữ liệu."
-            />
+            <div className="border rounded-lg">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="p-3 text-left">Ngày</th>
+                      <th className="p-3 text-left">Người đặt</th>
+                      <th className="p-3 text-left">Chi nhánh</th>
+                      <th className="p-3 text-left">Sản phẩm</th>
+                      <th className="p-3 text-left">Số lượng</th>
+                      <th className="p-3 text-left">Giá</th>
+                      <th className="p-3 text-left">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                          Không có dữ liệu.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedRows.map((row, index) => (
+                        <tr key={index} className="border-b hover:bg-muted/50">
+                          {row.map((cell, cellIndex) => (
+                            <td key={cellIndex} className="p-3">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              <div className="flex items-center justify-between p-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Hiển thị {Math.min((page - 1) * pageSize + 1, fakeTableData.length)} - {Math.min(page * pageSize, fakeTableData.length)} của {fakeTableData.length} kết quả
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                    disabled={page <= 1}
+                  >
+                    Trước
+                  </Button>
+                  <span className="text-sm">
+                    Trang {page} / {Math.ceil(fakeTableData.length / pageSize)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(Math.min(Math.ceil(fakeTableData.length / pageSize), page + 1))}
+                    disabled={page >= Math.ceil(fakeTableData.length / pageSize)}
+                  >
+                    Sau
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

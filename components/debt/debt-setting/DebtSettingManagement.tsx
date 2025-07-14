@@ -1,8 +1,19 @@
 import React, { useState } from "react";
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { WrenchIcon, EyeIcon } from "@heroicons/react/24/outline";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import axios from "axios";
@@ -10,6 +21,7 @@ import { getAccessToken } from "@/lib/auth";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import EditDebtConfigModal from "./EditDebtConfigModal";
 import DebtDetailDialog from "./DebtDetailDialog";
+import { P } from "@/components/common/P";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -17,11 +29,16 @@ interface DebtSettingManagementProps {
   data: any[];
   page: number;
   pageSize: number;
-  onToggle?: (id: string, type: 'send' | 'repeat', value: boolean, updatedRow?: any) => void;
+  onToggle?: (
+    id: string,
+    type: "send" | "repeat",
+    value: boolean,
+    updatedRow?: any
+  ) => void;
   onDelete?: (id: string) => void;
   onEdit?: (row: any) => void;
   onRefresh?: () => void;
-  onShowAlert?: (alert: { type: 'success' | 'error'; message: string }) => void;
+  onShowAlert?: (alert: { type: "success" | "error"; message: string }) => void;
   onUpdateRow?: (id: string, updatedData: any) => void; // Thêm prop mới để cập nhật row
 }
 
@@ -55,148 +72,268 @@ export default function DebtSettingManagement({
   ];
   // Map trạng thái nhắc nợ sang tiếng Việt và màu sắc
   const remindStatusMap: Record<string, { label: string; color: string }> = {
-    "Debt Reported": { label: "Đã Gửi Báo Nợ", color: "text-blue-600 font-semibold" },
-    "First Reminder": { label: "Đã Gửi Nhắc Lần 1", color: "text-orange-500 font-semibold" },
-    "Second Reminder": { label: "Đã Gửi Nhắc Lần 2", color: "text-yellow-600 font-semibold" },
-    "Customer Responded": { label: "Khách Đã Phản Hồi", color: "text-green-600 font-semibold" },
+    "Debt Reported": {
+      label: "Đã Gửi Báo Nợ",
+      color: "text-blue-600 font-semibold",
+    },
+    "First Reminder": {
+      label: "Đã Gửi Nhắc Lần 1",
+      color: "text-orange-500 font-semibold",
+    },
+    "Second Reminder": {
+      label: "Đã Gửi Nhắc Lần 2",
+      color: "text-yellow-600 font-semibold",
+    },
+    "Customer Responded": {
+      label: "Khách Đã Phản Hồi",
+      color: "text-green-600 font-semibold",
+    },
     "Not Sent": { label: "Chưa Gửi", color: "text-gray-500 font-semibold" },
-    "Error Send": { label: "Gửi Không Thành Công", color: "text-red-600 font-semibold" },
+    "Error Send": {
+      label: "Gửi Không Thành Công",
+      color: "text-red-600 font-semibold",
+    },
   };
-  
+
   // State để lưu data local để cập nhật ngay lập tức
   const [localData, setLocalData] = useState(data);
-  
+
   // Cập nhật localData khi data props thay đổi
   React.useEffect(() => {
     setLocalData(data);
   }, [data]);
-  
+
   // Tạo mảng đủ số dòng (dữ liệu thật + dòng ảo) từ localData
-  const rows = Array.from({ length: pageSize }).map((_, idx) => localData[idx] || null);
+  const rows = Array.from({ length: pageSize }).map(
+    (_, idx) => localData[idx] || null
+  );
   const [confirmState, setConfirmState] = useState({
     open: false,
-    type: undefined as 'send' | 'repeat' | undefined,
+    type: undefined as "send" | "repeat" | undefined,
     row: null as any,
     nextValue: false,
     loading: false, // Thêm loading state
   });
-  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [alert, setAlert] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   // State xác nhận xóa
-  const [deleteState, setDeleteState] = useState<{ open: boolean; row: any }>({ open: false, row: null });
-  const [editModal, setEditModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  const [deleteState, setDeleteState] = useState<{ open: boolean; row: any }>({
+    open: false,
+    row: null,
+  });
+  const [editModal, setEditModal] = useState<{
+    open: boolean;
+    id: string | null;
+  }>({ open: false, id: null });
   // State cho dialog xem chi tiết công nợ
-  const [detailDialog, setDetailDialog] = useState<{ open: boolean; debtConfigId: string | null }>({ open: false, debtConfigId: null });
+  const [detailDialog, setDetailDialog] = useState<{
+    open: boolean;
+    debtConfigId: string | null;
+  }>({ open: false, debtConfigId: null });
 
   // Debug useEffect để theo dõi state changes
   React.useEffect(() => {
-    console.log('🔍 detailDialog state changed:', detailDialog);
+    console.log("🔍 detailDialog state changed:", detailDialog);
   }, [detailDialog]);
 
   // Utility function để format date an toàn
   const formatUpdateInfo = (actor: any, lastUpdateAt: any) => {
     try {
       if (!actor || !lastUpdateAt) return null;
-      
+
       let updateDate: Date;
-      
+
       // Thử parse theo nhiều format
-      if (typeof lastUpdateAt === 'string') {
+      if (typeof lastUpdateAt === "string") {
         // Thử parse ISO string trước
         updateDate = new Date(lastUpdateAt);
-        
+
         // Nếu không thành công, thử parse DD/MM/YYYY HH:mm:ss
         if (isNaN(updateDate.getTime())) {
-          const parts = lastUpdateAt.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
+          const parts = lastUpdateAt.match(
+            /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/
+          );
           if (parts) {
             const [, day, month, year, hour, minute, second] = parts;
-            updateDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second));
+            updateDate = new Date(
+              parseInt(year),
+              parseInt(month) - 1,
+              parseInt(day),
+              parseInt(hour),
+              parseInt(minute),
+              parseInt(second)
+            );
           }
         }
       } else {
         updateDate = new Date(lastUpdateAt);
       }
-      
+
       if (isNaN(updateDate.getTime())) {
-        console.warn('Invalid date detected:', lastUpdateAt);
+        console.warn("Invalid date detected:", lastUpdateAt);
         return `${actor.fullName} đã thay đổi`;
       }
-      
-      return `${actor.fullName} đã thay đổi lúc ${updateDate.toLocaleDateString('vi-VN')} ${updateDate.toLocaleTimeString('vi-VN')}`;
+
+      return `${actor.fullName} đã thay đổi lúc ${updateDate.toLocaleDateString(
+        "vi-VN"
+      )} ${updateDate.toLocaleTimeString("vi-VN")}`;
     } catch (error) {
-      console.error('formatUpdateInfo error:', error, 'lastUpdateAt:', lastUpdateAt);
+      console.error(
+        "formatUpdateInfo error:",
+        error,
+        "lastUpdateAt:",
+        lastUpdateAt
+      );
       return actor?.fullName ? `${actor.fullName} đã thay đổi` : null;
     }
   };
 
-  const handleSwitchClick = (row: any, type: 'send' | 'repeat', nextValue: boolean) => {
+  const handleSwitchClick = (
+    row: any,
+    type: "send" | "repeat",
+    nextValue: boolean
+  ) => {
     setConfirmState({ open: true, type, row, nextValue, loading: false });
   };
 
   const handleConfirm = async () => {
     if (!confirmState.row) return;
-    
+
+    setConfirmState((prev) => ({ ...prev, loading: true }));
+
     // Cập nhật local state ngay lập tức để UI không bị lag
     const optimisticUpdate = (rowId: string, updates: any) => {
-      setLocalData(prevData => 
-        prevData.map(item => 
+      setLocalData((prevData) =>
+        prevData.map((item) =>
           item?.id === rowId ? { ...item, ...updates } : item
         )
       );
     };
-    
+
     try {
       const token = getAccessToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       let res, updatedRow;
-      
-      if (confirmState.type === 'send') {
-        // Optimistic update
-        const updates = { 
+
+      if (confirmState.type === "send") {
+        // Logic: bật/tắt gửi tự động sẽ bật/tắt cả nhắc lại
+        const updates = {
           is_send: confirmState.nextValue,
-          // Nếu tắt send thì cũng tắt repeat
-          ...(confirmState.nextValue ? {} : { is_repeat: false })
+          is_repeat: confirmState.nextValue, // Cùng trạng thái
         };
         optimisticUpdate(confirmState.row.id, updates);
-        
-        res = await axios.patch(`${API_BASE_URL}/debt-configs/${confirmState.row.id}/toggle-send`, { is_send: confirmState.nextValue }, { headers });
+
+        res = await axios.patch(
+          `${API_BASE_URL}/debt-configs/${confirmState.row.id}/toggle-send`,
+          { is_send: confirmState.nextValue },
+          { headers }
+        );
         updatedRow = res.data;
-        
+
         // Cập nhật với data thực từ server (bao gồm actor, last_update_at)
         optimisticUpdate(confirmState.row.id, updatedRow);
-        
-        if (onToggle) onToggle(confirmState.row.id, 'send', confirmState.nextValue, updatedRow);
+
+        if (onToggle)
+          onToggle(
+            confirmState.row.id,
+            "send",
+            confirmState.nextValue,
+            updatedRow
+          );
         if (onUpdateRow) onUpdateRow(confirmState.row.id, updatedRow);
-        setAlert({ type: 'success', message: 'Cập nhật trạng thái gửi tự động thành công!' });
-        
-      } else if (confirmState.type === 'repeat') {
+
+        // Show success message briefly
+        setAlert({
+          type: "success",
+          message: "Cập nhật trạng thái gửi tự động thành công!",
+        });
+        setTimeout(() => setAlert(null), 3000);
+      } else if (confirmState.type === "repeat") {
+        // Logic: chỉ cho phép bật nhắc lại khi gửi tự động đã bật, luôn cho phép tắt
+        if (confirmState.nextValue && !confirmState.row.is_send) {
+          setAlert({
+            type: "error",
+            message: 'Phải bật "Gửi tự động" trước khi bật "Gửi nhắc lại"!',
+          });
+          setTimeout(() => setAlert(null), 5000);
+          setConfirmState({
+            open: false,
+            type: undefined,
+            row: null,
+            nextValue: false,
+            loading: false,
+          });
+          return;
+        }
+
         // Optimistic update
-        optimisticUpdate(confirmState.row.id, { is_repeat: confirmState.nextValue });
-        
-        res = await axios.patch(`${API_BASE_URL}/debt-configs/${confirmState.row.id}/toggle-repeat`, { is_repeat: confirmState.nextValue }, { headers });
+        optimisticUpdate(confirmState.row.id, {
+          is_repeat: confirmState.nextValue,
+        });
+
+        res = await axios.patch(
+          `${API_BASE_URL}/debt-configs/${confirmState.row.id}/toggle-repeat`,
+          { is_repeat: confirmState.nextValue },
+          { headers }
+        );
         updatedRow = res.data;
-        
+
         // Cập nhật với data thực từ server (bao gồm actor, last_update_at)
         optimisticUpdate(confirmState.row.id, updatedRow);
-        
-        if (onToggle) onToggle(confirmState.row.id, 'repeat', confirmState.nextValue, updatedRow);
+
+        if (onToggle)
+          onToggle(
+            confirmState.row.id,
+            "repeat",
+            confirmState.nextValue,
+            updatedRow
+          );
         if (onUpdateRow) onUpdateRow(confirmState.row.id, updatedRow);
-        setAlert({ type: 'success', message: 'Cập nhật trạng thái gửi nhắc lại thành công!' });
+
+        // Show success message briefly
+        setAlert({
+          type: "success",
+          message: "Cập nhật trạng thái gửi nhắc lại thành công!",
+        });
+        setTimeout(() => setAlert(null), 3000);
+      }
+
+      // Call refresh để đảm bảo data consistency (optional, silent)
+      if (onRefresh) {
+        setTimeout(() => onRefresh(), 1000);
       }
     } catch (e) {
+      console.error("Update error:", e);
       // Rollback optimistic update on error
       setLocalData(data);
-      setAlert({ type: 'error', message: 'Cập nhật trạng thái thất bại!' });
+      setAlert({ type: "error", message: "Cập nhật trạng thái thất bại!" });
+      setTimeout(() => setAlert(null), 5000);
     }
-    setConfirmState({ open: false, type: undefined, row: null, nextValue: false, loading: false });
+    setConfirmState({
+      open: false,
+      type: undefined,
+      row: null,
+      nextValue: false,
+      loading: false,
+    });
   };
 
-  const handleCancel = () => setConfirmState({ open: false, type: undefined, row: null, nextValue: false, loading: false });
+  const handleCancel = () =>
+    setConfirmState({
+      open: false,
+      type: undefined,
+      row: null,
+      nextValue: false,
+      loading: false,
+    });
   const handleEdit = (row: any) => {
     setEditModal({ open: true, id: row.id });
   };
   // Mở dialog xem chi tiết công nợ
   const handleViewDetail = (row: any) => {
-    console.log('🔍 handleViewDetail called with row:', row);
+    console.log("🔍 handleViewDetail called with row:", row);
     setDetailDialog({ open: true, debtConfigId: row.id });
   };
 
@@ -207,15 +344,25 @@ export default function DebtSettingManagement({
           <TableRow>
             <TableHead className="w-12 text-center px-3 py-2">#</TableHead>
             <TableHead className="px-3 py-2 text-left">Mã Khách Hàng</TableHead>
-            <TableHead className="px-3 py-2 text-left">Tên Zalo Khách</TableHead>
+            <TableHead className="px-3 py-2 text-left">
+              Tên Zalo Khách
+            </TableHead>
             <TableHead className="px-3 py-2 text-center">Tổng Phiếu</TableHead>
             <TableHead className="px-3 py-2 text-center">Tổng Số Nợ</TableHead>
             <TableHead className="px-3 py-2 text-center">Loại KH</TableHead>
-            <TableHead className="px-3 py-2 text-center">Lịch Nhắc Nợ</TableHead>
-            <TableHead className="px-3 py-2 text-center">Ngày Đã Nhắc</TableHead>
-            <TableHead className="px-3 py-2 text-center">Trạng Thái Nhắc Nợ</TableHead>
+            <TableHead className="px-3 py-2 text-center">
+              Lịch Nhắc Nợ
+            </TableHead>
+            <TableHead className="px-3 py-2 text-center">
+              Ngày Đã Nhắc
+            </TableHead>
+            <TableHead className="px-3 py-2 text-center">
+              Trạng Thái Nhắc Nợ
+            </TableHead>
             <TableHead className="px-3 py-2 text-center">Ghi Chú</TableHead>
-            <TableHead className="px-3 py-2 text-center">Trạng Thái Hoạt Động</TableHead>
+            <TableHead className="px-3 py-2 text-center">
+              Trạng Thái Hoạt Động
+            </TableHead>
             <TableHead className="px-3 py-2 text-center">Thao Tác</TableHead>
           </TableRow>
         </TableHeader>
@@ -231,7 +378,12 @@ export default function DebtSettingManagement({
             if (!row) {
               // Dòng ảo
               return (
-                <TableRow key={`empty-${idx}`} className={rowClass + " select-none"} style={{ height: 49, opacity: 0.7, pointerEvents: "none" }} aria-hidden="true">
+                <TableRow
+                  key={`empty-${idx}`}
+                  className={rowClass + " select-none"}
+                  style={{ height: 49, opacity: 0.7, pointerEvents: "none" }}
+                  aria-hidden="true"
+                >
                   {Array.from({ length: 12 }).map((_, i) => (
                     <TableCell key={i} />
                   ))}
@@ -241,18 +393,35 @@ export default function DebtSettingManagement({
             // Map dữ liệu từ backend
             const debtLogs = Array.isArray(row.debt_logs) ? row.debt_logs : [];
             // Tổng số phiếu và tổng số nợ lấy từ backend
-            const totalBills = typeof row.total_bills !== 'undefined' ? row.total_bills : 0;
-            const totalDebt = typeof row.total_debt !== 'undefined' && row.total_debt !== null
-              ? Number(row.total_debt).toLocaleString('vi-VN')
-              : "--";
+            const totalBills =
+              typeof row.total_bills !== "undefined" ? row.total_bills : 0;
+            const totalDebt =
+              typeof row.total_debt !== "undefined" && row.total_debt !== null
+                ? Number(row.total_debt).toLocaleString("vi-VN")
+                : "--";
             // Map loại khách hàng
-            const customerType = customerTypeMap[row.customer_type] || row.customer_type || "--";
+            const customerType =
+              customerTypeMap[row.customer_type] || row.customer_type || "--";
             // Lịch nhắc nợ
             let remindSchedule = "--";
-            if (typeof row.gap_day === 'number') {
-              if (row.gap_day === 0) remindSchedule = "Nhắc Liên Tục";
-              else if (row.gap_day > 0) remindSchedule = `Cách ${row.gap_day} ngày`;
-            } else if (Array.isArray(row.day_of_week) && row.day_of_week.length > 0) {
+            if (typeof row.gap_day === "number") {
+              if (row.gap_day === 0) {
+                // Khi gap_day = 0, hiển thị theo loại khách hàng
+                if (
+                  row.customer_type === "non-fixed" ||
+                  row.customer_type === "cash"
+                ) {
+                  remindSchedule = "Nhắc Mỗi Ngày";
+                } else {
+                  remindSchedule = "Nhắc Liên Tục";
+                }
+              } else if (row.gap_day > 0) {
+                remindSchedule = `Cách ${row.gap_day} ngày`;
+              }
+            } else if (
+              Array.isArray(row.day_of_week) &&
+              row.day_of_week.length > 0
+            ) {
               // Sắp xếp tăng dần cho đẹp
               remindSchedule = row.day_of_week
                 .slice()
@@ -265,8 +434,8 @@ export default function DebtSettingManagement({
             let lastRemindedDateTime = null;
             if (row.send_last_at) {
               const dateObj = new Date(row.send_last_at);
-              lastRemindedDateStr = dateObj.toLocaleDateString('vi-VN');
-              lastRemindedDateTime = dateObj.toLocaleTimeString('vi-VN');
+              lastRemindedDateStr = dateObj.toLocaleDateString("vi-VN");
+              lastRemindedDateTime = dateObj.toLocaleTimeString("vi-VN");
             }
             // Trạng thái nhắc nợ: lấy remind_status của log mới nhất
             let remindStatus = "--";
@@ -274,11 +443,17 @@ export default function DebtSettingManagement({
             if (debtLogs.length) {
               const latestLog = debtLogs.reduce((latest: any, log: any) => {
                 if (!latest) return log;
-                return new Date(log.created_at) > new Date(latest.created_at) ? log : latest;
+                return new Date(log.created_at) > new Date(latest.created_at)
+                  ? log
+                  : latest;
               }, null);
-              if (latestLog?.remind_status && remindStatusMap[latestLog.remind_status]) {
+              if (
+                latestLog?.remind_status &&
+                remindStatusMap[latestLog.remind_status]
+              ) {
                 remindStatus = remindStatusMap[latestLog.remind_status].label;
-                remindStatusColor = remindStatusMap[latestLog.remind_status].color;
+                remindStatusColor =
+                  remindStatusMap[latestLog.remind_status].color;
               } else {
                 remindStatus = latestLog?.remind_status || "--";
                 remindStatusColor = "";
@@ -288,19 +463,63 @@ export default function DebtSettingManagement({
               return (
                 <Tooltip key={row.id || idx}>
                   <TooltipTrigger asChild>
-                    <TableRow className={rowClass} style={{ cursor: 'pointer' }}>
-                      <TableCell className="text-center px-3 py-2">{(page - 1) * pageSize + idx + 1}</TableCell>
-                      <TableCell className="px-3 py-2 text-left">{row.customer_code}</TableCell>
-                      <TableCell className="px-3 py-2 text-left">{row.customer_name || "--"}</TableCell>
-                      <TableCell className="px-3 py-2 text-center">{typeof row.total_bills !== 'undefined' ? row.total_bills : 0}</TableCell>
-                      <TableCell className="px-3 py-2 text-center">{typeof row.total_debt !== 'undefined' && row.total_debt !== null ? Number(row.total_debt).toLocaleString('vi-VN') : "--"}</TableCell>
-                      <TableCell className="px-3 py-2 text-center">{customerTypeMap[row.customer_type] || row.customer_type || "--"}</TableCell>
-                      <TableCell className="px-3 py-2 text-center">{remindSchedule}</TableCell>
-                      <TableCell className="px-3 py-2 text-center">{row.send_last_at ? (<><div>{lastRemindedDateStr}</div><div className="text-xs text-gray-500">{lastRemindedDateTime}</div></>) : <span className="text-gray-400 italic">Chưa Nhắc Nợ</span>}</TableCell>
-                      <TableCell className={`px-3 py-2 text-center ${remindStatusColor}`}>{remindStatus}</TableCell>
+                    <TableRow
+                      className={rowClass}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <TableCell className="text-center px-3 py-2">
+                        {(page - 1) * pageSize + idx + 1}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-left">
+                        {row.customer_code}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-left">
+                        {row.customer_name || "--"}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        {typeof row.total_bills !== "undefined"
+                          ? row.total_bills
+                          : 0}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        {typeof row.total_debt !== "undefined" &&
+                        row.total_debt !== null
+                          ? Number(row.total_debt).toLocaleString("vi-VN")
+                          : "--"}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        {customerTypeMap[row.customer_type] ||
+                          row.customer_type ||
+                          "--"}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        {remindSchedule}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-center">
+                        {row.send_last_at ? (
+                          <>
+                            <div>{lastRemindedDateStr}</div>
+                            <div className="text-xs text-gray-500">
+                              {lastRemindedDateTime}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-gray-400 italic">
+                            Chưa Nhắc Nợ
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell
+                        className={`px-3 py-2 text-center ${remindStatusColor}`}
+                      >
+                        {remindStatus}
+                      </TableCell>
                       <TableCell className="px-3 py-2 text-center">
                         {(() => {
-                          const updateInfo = formatUpdateInfo(row.actor, row.last_update_at);
+                          const updateInfo = formatUpdateInfo(
+                            row.actor,
+                            row.last_update_at
+                          );
                           return updateInfo ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -316,83 +535,221 @@ export default function DebtSettingManagement({
                           );
                         })()}
                       </TableCell>
-                      <TableCell className="px-3 py-2 text-center"><span className={row.is_send && row.is_repeat ? "font-semibold text-green-600" : row.is_send && !row.is_repeat ? "font-semibold text-blue-600" : !row.is_send && row.is_repeat ? "font-semibold text-orange-500" : "font-semibold text-gray-500"}>{row.is_send && row.is_repeat ? "Đang Hoạt Động" : row.is_send && !row.is_repeat ? "Chỉ Nhắc Nợ" : !row.is_send && row.is_repeat ? "Chỉ Gửi Sau 15 Phút" : "Không Gửi Nhắc"}</span></TableCell>
-                      <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
-                        {/* Icon con mắt xem chi tiết */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
-                              aria-label="Xem Chi Tiết Công Nợ"
-                              onClick={() => handleViewDetail(row)}
-                            >
-                              <EyeIcon className="w-5 h-5 text-blue-500" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Xem Chi Tiết Công Nợ</TooltipContent>
-                        </Tooltip>
-                        {/* Switch gửi tự động */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>
-                              <Switch
-                                checked={!!row.is_send}
-                                onClick={e => {
-                                  e.preventDefault();
-                                  handleSwitchClick(row, 'send', !row.is_send);
-                                }}
-                              />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Bật/Tắt gửi tự động</TooltipContent>
-                        </Tooltip>
-                        {/* Switch gửi nhắc lại */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>
-                              <Switch
-                                checked={!!row.is_repeat}
-                                disabled={!row.is_send}
-                                onClick={e => {
-                                  e.preventDefault();
-                                  if (row.is_send) handleSwitchClick(row, 'repeat', !row.is_repeat);
-                                }}
-                              />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>Bật/Tắt gửi nhắc lại</TooltipContent>
-                        </Tooltip>
-                        <Button size="sm" variant="edit" onClick={() => handleEdit(row)}>Sửa</Button>
-                        <Button size="sm" variant="delete" onClick={() => setDeleteState({ open: true, row })}>Xóa</Button>
+                      <TableCell className="px-3 py-2 text-center">
+                        <span
+                          className={
+                            row.is_send && row.is_repeat
+                              ? "font-semibold text-green-600"
+                              : row.is_send && !row.is_repeat
+                              ? "font-semibold text-blue-600"
+                              : !row.is_send && row.is_repeat
+                              ? "font-semibold text-orange-500"
+                              : "font-semibold text-gray-500"
+                          }
+                        >
+                          {row.is_send && row.is_repeat
+                            ? "Đang Hoạt Động"
+                            : row.is_send && !row.is_repeat
+                            ? "Chỉ Nhắc Nợ"
+                            : !row.is_send && row.is_repeat
+                            ? "Chỉ Gửi Sau 15 Phút"
+                            : "Không Gửi Nhắc"}
+                        </span>
                       </TableCell>
+                      <P
+                        name="debt-config-actions"
+                        mode="any"
+                        fallback={
+                          <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2 opacity-50 pointer-events-none">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded cursor-not-allowed"
+                                  aria-label="Xem Chi Tiết Công Nợ"
+                                  disabled={true}
+                                >
+                                  <EyeIcon className="w-5 h-5 text-blue-500" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Xem Chi Tiết Công Nợ
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Switch checked={!!row.is_send} disabled={true} />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Bật/Tắt gửi tự động
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Switch checked={!!row.is_repeat} disabled={true} />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Bật/Tắt gửi nhắc lại
+                              </TooltipContent>
+                            </Tooltip>
+                            <Button size="sm" variant="edit" disabled={true}>
+                              Sửa
+                            </Button>
+                            <Button size="sm" variant="delete" disabled={true}>
+                              Xóa
+                            </Button>
+                          </TableCell>
+                        }
+                      >
+                        <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
+                          {/* Icon con mắt xem chi tiết */}
+                          <P name="debt-config-table" fallback={null}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
+                                  aria-label="Xem Chi Tiết Công Nợ"
+                                  onClick={() => handleViewDetail(row)}
+                                >
+                                  <EyeIcon className="w-5 h-5 text-blue-500" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Xem Chi Tiết Công Nợ
+                              </TooltipContent>
+                            </Tooltip>
+                          </P>
+                          {/* Switch gửi tự động */}
+                          <P name="debt-config-edit" fallback={null}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Switch
+                                    checked={!!row.is_send}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      handleSwitchClick(
+                                        row,
+                                        "send",
+                                        !row.is_send
+                                      );
+                                    }}
+                                  />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Bật/Tắt gửi tự động</TooltipContent>
+                            </Tooltip>
+                          </P>
+                          {/* Switch gửi nhắc lại - Chỉ bật được khi gửi tự động đã bật */}
+                          <P name="debt-config-edit" fallback={null}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Switch
+                                    checked={!!row.is_repeat}
+                                    disabled={!row.is_send} // Disable khi gửi tự động chưa bật
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      if (row.is_send) {
+                                        // Chỉ cho phép toggle khi gửi tự động đã bật
+                                        handleSwitchClick(
+                                          row,
+                                          "repeat",
+                                          !row.is_repeat
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {!row.is_send
+                                  ? 'Phải bật "Gửi tự động" trước khi bật "Gửi nhắc lại"'
+                                  : "Bật/Tắt gửi nhắc lại"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </P>
+                          <P name="debt-config-edit" fallback={null}>
+                            <Button
+                              size="sm"
+                              variant="edit"
+                              onClick={() => handleEdit(row)}
+                            >
+                              Sửa
+                            </Button>
+                          </P>
+                          <P name="debt-config-delete" fallback={null}>
+                            <Button
+                              size="sm"
+                              variant="delete"
+                              onClick={() =>
+                                setDeleteState({ open: true, row })
+                              }
+                            >
+                              Xóa
+                            </Button>
+                          </P>
+                        </TableCell>
+                      </P>
                     </TableRow>
                   </TooltipTrigger>
-                  <TooltipContent>Mã khách hàng không trùng so với phiếu nợ</TooltipContent>
+                  <TooltipContent>
+                    Mã khách hàng không trùng so với phiếu nợ
+                  </TooltipContent>
                 </Tooltip>
               );
             }
             return (
               <TableRow key={row.id || idx} className={rowClass}>
-                <TableCell className="text-center px-3 py-2">{(page - 1) * pageSize + idx + 1}</TableCell>
-                <TableCell className="px-3 py-2 text-left">{row.customer_code}</TableCell>
-                <TableCell className="px-3 py-2 text-left">{row.customer_name || "--"}</TableCell>
-                <TableCell className="px-3 py-2 text-center">{totalBills}</TableCell>
-                <TableCell className="px-3 py-2 text-center">{totalDebt}</TableCell>
-                <TableCell className="px-3 py-2 text-center">{customerType}</TableCell>
-                <TableCell className="px-3 py-2 text-center">{remindSchedule}</TableCell>
+                <TableCell className="text-center px-3 py-2">
+                  {(page - 1) * pageSize + idx + 1}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-left">
+                  {row.customer_code}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-left">
+                  {row.customer_name || "--"}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-center">
+                  {totalBills}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-center">
+                  {totalDebt}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-center">
+                  {customerType}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-center">
+                  {remindSchedule}
+                </TableCell>
                 <TableCell className="px-3 py-2 text-center">
                   {row.send_last_at ? (
                     <>
                       <div>{lastRemindedDateStr}</div>
-                      <div className="text-xs text-gray-500">{lastRemindedDateTime}</div>
+                      <div className="text-xs text-gray-500">
+                        {lastRemindedDateTime}
+                      </div>
                     </>
-                  ) : <span className="text-gray-400 italic">Chưa Nhắc Nợ</span>}
+                  ) : (
+                    <span className="text-gray-400 italic">Chưa Nhắc Nợ</span>
+                  )}
                 </TableCell>
-                <TableCell className={`px-3 py-2 text-center ${remindStatusColor}`}>{remindStatus}</TableCell>
+                <TableCell
+                  className={`px-3 py-2 text-center ${remindStatusColor}`}
+                >
+                  {remindStatus}
+                </TableCell>
                 <TableCell className="px-3 py-2 text-center">
                   {(() => {
-                    const updateInfo = formatUpdateInfo(row.actor, row.last_update_at);
+                    const updateInfo = formatUpdateInfo(
+                      row.actor,
+                      row.last_update_at
+                    );
                     return updateInfo ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -430,55 +787,124 @@ export default function DebtSettingManagement({
                       : "Không Gửi Nhắc"}
                   </span>
                 </TableCell>
-                <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
-                  {/* Icon con mắt xem chi tiết */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button 
-                        type="button" 
-                        className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer" 
-                        aria-label="Xem Chi Tiết Công Nợ"
-                        onClick={() => handleViewDetail(row)}
+                <P
+                  name="debt-config-actions"
+                  mode="any"
+                  fallback={
+                    <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2 opacity-50 pointer-events-none">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1 rounded cursor-not-allowed"
+                            aria-label="Xem Chi Tiết Công Nợ"
+                            disabled={true}
+                          >
+                            <EyeIcon className="w-5 h-5 text-blue-500" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Xem Chi Tiết Công Nợ</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Switch checked={!!row.is_send} disabled={true} />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Bật/Tắt gửi tự động</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Switch checked={!!row.is_repeat} disabled={true} />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Bật/Tắt gửi nhắc lại</TooltipContent>
+                      </Tooltip>
+                      <Button size="sm" variant="edit" disabled={true}>Sửa</Button>
+                      <Button size="sm" variant="delete" disabled={true}>Xóa</Button>
+                    </TableCell>
+                  }
+                >
+                  <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
+                    {/* Icon con mắt xem chi tiết */}
+                    <P name="debt-config-table" fallback={null}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
+                            aria-label="Xem Chi Tiết Công Nợ"
+                            onClick={() => handleViewDetail(row)}
+                          >
+                            <EyeIcon className="w-5 h-5 text-blue-500" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Xem Chi Tiết Công Nợ</TooltipContent>
+                      </Tooltip>
+                    </P>
+                    {/* Switch gửi tự động */}
+                    <P name="debt-config-edit" fallback={null}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Switch
+                              checked={!!row.is_send}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleSwitchClick(row, "send", !row.is_send);
+                              }}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>Bật/Tắt gửi tự động</TooltipContent>
+                      </Tooltip>
+                    </P>
+                    {/* Switch gửi nhắc lại - Chỉ bật được khi gửi tự động đã bật */}
+                    <P name="debt-config-edit" fallback={null}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Switch
+                              checked={!!row.is_repeat}
+                              disabled={!row.is_send} // Disable khi gửi tự động chưa bật
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (row.is_send) {
+                                  // Chỉ cho phép toggle khi gửi tự động đã bật
+                                  handleSwitchClick(row, "repeat", !row.is_repeat);
+                                }
+                              }}
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {!row.is_send
+                            ? 'Phải bật "Gửi tự động" trước khi bật "Gửi nhắc lại"'
+                            : "Bật/Tắt gửi nhắc lại"}
+                        </TooltipContent>
+                      </Tooltip>
+                    </P>
+                    <P name="debt-config-edit" fallback={null}>
+                      <Button
+                        size="sm"
+                        variant="edit"
+                        onClick={() => handleEdit(row)}
                       >
-                        <EyeIcon className="w-5 h-5 text-blue-500" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Xem Chi Tiết Công Nợ</TooltipContent>
-                  </Tooltip>
-                  {/* Switch gửi tự động */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Switch
-                          checked={!!row.is_send}
-                          onClick={e => {
-                            e.preventDefault();
-                            handleSwitchClick(row, 'send', !row.is_send);
-                          }}
-                        />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Bật/Tắt gửi tự động</TooltipContent>
-                  </Tooltip>
-                  {/* Switch gửi nhắc lại */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Switch
-                          checked={!!row.is_repeat}
-                          disabled={!row.is_send}
-                          onClick={e => {
-                            e.preventDefault();
-                            if (row.is_send) handleSwitchClick(row, 'repeat', !row.is_repeat);
-                          }}
-                        />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Bật/Tắt gửi nhắc lại</TooltipContent>
-                  </Tooltip>
-                  <Button size="sm" variant="edit" onClick={() => handleEdit(row)}>Sửa</Button>
-                  <Button size="sm" variant="delete" onClick={() => setDeleteState({ open: true, row })}>Xóa</Button>
-                </TableCell>
+                        Sửa
+                      </Button>
+                    </P>
+                    <P name="debt-config-delete" fallback={null}>
+                      <Button
+                        size="sm"
+                        variant="delete"
+                        onClick={() => setDeleteState({ open: true, row })}
+                      >
+                        Xóa
+                      </Button>
+                    </P>
+                  </TableCell>
+                </P>
               </TableRow>
             );
           })}
@@ -486,8 +912,22 @@ export default function DebtSettingManagement({
       </Table>
       <ConfirmDialog
         isOpen={confirmState.open}
-        title={confirmState.type === 'send' ? 'Xác nhận thay đổi gửi tự động' : 'Xác nhận thay đổi gửi nhắc lại'}
-        message={`Bạn có chắc chắn muốn ${confirmState.nextValue ? 'bật' : 'tắt'} chức năng ${confirmState.type === 'send' ? 'gửi tự động' : 'gửi nhắc lại'} cho khách hàng này?`}
+        title={
+          confirmState.type === "send"
+            ? "Xác nhận thay đổi gửi tự động"
+            : "Xác nhận thay đổi gửi nhắc lại"
+        }
+        message={
+          confirmState.type === "send"
+            ? `Bạn có chắc chắn muốn ${
+                confirmState.nextValue ? "bật" : "tắt"
+              } chức năng gửi tự động cho khách hàng này? (Sẽ ${
+                confirmState.nextValue ? "bật" : "tắt"
+              } cả chức năng nhắc lại)`
+            : `Bạn có chắc chắn muốn ${
+                confirmState.nextValue ? "bật" : "tắt"
+              } chức năng gửi nhắc lại cho khách hàng này?`
+        }
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />
@@ -500,11 +940,14 @@ export default function DebtSettingManagement({
           try {
             const token = getAccessToken();
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
-            await axios.delete(`${API_BASE_URL}/debt-configs/${deleteState.row.id}`, { headers });
-            setAlert({ type: 'success', message: 'Xóa thành công!' });
+            await axios.delete(
+              `${API_BASE_URL}/debt-configs/${deleteState.row.id}`,
+              { headers }
+            );
+            setAlert({ type: "success", message: "Xóa thành công!" });
             if (onDelete) onDelete(deleteState.row.id);
           } catch {
-            setAlert({ type: 'error', message: 'Xóa thất bại!' });
+            setAlert({ type: "error", message: "Xóa thất bại!" });
           }
           setDeleteState({ open: false, row: null });
         }}
