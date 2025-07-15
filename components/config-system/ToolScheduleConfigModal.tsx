@@ -151,13 +151,13 @@ export default function ToolScheduleConfigModal({
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
-                  {filterValidSchedule(schedule)[day.key].length === 0 ? (
+                  {schedule[day.key].length === 0 ? (
                     <p className="text-muted-foreground text-sm">
                       Chưa có khung giờ
                     </p>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      {filterValidSchedule(schedule)[day.key].map((item, idx) => (
+                      {schedule[day.key].map((item, idx) => (
                         <div
                           key={idx}
                           className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded shadow"
