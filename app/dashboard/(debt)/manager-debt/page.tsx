@@ -156,16 +156,12 @@ export default function ManagerDebtPage() {
     isLoading,
     error,
     forceUpdate
-  } = useApiState(fetchDebts, { data: [], total: 0 }, {
-    autoRefreshInterval: 30000 // 30 seconds
-  });
+  } = useApiState(fetchDebts, { data: [], total: 0 });
 
   const {
     data: stats,
     forceUpdate: refreshStats
-  } = useApiState(fetchStats, { totalAmount: 0, totalBills: 0, totalCollected: 0, totalPaidAmount: 0, totalPaidBills: 0 }, {
-    autoRefreshInterval: 30000 // 30 seconds
-  });
+  } = useApiState(fetchStats, { totalAmount: 0, totalBills: 0, totalCollected: 0, totalPaidAmount: 0, totalPaidBills: 0 });
 
   const debts = debtsData.data;
   const total = debtsData.total;

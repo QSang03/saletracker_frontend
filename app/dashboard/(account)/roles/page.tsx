@@ -96,8 +96,6 @@ export default function RolesPage() {
     departments: [],
     permissions: [],
     allRolePermissions: []
-  }, {
-    autoRefreshInterval: 60000 // 1 minute
   });
 
   // Extract data from the response

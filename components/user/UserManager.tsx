@@ -114,9 +114,7 @@ export default function UserManager() {
     error,
     refetch,
     forceUpdate
-  } = useApiState(fetchUsers, { data: [], total: 0 }, {
-    autoRefreshInterval: 45000 // 45 seconds
-  });
+  } = useApiState(fetchUsers, { data: [], total: 0 });
 
   const users = usersData.data;
   const userTotal = usersData.total;

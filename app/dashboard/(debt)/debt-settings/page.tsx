@@ -72,9 +72,7 @@ export default function DebtSettingsPage() {
     isLoading,
     error,
     forceUpdate,
-  } = useApiState(fetchDebtConfigs, [], {
-    autoRefreshInterval: 30000, // 30 seconds
-  });
+  } = useApiState(fetchDebtConfigs, []);
 
   // Calculate total
   const total = apiData.length;
@@ -110,7 +108,20 @@ export default function DebtSettingsPage() {
 
   // Filter data locally when filters are applied
   const filteredData = useMemo(() => {
-    if (isAllFilterEmpty(filters)) {
+    // Check if filter is empty inline to avoid dependency issues
+    const isFilterEmpty = (
+      (!filters.search || filters.search.trim() === "") &&
+      (!filters.employees || filters.employees.length === 0) &&
+      !filters.singleDate &&
+      (!filters.departments || filters.departments.length === 0) &&
+      (!filters.roles || filters.roles.length === 0) &&
+      (!filters.statuses || filters.statuses.length === 0) &&
+      (!filters.categories || filters.categories.length === 0) &&
+      (!filters.brands || filters.brands.length === 0) &&
+      (!filters.dateRange || (!filters.dateRange.from && !filters.dateRange.to))
+    );
+
+    if (isFilterEmpty) {
       return apiData;
     }
 
@@ -143,7 +154,7 @@ export default function DebtSettingsPage() {
 
       return true;
     });
-  }, [apiData, filters, isAllFilterEmpty]);
+  }, [apiData, filters]);
 
   // Paginated data
   const paginatedData = useMemo(() => {
@@ -156,11 +167,8 @@ export default function DebtSettingsPage() {
     (f: Filters) => {
       setFilters(f);
       setPage(1);
-      if (isAllFilterEmpty(f)) {
-        forceUpdate(); // Refresh data when clearing all filters
-      }
     },
-    [forceUpdate, isAllFilterEmpty]
+    []
   );
 
   // Hàm reset filter

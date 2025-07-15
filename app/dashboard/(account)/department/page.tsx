@@ -72,9 +72,7 @@ export default function DepartmentPage() {
     isLoading,
     error,
     forceUpdate
-  } = useApiState(fetchDepartments, { data: [], total: 0 }, {
-    autoRefreshInterval: 45000 // 45 seconds
-  });
+  } = useApiState(fetchDepartments, { data: [], total: 0 });
 
   // Extract departments and total from data
   const departments = departmentsData.data;

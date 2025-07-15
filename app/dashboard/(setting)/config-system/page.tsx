@@ -66,9 +66,7 @@ export default function ConfigSystemPage() {
     isLoading: loadingAllConfigs,
     error,
     forceUpdate
-  } = useApiState(fetchAllConfigs, [], {
-    autoRefreshInterval: 0 // No auto refresh for configs
-  });
+  } = useApiState(fetchAllConfigs, []);
 
   // Khi mở modal chỉ cần mở, không fetch lại
   const handleOpenToolSchedule = () => {
