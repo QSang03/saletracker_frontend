@@ -20,6 +20,7 @@ export interface AgingData {
   count: number;
   amount: number;
   label: string;
+  range?: string; // Add range property from API
 }
 
 export interface TrendData {
@@ -164,7 +165,7 @@ class DebtStatisticsAPI {
   }
 
   async getDebtsByStatus(
-    status: 'paid' | 'promised' | 'no_info', 
+    status: 'paid' | 'pay_later' | 'no_information_available', 
     filters: DebtListFilters = {}
   ): Promise<DebtListResponse> {
     try {
@@ -273,3 +274,50 @@ class DebtStatisticsAPI {
 }
 
 export const debtStatisticsAPI = new DebtStatisticsAPI();
+
+// Helper function to get detailed debts by date and category
+export async function getDetailedDebtsByDate(
+  filters: DebtListFilters,
+  category: string,
+  date: Date
+): Promise<DebtListResponse> {
+  try {
+    // Format date for API
+    const dateStr = date.toISOString().split('T')[0];
+    
+    // Build API endpoint based on category
+    let endpoint = '/debt-statistics/detailed';
+    const params: any = {
+      date: dateStr,
+      page: filters.page || 1,
+      limit: filters.limit || 1000
+    };
+    
+    // Add status filter based on category
+    if (category === 'pay_later') {
+      params.status = 'pay_later';
+    } else if (category === 'no_information_available') {
+      params.status = 'no_information_available';
+    } else if (category === 'paid') {
+      params.status = 'paid';
+    }
+    // For 'aging' category, we get all records without status filter
+    
+    console.log('🔍 [getDetailedDebtsByDate] API call:', endpoint, params);
+    
+    const response = await api.get(endpoint, { params });
+    
+    console.log('📊 [getDetailedDebtsByDate] API response:', response.data);
+    
+    return response.data;
+  } catch (error) {
+    console.error('❌ [getDetailedDebtsByDate] API error:', error);
+    return {
+      data: [],
+      total: 0,
+      page: 1,
+      limit: filters.limit || 1000,
+      totalPages: 0
+    };
+  }
+}

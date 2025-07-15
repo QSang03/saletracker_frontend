@@ -18,6 +18,7 @@ export interface Department {
   id: number;
   name: string;
   slug: string;
+  server_url?: string;
   users?: User[];
   createdAt?: Date | string;
   updatedAt?: Date | string;

@@ -30,8 +30,11 @@ import {
   TrendData,
   EmployeePerformance,
   StatisticsFilters,
-  DebtListFilters 
+  DebtListFilters,
+  DebtListResponse,
+  getDetailedDebtsByDate
 } from "@/lib/debt-statistics-api";
+import { api } from "@/lib/api";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useDebounce } from "@/hooks/useDebounce";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
@@ -214,11 +217,9 @@ const DebtStatisticsDashboard: React.FC = () => {
   const debouncedFilters = useDebounce(filters, 500); // Increase debounce to 500ms
 
   const fetchData = useCallback(async (silent = false) => {
-    console.log('🔄 fetchData called:', { silent, isComponentMounted: isComponentMounted.current, fetchingRef: fetchingRef.current, isCallInProgress });
     
     // Prevent multiple simultaneous calls
     if (!isComponentMounted.current || fetchingRef.current || isCallInProgress) {
-      console.log('❌ fetchData blocked:', { isComponentMounted: isComponentMounted.current, fetchingRef: fetchingRef.current, isCallInProgress });
       return;
     }
 
@@ -243,6 +244,7 @@ const DebtStatisticsDashboard: React.FC = () => {
         ]);
 
         if (isComponentMounted.current) {
+          console.log('🔍 [Dashboard] Setting aging data:', agingRes);
           setOverview(overviewRes);
           setAgingData(agingRes);
           setTrendData(trendsRes);
@@ -269,7 +271,6 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Single effect for initial data loading only
   useEffect(() => {
-    console.log('🚀 useEffect[fetchData] triggered, initialFetchDone:', initialFetchDone.current);
     if (!initialFetchDone.current && isComponentMounted.current) {
       fetchData();
     }
@@ -277,7 +278,6 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Separate effect for filter changes - now using debounced filters
   useEffect(() => {
-    console.log('🔄 useEffect[debouncedFilters] triggered, initialFetchDone:', initialFetchDone.current);
     if (!initialFetchDone.current) return;
 
     if (isComponentMounted.current) {
@@ -292,7 +292,6 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Transform API data for existing components
   const chartData: ChartDataItem[] = useMemo(() => {
-    console.log('🔄 Transforming trendData to chartData:', trendData);
     
     return trendData.map((item, index) => {
       // Ensure name is a valid date string
@@ -322,8 +321,6 @@ const DebtStatisticsDashboard: React.FC = () => {
         pay_later: item.pay_later,
         no_info: item.no_info,
       };
-      
-      console.log('📊 Chart item transformed:', { original: item, transformed: result });
       return result;
     });
   }, [trendData]);
@@ -351,16 +348,11 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Fetch debts for modal - separate from main circuit breaker to avoid blocking
   const fetchDebtsForModal = useCallback(async (category: string, dateFromChart?: string) => {
-    console.log('🔍 fetchDebtsForModal START:', { category, dateFromChart, isComponentMounted: isComponentMounted.current });
     
     if (!isComponentMounted.current) {
-      console.log('❌ Component not mounted, returning early');
       return;
     }
-
     setLoadingModalData(true);
-    console.log('⏳ Loading modal data set to true');
-    
     try {
       // Don't use circuit breaker for modal - it should work independently
       const modalFilters: DebtListFilters = {
@@ -368,9 +360,11 @@ const DebtStatisticsDashboard: React.FC = () => {
         limit: 1000 // Get reasonable amount for modal
       };
 
+      // Default to today
+      let targetDate = new Date();
+
       // If dateFromChart is provided, use it instead of current date filters
       if (dateFromChart) {
-        console.log('📅 Processing dateFromChart:', { dateFromChart, type: typeof dateFromChart });
         
         try {
           // Handle different date formats that might come from chart
@@ -400,37 +394,28 @@ const DebtStatisticsDashboard: React.FC = () => {
             chartDate = new Date(); // Fallback to today
           }
           
-          console.log('✅ Parsed chartDate:', chartDate);
+          targetDate = chartDate;
           
           const dateStr = chartDate.toISOString().split('T')[0];
           modalFilters.from = dateStr;
           modalFilters.to = dateStr;
-          console.log('📅 Using date from chart:', { dateFromChart, chartDate: chartDate.toISOString(), dateStr, modalFilters });
         } catch (error) {
           console.error('❌ Error parsing dateFromChart:', error);
-          console.log('📅 Using current filters as fallback');
         }
-      } else {
-        console.log('📅 Using current filters:', modalFilters);
       }
-
-      console.log('🚀 Making API call to getDetailedDebts...');
-      const response = await debtStatisticsAPI.getDetailedDebts(modalFilters);
-      console.log('✅ API response received:', { 
-        dataLength: response?.data?.length,
-        total: response?.total,
-        hasData: !!response?.data
-      });
       
-      // Simplified filtering for now - just return all data to test API call
+      // Use the smart logic to get data from appropriate source
+      const response = await getDetailedDebtsByDate(modalFilters, category, targetDate);
+      
+      // Process the response data
       let filteredData: Debt[] = [];
-      
-      if (response.data && Array.isArray(response.data)) {
-        console.log('🔍 Processing response data, first 3 items:', response.data.slice(0, 3));
-        filteredData = response.data; // Temporarily return all data to test
+      if (response && response.data) {
+        filteredData = response.data;
+        console.log('📊 [fetchDebtsForModal] Got data:', filteredData.length, 'items');
+      } else {
+        console.warn('⚠️ [fetchDebtsForModal] No data in response:', response);
       }
       
-      console.log('✅ Setting filtered data:', filteredData.length, 'items');
       if (isComponentMounted.current) {
         setSelectedDebts(filteredData);
       }
@@ -440,7 +425,6 @@ const DebtStatisticsDashboard: React.FC = () => {
         setSelectedDebts([]);
       }
     } finally {
-      console.log('🏁 fetchDebtsForModal finished, setting loading to false');
       if (isComponentMounted.current) {
         setLoadingModalData(false);
       }
@@ -448,8 +432,6 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, [debouncedFilters]);
 
   const handleChartClick = useCallback((data: any, category: string) => {
-    console.log('🎯 Chart clicked:', { data, category, isComponentMounted: isComponentMounted.current });
-    console.log('🔍 Full data object:', JSON.stringify(data, null, 2));
     
     // Extract date from chart data - data could be from Bar or RadialBar
     let dateFromChart: string | undefined;
@@ -457,18 +439,9 @@ const DebtStatisticsDashboard: React.FC = () => {
     if (data && data.payload) {
       // For Bar chart, data has payload with name (date)
       dateFromChart = data.payload.name;
-      console.log('📊 Bar chart data extracted:', { 
-        payloadName: data.payload.name,
-        payloadKeys: Object.keys(data.payload),
-        payload: data.payload 
-      });
     } else if (data && data.name) {
       // For RadialBar chart, data has name directly
       dateFromChart = data.name;
-      console.log('🎯 RadialBar chart data extracted:', { 
-        name: data.name,
-        dataKeys: Object.keys(data) 
-      });
     }
     
     // Additional fallback checks
@@ -478,26 +451,22 @@ const DebtStatisticsDashboard: React.FC = () => {
       for (const field of possibleDateFields) {
         if (data[field]) {
           dateFromChart = data[field];
-          console.log(`📅 Found date in field '${field}':`, dateFromChart);
           break;
         }
       }
     }
     
-    console.log('📅 Final dateFromChart:', { dateFromChart, type: typeof dateFromChart });
-    
     setSelectedCategory(category);
     setModalOpen(true);
-    console.log('🔄 Calling fetchDebtsForModal...');
     fetchDebtsForModal(category, dateFromChart);
   }, [fetchDebtsForModal]);
 
   const getCategoryDisplayName = useCallback((category: string): string => {
     const categoryMap: Record<string, string> = {
       'paid': 'Đã thanh toán',
-      'promised': 'Khách hẹn trả',
       'pay_later': 'Khách hẹn trả',
-      'no_info': 'Chưa có thông tin'
+      'no_information_available': 'Chưa có thông tin',
+      'aging': 'Phân tích độ tuổi nợ'
     };
     return categoryMap[category] || category;
   }, []);
@@ -508,6 +477,85 @@ const DebtStatisticsDashboard: React.FC = () => {
       currency: "VND",
     }).format(amount);
   }, []);
+
+  // Helper function to check if a date is today
+  const isToday = (date: Date): boolean => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  // Helper function to get detailed debts based on date
+  const getDetailedDebtsByDate = async (
+    filters: DebtListFilters, 
+    category: string, 
+    targetDate: Date
+  ): Promise<DebtListResponse> => {
+    const isCurrentDay = isToday(targetDate);
+    const dateStr = targetDate.toISOString().split('T')[0];
+
+    if (isCurrentDay) {
+      
+      // Add date filter for current day
+      const currentDayFilters = {
+        ...filters,
+        date: dateStr // Ensure we filter by the specific date
+      };
+      
+      return await debtStatisticsAPI.getDetailedDebts(currentDayFilters);
+    } else {
+      
+      // Map frontend categories to backend parameters
+      const apiParams: any = {
+        date: dateStr,
+        page: filters.page || 1,
+        limit: filters.limit || 1000
+      };
+
+      // Map category to appropriate API parameters
+      switch (category) {
+        case 'paid':
+          apiParams.status = 'paid';
+          break;
+        case 'promised':
+        case 'pay_later':
+          apiParams.status = 'pay_later';
+          break;
+        case 'no_info':
+          apiParams.status = 'no_information_available';
+          break;
+        default:
+          console.log('🔍 No specific filter for category:', category);
+      }
+
+      const response = await api.get('/debt-statistics/detailed', {
+        params: apiParams
+      });
+
+      // Handle different response structures
+      if (response.data) {
+        if (response.data.data && Array.isArray(response.data.data)) {
+          return response.data;
+        }
+        if (Array.isArray(response.data)) {
+          return {
+            data: response.data,
+            total: response.data.length,
+            page: 1,
+            limit: response.data.length,
+            totalPages: 1
+          };
+        }
+      }
+
+      return {
+        data: [],
+        total: 0,
+        page: 1,
+        limit: filters.limit || 1000,
+        totalPages: 0
+      };
+    }
+  };
 
   if (!user) {
     return (
@@ -563,6 +611,16 @@ const DebtStatisticsDashboard: React.FC = () => {
       </main>
     );
   }
+
+  // Debug: Log current state before rendering
+  console.log('🔍 [Dashboard] Current state:', {
+    loading,
+    agingDataLength: agingData?.length,
+    agingData: agingData,
+    overview,
+    trendDataLength: trendData?.length,
+    employeeDataLength: employeeData?.length
+  });
 
   return (
     <main className="flex flex-col gap-4 pt-0 pb-0">
@@ -656,7 +714,16 @@ const DebtStatisticsDashboard: React.FC = () => {
                 data={agingData}
                 loading={loading}
                 onBarClick={(data) => {
-                  // You can implement drill-down here
+                  console.log('🔍 [Dashboard] AgingChart bar clicked:', data);
+                  
+                  // For aging chart, we want to show all debts in that age range
+                  // Since aging data doesn't directly correspond to debt status,
+                  // we'll show all debts and let the user filter by the range
+                  
+                  // We can use a generic category or create a special one for aging
+                  const category = 'aging'; // Special category for aging drill-down
+                  
+                  handleChartClick(data, category);
                 }}
               />
             </TabsContent>

@@ -175,7 +175,7 @@ export default function ManagerDebtPage() {
   const statusOptions = [
     { value: 'paid', label: 'Đã thanh toán' },
     { value: 'pay_later', label: 'Đã hẹn thanh toán' },
-    { value: 'no_infomation_available', label: 'Không có thông tin' },
+    { value: 'no_information_available', label: 'Không có thông tin' },
   ];
 
   // Fetch customer options

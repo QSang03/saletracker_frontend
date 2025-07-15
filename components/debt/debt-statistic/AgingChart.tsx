@@ -1,15 +1,19 @@
 'use client';
 
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AgingData } from '@/lib/debt-statistics-api';
 
 const agingColors = {
+  '0-30': '#10b981',           // Green - good
+  '1-30': '#10b981',           // Green - good  
   '0-30 ngày': '#10b981',      // Green - good
+  '31-60': '#f59e0b',          // Yellow - warning
   '31-60 ngày': '#f59e0b',     // Yellow - warning  
+  '61-90': '#ef4444',          // Red - urgent
   '61-90 ngày': '#ef4444',     // Red - urgent
+  '>90': '#7c2d12',            // Dark red - critical
   '>90 ngày': '#7c2d12',       // Dark red - critical
 };
 
@@ -48,16 +52,57 @@ const formatCompactCurrency = (value: number) => {
 };
 
 const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarClick }) => {
-  const chartData = data.map((item, index) => ({
-    ...item,
-    fill: Object.values(agingColors)[index] || agingColors['0-30 ngày'],
-    percentage: data.reduce((sum, d) => sum + d.count, 0) > 0 
-      ? Math.round((item.count / data.reduce((sum, d) => sum + d.count, 0)) * 100) 
-      : 0
-  }));
+  console.log('🔍 [AgingChart] Raw data:', data);
+  console.log('🔍 [AgingChart] Data length:', data?.length);
+  console.log('🔍 [AgingChart] Loading state:', loading);
+  
+  const chartData = React.useMemo(() => {
+    if (!data || data.length === 0) {
+      console.log('🔍 [AgingChart] No data provided, returning empty array');
+      return [];
+    }
+    
+    console.log('🔍 [AgingChart] Processing data:', data);
+    
+    const result = data.map((item, index) => {
+      // Get range from API data
+      const range = (item as any).range || item.label;
+      
+      // Map API range format to color - use the exact range as key
+      const color = (agingColors as any)[range] || agingColors['1-30'] || '#10b981';
+      
+      // Create display label from range
+      let displayLabel = range;
+      if (range === '1-30') displayLabel = '1-30 ngày';
+      if (range === '31-60') displayLabel = '31-60 ngày';  
+      if (range === '61-90') displayLabel = '61-90 ngày';
+      if (range === '>90') displayLabel = '>90 ngày';
+      
+      const processedItem = {
+        ...item,
+        name: displayLabel, // Use name for XAxis dataKey
+        label: displayLabel, // Keep label for compatibility
+        fill: color,
+        percentage: data.reduce((sum, d) => sum + d.count, 0) > 0 
+          ? Math.round((item.count / data.reduce((sum, d) => sum + d.count, 0)) * 100) 
+          : 0
+      };
+      
+      console.log(`🔍 [AgingChart] Processed item ${index}:`, processedItem);
+      return processedItem;
+    });
+    
+    console.log('🔍 [AgingChart] Final chart data:', result);
+    return result;
+  }, [data]);
+  
+  console.log('🔍 [AgingChart] Chart data with displayAmount:', chartData);
+  console.log('🔍 [AgingChart] onBarClick function:', typeof onBarClick);
 
-  const totalDebts = data.reduce((sum, item) => sum + item.count, 0);
-  const totalAmount = data.reduce((sum, item) => sum + item.amount, 0);
+  const totalDebts = React.useMemo(() => data.reduce((sum, item) => sum + item.count, 0), [data]);
+  const totalAmount = React.useMemo(() => data.reduce((sum, item) => sum + item.amount, 0), [data]);
+
+  console.log('🔍 [AgingChart] Total debts:', totalDebts, 'Total amount:', totalAmount);
 
   if (loading) {
     return (
@@ -86,17 +131,19 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {totalDebts === 0 ? (
+        {totalDebts === 0 || !chartData || chartData.length === 0 ? (
           <div className="h-80 flex items-center justify-center">
-            <div className="text-muted-foreground">Không có dữ liệu nợ quá hạn</div>
+            <div className="text-muted-foreground">
+              {totalDebts === 0 ? "Không có dữ liệu nợ quá hạn" : "Đang tải dữ liệu..."}
+            </div>
           </div>
         ) : (
-          <ChartContainer config={agingConfig} className="h-80 w-full">
+          <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis 
-                  dataKey="label" 
+                  dataKey="name" 
                   tickLine={false} 
                   axisLine={false}
                   fontSize={12}
@@ -109,9 +156,10 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
                   axisLine={false}
                   fontSize={12}
                   tickFormatter={formatCompactCurrency}
+                  domain={[0, (dataMax: number) => Math.max(dataMax * 1.1, 1000)]}
                 />
-                <ChartTooltip
-                  content={({ active, payload, label }) => {
+                <Tooltip
+                  content={({ active, payload, label }: any) => {
                     if (active && payload && payload.length) {
                       const data = payload[0].payload;
                       return (
@@ -140,23 +188,30 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
                 <Bar 
                   dataKey="amount" 
                   radius={[4, 4, 0, 0]}
-                  onClick={(data: any) => onBarClick && onBarClick(data.payload)}
-                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(data: any) => {
+                    if (onBarClick) {
+                      console.log('📊 [AgingChart] Bar clicked:', data.payload);
+                      onBarClick(data.payload);
+                    }
+                  }}
+                  className="cursor-pointer hover:opacity-80 transition-colors"
+                  fill="#8884d8"
+                  minPointSize={5}
                 >
                   {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={`aging-cell-${index}-${entry.name}`} fill={entry.fill} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </ChartContainer>
+          </div>
         )}
         
         {/* Summary stats below chart */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           {chartData.map((item, index) => (
             <div 
-              key={item.label}
+              key={`aging-stat-${index}-${item.label}`}
               className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
               onClick={() => onBarClick && onBarClick(item)}
             >

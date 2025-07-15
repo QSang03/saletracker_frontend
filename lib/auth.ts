@@ -84,7 +84,8 @@ export function setAccessToken(token: string) {
     // Set cookie with 30 days expiry
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
-    document.cookie = `access_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+    const isHttps = window.location.protocol === "https:";
+    document.cookie = `access_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${isHttps ? " Secure" : ""}`;
   }
 }
 
@@ -93,7 +94,8 @@ export function setRefreshToken(token: string) {
     // Set cookie with 30 days expiry
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
-    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+    const isHttps = window.location.protocol === "https:";
+    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax${isHttps ? " Secure" : ""}`;
   }
 }
 

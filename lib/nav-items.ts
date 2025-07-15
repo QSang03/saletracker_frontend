@@ -63,7 +63,7 @@ export const navItems = [
     icon: "Wrench",
     items: [
       { title: "Cấu hình hệ thống", url: "/dashboard/config-system", roles: ["admin"] },
-      { title: "Cấu hình lịch nghỉ", url: "/dashboard/holiday", roles: ["admin"] },
+      { title: "Cấu hình server", url: "/dashboard/service-monitor", roles: ["admin"] },
     ],
   },
 ];

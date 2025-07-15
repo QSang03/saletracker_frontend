@@ -54,7 +54,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
-type StatusType = "paid" | "promised" | "no_info";
+type StatusType = "paid" | "pay_later" | "no_information_available";
 
 interface StatusConfig {
   label: string;
@@ -63,8 +63,8 @@ interface StatusConfig {
 
 const statusConfig: Record<StatusType, StatusConfig> = {
   paid: { label: "Đã thanh toán", variant: "default" },
-  promised: { label: "Khách hẹn trả", variant: "secondary" },
-  no_info: { label: "Chưa có thông tin", variant: "outline" },
+  pay_later: { label: "Khách hẹn trả", variant: "secondary" },
+  no_information_available: { label: "Chưa có thông tin", variant: "outline" },
 };
 
 interface StatusBadgeProps {
@@ -72,7 +72,7 @@ interface StatusBadgeProps {
 }
 
 const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
-  const config = statusConfig[status as StatusType] ?? statusConfig.no_info;
+  const config = statusConfig[status as StatusType] ?? statusConfig.no_information_available;
   return <Badge variant={config.variant}>{config.label}</Badge>;
 };
 
@@ -394,6 +394,8 @@ const DebtModal: React.FC<DebtModalProps> = ({
   debts,
   loading = false,
 }) => {
+  console.log('🔍 [DebtModal] Props:', { isOpen, category, debtsCount: debts?.length, loading });
+  
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -523,13 +525,20 @@ const DebtModal: React.FC<DebtModalProps> = ({
     const labels = {
       paid: "Đã thanh toán",
       promised: "Khách hẹn trả",
+      pay_later: "Khách hẹn trả", 
       no_info: "Chưa có thông tin",
+      no_information_available: "Chưa có thông tin",
     };
     return labels[cat as keyof typeof labels] || cat;
   };
 
   // Function to get debt status based on category and debt data
   const getDebtStatus = (debt: Debt, modalCategory: string): string => {
+    // Use actual status from database if available
+    if (debt.status) {
+      return debt.status;
+    }
+    
     // If this is paid category, all debts should show as paid
     if (modalCategory === 'paid') {
       return 'paid';
@@ -547,18 +556,18 @@ const DebtModal: React.FC<DebtModalProps> = ({
     // Check if has promise date
     if (payLater) {
       if (typeof payLater === 'string' && payLater.trim() !== '') {
-        return 'promised';
+        return 'pay_later';
       }
       if (typeof payLater === 'boolean' && payLater === true) {
-        return 'promised';
+        return 'pay_later';
       }
       if (payLater instanceof Date) {
-        return 'promised';
+        return 'pay_later';
       }
     }
     
     // Default to no info
-    return 'no_info';
+    return 'no_information_available';
   };
 
   const handleSearch = useCallback(() => {
@@ -660,7 +669,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                     Còn lại
                   </TableHead>
                   <TableHead className="h-12 px-4 text-center font-semibold text-sm text-gray-700 bg-gray-50">
-                    Hạn thanh toán
+                    Ngày hẹn thanh toán
                   </TableHead>
                   <TableHead className="h-12 px-4 text-center font-semibold text-sm text-gray-700 bg-gray-50">
                     Trạng thái
@@ -694,7 +703,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
                       {formatCurrency(debt.remaining)}
                     </TableCell>
                     <TableCell className="h-14 px-4 text-sm text-center text-gray-700">
-                      {formatDate(typeof debt.pay_later === 'string' ? debt.pay_later : debt.due_date)}
+                      {debt.pay_later && typeof debt.pay_later !== 'boolean' ? 
+                        formatDate(debt.pay_later) : 
+                        (debt.due_date ? formatDate(debt.due_date) : '-')
+                      }
                     </TableCell>
                     <TableCell className="h-14 px-4 text-center">
                       <StatusBadge status={getDebtStatus(debt, category)} />

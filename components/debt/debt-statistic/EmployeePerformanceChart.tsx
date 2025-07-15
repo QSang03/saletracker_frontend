@@ -46,8 +46,16 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
   loading = false, 
   onEmployeeClick 
 }) => {
+  
   // Take top 10 performers
   const topPerformers = data.slice(0, 10);
+  
+  // Transform data to ensure bars are visible even with 0 values
+  const chartData = topPerformers.map(employee => ({
+    ...employee,
+    // Ensure minimum bar height for visibility, use 5% minimum for 0 values
+    displayRate: employee.collectionRate > 0 ? employee.collectionRate : 5
+  }));
 
   if (loading) {
     return (
@@ -96,7 +104,7 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
         <CardContent>
           <ChartContainer config={performanceConfig} className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topPerformers} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis 
                   dataKey="employeeCode" 
@@ -123,19 +131,19 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
                           <div className="space-y-1 mt-2">
                             <div className="flex justify-between gap-4">
                               <span className="text-gray-600">Tỷ lệ thu hồi:</span>
-                              <span className="font-medium">{data.collectionRate.toFixed(1)}%</span>
+                              <span className="font-medium">{(data.collectionRate || 0).toFixed(1)}%</span>
                             </div>
                             <div className="flex justify-between gap-4">
                               <span className="text-gray-600">Đã thu hồi:</span>
-                              <span className="font-medium">{data.totalCollected}/{data.totalAssigned}</span>
+                              <span className="font-medium">{data.totalCollected || 0}/{data.totalAssigned || 0}</span>
                             </div>
                             <div className="flex justify-between gap-4">
                               <span className="text-gray-600">Tổng tiền:</span>
-                              <span className="font-medium">{formatCurrency(data.totalAmount)}</span>
+                              <span className="font-medium">{formatCurrency(data.totalAmount || 0)}</span>
                             </div>
                             <div className="flex justify-between gap-4">
                               <span className="text-gray-600">Đã thu:</span>
-                              <span className="font-medium">{formatCurrency(data.collectedAmount)}</span>
+                              <span className="font-medium">{formatCurrency(data.collectedAmount || 0)}</span>
                             </div>
                           </div>
                         </div>
@@ -145,7 +153,7 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
                   }}
                 />
                 <Bar 
-                  dataKey="collectionRate" 
+                  dataKey="displayRate" 
                   fill={performanceConfig.collectionRate.color}
                   radius={[4, 4, 0, 0]}
                   onClick={(data: any) => onEmployeeClick && onEmployeeClick(data)}
@@ -192,20 +200,20 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
                         <span className="font-medium">{employee.employeeCode}</span>
                       </div>
                     </td>
-                    <td className="p-2 text-right">{employee.totalAssigned}</td>
-                    <td className="p-2 text-right">{employee.totalCollected}</td>
+                    <td className="p-2 text-right">{employee.totalAssigned || 0}</td>
+                    <td className="p-2 text-right">{employee.totalCollected || 0}</td>
                     <td className="p-2 text-right">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        getPerformanceColor(employee.collectionRate)
+                        getPerformanceColor(employee.collectionRate || 0)
                       }`}>
-                        {employee.collectionRate.toFixed(1)}%
+                        {(employee.collectionRate || 0).toFixed(1)}%
                       </span>
                     </td>
                     <td className="p-2 text-right text-xs">
-                      {formatCurrency(employee.totalAmount)}
+                      {formatCurrency(employee.totalAmount || 0)}
                     </td>
                     <td className="p-2 text-right text-xs">
-                      {formatCurrency(employee.collectedAmount)}
+                      {formatCurrency(employee.collectedAmount || 0)}
                     </td>
                     <td className="p-2 text-center">
                       <Badge variant="outline" className={getPerformanceColor(employee.collectionRate)}>

@@ -130,7 +130,7 @@ export default function PaginatedTable({
         // Map lại label cho các trạng thái đặc biệt
         if (value === "paid") label = "Đã thanh toán";
         else if (value === "pay_later") label = "Đã hẹn thanh toán";
-        else if (value === "no_infomation_available") label = "Không có thông tin";
+        else if (value === "no_information_available") label = "Không có thông tin";
         else if (typeof s === "string") label = s;
         else label = s.label;
         return { label, value };
