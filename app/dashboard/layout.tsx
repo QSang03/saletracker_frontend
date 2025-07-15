@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import type { User } from "@/types";
 import { LoginSocket } from "@/components/auth/LoginSocket";
 import { CurrentUserContext } from "@/contexts/CurrentUserContext";
+import ZaloLinkStatusChecker from "@/components/common/ZaloLinkStatusChecker";
 
 export default function DashboardLayout({
   children,
@@ -112,6 +113,7 @@ export default function DashboardLayout({
             </div>
           </div>
         </SidebarInset>
+        <ZaloLinkStatusChecker />
       </CurrentUserContext.Provider>
     </SidebarProvider>
   );

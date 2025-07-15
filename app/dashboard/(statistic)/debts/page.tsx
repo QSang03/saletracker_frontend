@@ -32,12 +32,10 @@ import {
   StatisticsFilters,
   DebtListFilters 
 } from "@/lib/debt-statistics-api";
-import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
-import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDebounce } from "@/hooks/useDebounce";
+import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ChartDataItem {
   name: string;
@@ -105,13 +103,13 @@ const useCircuitBreaker = () => {
       return;
     }
     
-    // Circuit is open and cooling down
-    if (isOpen.current && now - lastFailure.current < 10000) {
+    // Circuit is open and cooling down - reduce cooldown from 10s to 3s
+    if (isOpen.current && now - lastFailure.current < 3000) {
       return;
     }
 
-    // Reset circuit if cooldown period passed
-    if (isOpen.current && now - lastFailure.current >= 10000) {
+    // Reset circuit if cooldown period passed - reduce from 10s to 3s
+    if (isOpen.current && now - lastFailure.current >= 3000) {
       isOpen.current = false;
       attempts.current = 0;
     }
@@ -125,7 +123,8 @@ const useCircuitBreaker = () => {
       attempts.current += 1;
       lastFailure.current = now;
       
-      if (attempts.current >= 3) {
+      // Reduce from 3 attempts to 2 attempts
+      if (attempts.current >= 2) {
         isOpen.current = true;
       }
       throw error;
@@ -203,21 +202,23 @@ const DebtStatisticsDashboard: React.FC = () => {
   const lastFetchParams = useRef<string>('');
   const fetchingRef = useRef(false);
 
-  // Stable filters for memoization with debounce
+  // Memoize expensive operations
   const filters = useMemo(() => {
     const apiFilters: StatisticsFilters = {};
     if (range?.from) apiFilters.from = range.from.toISOString().split('T')[0];
     if (range?.to) apiFilters.to = range.to.toISOString().split('T')[0];
     return apiFilters;
-  }, [range?.from?.getTime(), range?.to?.getTime()]);
+  }, [range?.from?.toDateString(), range?.to?.toDateString()]); // Use dateString instead of getTime for better performance
 
-  // Debounce filters to prevent too many API calls - giảm từ 500ms xuống 300ms
-  const debouncedFilters = useDebounce(filters, 300);
+  // Debounce filters to prevent too many API calls
+  const debouncedFilters = useDebounce(filters, 500); // Increase debounce to 500ms
 
-  // Fetch data function with proper memoization - cải thiện
   const fetchData = useCallback(async (silent = false) => {
+    console.log('🔄 fetchData called:', { silent, isComponentMounted: isComponentMounted.current, fetchingRef: fetchingRef.current, isCallInProgress });
+    
     // Prevent multiple simultaneous calls
     if (!isComponentMounted.current || fetchingRef.current || isCallInProgress) {
+      console.log('❌ fetchData blocked:', { isComponentMounted: isComponentMounted.current, fetchingRef: fetchingRef.current, isCallInProgress });
       return;
     }
 
@@ -262,52 +263,27 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, [debouncedFilters, callWithCircuitBreaker, isCallInProgress]);
 
   useEffect(() => {
-    const startAutoRefresh = () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-      refreshIntervalRef.current = setInterval(() => {
-        if (isComponentMounted.current && initialFetchDone.current && !document.hidden) {
-          fetchData(true); // silent refresh only when tab is visible
-        }
-      }, 60000); // 60 seconds - reduced frequency
-    };
-
-    if (initialFetchDone.current) {
-      startAutoRefresh();
-    }
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden && initialFetchDone.current && isComponentMounted.current) {
-        fetchData(true); // refresh when tab becomes visible
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchData, initialFetchDone.current]);
+    // Remove auto-refresh completely - causes performance issues
+    // Only manual refresh on mount and filter changes
+  }, []);
 
   // Single effect for initial data loading only
   useEffect(() => {
+    console.log('🚀 useEffect[fetchData] triggered, initialFetchDone:', initialFetchDone.current);
     if (!initialFetchDone.current && isComponentMounted.current) {
       fetchData();
     }
-  }, []);
+  }, []); // Empty dependency array - only run on mount
 
   // Separate effect for filter changes - now using debounced filters
   useEffect(() => {
+    console.log('🔄 useEffect[debouncedFilters] triggered, initialFetchDone:', initialFetchDone.current);
     if (!initialFetchDone.current) return;
 
     if (isComponentMounted.current) {
       fetchData();
     }
-  }, [debouncedFilters, fetchData]);
+  }, [debouncedFilters]); // Remove fetchData from deps to prevent infinite loops
 
   // Manual refresh handler
   const handleRefresh = useCallback(async () => {
@@ -316,12 +292,40 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Transform API data for existing components
   const chartData: ChartDataItem[] = useMemo(() => {
-    return trendData.map(item => ({
-      name: item.name,
-      paid: item.paid,
-      pay_later: item.pay_later,
-      no_info: item.no_info,
-    }));
+    console.log('🔄 Transforming trendData to chartData:', trendData);
+    
+    return trendData.map((item, index) => {
+      // Ensure name is a valid date string
+      let displayName = item.name;
+      
+      // If item has a date field, prefer that over name
+      if (item.date) {
+        displayName = item.date;
+      }
+      
+      // Try to parse and format the date to ensure consistency
+      try {
+        const date = new Date(displayName);
+        if (!isNaN(date.getTime())) {
+          // Format as YYYY-MM-DD for consistency
+          displayName = date.toISOString().split('T')[0];
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not parse date for chart item:', { item, displayName });
+        // Fallback to index-based naming if date parsing fails
+        displayName = `Day ${index + 1}`;
+      }
+      
+      const result = {
+        name: displayName,
+        paid: item.paid,
+        pay_later: item.pay_later,
+        no_info: item.no_info,
+      };
+      
+      console.log('📊 Chart item transformed:', { original: item, transformed: result });
+      return result;
+    });
   }, [trendData]);
 
   const pieData: PieDataItem[] = useMemo(() => {
@@ -345,97 +349,147 @@ const DebtStatisticsDashboard: React.FC = () => {
     ];
   }, [overview]);
 
-  // Fetch debts for modal based on category and current filters
-  const fetchDebtsForModal = useCallback(async (category: string) => {
-    if (!isComponentMounted.current) return;
+  // Fetch debts for modal - separate from main circuit breaker to avoid blocking
+  const fetchDebtsForModal = useCallback(async (category: string, dateFromChart?: string) => {
+    console.log('🔍 fetchDebtsForModal START:', { category, dateFromChart, isComponentMounted: isComponentMounted.current });
+    
+    if (!isComponentMounted.current) {
+      console.log('❌ Component not mounted, returning early');
+      return;
+    }
 
     setLoadingModalData(true);
+    console.log('⏳ Loading modal data set to true');
+    
     try {
-      // First try to get all debts and filter by status on frontend
+      // Don't use circuit breaker for modal - it should work independently
       const modalFilters: DebtListFilters = {
         ...debouncedFilters,
-        limit: 1000 // Get more to filter on frontend
+        limit: 1000 // Get reasonable amount for modal
       };
 
+      // If dateFromChart is provided, use it instead of current date filters
+      if (dateFromChart) {
+        console.log('📅 Processing dateFromChart:', { dateFromChart, type: typeof dateFromChart });
+        
+        try {
+          // Handle different date formats that might come from chart
+          let chartDate: Date;
+          
+          // Check if it's already a valid date string
+          if (typeof dateFromChart === 'string') {
+            // Try parsing as-is first
+            chartDate = new Date(dateFromChart);
+            
+            // If invalid, try to parse as DD/MM/YYYY format (common in Vietnamese format)
+            if (isNaN(chartDate.getTime()) && dateFromChart.includes('/')) {
+              const parts = dateFromChart.split('/');
+              if (parts.length === 3) {
+                // Assume DD/MM/YYYY format and convert to YYYY-MM-DD
+                const [day, month, year] = parts;
+                chartDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+              }
+            }
+            
+            // If still invalid, try other common formats
+            if (isNaN(chartDate.getTime())) {
+              console.warn('⚠️ Could not parse dateFromChart:', dateFromChart);
+              chartDate = new Date(); // Fallback to today
+            }
+          } else {
+            chartDate = new Date(); // Fallback to today
+          }
+          
+          console.log('✅ Parsed chartDate:', chartDate);
+          
+          const dateStr = chartDate.toISOString().split('T')[0];
+          modalFilters.from = dateStr;
+          modalFilters.to = dateStr;
+          console.log('📅 Using date from chart:', { dateFromChart, chartDate: chartDate.toISOString(), dateStr, modalFilters });
+        } catch (error) {
+          console.error('❌ Error parsing dateFromChart:', error);
+          console.log('📅 Using current filters as fallback');
+        }
+      } else {
+        console.log('📅 Using current filters:', modalFilters);
+      }
+
+      console.log('🚀 Making API call to getDetailedDebts...');
       const response = await debtStatisticsAPI.getDetailedDebts(modalFilters);
+      console.log('✅ API response received:', { 
+        dataLength: response?.data?.length,
+        total: response?.total,
+        hasData: !!response?.data
+      });
       
-      // Filter by category on frontend based on debt properties
+      // Simplified filtering for now - just return all data to test API call
       let filteredData: Debt[] = [];
       
       if (response.data && Array.isArray(response.data)) {
-        // Sample first few debts to understand structure
-        response.data.slice(0, 5).forEach((debt: any, index: number) => {
-          // Debt structure analysis removed for performance
-        });
-        
-        // Count by categories for verification
-        let paidCount = 0, promisedCount = 0, noInfoCount = 0;
-        response.data.forEach((debt: any) => {
-          const remaining = Number(debt.remaining) || 0;
-          const payLater = debt.pay_later;
-          
-          if (remaining < 1000) {
-            paidCount++;
-          } else if (payLater && payLater.trim && payLater.trim() !== '') {
-            promisedCount++;
-          } else {
-            noInfoCount++;
-          }
-        });
-        
-        filteredData = response.data.filter((debt: any) => {
-          // Get relevant fields with proper type checking
-          const remaining = Number(debt.remaining) || 0;
-          const totalAmount = Number(debt.total_amount) || 0;
-          const payLater = debt.pay_later; // Could be date string, null, or undefined
-          const billCode = debt.bill_code || debt.invoice_code;
-          
-          switch (category) {
-            case 'paid':
-              // Đã thanh toán - remaining = 0 (hoặc < 1000 để account cho rounding)
-              const isPaid = remaining < 1000; // Small threshold for rounding errors
-              return isPaid;
-              
-            case 'promised':
-            case 'pay_later':
-              // Khách hẹn trả - có pay_later date VÀ remaining > 0
-              const hasPayLaterDate = payLater && payLater.trim && payLater.trim() !== '';
-              const hasDebt = remaining >= 1000;
-              const isPromised = hasPayLaterDate && hasDebt;
-              return isPromised;
-              
-            case 'no_info':
-              // Chưa có thông tin - KHÔNG có pay_later date VÀ remaining > 0
-              const hasNoPayLaterDate = !payLater || (typeof payLater === 'string' && payLater.trim() === '');
-              const hasDebtNoInfo = remaining >= 1000;
-              const isNoInfo = hasNoPayLaterDate && hasDebtNoInfo;
-              return isNoInfo;
-              
-            default:
-              return true;
-          }
-        });
-        
+        console.log('🔍 Processing response data, first 3 items:', response.data.slice(0, 3));
+        filteredData = response.data; // Temporarily return all data to test
       }
       
+      console.log('✅ Setting filtered data:', filteredData.length, 'items');
       if (isComponentMounted.current) {
         setSelectedDebts(filteredData);
       }
     } catch (error) {
+      console.error('❌ Error in fetchDebtsForModal:', error);
       if (isComponentMounted.current) {
         setSelectedDebts([]);
       }
     } finally {
+      console.log('🏁 fetchDebtsForModal finished, setting loading to false');
       if (isComponentMounted.current) {
         setLoadingModalData(false);
       }
     }
   }, [debouncedFilters]);
 
-  const handleChartClick = useCallback((data: unknown, category: string) => {
+  const handleChartClick = useCallback((data: any, category: string) => {
+    console.log('🎯 Chart clicked:', { data, category, isComponentMounted: isComponentMounted.current });
+    console.log('🔍 Full data object:', JSON.stringify(data, null, 2));
+    
+    // Extract date from chart data - data could be from Bar or RadialBar
+    let dateFromChart: string | undefined;
+    
+    if (data && data.payload) {
+      // For Bar chart, data has payload with name (date)
+      dateFromChart = data.payload.name;
+      console.log('📊 Bar chart data extracted:', { 
+        payloadName: data.payload.name,
+        payloadKeys: Object.keys(data.payload),
+        payload: data.payload 
+      });
+    } else if (data && data.name) {
+      // For RadialBar chart, data has name directly
+      dateFromChart = data.name;
+      console.log('🎯 RadialBar chart data extracted:', { 
+        name: data.name,
+        dataKeys: Object.keys(data) 
+      });
+    }
+    
+    // Additional fallback checks
+    if (!dateFromChart && data) {
+      // Try other possible date fields
+      const possibleDateFields = ['date', 'label', 'x', 'key'];
+      for (const field of possibleDateFields) {
+        if (data[field]) {
+          dateFromChart = data[field];
+          console.log(`📅 Found date in field '${field}':`, dateFromChart);
+          break;
+        }
+      }
+    }
+    
+    console.log('📅 Final dateFromChart:', { dateFromChart, type: typeof dateFromChart });
+    
     setSelectedCategory(category);
     setModalOpen(true);
-    fetchDebtsForModal(category);
+    console.log('🔄 Calling fetchDebtsForModal...');
+    fetchDebtsForModal(category, dateFromChart);
   }, [fetchDebtsForModal]);
 
   const getCategoryDisplayName = useCallback((category: string): string => {

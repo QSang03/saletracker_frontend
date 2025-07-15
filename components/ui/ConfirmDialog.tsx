@@ -8,6 +8,9 @@ interface ConfirmDialogProps {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
+  hideCancelButton?: boolean;
 }
 
 export default function ConfirmDialog({
@@ -16,6 +19,9 @@ export default function ConfirmDialog({
   message,
   onConfirm,
   onCancel,
+  confirmText = "Xác nhận",
+  cancelText = "Hủy",
+  hideCancelButton = false,
 }: ConfirmDialogProps) {
   const [show, setShow] = useState(isOpen);
 
@@ -52,11 +58,13 @@ export default function ConfirmDialog({
         <h3 className="text-xl font-bold mb-2 text-gray-800">{title}</h3>
         <p className="mb-7 text-gray-600">{message}</p>
         <div className="flex justify-end gap-2">
-          <Button variant="delete" onClick={onCancel}>
-            Hủy
-          </Button>
+          {!hideCancelButton && (
+            <Button variant="delete" onClick={onCancel}>
+              {cancelText}
+            </Button>
+          )}
           <Button variant="add" onClick={onConfirm}>
-            Xác nhận
+            {confirmText}
           </Button>
         </div>
       </div>

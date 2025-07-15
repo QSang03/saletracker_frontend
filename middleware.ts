@@ -31,9 +31,11 @@ function isAccessible(userRoles: string[], url: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const publicPaths = ['/login'];
+  const zaloLinkPath = '/dashboard/link-account';
   const token = request.cookies.get('access_token')?.value;
   let isValid = false;
   let userRoles: string[] = [];
+  let zaloLinkStatus: number = 0;
 
   if (token) {
     try {
@@ -47,9 +49,24 @@ export async function middleware(request: NextRequest) {
       if (payload.roles && Array.isArray(payload.roles)) {
         userRoles = payload.roles.map((role: any) => role.name || role);
       }
+
+      // Lấy zaloLinkStatus từ payload
+      if (typeof payload.zaloLinkStatus === 'number') {
+        zaloLinkStatus = payload.zaloLinkStatus;
+      }
     } catch (error) {
       console.error('Token decode error:', error);
     }
+  }
+
+  // Kiểm tra zaloLinkStatus = 2 (lỗi liên kết)
+  if (isValid && zaloLinkStatus === 2) {
+    // Chỉ cho phép truy cập route liên kết tài khoản
+    if (pathname !== zaloLinkPath) {
+      return NextResponse.redirect(new URL(zaloLinkPath, request.url));
+    }
+    // Nếu đang ở route liên kết, cho phép tiếp tục
+    return NextResponse.next();
   }
 
   if (isValid && (pathname === '/' || pathname === '/login' || pathname === '/dashboard')) {
