@@ -59,11 +59,11 @@ export default function ConfirmDialog({
         <p className="mb-7 text-gray-600">{message}</p>
         <div className="flex justify-end gap-2">
           {!hideCancelButton && (
-            <Button variant="delete" onClick={onCancel()}>
+            <Button variant="delete" onClick={onCancel}>
               {cancelText}
             </Button>
           )}
-          <Button variant="add" onClick={onConfirm()}>
+          <Button variant="add" onClick={onConfirm}>
             {confirmText}
           </Button>
         </div>

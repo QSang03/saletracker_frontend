@@ -60,7 +60,9 @@ export default function DepartmentTable({
             <TableHead className="px-3 py-2 text-left">Slug</TableHead>
             <TableHead className="px-3 py-2 text-left">Trưởng nhóm</TableHead>
             <TableHead className="px-3 py-2 text-left">Ngày tạo</TableHead>
-            <TableHead className="w-36 text-center px-3 py-2">Thao tác</TableHead>
+            <TableHead className="w-36 text-center px-3 py-2">
+              Thao tác
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -73,7 +75,10 @@ export default function DepartmentTable({
           ) : (
             rows.map((dep, idx) =>
               dep ? (
-                <TableRow key={dep.id} className={idx % 2 === 0 ? "bg-gray-50" : ""}>
+                <TableRow
+                  key={dep.id}
+                  className={idx % 2 === 0 ? "bg-gray-50" : ""}
+                >
                   <TableCell className="text-center px-3 py-2">
                     {startIndex + idx + 1}
                   </TableCell>
@@ -83,7 +88,9 @@ export default function DepartmentTable({
                     {dep.manager?.fullName || dep.manager?.username || "-"}
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    {dep.createdAt ? new Date(dep.createdAt).toLocaleString() : "-"}
+                    {dep.createdAt
+                      ? new Date(dep.createdAt).toLocaleString()
+                      : "-"}
                   </TableCell>
                   <TableCell className="text-center px-3 py-2 flex gap-2 justify-center">
                     <Button
@@ -116,15 +123,15 @@ export default function DepartmentTable({
               )
             )
           )}
+          <ConfirmDialog
+            isOpen={confirmOpen}
+            title="Xác nhận xóa phòng ban"
+            message={`Bạn có chắc chắn muốn xóa phòng ban "${selectedDep?.name}"?`}
+            onConfirm={handleConfirm}
+            onCancel={handleCancel}
+          />
         </TableBody>
       </Table>
-      <ConfirmDialog
-        isOpen={confirmOpen}
-        title="Xác nhận xóa phòng ban"
-        message={`Bạn có chắc chắn muốn xóa phòng ban "${selectedDep?.name}"?`}
-        onConfirm={handleConfirm}
-        onCancel={handleCancel}
-      />
     </div>
   );
 }

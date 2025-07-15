@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
@@ -32,7 +38,9 @@ export default function EditDepartmentModal({
     setIsSubmitting(true);
     setError(null);
     try {
-      const token = getAccessToken ? getAccessToken() : localStorage.getItem("access_token");
+      const token = getAccessToken
+        ? getAccessToken()
+        : localStorage.getItem("access_token");
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/departments/${department.id}`,
         {
@@ -58,53 +66,51 @@ export default function EditDepartmentModal({
   };
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Chỉnh sửa phòng ban</DialogTitle>
-            <DialogDescription>
-              Đổi tên phòng ban, slug sẽ tự động cập nhật.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div>
-              <label className="block text-sm font-medium mb-1">Tên phòng ban</label>
-              <Input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Nhập tên phòng ban"
-                autoFocus
-              />
-            </div>
-            {error && (
-              <div className="text-red-500 text-sm mt-1">{error}</div>
-            )}
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Chỉnh sửa phòng ban</DialogTitle>
+          <DialogDescription>
+            Đổi tên phòng ban, slug sẽ tự động cập nhật.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Tên phòng ban
+            </label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nhập tên phòng ban"
+              autoFocus
+            />
           </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={onClose}>
-              Hủy
-            </Button>
-            <Button
-              variant="gradient"
-              onClick={() => setShowConfirm(true)}
-              disabled={isSubmitting || !name.trim()}
-            >
-              {isSubmitting ? <LoadingSpinner size={18} /> : "Lưu"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <ConfirmDialog
-        isOpen={showConfirm}
-        title="Xác nhận chỉnh sửa"
-        message={`Bạn có chắc chắn muốn lưu thay đổi tên phòng ban thành "${name}"?`}
-        onConfirm={() => {
-          setShowConfirm(false);
-          handleUpdate();
-        }}
-        onCancel={() => setShowConfirm(false)}
-      />
-    </>
+          {error && <div className="text-red-500 text-sm mt-1">{error}</div>}
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="outline" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button
+            variant="gradient"
+            onClick={() => setShowConfirm(true)}
+            disabled={isSubmitting || !name.trim()}
+          >
+            {isSubmitting ? <LoadingSpinner size={18} /> : "Lưu"}
+          </Button>
+        </div>
+        <ConfirmDialog
+          isOpen={showConfirm}
+          title="Xác nhận chỉnh sửa"
+          message={`Bạn có chắc chắn muốn lưu thay đổi tên phòng ban thành "${name}"?`}
+          onConfirm={() => {
+            setShowConfirm(false);
+            handleUpdate();
+          }}
+          onCancel={() => setShowConfirm(false)}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
