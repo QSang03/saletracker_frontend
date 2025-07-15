@@ -6,7 +6,7 @@ import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
-import { setAccessToken, clearAccessToken } from "@/lib/auth";
+import { setAccessToken, clearAccessToken, setRefreshToken, clearAllTokens } from "@/lib/auth";
 
 import { Input } from "@/components/ui/custom/input";
 import { Button } from "@/components/ui/buttons/LoginButton";
@@ -43,21 +43,22 @@ function LoginForm() {
       });
       const data = await res.json();
 
-      if (res.ok && data.access_token && data.user && !data.user.isBlock) {
+      if (res.ok && data.access_token && data.refresh_token && data.user && !data.user.isBlock) {
         setAccessToken(data.access_token);
+        setRefreshToken(data.refresh_token);
         toast.success("🎉 Đăng nhập thành công!");
         window.location.href = callbackUrl;
       } else if (data.user && data.user.isBlock) {
-        clearAccessToken();
+        clearAllTokens();
         toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
       } else {
-        clearAccessToken();
+        clearAllTokens();
         toast.error("Đăng nhập thất bại", {
           description: data.message || "Sai tên đăng nhập hoặc mật khẩu",
         });
       }
     } catch (err) {
-      clearAccessToken();
+      clearAllTokens();
       toast.error("Lỗi hệ thống", { description: String(err) });
     }
     setLoading(false);

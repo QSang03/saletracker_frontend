@@ -19,11 +19,13 @@ import {
 } from "@/components/ui/sidebar";
 import { NavUserInline } from "@/components/dashboard/nav-user-inline";
 import { getAccessToken, clearAccessToken } from "@/lib/auth";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import type { User } from "@/types";
 import { LoginSocket } from "@/components/auth/LoginSocket";
 import { CurrentUserContext } from "@/contexts/CurrentUserContext";
 import ZaloLinkStatusChecker from "@/components/common/ZaloLinkStatusChecker";
+import NotificationBell from "@/components/common/NotificationBell";
+
 
 export default function DashboardLayout({
   children,
@@ -106,7 +108,11 @@ export default function DashboardLayout({
                   </BreadcrumbList>
                 </Breadcrumb>
               </div>
-              <NavUserInline user={userInfo} />
+              {/* Notification component nằm bên trái NavUserInline */}
+              <div className="flex items-center gap-5">
+                <NotificationBell />
+                <NavUserInline user={userInfo} />
+              </div>
             </header>
             <div className="flex-1 overflow-hidden">
               {children}

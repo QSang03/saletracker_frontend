@@ -14,10 +14,23 @@ export function getAccessToken(): string | null {
   return null;
 }
 
+export function getRefreshToken(): string | null {
+  if (typeof document === "undefined") return null;
+
+  const cookies = document.cookie.split(";");
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split("=");
+    if (name === "refresh_token") {
+      return decodeURIComponent(value);
+    }
+  }
+
+  return null;
+}
+
 export function getUserFromToken(token: string): any | null {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
@@ -33,6 +46,12 @@ export function getUserFromToken(token: string): any | null {
       roles: payload.roles || [],
       departments: payload.departments || [],
       permissions: payload.permissions || [],
+      zaloLinkStatus: payload.zaloLinkStatus || 0,
+      zaloName: payload.zaloName || null,
+      avatarZalo: payload.avatarZalo || null,
+      employeeCode: payload.employeeCode || "",
+      nickName: payload.nickName || "",
+      email: payload.email || "",
     };
   } catch (error) {
     console.error("Token decode error:", error);
@@ -62,16 +81,37 @@ export function getUserRolesFromToken(token: string): string[] {
 
 export function setAccessToken(token: string) {
   if (typeof document !== "undefined") {
-    // Set cookie with 7 days expiry
+    // Set cookie with 30 days expiry
     const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 7);
-    document.cookie = `access_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax`;
+    expiryDate.setDate(expiryDate.getDate() + 30);
+    document.cookie = `access_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
+  }
+}
+
+export function setRefreshToken(token: string) {
+  if (typeof document !== "undefined") {
+    // Set cookie with 30 days expiry
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + 30);
+    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax; Secure`;
   }
 }
 
 export function clearAccessToken() {
   if (typeof document !== "undefined") {
     document.cookie =
-      "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
+      "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";
   }
+}
+
+export function clearRefreshToken() {
+  if (typeof document !== "undefined") {
+    document.cookie =
+      "refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";
+  }
+}
+
+export function clearAllTokens() {
+  clearAccessToken();
+  clearRefreshToken();
 }

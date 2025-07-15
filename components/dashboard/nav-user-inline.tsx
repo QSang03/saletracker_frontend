@@ -24,6 +24,8 @@ import { useState } from "react";
 import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import type { User } from "@/types";
 
+import { clearAllTokens } from "@/lib/auth";
+
 // Hàm lấy cookie từ client-side
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
@@ -63,7 +65,7 @@ export function NavUserInline({
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
-      document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;";
+      clearAllTokens();
       router.push("/login");
     }
   };

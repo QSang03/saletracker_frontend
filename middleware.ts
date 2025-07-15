@@ -59,13 +59,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Kiểm tra zaloLinkStatus = 2 (lỗi liên kết)
+  // Kiểm tra zaloLinkStatus = 2 (lỗi liên kết) - chỉ redirect nếu có lỗi liên kết
   if (isValid && zaloLinkStatus === 2) {
-    // Chỉ cho phép truy cập route liên kết tài khoản
+    // Chỉ cho phép truy cập route liên kết tài khoản khi có lỗi
     if (pathname !== zaloLinkPath) {
       return NextResponse.redirect(new URL(zaloLinkPath, request.url));
     }
     // Nếu đang ở route liên kết, cho phép tiếp tục
+    return NextResponse.next();
+  }
+
+  // Cho phép truy cập trang liên kết tài khoản bình thường (không chỉ khi có lỗi)
+  if (isValid && pathname === zaloLinkPath) {
     return NextResponse.next();
   }
 
@@ -81,12 +86,52 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!isValid) {
+    const refreshToken = request.cookies.get('refresh_token')?.value;
+    
+    // Nếu có refresh token, thử refresh access token
+    if (refreshToken) {
+      try {
+        const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          if (data.access_token) {
+            const response = NextResponse.next();
+            // Set new access token
+            response.cookies.set('access_token', data.access_token, {
+              httpOnly: false,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 30 * 24 * 60 * 60, // 30 days
+            });
+            // Set new refresh token if provided
+            if (data.refresh_token) {
+              response.cookies.set('refresh_token', data.refresh_token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 30 * 24 * 60 * 60, // 30 days
+              });
+            }
+            return response;
+          }
+        }
+      } catch (error) {
+        console.error('Token refresh failed in middleware:', error);
+      }
+    }
+    
     const loginUrl = new URL('/login', request.url);
     if (!pathname.startsWith('/login')) {
       loginUrl.searchParams.set('callbackUrl', request.nextUrl.href);
     }
     const response = NextResponse.redirect(loginUrl);
     response.cookies.delete('access_token');
+    response.cookies.delete('refresh_token');
     return response;
   }
 

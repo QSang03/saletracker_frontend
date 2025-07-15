@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { UserWithPermissions } from '../types';
-import { clearAccessToken, getAccessToken, getUserFromToken } from '@/lib/auth';
+import { clearAllTokens, getAccessToken, getUserFromToken } from '@/lib/auth';
 
 interface AuthContextType {
   user: UserWithPermissions | null;
@@ -50,7 +50,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = () => {
     setUser(null);
-    clearAccessToken();
+    clearAllTokens();
   };
 
   return (

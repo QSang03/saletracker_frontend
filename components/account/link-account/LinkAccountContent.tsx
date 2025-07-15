@@ -107,7 +107,7 @@ export default function LinkAccountContent({
     try {
       const token = getAccessToken();
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-      await fetch(`${apiUrl}/users/${currentUser.id}`, {
+      const response = await fetch(`${apiUrl}/users/${currentUser.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -119,6 +119,40 @@ export default function LinkAccountContent({
           avatarZalo,
         }),
       });
+      
+      if (response.ok) {
+        // Gọi API refresh token để cập nhật thông tin Zalo trong JWT
+        await refreshTokenAfterZaloUpdate();
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const refreshTokenAfterZaloUpdate = async () => {
+    try {
+      const token = getAccessToken();
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const response = await fetch(`${apiUrl}/auth/refresh-after-update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.access_token) {
+          // Import function để set access token
+          const { setAccessToken } = await import("@/lib/auth");
+          
+          // Chỉ cập nhật access token, giữ nguyên refresh token
+          setAccessToken(data.access_token);
+          
+          console.log("✅ [LinkAccount] Access token updated with new Zalo info");
+        }
+      }
     } catch (e) {
       // ignore
     }

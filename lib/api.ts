@@ -13,3 +13,10 @@ api.interceptors.request.use(config => {
   }
   return config;
 });
+
+// Setup refresh interceptor chỉ khi ở client-side
+if (typeof window !== 'undefined') {
+  import('./axiosRefresh').then(({ setupAxiosInterceptors }) => {
+    setupAxiosInterceptors(api);
+  });
+}

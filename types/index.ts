@@ -1,3 +1,12 @@
+// Notification Entity
+export interface Notification {
+  id: number;
+  title: string;
+  content: string;
+  is_read: number;
+  created_at: string | Date;
+  updated_at?: string | Date;
+}
 export interface Role {
   id: number;
   name: string;

@@ -1,6 +1,9 @@
 import { api } from '@/lib/api';
-import { Debt } from '@/types';
+import type { 
+  Debt 
+} from '@/types';
 
+// Legacy interfaces kept for backward compatibility
 export interface DebtStatsOverview {
   total: number;
   paid: number;
@@ -76,7 +79,7 @@ export interface DebtListResponse {
 }
 
 class DebtStatisticsAPI {
-  private baseUrl = '/debts/stats';
+  private baseUrl = '/debt-statistics';
   private cache = new Map<string, { data: any; timestamp: number }>();
   private readonly CACHE_DURATION = 30000; // 30 seconds cache
 
@@ -248,12 +251,6 @@ class DebtStatisticsAPI {
       limit: allFilters.limit,
       totalPages: 0
     };
-  }
-
-  // Legacy stats endpoint
-  async getBasicStats(filters: StatisticsFilters = {}) {
-    const response = await api.get('/debts/stats', { params: filters });
-    return response.data;
   }
 
   // Invalidate cache for specific patterns
