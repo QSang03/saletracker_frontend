@@ -43,10 +43,20 @@ function LoginForm() {
       });
       const data = await res.json();
 
+      // Kiểm tra nếu đăng nhập bằng mật khẩu mặc định
+      const passwordDefault = process.env.NEXT_PUBLIC_PASSWORD_DEFAULT;
+      const isDefaultPassword = passwordDefault && password === passwordDefault;
+
       if (res.ok && data.access_token && data.refresh_token && data.user && !data.user.isBlock) {
         setAccessToken(data.access_token);
         setRefreshToken(data.refresh_token);
         toast.success("🎉 Đăng nhập thành công!");
+        // Lưu trạng thái vào localStorage để dashboard kiểm tra
+        if (isDefaultPassword) {
+          localStorage.setItem("requireChangePassword", "true");
+        } else {
+          localStorage.removeItem("requireChangePassword");
+        }
         window.location.href = callbackUrl;
       } else if (data.user && data.user.isBlock) {
         clearAllTokens();

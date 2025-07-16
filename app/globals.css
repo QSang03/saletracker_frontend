@@ -212,3 +212,55 @@
     background-position: 0% 50%;
   }
 }
+
+.toggle-activated-anim {
+  position: relative;
+  z-index: 1;
+}
+.toggle-activated-anim::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.7);
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,200,80,0.35) 0%, rgba(0,200,80,0.18) 60%, rgba(0,200,80,0) 100%);
+  animation: togglePulse 0.3s cubic-bezier(.4,0,.2,1);
+  pointer-events: none;
+}
+.toggle-activated-anim.toggle-blue::after {
+  background: radial-gradient(circle, rgba(0,120,255,0.35) 0%, rgba(0,120,255,0.18) 60%, rgba(0,120,255,0) 100%);
+}
+@keyframes togglePulse {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  60% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2);
+  }
+}
+
+.animate-bell-scale {
+  animation: bellScale 0.5s cubic-bezier(.4,0,.2,1) infinite;
+}
+@keyframes bellScale {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.toggle-btn {
+  cursor: pointer;
+}
+.toggle-btn:disabled {
+  cursor: not-allowed;
+}

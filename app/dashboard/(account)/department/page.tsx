@@ -204,7 +204,16 @@ export default function DepartmentPage() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
-            <span>Quản Lý Phòng Ban</span>
+            <span className="flex items-center gap-2">
+              <span>Quản Lý Phòng Ban</span>
+              {/* Department SVG icon: School Bag */}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-primary" aria-label="Phòng Ban">
+              <rect x="4" y="8" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="2" />
+              <path d="M8 8V6a4 4 0 0 1 8 0v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <rect x="10" y="13" width="4" height="3" rx="1" fill="currentColor" />
+              <path d="M4 12v2m16-2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </span>
             <div className="flex gap-2 w-full sm:w-auto">
               <PDynamic permissions={[{ departmentSlug: 'account', action: 'read' }]}>
                 <Button

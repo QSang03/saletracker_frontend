@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -385,6 +385,10 @@ interface DebtModalProps {
   category: string;
   debts: Debt[];
   loading?: boolean;
+  onPageChange?: (page: number) => Promise<void>;
+  totalCount?: number;
+  totalPages?: number;
+  currentPage?: number;
 }
 
 const DebtModal: React.FC<DebtModalProps> = ({
@@ -393,19 +397,33 @@ const DebtModal: React.FC<DebtModalProps> = ({
   category,
   debts,
   loading = false,
+  onPageChange,
+  totalCount: propTotalCount,
+  totalPages: propTotalPages,
+  currentPage: propCurrentPage = 1,
 }) => {
-  console.log('🔍 [DebtModal] Props:', { isOpen, category, debtsCount: debts?.length, loading });
   
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [employeePopoverOpen, setEmployeePopoverOpen] = useState(false);
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
+  // Use props for pagination if available, otherwise fall back to local state with lazy loading
+  const [localCurrentPage, setLocalCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sortField, setSortField] = useState<keyof Debt>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  
+  // Lazy loading states
+  const [displayedItems, setDisplayedItems] = useState(10); // Start with 10 items
+  const [isLazyLoading, setIsLazyLoading] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Determine if we're using external pagination (from parent) or internal pagination
+  const useExternalPagination = !!(onPageChange && propTotalCount && propTotalPages);
+  const currentPage = useExternalPagination ? propCurrentPage : localCurrentPage;
+  const totalCountExternal = useExternalPagination ? propTotalCount : 0;
+  const totalPagesExternal = useExternalPagination ? propTotalPages : 0;
 
   // Extract unique employees from debts data
   const uniqueEmployees = useMemo(() => {
@@ -470,23 +488,46 @@ const DebtModal: React.FC<DebtModalProps> = ({
     });
   }, [filteredDebts, sortField, sortDirection]);
 
-  // Paginate sorted debts
+  // Paginate sorted debts or use external data with lazy loading
   const paginatedDebts = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    return sortedDebts.slice(startIndex, endIndex);
-  }, [sortedDebts, currentPage, pageSize]);
+    if (useExternalPagination) {
+      // If using external pagination, the debts are already paginated from server
+      return filteredDebts;
+    } else {
+      // For lazy loading, show only the first N items based on displayedItems
+      return sortedDebts.slice(0, displayedItems);
+    }
+  }, [sortedDebts, filteredDebts, displayedItems, useExternalPagination]);
 
-  // Calculate pagination info
-  const totalItems = sortedDebts.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
-  const startItem = totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
+  // Calculate pagination info for lazy loading
+  let totalItems: number;
+  let totalPages: number;
+  let startItem: number;
+  let endItem: number;
+
+  if (useExternalPagination) {
+    // External pagination - use props from parent
+    totalItems = totalCountExternal;
+    totalPages = totalPagesExternal;
+    startItem = totalItems > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+    endItem = Math.min(currentPage * pageSize, totalItems);
+  } else {
+    // Lazy loading - show total items but display incrementally
+    totalItems = sortedDebts.length;
+    startItem = 1;
+    endItem = Math.min(displayedItems, totalItems);
+    totalPages = 1; // All data in one "page" with lazy loading
+  }
 
   // Reset page when filters change
   React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedEmployees, selectedDate]);
+    if (useExternalPagination && onPageChange) {
+      onPageChange(1);
+    } else {
+      setLocalCurrentPage(1);
+      setDisplayedItems(10); // Reset lazy loading to 10 items
+    }
+  }, [searchTerm, selectedEmployees, selectedDate, useExternalPagination, onPageChange]);
 
   // Handle sorting
   const handleSort = useCallback((field: keyof Debt) => {
@@ -496,18 +537,33 @@ const DebtModal: React.FC<DebtModalProps> = ({
       setSortField(field);
       setSortDirection('asc');
     }
-    setCurrentPage(1);
-  }, [sortField]);
+    if (useExternalPagination && onPageChange) {
+      onPageChange(1);
+    } else {
+      setLocalCurrentPage(1);
+    }
+  }, [sortField, useExternalPagination, onPageChange]);
 
   // Handle pagination
   const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page);
-  }, []);
+    if (useExternalPagination && onPageChange) {
+      // Use external pagination handler
+      onPageChange(page);
+    } else {
+      // Use local pagination
+      setLocalCurrentPage(page);
+    }
+  }, [useExternalPagination, onPageChange]);
 
   const handlePageSizeChange = useCallback((size: number) => {
     setPageSize(size);
-    setCurrentPage(1);
-  }, []);
+    if (useExternalPagination && onPageChange) {
+      // Reset to page 1 when changing page size in external pagination
+      onPageChange(1);
+    } else {
+      setLocalCurrentPage(1);
+    }
+  }, [useExternalPagination, onPageChange]);
 
   const formatCurrency = useCallback((amount: number): string => {
     return new Intl.NumberFormat("vi-VN", {
@@ -583,7 +639,11 @@ const DebtModal: React.FC<DebtModalProps> = ({
     setSearchTerm("");
     setSelectedEmployees([]);
     setSelectedDate(undefined);
-    setCurrentPage(1); // Reset pagination when clearing filters
+    if (useExternalPagination && onPageChange) {
+      onPageChange(1); // Reset to page 1 when clearing filters
+    } else {
+      setLocalCurrentPage(1); // Reset pagination when clearing filters
+    }
   };
 
   const toggleEmployee = (employee: string) => {
@@ -599,6 +659,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   };
 
   // Calculate totals with proper null/undefined handling and category-specific logic
+  // IMPORTANT: Calculate based on ALL sorted debts, not just displayed items
   const totalAmount = useMemo(() => {
     const total = sortedDebts.reduce((sum, debt) => {
       const amount = Number(debt.total_amount) || 0;
@@ -606,7 +667,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
     }, 0);
 
     return total;
-  }, [sortedDebts, category]);
+  }, [sortedDebts]);
 
   const totalRemaining = useMemo(() => {
     // For "paid" category, remaining should always be 0
@@ -614,14 +675,53 @@ const DebtModal: React.FC<DebtModalProps> = ({
       return 0;
     }
     
-    // For other categories, calculate actual remaining
+    // For other categories, calculate actual remaining from ALL sorted debts
     const remaining = sortedDebts.reduce((sum, debt) => {
       const remainingAmount = Number(debt.remaining) || 0;
       return sum + (isNaN(remainingAmount) ? 0 : remainingAmount);
     }, 0);
 
     return remaining;
-  }, [filteredDebts, category]);
+  }, [sortedDebts, category]);
+
+  // Lazy loading scroll handler
+  const handleScroll = useCallback(() => {
+    if (!tableContainerRef.current || isLazyLoading || useExternalPagination) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = tableContainerRef.current;
+    const threshold = 100; // Load more when within 100px of bottom
+    
+    if (scrollTop + clientHeight >= scrollHeight - threshold) {
+      if (displayedItems < sortedDebts.length) {
+        setIsLazyLoading(true);
+        
+        // Simulate loading delay for better UX
+        setTimeout(() => {
+          setDisplayedItems(prev => {
+            const newCount = Math.min(prev + 20, sortedDebts.length);
+            return newCount;
+          });
+          setIsLazyLoading(false);
+        }, 300);
+      }
+    }
+  }, [isLazyLoading, displayedItems, sortedDebts.length, useExternalPagination]);
+
+  // Add scroll listener
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (container && !useExternalPagination) {
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll, useExternalPagination]);
+
+  // Reset displayed items when data changes
+  useEffect(() => {
+    if (!useExternalPagination) {
+      setDisplayedItems(10); // Reset to initial load of 10 items
+    }
+  }, [debts, searchTerm, selectedEmployees, selectedDate, useExternalPagination]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -629,7 +729,12 @@ const DebtModal: React.FC<DebtModalProps> = ({
         <DialogHeader className="flex flex-row items-center justify-between p-4 border-b bg-background">
           <DialogTitle className="text-lg font-semibold">
             Chi tiết phiếu nợ - {getCategoryLabel(category)} (
-            {filteredDebts.length} phiếu)
+            {useExternalPagination ? totalCountExternal : filteredDebts.length} phiếu)
+            {!useExternalPagination && (
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                [Hiển thị: {displayedItems}/{sortedDebts.length}]
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -646,13 +751,13 @@ const DebtModal: React.FC<DebtModalProps> = ({
             handleSearch={handleSearch}
             clearFilters={clearFilters}
             handleExport={handleExport}
-            totalCount={totalItems}
+            totalCount={useExternalPagination ? totalCountExternal : totalItems}
             totalAmount={formatCurrency(totalAmount)}
             totalRemaining={formatCurrency(totalRemaining)}
           />
 
           {/* Table */}
-          <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-white shadow-sm" ref={tableContainerRef}>
             <Table>
               <TableHeader className="sticky top-0 bg-gray-50 z-10">
                 <TableRow className="hover:bg-transparent border-b border-gray-200">
@@ -722,12 +827,51 @@ const DebtModal: React.FC<DebtModalProps> = ({
                     </TableCell>
                   </TableRow>
                 ))}
+                
+                {/* Lazy loading indicator */}
+                {!useExternalPagination && isLazyLoading && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-16 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-sm text-gray-500">Đang tải thêm...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                
+                {/* End of data indicator */}
+                {!useExternalPagination && !isLazyLoading && displayedItems >= sortedDebts.length && sortedDebts.length > 10 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-12 text-center text-sm text-gray-500">
+                      ✅ Đã hiển thị tất cả {sortedDebts.length} kết quả
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
+          {/* Lazy Loading Status Bar - only show for internal pagination */}
+          {!useExternalPagination && totalItems > 10 && (
+            <div className="flex items-center justify-between px-6 py-3 border-t bg-gray-50 text-sm text-gray-600">
+              <span>Hiển thị {displayedItems} trên {totalItems} kết quả</span>
+              <div className="flex items-center space-x-2">
+                {displayedItems < totalItems && (
+                  <>
+                    <span className="text-blue-600">Cuộn xuống để xem thêm</span>
+                    <div className="h-2 w-2 bg-blue-600 rounded-full animate-pulse"></div>
+                  </>
+                )}
+                {displayedItems >= totalItems && (
+                  <span className="text-green-600">✅ Đã tải xong</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Pagination Controls - only show for external pagination */}
+          {useExternalPagination && totalPages > 1 && (
             <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <span>Hiển thị {startItem}-{endItem} trên {totalItems} kết quả</span>
@@ -817,7 +961,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
             </div>
           )}
 
-          {!loading && totalItems === 0 && (
+          {!loading && (useExternalPagination ? totalCountExternal === 0 : totalItems === 0) && (
             <div className="text-center py-16 text-muted-foreground">
               <AlertCircle className="h-16 w-16 mx-auto mb-4 opacity-50" />
               <p className="text-xl font-medium mb-2">

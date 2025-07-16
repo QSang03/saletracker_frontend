@@ -24,7 +24,6 @@ export default function DepartmentTable({
   onEdit?: (dep: Department) => void;
   onDelete?: (dep: Department) => void;
 }) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [selectedDep, setSelectedDep] = useState<Department | null>(null);
 
   const safeDepartments = Array.isArray(departments) ? departments : [];
@@ -36,17 +35,17 @@ export default function DepartmentTable({
 
   const handleDeleteClick = (dep: Department) => {
     setSelectedDep(dep);
-    setConfirmOpen(true);
+    if (onDelete) {
+      onDelete(dep);
+    }
   };
 
   const handleConfirm = () => {
     if (selectedDep && onDelete) onDelete(selectedDep);
-    setConfirmOpen(false);
     setSelectedDep(null);
   };
 
   const handleCancel = () => {
-    setConfirmOpen(false);
     setSelectedDep(null);
   };
 
@@ -58,6 +57,7 @@ export default function DepartmentTable({
             <TableHead className="w-12 text-center px-3 py-2">#</TableHead>
             <TableHead className="px-3 py-2 text-left">Tên phòng ban</TableHead>
             <TableHead className="px-3 py-2 text-left">Slug</TableHead>
+            <TableHead className="px-3 py-2 text-left">IP Server</TableHead>
             <TableHead className="px-3 py-2 text-left">Trưởng nhóm</TableHead>
             <TableHead className="px-3 py-2 text-left">Ngày tạo</TableHead>
             <TableHead className="w-36 text-center px-3 py-2">
@@ -68,7 +68,7 @@ export default function DepartmentTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center py-4 text-gray-400">
+              <TableCell colSpan={7} className="text-center py-4 text-gray-400">
                 Không có phòng ban nào phù hợp.
               </TableCell>
             </TableRow>
@@ -84,6 +84,9 @@ export default function DepartmentTable({
                   </TableCell>
                   <TableCell className="px-3 py-2">{dep.name}</TableCell>
                   <TableCell className="px-3 py-2">{dep.slug}</TableCell>
+                  <TableCell className="px-3 py-2">
+                    {dep.server_ip || "-"}
+                  </TableCell>
                   <TableCell className="px-3 py-2">
                     {dep.manager?.fullName || dep.manager?.username || "-"}
                   </TableCell>
@@ -116,20 +119,13 @@ export default function DepartmentTable({
                   style={{ height: 49, opacity: 0, pointerEvents: "none" }}
                   aria-hidden="true"
                 >
-                  {Array.from({ length: 6 }).map((_, i) => (
+                  {Array.from({ length: 7 }).map((_, i) => (
                     <TableCell key={i} />
                   ))}
                 </TableRow>
               )
             )
           )}
-          <ConfirmDialog
-            isOpen={confirmOpen}
-            title="Xác nhận xóa phòng ban"
-            message={`Bạn có chắc chắn muốn xóa phòng ban "${selectedDep?.name}"?`}
-            onConfirm={handleConfirm}
-            onCancel={handleCancel}
-          />
         </TableBody>
       </Table>
     </div>

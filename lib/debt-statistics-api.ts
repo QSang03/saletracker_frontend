@@ -217,14 +217,15 @@ class DebtStatisticsAPI {
   }
 
   async getDetailedDebts(filters: DebtListFilters = {}): Promise<DebtListResponse> {
-    // For statistics, use large limit to get complete data
+    // Always use debt-statistics API for consistent filtering logic
     const allFilters = {
       ...filters,
       limit: filters.limit || 10000, // Get all records for accurate statistics
       page: filters.page || 1
     };
     
-    const response = await api.get('/debts', { params: allFilters });
+    // Use debt-statistics endpoint instead of debts
+    const response = await api.get(`${this.baseUrl}/detailed`, { params: allFilters });
 
     
     // Handle different response structures
@@ -301,13 +302,8 @@ export async function getDetailedDebtsByDate(
     } else if (category === 'paid') {
       params.status = 'paid';
     }
-    // For 'aging' category, we get all records without status filter
-    
-    console.log('🔍 [getDetailedDebtsByDate] API call:', endpoint, params);
     
     const response = await api.get(endpoint, { params });
-    
-    console.log('📊 [getDetailedDebtsByDate] API response:', response.data);
     
     return response.data;
   } catch (error) {

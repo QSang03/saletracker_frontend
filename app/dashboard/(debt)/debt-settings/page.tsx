@@ -471,7 +471,7 @@ export default function DebtSettingsPage() {
             enableEmployeeFilter
             availableEmployees={employeeOptions}
             enableSingleDateFilter
-            singleDateLabel="Ngày tạo"
+            singleDateLabel="Ngày đã nhắc"
             page={page}
             pageSize={pageSize}
             total={filteredData.length}

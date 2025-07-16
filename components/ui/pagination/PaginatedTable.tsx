@@ -20,6 +20,7 @@ interface PaginatedTableProps {
   enableRoleFilter?: boolean;
   enableStatusFilter?: boolean;
   enableEmployeeFilter?: boolean;
+  enableZaloLinkStatusFilter?: boolean;
   availableEmployees?: Option[];
   enableDateRangeFilter?: boolean;
   enableSingleDateFilter?: boolean;
@@ -27,6 +28,7 @@ interface PaginatedTableProps {
   availableDepartments?: string[];
   availableRoles?: string[];
   availableStatuses?: { value: string; label: string }[] | string[];
+  availableZaloLinkStatuses?: { value: string | number; label: string }[];
   availableCategories?: string[];
   availableBrands?: string[];
   dateRangeLabel?: string;
@@ -41,6 +43,10 @@ interface PaginatedTableProps {
   children: React.ReactNode;
   onFilterChange?: (filters: Filters) => void;
   loading?: boolean;
+  // Thêm prop để pass initial filters từ parent
+  initialFilters?: Partial<Filters>;
+  // Thêm flag để kiểm soát việc sync
+  preserveFiltersOnEmpty?: boolean;
   filterClassNames?: {
     search?: string;
     departments?: string;
@@ -66,6 +72,7 @@ export type Filters = {
   departments: (string | number)[];
   roles: (string | number)[];
   statuses: (string | number)[];
+  zaloLinkStatuses: (string | number)[];
   categories: (string | number)[];
   brands: (string | number)[];
   dateRange: DateRange;
@@ -81,6 +88,13 @@ export default function PaginatedTable({
   enableStatusFilter,
   enableEmployeeFilter,
   availableEmployees = [],
+  // Thêm các props mới
+  enableZaloLinkStatusFilter,
+  availableZaloLinkStatuses = [
+    { value: 0, label: "Chưa liên kết" },
+    { value: 1, label: "Đã liên kết" },
+    { value: 2, label: "Lỗi liên kết" },
+  ],
   enableDateRangeFilter,
   enableSingleDateFilter,
   singleDateLabel,
@@ -103,6 +117,8 @@ export default function PaginatedTable({
   children,
   onFilterChange,
   loading = false,
+  initialFilters,
+  preserveFiltersOnEmpty = true,
   filterClassNames = {},
   buttonClassNames = {},
   getExportData,
@@ -150,17 +166,63 @@ export default function PaginatedTable({
     [availableEmployees]
   );
 
-  const [filters, setFilters] = useState<Filters>({
-    search: "",
-    departments: [],
-    roles: [],
-    statuses: [],
-    categories: [],
-    brands: [],
-    dateRange: { from: undefined, to: undefined },
-    singleDate: undefined,
-    employees: [],
-  });
+  // Thêm useMemo cho zaloLinkStatusOptions
+  const zaloLinkStatusOptions = useMemo(
+    () => availableZaloLinkStatuses.map((s) => ({ label: s.label, value: s.value })),
+    [availableZaloLinkStatuses]
+  );
+
+  const [filters, setFilters] = useState<Filters>(() => ({
+    search: initialFilters?.search || "",
+    departments: initialFilters?.departments || [],
+    roles: initialFilters?.roles || [],
+    statuses: initialFilters?.statuses || [],
+    zaloLinkStatuses: initialFilters?.zaloLinkStatuses || [],
+    categories: initialFilters?.categories || [],
+    brands: initialFilters?.brands || [],
+    dateRange: initialFilters?.dateRange || { from: undefined, to: undefined },
+    singleDate: initialFilters?.singleDate || undefined,
+    employees: initialFilters?.employees || [],
+  }));
+
+  // Sync filters when initialFilters changes - but only if preserveFiltersOnEmpty is true
+  const memoizedInitialFilters = useMemo(() => initialFilters, [
+    initialFilters?.search,
+    JSON.stringify(initialFilters?.departments),
+    JSON.stringify(initialFilters?.roles),
+    JSON.stringify(initialFilters?.statuses),
+    JSON.stringify(initialFilters?.zaloLinkStatuses),
+    JSON.stringify(initialFilters?.categories),
+    JSON.stringify(initialFilters?.brands),
+    JSON.stringify(initialFilters?.dateRange),
+    initialFilters?.singleDate,
+    JSON.stringify(initialFilters?.employees),
+  ]);
+
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+
+  useEffect(() => {
+    if (memoizedInitialFilters && !hasUserInteracted) {
+      setFilters(prev => {
+        const newFilters = {
+          search: memoizedInitialFilters.search !== undefined ? memoizedInitialFilters.search : prev.search,
+          departments: memoizedInitialFilters.departments !== undefined ? memoizedInitialFilters.departments : prev.departments,
+          roles: memoizedInitialFilters.roles !== undefined ? memoizedInitialFilters.roles : prev.roles,
+          statuses: memoizedInitialFilters.statuses !== undefined ? memoizedInitialFilters.statuses : prev.statuses,
+          zaloLinkStatuses: memoizedInitialFilters.zaloLinkStatuses !== undefined ? memoizedInitialFilters.zaloLinkStatuses : prev.zaloLinkStatuses,
+          categories: memoizedInitialFilters.categories !== undefined ? memoizedInitialFilters.categories : prev.categories,
+          brands: memoizedInitialFilters.brands !== undefined ? memoizedInitialFilters.brands : prev.brands,
+          dateRange: memoizedInitialFilters.dateRange !== undefined ? memoizedInitialFilters.dateRange : prev.dateRange,
+          singleDate: memoizedInitialFilters.singleDate !== undefined ? memoizedInitialFilters.singleDate : prev.singleDate,
+          employees: memoizedInitialFilters.employees !== undefined ? memoizedInitialFilters.employees : prev.employees,
+        };
+        
+        // Only update if actually different
+        const isEqual = JSON.stringify(prev) === JSON.stringify(newFilters);
+        return isEqual ? prev : newFilters;
+      });
+    }
+  }, [memoizedInitialFilters, hasUserInteracted]);
 
   // Xác định chế độ phân trang: backend (có page, pageSize, total) hay frontend (không có)
   const isBackendPaging = page !== undefined && pageSize !== undefined && total !== undefined;
@@ -181,19 +243,20 @@ export default function PaginatedTable({
     setPendingPageSize(currentPageSize);
   }, [currentPageSize]);
 
-  // Debounce filter cho backend: giảm thời gian từ 500ms xuống 300ms để responsive hơn
+  // Debounce filter cho backend: giảm thời gian xuống 150ms để responsive hơn
   const filterTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const debouncedSetFilters = useCallback((newFilters: Filters) => {
     if (filterTimeout.current) clearTimeout(filterTimeout.current);
     filterTimeout.current = setTimeout(() => {
       if (onFilterChange) onFilterChange(newFilters);
-    }, 300); // giảm từ 500ms xuống 300ms
+    }, 150); // giảm từ 300ms xuống 150ms để responsive hơn
   }, [onFilterChange]);
 
   // updateFilter chỉ cập nhật filter, không reset page
   const updateFilter = useCallback(
     <K extends keyof Filters>(key: K, value: Filters[K]) => {
+      setHasUserInteracted(true); // Mark that user has interacted
       setFilters((prev) => {
         if (prev[key] === value) return prev;
         const next = { ...prev, [key]: value };
@@ -204,6 +267,39 @@ export default function PaginatedTable({
     [debouncedSetFilters]
   );
 
+  // Memoized onChange handlers to prevent re-renders
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    updateFilter("search", e.target.value);
+  }, [updateFilter]);
+
+  const handleEmployeesChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("employees", vals);
+  }, [updateFilter]);
+
+  const handleDepartmentsChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("departments", vals);
+  }, [updateFilter]);
+
+  const handleRolesChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("roles", vals);
+  }, [updateFilter]);
+
+  const handleStatusesChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("statuses", vals);
+  }, [updateFilter]);
+
+  const handleZaloLinkStatusesChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("zaloLinkStatuses", vals);
+  }, [updateFilter]);
+
+  const handleCategoriesChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("categories", vals);
+  }, [updateFilter]);
+
+  const handleBrandsChange = useCallback((vals: (string | number)[]) => {
+    updateFilter("brands", vals);
+  }, [updateFilter]);
+
   // useEffect này KHÔNG gọi onFilterChange trực tiếp nữa
   // handleResetFilter: reset filter, đồng thời reset page về 1 nếu là backend paging
   const handleResetFilter = useCallback(() => {
@@ -212,6 +308,8 @@ export default function PaginatedTable({
       departments: [],
       roles: [],
       statuses: [],
+      // Thêm field mới vào reset
+      zaloLinkStatuses: [],
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
@@ -219,6 +317,8 @@ export default function PaginatedTable({
       employees: [],
     };
     setFilters(reset);
+    // Gọi debouncedSetFilters để thông báo cho parent component
+    debouncedSetFilters(reset);
     if (onPageChange) onPageChange(1);
     else setInternalPage(0);
     setPendingPageSize("");
@@ -226,7 +326,7 @@ export default function PaginatedTable({
     if (typeof onResetFilter === 'function') {
       onResetFilter();
     }
-  }, [onPageChange, onResetFilter]);
+  }, [onPageChange, onResetFilter, debouncedSetFilters]);
 
   // State cho panel xuất CSV
   const [openExport, setOpenExport] = useState(false);
@@ -277,7 +377,7 @@ export default function PaginatedTable({
               className={`min-w-0 w-full ${filterClassNames.search ?? ''}`}
               placeholder="Tìm kiếm..."
               value={filters.search}
-              onChange={(e) => updateFilter("search", e.target.value)}
+              onChange={handleSearchChange}
             />
           )}
           {enableEmployeeFilter && (
@@ -286,7 +386,7 @@ export default function PaginatedTable({
               placeholder="Nhân viên"
               value={filters.employees}
               options={employeeOptions}
-              onChange={(vals) => updateFilter("employees", vals)}
+              onChange={handleEmployeesChange}
             />
           )}
           {enableDepartmentFilter && (
@@ -295,7 +395,7 @@ export default function PaginatedTable({
               placeholder="Phòng ban"
               value={filters.departments}
               options={departmentOptions}
-              onChange={(vals) => updateFilter("departments", vals)}
+              onChange={handleDepartmentsChange}
             />
           )}
           {enableRoleFilter && (
@@ -304,7 +404,7 @@ export default function PaginatedTable({
               placeholder="Vai trò"
               value={filters.roles}
               options={roleOptions}
-              onChange={(vals) => updateFilter("roles", vals)}
+              onChange={handleRolesChange}
             />
           )}
           {enableStatusFilter && (
@@ -313,7 +413,16 @@ export default function PaginatedTable({
               placeholder="Trạng thái"
               value={filters.statuses}
               options={statusOptions}
-              onChange={(vals) => updateFilter("statuses", vals)}
+              onChange={handleStatusesChange}
+            />
+          )}
+          {enableZaloLinkStatusFilter && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full`}
+              placeholder="Trạng thái liên kết"
+              value={filters.zaloLinkStatuses}
+              options={zaloLinkStatusOptions}
+              onChange={handleZaloLinkStatusesChange}
             />
           )}
           {enableSingleDateFilter && (
@@ -383,7 +492,7 @@ export default function PaginatedTable({
               placeholder="Danh mục"
               value={filters.categories}
               options={categoryOptions}
-              onChange={(vals) => updateFilter("categories", vals)}
+              onChange={handleCategoriesChange}
             />
           )}
           {availableBrands.length > 0 && (
@@ -392,7 +501,7 @@ export default function PaginatedTable({
               placeholder="Brand"
               value={filters.brands}
               options={brandOptions}
-              onChange={(vals) => updateFilter("brands", vals)}
+              onChange={handleBrandsChange}
             />
           )}
           {enableDateRangeFilter && (

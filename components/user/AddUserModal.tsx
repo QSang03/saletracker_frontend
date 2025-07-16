@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CreateUserDto, Department } from "@/types";
 import {
   Dialog,
@@ -17,38 +17,44 @@ interface AddUserModalProps {
   departments: Department[];
   onClose: () => void;
   onAddUser: (userData: CreateUserDto) => void;
+  onRestoreUser: (userId: number) => Promise<void>;
+  open: boolean;
 }
 
 export default function AddUserModal({
   departments,
   onClose,
   onAddUser,
+  onRestoreUser,
+  open,
 }: AddUserModalProps) {
   const [formData, setFormData] = useState<CreateUserDto>({
     username: "",
     fullName: "",
     nickName: "",
     email: "",
-    password: "",
     employeeCode: "",
     departmentIds: [],
   });
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [restoreUserId, setRestoreUserId] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Reset form khi đóng modal
+  // Reset form khi modal AddUserModal thực sự đóng (open chuyển từ true sang false)
+  const prevOpen = useRef<boolean>(open);
   useEffect(() => {
-    if (!showConfirm) {
+    if (prevOpen.current && !open) {
       setFormData({
         username: "",
         fullName: "",
         nickName: "",
         email: "",
-        password: "",
         employeeCode: "",
         departmentIds: [],
       });
     }
-  }, [onClose, showConfirm]);
+    prevOpen.current = open;
+  }, [open]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -66,9 +72,7 @@ export default function AddUserModal({
     e.preventDefault();
     if (
       !String(formData.username).trim() ||
-      !String(formData.password).trim() ||
-      !String(formData.fullName).trim() ||
-      !String(formData.email).trim()
+      !String(formData.fullName).trim()
     ) {
       alert("Vui lòng nhập đầy đủ thông tin bắt buộc!");
       return;
@@ -77,12 +81,51 @@ export default function AddUserModal({
   };
 
   const handleConfirm = () => {
-    onAddUser(formData);
-    setShowConfirm(false);
+    setShowRestoreDialog(false);
+    setRestoreUserId(null);
+    // Lọc bỏ các trường rỗng
+    const cleanData = Object.fromEntries(
+      Object.entries(formData).filter(
+        ([_, v]) => v !== "" && v !== undefined && !(Array.isArray(v) && v.length === 0)
+      )
+    ) as CreateUserDto;
+    Promise.resolve(onAddUser(cleanData))
+      .then(() => {
+        setShowConfirm(false);
+        setFormData({
+          username: "",
+          fullName: "",
+          nickName: "",
+          email: "",
+          employeeCode: "",
+          departmentIds: [],
+        });
+      })
+      .catch((err) => {
+        setShowConfirm(false); // Đóng modal xác nhận khi có lỗi
+        let msg = "Đã có lỗi xảy ra. Vui lòng thử lại!";
+        // Luôn kiểm tra code ở cả err và err.response.data
+        const code = err?.code || err?.response?.data?.code;
+        const userId = err?.userId || err?.response?.data?.userId || null;
+        if (code === "SOFT_DELETED_DUPLICATE" && userId) {
+          setRestoreUserId(userId);
+          setShowRestoreDialog(true);
+          msg = "";
+        } else {
+          const backendMsg = err?.response?.data?.message;
+          if (Array.isArray(backendMsg)) {
+            msg = backendMsg.join("; ");
+          } else if (typeof backendMsg === "string") {
+            msg = backendMsg;
+          } else if (err?.message) {
+            msg = err.message;
+          }
+        }
+      });
   };
 
   return (
-    <Dialog open onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent
         className="w-full max-w-full sm:max-w-md rounded-xl p-2 sm:p-6 shadow-xl animate-in fade-in-0 zoom-in-95"
         style={{ backgroundColor: "white" }}
@@ -100,9 +143,25 @@ export default function AddUserModal({
           className="mt-4 space-y-4"
           autoComplete="off"
         >
+          <ConfirmDialog
+            isOpen={showRestoreDialog}
+            title="Khôi phục người dùng đã xóa"
+            message="Tên đăng nhập đã tồn tại nhưng đã bị xóa mềm. Bạn có muốn khôi phục lại người dùng này không?"
+            onConfirm={async () => {
+              setShowRestoreDialog(false);
+              if (restoreUserId !== null && restoreUserId !== undefined) {
+                try {
+                  await onRestoreUser(restoreUserId);
+                  setRestoreUserId(null);
+                } catch (err: any) {
+                }
+              }
+            }}
+            onCancel={() => setShowRestoreDialog(false)}
+          />
           <div>
             <Label htmlFor="username" className="mb-1 block">
-              Tên đăng nhập
+              Tên đăng nhập <span className="text-red-500 ml-1 text-sm align-top">*</span>
             </Label>
             <Input
               id="username"
@@ -128,23 +187,8 @@ export default function AddUserModal({
             />
           </div>
           <div>
-            <Label htmlFor="password" className="mb-1 block">
-              Mật khẩu
-            </Label>
-            <Input
-              id="password"
-              type="password"
-              name="password"
-              autoComplete="new-password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              className="mt-1"
-            />
-          </div>
-          <div>
             <Label htmlFor="fullName" className="mb-1 block">
-              Họ và tên
+              Họ và tên <span className="text-red-500 ml-1 text-sm align-top">*</span>
             </Label>
             <Input
               id="fullName"
@@ -179,8 +223,8 @@ export default function AddUserModal({
               name="email"
               value={formData.email}
               onChange={handleChange}
-              required
               className="mt-1"
+              placeholder="Email (không bắt buộc)"
             />
           </div>
           <div>

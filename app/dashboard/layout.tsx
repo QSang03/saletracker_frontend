@@ -25,6 +25,7 @@ import { LoginSocket } from "@/components/auth/LoginSocket";
 import { CurrentUserContext } from "@/contexts/CurrentUserContext";
 import ZaloLinkStatusChecker from "@/components/common/ZaloLinkStatusChecker";
 import NotificationBell from "@/components/common/NotificationBell";
+import { ProfileModal } from "@/components/dashboard/ProfileModal";
 
 
 export default function DashboardLayout({
@@ -73,6 +74,30 @@ export default function DashboardLayout({
         email: loading ? "Đang tải..." : "Không xác định",
       };
 
+  // Modal đổi mật khẩu nếu đăng nhập bằng mật khẩu mặc định
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("requireChangePassword") === "true") {
+      setShowChangePasswordModal(true);
+    }
+  }, []);
+
+  const handleCloseChangePasswordModal = () => {
+    setShowChangePasswordModal(false);
+    localStorage.removeItem("requireChangePassword");
+  };
+
+  // Khi bấm "Đổi mật khẩu ngay" thì hiện modal đổi mật khẩu
+  const handleShowPasswordModal = () => {
+    setShowChangePasswordModal(false);
+    localStorage.removeItem("requireChangePassword");
+    // Đợi modal cảnh báo đóng xong mới mở modal đổi mật khẩu để tránh double overlay
+    setTimeout(() => {
+      setShowPasswordModal(true);
+    }, 100);
+  };
+
   return (
     <SidebarProvider>
       <CurrentUserContext.Provider value={{ currentUser, setCurrentUser }}>
@@ -117,6 +142,39 @@ export default function DashboardLayout({
             <div className="flex-1 overflow-hidden">
               {children}
             </div>
+            {/* Modal cảnh báo đổi mật khẩu mặc định */}
+            {showChangePasswordModal && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg p-6 w-full max-w-sm">
+                  <h2 className="text-lg font-bold mb-2 text-center">Bạn đang sử dụng mật khẩu mặc định</h2>
+                  <p className="mb-4 text-center text-sm text-gray-600 dark:text-gray-300">Vui lòng đổi mật khẩu để bảo vệ tài khoản của bạn.</p>
+                  <button
+                    className="w-full py-2 px-4 bg-gradient-to-r from-pink-500 to-indigo-500 text-white rounded-lg font-semibold hover:scale-[1.03] transition-all mb-2"
+                    onClick={handleShowPasswordModal}
+                  >Đổi mật khẩu ngay</button>
+                  <button
+                    className="w-full py-2 px-4 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg font-semibold hover:scale-[1.03] transition-all"
+                    onClick={handleCloseChangePasswordModal}
+                  >Để sau</button>
+                </div>
+              </div>
+            )}
+
+            {/* Modal đổi mật khẩu thực tế */}
+            {showPasswordModal && currentUser && (
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center">
+                <div className="w-full max-w-2xl">
+                  {/* ProfileModal chỉ hiện tab đổi mật khẩu */}
+                  <ProfileModal
+                    open={showPasswordModal}
+                    onOpenChange={setShowPasswordModal}
+                    userData={currentUser}
+                    onUserUpdate={(user) => setCurrentUser(user)}
+                    initialTab="password"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </SidebarInset>
         <ZaloLinkStatusChecker />

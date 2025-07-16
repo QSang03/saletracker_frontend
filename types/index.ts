@@ -18,7 +18,7 @@ export interface Department {
   id: number;
   name: string;
   slug: string;
-  server_url?: string;
+  server_ip?: string;
   users?: User[];
   createdAt?: Date | string;
   updatedAt?: Date | string;
@@ -87,7 +87,6 @@ export interface UpdatePermissionsDto {
 
 export interface CreateUserDto {
   username: string;
-  password: string;
   fullName?: string;
   nickName?: string;
   email?: string;
@@ -258,9 +257,6 @@ export interface DebtLog {
   second_remind_at?: string | Date;
   sale_msg?: string;
   debt_img?: string;
-  
-  // API Response structure - nested debt_logs array
-  debt_logs?: DebtLog[];
 }
 
 // DebtHistory Entity

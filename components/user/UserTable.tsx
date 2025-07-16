@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   Table,
   TableBody,
@@ -10,6 +11,8 @@ import {
 } from "@/components/ui/table";
 import { User } from "@/types";
 import { Button } from "@/components/ui/button";
+import { MoreVertical } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 
 interface UserTableProps {
@@ -25,9 +28,10 @@ interface UserTableProps {
   expectedRowCount?: number;
   showRestore?: boolean;
   onRestore?: (userId: number) => void;
+  onResetPassword?: (userId: number) => void;
 }
 
-export default function UserTable({
+export default React.memo(function UserTable({
   users,
   currentUserRole,
   onEdit,
@@ -38,6 +42,7 @@ export default function UserTable({
   onRequestBlockConfirm,
   showRestore,
   onRestore,
+  onResetPassword,
 }: UserTableProps) {
   const headers = [
     "Mã NV",
@@ -47,7 +52,7 @@ export default function UserTable({
     "Phòng ban",
     "Vai trò",
     "Trạng thái tài khoản",
-    "Trạng thái đăng nhập",
+    "Trạng thái hoạt động",
     "Ngày tạo",
     "Đăng nhập cuối",
     "Thao tác",
@@ -188,11 +193,11 @@ export default function UserTable({
                 <TableCell className={cellCenterClass}>
                   {user.status === "active" ? (
                     <span className="text-green-600 font-semibold">
-                      Đang hoạt động
+                      Online
                     </span>
                   ) : (
                     <span className="text-gray-500 font-semibold">
-                      Ngưng hoạt động
+                      Offline
                     </span>
                   )}
                 </TableCell>
@@ -233,43 +238,61 @@ export default function UserTable({
                     (currentUserRole === "ADMIN" ||
                       currentUserRole.startsWith("MANAGER")) && (
                       <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="edit"
-                          size="sm"
-                          onClick={() => onEdit(user)}
-                        >
-                          Sửa
-                        </Button>
-                        {currentUserRole === "ADMIN" && (
-                          <>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className="p-1"><MoreVertical size={18} /></Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-40 p-1">
                             <Button
-                              variant="delete"
+                              variant="ghost"
                               size="sm"
+                              className="w-full justify-start"
+                              onClick={() => onEdit(user)}
+                            >
+                              Sửa
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
                               onClick={() => onDelete(user.id)}
                             >
                               Xóa
                             </Button>
-                            <Switch
-                              checked={user.isBlock}
-                              onCheckedChange={(checked) => {
-                                if (
-                                  typeof onRequestBlockConfirm === "function"
-                                ) {
-                                  onRequestBlockConfirm(user, checked);
-                                } else {
-                                  onToggleBlock(user, checked);
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
+                              onClick={() => onResetPassword && onResetPassword(user.id)}
+                            >
+                              Reset pass
+                            </Button>
+                            <div className="flex items-center w-full px-2 py-1">
+                              <Switch
+                                checked={user.isBlock}
+                                onCheckedChange={(checked) => {
+                                  if (
+                                    typeof onRequestBlockConfirm === "function"
+                                  ) {
+                                    onRequestBlockConfirm(user, checked);
+                                  } else {
+                                    onToggleBlock(user, checked);
+                                  }
+                                }}
+                                className="mr-2"
+                                aria-label="Khóa tài khoản"
+                                title={
+                                  user.isBlock
+                                    ? "Mở khóa tài khoản"
+                                    : "Khóa tài khoản"
                                 }
-                              }}
-                              className="ml-2"
-                              aria-label="Khóa tài khoản"
-                              title={
-                                user.isBlock
-                                  ? "Mở khóa tài khoản"
-                                  : "Khóa tài khoản"
-                              }
-                            />
-                          </>
-                        )}
+                              />
+                              <span className="text-xs">
+                                {user.isBlock ? "Mở khóa" : "Khóa"}
+                              </span>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     )
                   )}
@@ -281,4 +304,4 @@ export default function UserTable({
       </Table>
     </div>
   );
-}
+});

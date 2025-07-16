@@ -169,6 +169,13 @@ const DebtStatisticsDashboard: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedDebts, setSelectedDebts] = useState<Debt[]>([]);
   const [loadingModalData, setLoadingModalData] = useState<boolean>(false);
+  
+  // Modal pagination states
+  const [modalCurrentPage, setModalCurrentPage] = useState<number>(1);
+  const [modalTotalCount, setModalTotalCount] = useState<number>(0);
+  const [modalTotalPages, setModalTotalPages] = useState<number>(0);
+  const [modalCurrentDate, setModalCurrentDate] = useState<string>("");
+  const [modalCurrentCategory, setModalCurrentCategory] = useState<string>("");
 
   // Thêm refs cho auto-refresh và component management
   const isComponentMounted = useRef(true);
@@ -244,7 +251,6 @@ const DebtStatisticsDashboard: React.FC = () => {
         ]);
 
         if (isComponentMounted.current) {
-          console.log('🔍 [Dashboard] Setting aging data:', agingRes);
           setOverview(overviewRes);
           setAgingData(agingRes);
           setTrendData(trendsRes);
@@ -346,7 +352,7 @@ const DebtStatisticsDashboard: React.FC = () => {
     ];
   }, [overview]);
 
-  // Fetch debts for modal - separate from main circuit breaker to avoid blocking
+  // Fetch ALL debts for modal with lazy loading - accurate statistics
   const fetchDebtsForModal = useCallback(async (category: string, dateFromChart?: string) => {
     
     if (!isComponentMounted.current) {
@@ -354,12 +360,6 @@ const DebtStatisticsDashboard: React.FC = () => {
     }
     setLoadingModalData(true);
     try {
-      // Don't use circuit breaker for modal - it should work independently
-      const modalFilters: DebtListFilters = {
-        ...debouncedFilters,
-        limit: 1000 // Get reasonable amount for modal
-      };
-
       // Default to today
       let targetDate = new Date();
 
@@ -395,23 +395,28 @@ const DebtStatisticsDashboard: React.FC = () => {
           }
           
           targetDate = chartDate;
-          
-          const dateStr = chartDate.toISOString().split('T')[0];
-          modalFilters.from = dateStr;
-          modalFilters.to = dateStr;
         } catch (error) {
           console.error('❌ Error parsing dateFromChart:', error);
         }
       }
       
-      // Use the smart logic to get data from appropriate source
-      const response = await getDetailedDebtsByDate(modalFilters, category, targetDate);
+      const modalFilters: DebtListFilters = {
+        ...debouncedFilters
+        // No limit - will fetch all data
+      };
+      
+      const dateStr = targetDate.toISOString().split('T')[0];
+      modalFilters.from = dateStr;
+      modalFilters.to = dateStr;
+      
+      // Fetch ALL data for accurate statistics
+      const response = await getAllDebtsByDate(modalFilters, category, targetDate);
       
       // Process the response data
       let filteredData: Debt[] = [];
+      
       if (response && response.data) {
         filteredData = response.data;
-        console.log('📊 [fetchDebtsForModal] Got data:', filteredData.length, 'items');
       } else {
         console.warn('⚠️ [fetchDebtsForModal] No data in response:', response);
       }
@@ -431,6 +436,133 @@ const DebtStatisticsDashboard: React.FC = () => {
     }
   }, [debouncedFilters]);
 
+  // Helper function to fetch ALL debts (for modal) - fetches all pages
+  const getAllDebtsByDate = async (
+    filters: DebtListFilters, 
+    category: string, 
+    targetDate: Date
+  ): Promise<DebtListResponse> => {
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+
+    const fetchAllPages = async (endpoint: string, baseParams: any): Promise<any[]> => {
+      
+      const params = {
+        ...baseParams,
+        page: 1,
+        limit: 100000, // Request large limit to get all data
+        all: 'true' // Flag to backend to return all data
+      };
+      const response = await api.get(endpoint, { params });
+      
+      let allData: any[] = [];
+      let total = 0;
+
+      // Handle different response structures
+      if (response.data) {
+        if (response.data.data && Array.isArray(response.data.data)) {
+          allData = response.data.data;
+          total = response.data.total || allData.length;
+        } else if (Array.isArray(response.data)) {
+          allData = response.data;
+          total = allData.length;
+        }
+      }
+      // If we didn't get all data in one request, fall back to pagination
+      if (allData.length < total && total > 0) {
+        allData = [];
+        let currentPage = 1;
+        const pageSize = 1000;
+        let hasMoreData = true;
+
+        while (hasMoreData) {
+          const paginatedParams = {
+            ...baseParams,
+            page: currentPage,
+            limit: pageSize
+          };
+          
+          const pageResponse = await api.get(endpoint, { params: paginatedParams });
+          
+          let pageData: any[] = [];
+
+          if (pageResponse.data) {
+            if (pageResponse.data.data && Array.isArray(pageResponse.data.data)) {
+              pageData = pageResponse.data.data;
+            } else if (Array.isArray(pageResponse.data)) {
+              pageData = pageResponse.data;
+            }
+          }
+
+          allData = [...allData, ...pageData];
+
+          // Check if we have more data to fetch
+          hasMoreData = pageData.length === pageSize && allData.length < total;
+          
+          if (hasMoreData) {
+            currentPage++;
+          }
+        }
+      }
+
+      return allData;
+    };
+
+    // Prepare base parameters
+    const baseParams: any = {
+      date: dateStr
+    };
+
+    // Map category to status filter
+    switch (category) {
+      case 'paid':
+        baseParams.status = 'paid';
+        break;
+      case 'promised':
+      case 'pay_later':
+        baseParams.status = 'pay_later';
+        break;
+      case 'no_info':
+      case 'no_information_available':
+        baseParams.status = 'no_information_available';
+        break;
+      default:
+        console.log('🔍 No specific status filter for category:', category);
+    }
+
+    let allData: any[] = [];
+    
+    if (dateStr === today) {
+      
+      const debtsParams: any = {
+        from: dateStr,
+        to: dateStr,
+        all: 'true' // Flag to get all data
+      };
+
+      if (baseParams.status) {
+        debtsParams.status = baseParams.status;
+      }
+
+      allData = await fetchAllPages('/debts', debtsParams);
+    } else {
+      allData = await fetchAllPages('/debt-statistics/detailed', baseParams);
+    }
+
+    return {
+      data: allData,
+      total: allData.length,
+      page: 1,
+      limit: allData.length,
+      totalPages: 1
+    };
+  };
+
+  // Handle modal pagination - simplified version
+  const handleModalPageChange = useCallback(async (newPage: number) => {
+  }, []);
+
+  // Reset modal pagination when opening modal
   const handleChartClick = useCallback((data: any, category: string) => {
     
     // Extract date from chart data - data could be from Bar or RadialBar
@@ -456,9 +588,14 @@ const DebtStatisticsDashboard: React.FC = () => {
       }
     }
     
+    // Reset modal pagination when opening modal
+    setModalCurrentPage(1);
+    setModalTotalCount(0);
+    setModalTotalPages(0);
+    
     setSelectedCategory(category);
     setModalOpen(true);
-    fetchDebtsForModal(category, dateFromChart);
+    fetchDebtsForModal(category, dateFromChart); // Reset and load data
   }, [fetchDebtsForModal]);
 
   const getCategoryDisplayName = useCallback((category: string): string => {
@@ -484,57 +621,142 @@ const DebtStatisticsDashboard: React.FC = () => {
     return date.toDateString() === today.toDateString();
   };
 
-  // Helper function to get detailed debts based on date
+  // Get statistics count only (without full data) - much faster
+  const getStatisticsCount = async (
+    category: string, 
+    targetDate: Date
+  ): Promise<number> => {
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+
+    const baseParams: any = {
+      date: dateStr,
+      page: 1,
+      limit: 1 // Only need count, not actual data
+    };
+
+    // Map category to status filter
+    switch (category) {
+      case 'paid':
+        baseParams.status = 'paid';
+        break;
+      case 'promised':
+      case 'pay_later':
+        baseParams.status = 'pay_later';
+        break;
+      case 'no_info':
+      case 'no_information_available':
+        baseParams.status = 'no_information_available';
+        break;
+      default:
+        console.log('🔍 No specific status filter for category:', category);
+    }
+
+    try {
+      let response;
+      
+      if (dateStr === today) {
+        // Current day - use debts endpoint
+        const debtsParams: any = {
+          from: dateStr,
+          to: dateStr,
+          page: 1,
+          pageSize: 1 // Only need count
+        };
+
+        if (baseParams.status) {
+          debtsParams.status = baseParams.status;
+        }
+
+        response = await api.get('/debts', { params: debtsParams });
+      } else {
+        // Past date - use debt-statistics endpoint
+        response = await api.get('/debt-statistics/detailed', { params: baseParams });
+      }
+
+      // Extract total count from response
+      if (response.data) {
+        if (response.data.total !== undefined) {
+          return response.data.total;
+        }
+        if (Array.isArray(response.data)) {
+          return response.data.length;
+        }
+        if (response.data.data && response.data.data.length !== undefined) {
+          return response.data.total || response.data.data.length;
+        }
+      }
+
+      return 0;
+    } catch (error) {
+      console.error('❌ Error getting statistics count:', error);
+      return 0;
+    }
+  };
+
+  // Helper function to get detailed debts with pagination (for modal display)
   const getDetailedDebtsByDate = async (
     filters: DebtListFilters, 
     category: string, 
     targetDate: Date
   ): Promise<DebtListResponse> => {
-    const isCurrentDay = isToday(targetDate);
     const dateStr = targetDate.toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    // Prepare base parameters
+    const baseParams: any = {
+      date: dateStr,
+      page: filters.page || 1,
+      limit: filters.limit || 50 // Reasonable page size for modal
+    };
 
-    if (isCurrentDay) {
-      
-      // Add date filter for current day
-      const currentDayFilters = {
-        ...filters,
-        date: dateStr // Ensure we filter by the specific date
-      };
-      
-      return await debtStatisticsAPI.getDetailedDebts(currentDayFilters);
-    } else {
-      
-      // Map frontend categories to backend parameters
-      const apiParams: any = {
-        date: dateStr,
-        page: filters.page || 1,
-        limit: filters.limit || 1000
-      };
+    // Map category to status filter
+    switch (category) {
+      case 'paid':
+        baseParams.status = 'paid';
+        break;
+      case 'promised':
+      case 'pay_later':
+        baseParams.status = 'pay_later';
+        break;
+      case 'no_info':
+      case 'no_information_available':
+        baseParams.status = 'no_information_available';
+        break;
+      default:
+        console.log('🔍 No specific status filter for cate gory:', category);
+    }
 
-      // Map category to appropriate API parameters
-      switch (category) {
-        case 'paid':
-          apiParams.status = 'paid';
-          break;
-        case 'promised':
-        case 'pay_later':
-          apiParams.status = 'pay_later';
-          break;
-        case 'no_info':
-          apiParams.status = 'no_information_available';
-          break;
-        default:
-          console.log('🔍 No specific filter for category:', category);
+    try {
+      let response;
+      
+      if (dateStr === today) {
+        
+        const debtsParams: any = {
+          from: dateStr,
+          to: dateStr,
+          page: baseParams.page,
+          pageSize: baseParams.limit
+        };
+
+        if (baseParams.status) {
+          debtsParams.status = baseParams.status;
+        }
+
+        response = await api.get('/debts', { params: debtsParams });
+      } else {
+        response = await api.get('/debt-statistics/detailed', { params: baseParams });
       }
-
-      const response = await api.get('/debt-statistics/detailed', {
-        params: apiParams
-      });
 
       // Handle different response structures
       if (response.data) {
         if (response.data.data && Array.isArray(response.data.data)) {
-          return response.data;
+          return {
+            data: response.data.data,
+            total: response.data.total || response.data.data.length,
+            page: response.data.page || baseParams.page,
+            limit: response.data.limit || baseParams.limit,
+            totalPages: response.data.totalPages || Math.ceil((response.data.total || response.data.data.length) / baseParams.limit)
+          };
         }
         if (Array.isArray(response.data)) {
           return {
@@ -550,8 +772,17 @@ const DebtStatisticsDashboard: React.FC = () => {
       return {
         data: [],
         total: 0,
-        page: 1,
-        limit: filters.limit || 1000,
+        page: baseParams.page,
+        limit: baseParams.limit,
+        totalPages: 0
+      };
+    } catch (error) {
+      console.error('❌ Error in getDetailedDebtsByDate:', error);
+      return {
+        data: [],
+        total: 0,
+        page: filters.page || 1,
+        limit: filters.limit || 50,
         totalPages: 0
       };
     }
@@ -611,16 +842,6 @@ const DebtStatisticsDashboard: React.FC = () => {
       </main>
     );
   }
-
-  // Debug: Log current state before rendering
-  console.log('🔍 [Dashboard] Current state:', {
-    loading,
-    agingDataLength: agingData?.length,
-    agingData: agingData,
-    overview,
-    trendDataLength: trendData?.length,
-    employeeDataLength: employeeData?.length
-  });
 
   return (
     <main className="flex flex-col gap-4 pt-0 pb-0">
@@ -746,6 +967,10 @@ const DebtStatisticsDashboard: React.FC = () => {
               setModalOpen(false);
               setSelectedDebts([]);
               setSelectedCategory("");
+              // Reset modal pagination states
+              setModalCurrentPage(1);
+              setModalTotalCount(0);
+              setModalTotalPages(0);
             }}
             category={getCategoryDisplayName(selectedCategory)}
             debts={selectedDebts}

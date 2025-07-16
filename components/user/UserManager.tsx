@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getAccessToken } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { User, Department, Role, CreateUserDto } from "@/types";
@@ -26,6 +26,30 @@ import { useApiState } from "@/hooks/useApiState";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
 export default function UserManager() {
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<number | null>(
+    null
+  );
+  const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
+  const handleResetPassword = async (userId: number) => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/users/${userId}/reset-password`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (!res.ok) throw new Error("Reset mật khẩu thất bại!");
+      setAlert({ type: "success", message: "Reset mật khẩu thành công!" });
+    } catch (err) {
+      setAlert({ type: "error", message: "Reset mật khẩu thất bại!" });
+    } finally {
+      setShowResetPasswordDialog(false);
+      setResetPasswordUserId(null);
+    }
+  };
   const { canExportInDepartment } = useDynamicPermission();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -65,46 +89,50 @@ export default function UserManager() {
 
   const router = useRouter();
 
-  const fetchUsers = useCallback(async (): Promise<{ data: User[]; total: number }> => {
+  const fetchUsers = useCallback(async (): Promise<{
+    data: User[];
+    total: number;
+  }> => {
     const token = getAccessToken();
     if (!token) {
       router.push("/login");
       throw new Error("No token available");
     }
-    
 
-    
     let query = `?page=${userPage}&limit=${userLimit}`;
     if (userFilters.search)
       query += `&search=${encodeURIComponent(userFilters.search)}`;
     if (userFilters.departments.length)
       query += `&departments=${userFilters.departments.join(",")}`;
-    if (userFilters.roles.length) query += `&roles=${userFilters.roles.join(",")}`;
+    if (userFilters.roles.length)
+      query += `&roles=${userFilters.roles.join(",")}`;
     if (userFilters.statuses.length)
       query += `&statuses=${userFilters.statuses.join(",")}`;
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users${query}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-    
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/users${query}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
     if (res.status === 401) {
       router.push("/login");
       throw new Error("Unauthorized");
     }
-    
+
     if (!res.ok) {
-      throw new Error('Failed to fetch users');
+      throw new Error("Failed to fetch users");
     }
 
     const result = await res.json();
 
-    
     return {
       data: result.data || [],
-      total: result.total || 0
+      total: result.total || 0,
     };
   }, [userPage, userFilters, userLimit, router]);
 
@@ -113,15 +141,14 @@ export default function UserManager() {
     isLoading,
     error,
     refetch,
-    forceUpdate
+    forceUpdate,
   } = useApiState(fetchUsers, { data: [], total: 0 });
 
   const users = usersData.data;
   const userTotal = usersData.total;
 
-  useEffect(() => {
-    forceUpdate();
-  }, [userPage, userFilters, forceUpdate]);
+  // Remove problematic useEffect that causes dropdown to close
+  // useApiState already handles re-fetching when dependencies change
 
   const handleUserLogin = useCallback(() => {
     forceUpdate();
@@ -255,13 +282,32 @@ export default function UserManager() {
         },
         body: JSON.stringify(userData),
       });
-      if (!res.ok) throw new Error("Thêm người dùng thất bại!");
+      if (!res.ok) {
+        let msg = "Thêm người dùng thất bại!";
+        let code = undefined;
+        let userId = undefined;
+        try {
+          const data = await res.json();
+          code = data?.code;
+          userId = data?.userId;
+          const backendMsg = data?.message;
+          if (Array.isArray(backendMsg)) msg = backendMsg.join("; ");
+          else if (typeof backendMsg === "string") msg = backendMsg;
+        } catch {}
+        setAlert({ type: "error", message: msg });
+        if (code) {
+          throw { code, userId, message: msg };
+        } else {
+          throw new Error(msg);
+        }
+      }
       setUserPage(1);
       setAlert({ type: "success", message: "Thêm người dùng thành công!" });
       forceUpdate();
-      setIsAddModalOpen(false);
+      // Không đóng modal ở đây nữa
     } catch (err) {
-      setAlert({ type: "error", message: "Thêm người dùng thất bại!" });
+      // Không setAlert ở đây nữa vì đã set ở trên nếu có lỗi
+      throw err;
     }
   };
 
@@ -395,6 +441,22 @@ export default function UserManager() {
     }
   };
 
+  // Memoized filter handlers to prevent dropdown closing
+  const handleFilterChange = useCallback((filters: any) => {
+    setUserFilters(filters);
+    setUserPage(1);
+  }, []);
+
+  const handleOnResetFilter = useCallback(() => {
+    setUserFilters({
+      search: "",
+      departments: [],
+      roles: [],
+      statuses: [],
+    });
+    setUserPage(1);
+  }, []);
+
   if (!currentUser) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -477,14 +539,19 @@ export default function UserManager() {
             enableRoleFilter
             enableDepartmentFilter
             enableStatusFilter
-            canExport={canExportInDepartment('nguoi-dung')}
+            canExport={canExportInDepartment("nguoi-dung")}
             availableRoles={availableRoles}
             availableDepartments={availableDepartments}
             availableStatuses={availableStatuses}
-            onFilterChange={(filters) => {
-              setUserFilters(filters);
-              setUserPage(1);
+            initialFilters={{
+              search: userFilters.search,
+              roles: userFilters.roles,
+              departments: userFilters.departments,
+              statuses: userFilters.statuses,
             }}
+            preserveFiltersOnEmpty={true}
+            onFilterChange={handleFilterChange}
+            onResetFilter={handleOnResetFilter}
           >
             <UserTable
               users={users}
@@ -506,6 +573,10 @@ export default function UserManager() {
               onRequestBlockConfirm={(user, checked) =>
                 setConfirmAction({ type: "block", user, checked })
               }
+              onResetPassword={(userId: number) => {
+                setResetPasswordUserId(userId);
+                setShowResetPasswordDialog(true);
+              }}
             />
           </PaginatedTable>
         </CardContent>
@@ -513,9 +584,11 @@ export default function UserManager() {
         {/* Modal thêm user */}
         {isAddModalOpen && (
           <AddUserModal
+            open={isAddModalOpen}
             departments={departments}
             onClose={() => setIsAddModalOpen(false)}
             onAddUser={handleAddUser}
+            onRestoreUser={handleRestoreUser}
           />
         )}
 
@@ -566,6 +639,19 @@ export default function UserManager() {
           onCancel={() => setConfirmAction({ type: null })}
         />
 
+        <ConfirmDialog
+          isOpen={showResetPasswordDialog}
+          title="Xác nhận reset mật khẩu"
+          message="Bạn có chắc chắn muốn reset mật khẩu về mặc định cho người dùng này?"
+          onConfirm={() =>
+            resetPasswordUserId && handleResetPassword(resetPasswordUserId)
+          }
+          onCancel={() => {
+            setShowResetPasswordDialog(false);
+            setResetPasswordUserId(null);
+          }}
+        />
+
         {/* Modal tài khoản đã xóa với PaginatedTable */}
         {showDeletedModal && (
           <Dialog open={showDeletedModal} onOpenChange={setShowDeletedModal}>
@@ -593,7 +679,8 @@ export default function UserManager() {
                   pageSize={deletedLimit}
                   onPageChange={setDeletedPage}
                   emptyText="Không có tài khoản nào bị xóa."
-                  canExport={canExportInDepartment('nguoi-dung')}
+                  canExport={canExportInDepartment("nguoi-dung")}
+                  preserveFiltersOnEmpty={true}
                 >
                   <UserTable
                     users={deletedUsers}

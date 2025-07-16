@@ -20,7 +20,7 @@ interface MultiSelectComboboxProps {
   className?: string; // ✅ Cho phép truyền className từ bên ngoài
 }
 
-export function MultiSelectCombobox({
+export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
   options,
   value,
   onChange,
@@ -28,6 +28,7 @@ export function MultiSelectCombobox({
   className = "", // ✅ Mặc định rỗng
 }: MultiSelectComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const comboboxRef = React.useRef<HTMLDivElement>(null);
 
   const handleSelect = (val: string | number) => {
     if (value.includes(val)) {
@@ -37,8 +38,25 @@ export function MultiSelectCombobox({
     }
   };
 
+  // Đóng combobox khi click outside
+  React.useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        comboboxRef.current &&
+        !comboboxRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
+
   return (
-    <div className={`relative ${className}`}>
+    <div ref={comboboxRef} className={`relative ${className}`}>
       <Button
         type="button"
         variant="outline"
@@ -102,4 +120,4 @@ export function MultiSelectCombobox({
       )}
     </div>
   );
-}
+});

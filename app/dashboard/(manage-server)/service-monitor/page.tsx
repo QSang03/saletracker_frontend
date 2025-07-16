@@ -51,8 +51,10 @@ export default function ServiceMonitorPage() {
   const [loadingLogs, setLoadingLogs] = useState<Record<string, boolean>>({});
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const [componentKey, setComponentKey] = useState(Date.now());
 
   useEffect(() => {
+    console.log("WS_URL:", WS_URL);
     const socket = io(WS_URL, {
       transports: ["websocket"],
       reconnection: true,
@@ -64,6 +66,14 @@ export default function ServiceMonitorPage() {
     setConnecting(true);
 
     socket.on("connect", () => {
+      setConnecting(false);
+      setConnected(true);
+      setLastUpdate(new Date());
+      socket.emit("get_status");
+    });
+
+    // Lắng nghe event 'connected' từ backend nếu có
+    socket.on("connected", (data) => {
       setConnecting(false);
       setConnected(true);
       setLastUpdate(new Date());
@@ -126,6 +136,10 @@ export default function ServiceMonitorPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setComponentKey(Date.now());
+  }, []);
+
   const handleStart = (category: string) => {
     socketRef.current?.emit("start_service", { category });
     // Auto-fetch logs after starting service
@@ -159,7 +173,7 @@ export default function ServiceMonitorPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div key={componentKey} className="flex flex-col gap-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">

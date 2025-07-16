@@ -7,6 +7,7 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import DebtManagement from "../../../../components/debt/manager-debt/DebtManagement";
 import ImportPayDateModal from "../../../../components/debt/manager-debt/ImportPayDateModal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { getAccessToken } from "@/lib/auth";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useApiState } from "@/hooks/useApiState";
@@ -32,6 +33,8 @@ interface DebtFilters {
 export default function ManagerDebtPage() {
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [showImportPayDate, setShowImportPayDate] = useState(false);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const { 
     canReadDepartment, 
@@ -359,6 +362,39 @@ export default function ManagerDebtPage() {
     }
   };
 
+  // Handle delete all debts for today
+  const handleDeleteAllTodayDebts = async () => {
+    const token = getAccessToken();
+    if (!token) return;
+
+    setIsDeletingAll(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/debts/bulk/today`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const result = await res.json();
+      
+      if (res.ok) {
+        setAlert({ type: "success", message: result.message || `Đã xóa ${result.deleted || 0} phiếu công nợ!` });
+        forceUpdate(); // Refresh data
+        refreshStats(); // Refresh stats
+        setShowDeleteAllConfirm(false);
+      } else {
+        setAlert({ type: "error", message: result.message || "Xóa công nợ thất bại!" });
+      }
+    } catch (error) {
+      console.error('Delete all debts error:', error);
+      setAlert({ type: "error", message: "Lỗi khi xóa tất cả công nợ!" });
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   // Get export data - proper format
   const getExportData = () => {
     const data = debts.map((debt: any, index: number) => [
@@ -457,6 +493,17 @@ export default function ManagerDebtPage() {
                   + Nhập ngày hẹn thanh toán
                 </Button>
               </PDynamic>
+              
+              <PDynamic permission={{ departmentSlug: 'cong-no', action: 'delete' }}>
+                <Button 
+                  variant="delete" 
+                  onClick={() => setShowDeleteAllConfirm(true)}
+                  disabled={isDeletingAll}
+                >
+                  {isDeletingAll ? "Đang xóa..." : "🗑️ Xóa tất cả hôm nay"}
+                </Button>
+              </PDynamic>
+              
               <Button
                 onClick={() => {
                   forceUpdate();
@@ -585,6 +632,17 @@ export default function ManagerDebtPage() {
               setAlert({ type: 'error', message: 'Lỗi khi cập nhật ngày hẹn!' });
             }
           }}
+        />
+
+        {/* Confirm dialog cho xóa tất cả */}
+        <ConfirmDialog
+          isOpen={showDeleteAllConfirm}
+          title="⚠️ Xác nhận xóa tất cả công nợ"
+          message={`Bạn có chắc chắn muốn xóa TẤT CẢ phiếu công nợ có ngày cập nhật hôm nay (${new Date().toLocaleDateString('vi-VN')})?
+
+Thao tác này không thể hoàn tác!`}
+          onConfirm={handleDeleteAllTodayDebts}
+          onCancel={() => setShowDeleteAllConfirm(false)}
         />
       </div>
     </div>
