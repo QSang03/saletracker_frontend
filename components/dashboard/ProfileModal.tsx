@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Eye, EyeOff, User, Mail, KeyRound, Badge } from "lucide-react";
+import { Eye, EyeOff, User as UserIcon, Mail, KeyRound, Badge } from "lucide-react";
 import { toast } from "sonner";
 import { getAccessToken } from "@/lib/auth";
 import type { User } from "@/types";
@@ -241,7 +241,7 @@ export function ProfileModal({
                     : "text-gray-600 hover:text-gray-800"
                 }`}
               >
-                <User size={18} />
+                <UserIcon size={18} />
                 Thông tin cá nhân
               </button>
               <button
@@ -287,7 +287,7 @@ export function ProfileModal({
                         htmlFor="nickName"
                         className="flex items-center gap-2 font-medium"
                       >
-                        <User size={16} className="text-gray-500" />
+                        <UserIcon size={16} className="text-gray-500" />
                         Biệt danh
                       </Label>
                       <Input

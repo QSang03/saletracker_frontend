@@ -27,6 +27,7 @@ export default function DebtSettingsPage() {
     dateRange: { from: undefined, to: undefined },
     singleDate: undefined,
     employees: [],
+    zaloLinkStatuses: [],
   });
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showAddManualModal, setShowAddManualModal] = useState(false);
@@ -183,6 +184,7 @@ export default function DebtSettingsPage() {
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
       employees: [],
+      zaloLinkStatuses: [],
     };
     setFilters(resetFilters);
     setPage(1);
@@ -510,14 +512,12 @@ export default function DebtSettingsPage() {
       <DebtConfigModal
         open={showConfigModal}
         onClose={() => setShowConfigModal(false)}
-        onSave={(success: boolean) => {
+        onSaved={(result: { success: boolean; message: string }) => {
           setAlert({
-            type: success ? "success" : "error",
-            message: success
-              ? "Lưu cấu hình thành công!"
-              : "Lưu cấu hình thất bại!",
+            type: result.success ? "success" : "error",
+            message: result.message,
           });
-          if (success) {
+          if (result.success) {
             setShowConfigModal(false);
             forceUpdate();
           }

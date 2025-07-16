@@ -105,7 +105,7 @@ export default function ConfigSystemMainPanel({ allConfigs, onConfirm, onSaved }
               {SECTION_TITLES[section] || section}
             </motion.h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {configs.filter((config: any) => config.type === "number").map((config: any) => (
+              {Array.isArray(configs) && configs.filter((config: any) => config.type === "number").map((config: any) => (
                 <div
                   key={config.name}
                   className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 bg-white rounded-lg shadow-sm border p-4"
