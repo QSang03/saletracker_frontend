@@ -29,6 +29,7 @@ interface ServerResponseAlertProps {
   message: string;
   className?: string;
   onClose?: () => void;
+  duration?: number;
 }
 
 const iconMap = {
@@ -92,6 +93,7 @@ export function ServerResponseAlert({
   message,
   className,
   onClose,
+  duration = 3000,
 }: ServerResponseAlertProps) {
   const [visible, setVisible] = useState(true);
 
@@ -100,7 +102,7 @@ export function ServerResponseAlert({
       const timeout = setTimeout(() => {
         setVisible(false);
         onClose?.();
-      }, 3000);
+      }, duration);
       return () => clearTimeout(timeout);
     }
   }, [type, onClose]);

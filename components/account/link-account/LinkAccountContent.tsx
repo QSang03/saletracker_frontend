@@ -25,7 +25,7 @@ export default function LinkAccountContent({
 }) {
   const { currentUser, setCurrentUser } = useCurrentUser();
   const [alerts, setAlerts] = useState<
-    Array<{ type: AlertType; message: string }>
+    Array<{ type: AlertType; message: string; duration?: number }>
   >([]);
   const [qrData, setQrData] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -94,7 +94,7 @@ export default function LinkAccountContent({
     }
   };
 
-  const addAlert = (alert: { type: AlertType; message: string }) => {
+  const addAlert = (alert: { type: AlertType; message: string; duration?: number }) => {
     setAlerts((prev) => [...prev, alert]);
   };
 
@@ -242,11 +242,11 @@ export default function LinkAccountContent({
               stopAllConnections();
               break;
             case 'QR_SCANNED':
-              setAlerts([{ type: 'info', message: `Đã quét mã QR${msg.data?.displayName ? ' bởi ' + msg.data.displayName : ''}. Đang xác thực thông tin, vui lòng chờ trong giây lát...` }]);
+              // Không ghi đè alert, chỉ set loading
               setLoading(true);
               break;
             case 'PROCESSING':
-              setAlerts([{ type: 'info', message: 'Đang xử lý liên kết tài khoản Zalo...' }]);
+              setAlerts([{ type: 'info', message: 'Đang xử lý liên kết tài khoản Zalo...', duration: 60000 }]);
               setLoading(true);
               break;
             case 'QR_AVAILABLE':
@@ -273,7 +273,11 @@ export default function LinkAccountContent({
               setAlerts([{ type: 'info', message: 'Trạng thái hệ thống: ' + msg.message }]);
           }
         } else if (msg.type === "login_processing") {
-          setAlerts([{ type: "info", message: "Hệ thống đang tiến hành liên kết tài khoản Zalo của bạn. Vui lòng chờ trong giây lát và không đóng trang này." }]);
+          // Không ghi đè alert nếu đã có alert "Đang xử lý liên kết"
+          const hasProcessingAlert = alerts.some(a => a.message.includes('Đang xử lý liên kết tài khoản Zalo'));
+          if (!hasProcessingAlert) {
+            setAlerts([{ type: "info", message: "Đang xử lý liên kết tài khoản Zalo..." }]);
+          }
           setLoading(true);
         } else if (msg.type === "login_complete") {
           setAlerts([{ type: "success", message: "Liên kết tài khoản Zalo thành công! Chào mừng bạn đến với hệ sinh thái tự động hóa của chúng tôi." }]);
@@ -467,6 +471,7 @@ export default function LinkAccountContent({
                   key={idx}
                   type={alert.type}
                   message={alert.message}
+                  duration={alert.duration}
                   onClose={() =>
                     setAlerts((prev) => prev.filter((_, i) => i !== idx))
                   }

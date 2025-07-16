@@ -31,17 +31,19 @@ export default function DebtSettingsPage() {
   });
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showAddManualModal, setShowAddManualModal] = useState(false);
-  const [alert, setAlert] = useState<{ type: any; message: string } | null>(null);
+  const [alert, setAlert] = useState<{ type: any; message: string } | null>(
+    null
+  );
   const [importing, setImporting] = useState(false);
 
   // Check permissions for debt configuration access
-  const { 
-    canReadDepartment, 
-    canCreateInDepartment, 
+  const {
+    canReadDepartment,
+    canCreateInDepartment,
     canImportInDepartment,
     canExportInDepartment,
     getPermissionsByDepartment,
-    user 
+    user,
   } = useDynamicPermission();
 
   // Fetch function for debt configs
@@ -110,7 +112,7 @@ export default function DebtSettingsPage() {
   // Filter data locally when filters are applied
   const filteredData = useMemo(() => {
     // Check if filter is empty inline to avoid dependency issues
-    const isFilterEmpty = (
+    const isFilterEmpty =
       (!filters.search || filters.search.trim() === "") &&
       (!filters.employees || filters.employees.length === 0) &&
       !filters.singleDate &&
@@ -119,8 +121,8 @@ export default function DebtSettingsPage() {
       (!filters.statuses || filters.statuses.length === 0) &&
       (!filters.categories || filters.categories.length === 0) &&
       (!filters.brands || filters.brands.length === 0) &&
-      (!filters.dateRange || (!filters.dateRange.from && !filters.dateRange.to))
-    );
+      (!filters.dateRange ||
+        (!filters.dateRange.from && !filters.dateRange.to));
 
     if (isFilterEmpty) {
       return apiData;
@@ -164,13 +166,10 @@ export default function DebtSettingsPage() {
   }, [filteredData, page, pageSize]);
 
   // Callback filter
-  const handleFilterChange = useCallback(
-    (f: Filters) => {
-      setFilters(f);
-      setPage(1);
-    },
-    []
-  );
+  const handleFilterChange = useCallback((f: Filters) => {
+    setFilters(f);
+    setPage(1);
+  }, []);
 
   // Hàm reset filter
   const handleResetFilter = useCallback(() => {
@@ -297,7 +296,10 @@ export default function DebtSettingsPage() {
           });
           forceUpdate(); // Refresh data
         } else {
-          setAlert({ type: "error", message: result.message || "Import thất bại!" });
+          setAlert({
+            type: "error",
+            message: result.message || "Import thất bại!",
+          });
         }
       } catch (error) {
         setAlert({ type: "error", message: "Lỗi khi import file!" });
@@ -350,7 +352,7 @@ export default function DebtSettingsPage() {
   }, [error]);
 
   // Check if user has read access to debt department
-  const canAccessDebtConfig = canReadDepartment('cong-no');
+  const canAccessDebtConfig = canReadDepartment("cong-no");
 
   // Loading state for permissions
   if (!user) {
@@ -367,8 +369,12 @@ export default function DebtSettingsPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
         <div className="text-6xl">🚫</div>
-        <div className="text-xl font-semibold text-red-600">Không có quyền truy cập</div>
-        <div className="text-gray-600">Bạn không có quyền xem cấu hình công nợ</div>
+        <div className="text-xl font-semibold text-red-600">
+          Không có quyền truy cập
+        </div>
+        <div className="text-gray-600">
+          Bạn không có quyền xem cấu hình công nợ
+        </div>
       </div>
     );
   }
@@ -390,14 +396,16 @@ export default function DebtSettingsPage() {
             ⚙️ Cấu hình công nợ
           </CardTitle>
           <div className="flex gap-2">
-            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'export' }}>
+            <PDynamic
+              permission={{ departmentSlug: "cong-no", action: "export" }}
+            >
               <Button
                 variant="export"
                 type="button"
                 onClick={() => {
-                  const link = document.createElement('a');
-                  link.href = '/file_mau_cau_hinh_cong_no.xlsx';
-                  link.download = 'file_mau_cau_hinh_cong_no.xlsx';
+                  const link = document.createElement("a");
+                  link.href = "/file_mau_cau_hinh_cong_no.xlsx";
+                  link.download = "file_mau_cau_hinh_cong_no.xlsx";
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
@@ -407,8 +415,10 @@ export default function DebtSettingsPage() {
                 📁 Tải file mẫu Excel
               </Button>
             </PDynamic>
-            
-            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'import' }}>
+
+            <PDynamic
+              permission={{ departmentSlug: "cong-no", action: "import" }}
+            >
               <form id="excel-upload-form" style={{ display: "inline" }}>
                 <input
                   type="file"
@@ -437,19 +447,26 @@ export default function DebtSettingsPage() {
                 </Button>
               </form>
             </PDynamic>
-            
-            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'create' }}>
+
+            <PDynamic
+              permission={{ departmentSlug: "cong-no", action: "create" }}
+            >
               <Button variant="add" onClick={() => setShowConfigModal(true)}>
                 + Thêm cấu hình
               </Button>
             </PDynamic>
-            
-            <PDynamic permission={{ departmentSlug: 'cong-no', action: 'create' }}>
-              <Button variant="gradient" onClick={() => setShowAddManualModal(true)}>
+
+            <PDynamic
+              permission={{ departmentSlug: "cong-no", action: "create" }}
+            >
+              <Button
+                variant="gradient"
+                onClick={() => setShowAddManualModal(true)}
+              >
                 + Thêm thủ công
               </Button>
             </PDynamic>
-            
+
             <Button
               onClick={() => forceUpdate()}
               variant="outline"
@@ -485,7 +502,7 @@ export default function DebtSettingsPage() {
             onFilterChange={handleFilterChange}
             onResetFilter={handleResetFilter}
             getExportData={handleExportExcel}
-            canExport={canExportInDepartment('cong-no')}
+            canExport={canExportInDepartment("cong-no")}
             pageSizeOptions={[5, 10, 20, 50]}
           >
             <DebtSettingManagement
@@ -527,15 +544,18 @@ export default function DebtSettingsPage() {
       <AddManualDebtModal
         open={showAddManualModal}
         onClose={() => setShowAddManualModal(false)}
-        onSave={(success: boolean) => {
+        onSave={(success: boolean, errorMessage?: string) => {
           setAlert({
             type: success ? "success" : "error",
-            message: success ? "Thêm thành công!" : "Thêm thất bại!",
+            message: success
+              ? "Thêm thành công!"
+              : errorMessage || "Thêm thất bại!",
           });
           if (success) {
             setShowAddManualModal(false);
             forceUpdate();
           }
+          // Nếu lỗi thì chỉ hiện alert, KHÔNG đóng modal
         }}
       />
     </div>
