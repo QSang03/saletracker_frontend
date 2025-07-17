@@ -152,7 +152,7 @@ export default function DashboardLayout({
                     token={getAccessToken()!}
                     passwordDefault={process.env.NEXT_PUBLIC_PASSWORD_DEFAULT || "default_password"}
                     onSuccess={() => {
-                      setShowChangePasswordModal(false);
+                      handleCloseChangePasswordModal();
                       setShowPasswordModal(false);
                       toast.success("Đổi mật khẩu thành công!");
                     }}
