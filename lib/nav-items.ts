@@ -22,7 +22,7 @@ export const navItems = [
     items: [
       { title: "Quản lý công nợ", url: "/dashboard/manager-debt", roles: ["admin", "manager-cong-no", "user-cong-no"] },
       { title: "Công nợ đã xóa", url: "/dashboard/debt-trashed", roles: ["admin", "manager-cong-no", "user-cong-no"] },
-      { title: "Cấu hình công nợ", url: "/dashboard/debt-settings", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Cấu hình nhắc nợ", url: "/dashboard/debt-settings", roles: ["admin", "manager-cong-no", "user-cong-no"] },
     ],
   },
   {
