@@ -93,6 +93,7 @@ export default function EditUserModal({
         id: user.id,
         fullName: formData.fullName,
         nickName: formData.nickName,
+        email: formData.email,
         employeeCode: formData.employeeCode,
       };
     } else {
@@ -181,10 +182,6 @@ export default function EditUserModal({
                   className="mt-1"
                 />
               </div>
-            </>
-          )}
-          {currentUserRole === "ADMIN" && (
-            <>
               <div>
                 <Label htmlFor="email" className="mb-1 block">
                   Email
@@ -199,6 +196,10 @@ export default function EditUserModal({
                   className="mt-1"
                 />
               </div>
+            </>
+          )}
+          {currentUserRole === "ADMIN" && (
+            <>
               <div>
                 <Label className="mb-1 block">Phòng ban</Label>
                 <MultiSelectCombobox
