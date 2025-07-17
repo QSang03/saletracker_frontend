@@ -494,6 +494,7 @@ export default function DebtSettingsPage() {
               onDelete={handleDelete}
               onEdit={handleEditWrapper}
               onRefresh={() => forceUpdate()}
+              onShowAlert={setAlert}
             />
           </PaginatedTable>
 

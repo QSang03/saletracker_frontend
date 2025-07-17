@@ -105,12 +105,15 @@ export default function EditDebtConfigModal({
 				if (onShowAlert) onShowAlert({ type: 'success', message: 'Cập nhật cấu hình công nợ thành công!' });
 				else setAlert({ type: 'success', message: 'Cập nhật cấu hình công nợ thành công!' });
 				if (onSave) onSave(true);
+				onClose(); // Đóng modal sau khi cập nhật thành công
 			} else {
+				const errorText = await res.text();
 				if (onShowAlert) onShowAlert({ type: 'error', message: 'Cập nhật cấu hình công nợ thất bại!' });
 				else setAlert({ type: 'error', message: 'Cập nhật cấu hình công nợ thất bại!' });
 				if (onSave) onSave(false);
 			}
-		} catch {
+		} catch (error) {
+			console.error("EditDebtConfigModal - Exception:", error);
 			if (onShowAlert) onShowAlert({ type: 'error', message: 'Cập nhật cấu hình công nợ thất bại!' });
 			else setAlert({ type: 'error', message: 'Cập nhật cấu hình công nợ thất bại!' });
 			if (onSave) onSave(false);

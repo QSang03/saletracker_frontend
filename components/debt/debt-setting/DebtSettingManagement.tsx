@@ -136,6 +136,8 @@ export default function DebtSettingManagement({
   }>({ open: false, debtConfigId: null });
 
   // Debug useEffect để theo dõi state changes
+  React.useEffect(() => {
+  }, [editModal]);
 
   // Utility function để format date an toàn
   const formatUpdateInfo = (actor: any, lastUpdateAt: any) => {
