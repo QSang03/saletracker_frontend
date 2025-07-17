@@ -48,6 +48,7 @@ export default React.memo(function UserTable({
     "Mã NV",
     "Tên đăng nhập",
     "Tên đầy đủ",
+    "Tên hiển thị",
     "Email",
     "Phòng ban",
     "Vai trò",
@@ -61,7 +62,7 @@ export default React.memo(function UserTable({
   const centerIndexes = [6, 7, 8, 9];
 
   const cellClass =
-    "overflow-hidden text-ellipsis whitespace-nowrap max-w-[160px] px-3 py-2";
+    "overflow-hidden px-3 py-2";
   const cellCenterClass = "text-center " + cellClass;
   const cellLeftClass = "text-left " + cellClass;
 
@@ -132,7 +133,7 @@ export default React.memo(function UserTable({
                 >
                   {user.employeeCode
                     ? user.employeeCode.length > 16
-                      ? user.employeeCode.slice(0, 15) + "…"
+                      ? user.employeeCode
                       : user.employeeCode
                     : "-"}
                 </TableCell>
@@ -148,14 +149,24 @@ export default React.memo(function UserTable({
                 >
                   {user.fullName
                     ? user.fullName.length > 16
-                      ? user.fullName.slice(0, 15) + "…"
+                      ? user.fullName
                       : user.fullName
+                    : "-"}
+                </TableCell>
+                <TableCell
+                  className={cellLeftClass}
+                  title={user.nickName || "-"}
+                >
+                  {user.nickName
+                    ? user.nickName.length > 16
+                      ? user.nickName
+                      : user.nickName
                     : "-"}
                 </TableCell>
                 <TableCell className={cellLeftClass} title={user.email || "-"}>
                   {user.email
                     ? user.email.length > 16
-                      ? user.email.slice(0, 15) + "…"
+                      ? user.email
                       : user.email
                     : "-"}
                 </TableCell>
@@ -167,7 +178,6 @@ export default React.memo(function UserTable({
                     ? user.departments
                         ?.map((d) => d.name)
                         .join(", ")
-                        .slice(0, 23) + "…"
                     : user.departments?.map((d) => d.name).join(", ")}
                 </TableCell>
                 <TableCell
@@ -178,7 +188,6 @@ export default React.memo(function UserTable({
                     ? user.roles
                         ?.map((r) => r.name)
                         .join(", ")
-                        .slice(0, 23) + "…"
                     : user.roles?.map((r) => r.name).join(", ")}
                 </TableCell>
                 <TableCell className={cellCenterClass}>
