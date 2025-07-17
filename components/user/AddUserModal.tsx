@@ -36,6 +36,7 @@ export default function AddUserModal({
     employeeCode: "",
     departmentIds: [],
   });
+  const [usernameError, setUsernameError] = useState<string>("");
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [restoreUserId, setRestoreUserId] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -58,6 +59,15 @@ export default function AddUserModal({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    if (name === "username") {
+      // Chỉ cho phép a-z, A-Z, 0-9, _
+      const regex = /^[a-zA-Z0-9_]+$/;
+      if (!regex.test(value)) {
+        setUsernameError("Tên đăng nhập chỉ được chứa chữ cái không dấu, số, và dấu gạch dưới, không có dấu cách hoặc ký tự đặc biệt.");
+      } else {
+        setUsernameError("");
+      }
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -70,11 +80,14 @@ export default function AddUserModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      !String(formData.username).trim() ||
-      !String(formData.fullName).trim()
-    ) {
+    if (!String(formData.username).trim() || !String(formData.fullName).trim()) {
       alert("Vui lòng nhập đầy đủ thông tin bắt buộc!");
+      return;
+    }
+    // Kiểm tra username hợp lệ
+    const regex = /^[a-zA-Z0-9_]+$/;
+    if (!regex.test(formData.username)) {
+      setUsernameError("Tên đăng nhập chỉ được chứa chữ cái không dấu, số, và dấu gạch dưới, không có dấu cách hoặc ký tự đặc biệt.");
       return;
     }
     setShowConfirm(true);
@@ -170,8 +183,11 @@ export default function AddUserModal({
               value={formData.username}
               onChange={handleChange}
               required
-              className="mt-1"
+              className={`mt-1 ${usernameError ? "border-red-500" : ""}`}
             />
+            {usernameError && (
+              <span className="text-red-500 text-xs mt-1 block">{usernameError}</span>
+            )}
           </div>
           <div>
             <Label htmlFor="employeeCode" className="mb-1 block">

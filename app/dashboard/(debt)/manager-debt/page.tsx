@@ -624,7 +624,7 @@ export default function ManagerDebtPage() {
                 forceUpdate(); // Refresh data
                 refreshStats(); // Refresh stats
               } else if (res.ok && result.updated === 0) {
-                setAlert({ type: 'error', message: 'Không có khách hàng nào được cập nhật (có thể là loại fixed)!' });
+                setAlert({ type: 'error', message: 'Không có khách hàng nào được cập nhật (có thể là loại fixed hoặc chưa có phiếu nợ)!' });
               } else {
                 setAlert({ type: 'error', message: result?.message || 'Cập nhật thất bại!' });
               }

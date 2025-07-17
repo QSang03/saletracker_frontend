@@ -148,7 +148,6 @@ export default function EditUserModal({
               name="employeeCode"
               value={formData.employeeCode}
               onChange={handleChange}
-              required
               disabled={isSubmitting}
               className="mt-1"
             />
@@ -196,7 +195,6 @@ export default function EditUserModal({
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  required
                   disabled={isSubmitting}
                   className="mt-1"
                 />

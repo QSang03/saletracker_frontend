@@ -26,6 +26,7 @@ import { CurrentUserContext } from "@/contexts/CurrentUserContext";
 import ZaloLinkStatusChecker from "@/components/common/ZaloLinkStatusChecker";
 import NotificationBell from "@/components/common/NotificationBell";
 import { ProfileModal } from "@/components/dashboard/ProfileModal";
+import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
 
 
 export default function DashboardLayout({
@@ -142,39 +143,25 @@ export default function DashboardLayout({
             <div className="flex-1 overflow-hidden">
               {children}
             </div>
-            {/* Modal cảnh báo đổi mật khẩu mặc định */}
-            {showChangePasswordModal && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
-                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg p-6 w-full max-w-sm">
-                  <h2 className="text-lg font-bold mb-2 text-center">Bạn đang sử dụng mật khẩu mặc định</h2>
-                  <p className="mb-4 text-center text-sm text-gray-600 dark:text-gray-300">Vui lòng đổi mật khẩu để bảo vệ tài khoản của bạn.</p>
-                  <button
-                    className="w-full py-2 px-4 bg-gradient-to-r from-pink-500 to-indigo-500 text-white rounded-lg font-semibold hover:scale-[1.03] transition-all mb-2"
-                    onClick={handleShowPasswordModal}
-                  >Đổi mật khẩu ngay</button>
-                  <button
-                    className="w-full py-2 px-4 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg font-semibold hover:scale-[1.03] transition-all"
-                    onClick={handleCloseChangePasswordModal}
-                  >Để sau</button>
-                </div>
-              </div>
-            )}
-
-            {/* Modal đổi mật khẩu thực tế */}
-            {showPasswordModal && currentUser && (
-              <div className="fixed inset-0 z-[10000] flex items-center justify-center">
-                <div className="w-full max-w-2xl">
-                  {/* ProfileModal chỉ hiện tab đổi mật khẩu */}
-                  <ProfileModal
-                    open={showPasswordModal}
-                    onOpenChange={setShowPasswordModal}
-                    userData={currentUser}
-                    onUserUpdate={(user) => setCurrentUser(user)}
-                    initialTab="password"
+            {/* Modal cảnh báo đổi mật khẩu mặc định - luôn hiển thị modal đổi mật khẩu, không cho tắt */}
+            {(showChangePasswordModal || (showPasswordModal && currentUser)) && currentUser && (
+              <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40">
+                <div className="w-full max-w-sm">
+                  <ChangePasswordModal
+                    userId={currentUser.id}
+                    token={getAccessToken()!}
+                    passwordDefault={process.env.NEXT_PUBLIC_PASSWORD_DEFAULT || "default_password"}
+                    onSuccess={() => {
+                      setShowChangePasswordModal(false);
+                      setShowPasswordModal(false);
+                      toast.success("Đổi mật khẩu thành công!");
+                    }}
                   />
                 </div>
               </div>
             )}
+
+            {/* Modal đổi mật khẩu thực tế đã gộp vào trên */}
           </div>
         </SidebarInset>
         <ZaloLinkStatusChecker />
