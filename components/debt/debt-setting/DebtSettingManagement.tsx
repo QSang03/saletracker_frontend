@@ -108,7 +108,7 @@ export default function DebtSettingManagement({
   const rows = Array.from({ length: pageSize }).map(
     (_, idx) => localData[idx] || null
   );
-  
+
   const [confirmState, setConfirmState] = useState({
     open: false,
     type: undefined as "send" | "repeat" | undefined,
@@ -368,11 +368,13 @@ export default function DebtSettingManagement({
           {rows.map((row, idx) => {
             const isEven = idx % 2 === 0;
             const isEmployeeNull = row && row.employee == null;
-            const rowClass = isEmployeeNull
-              ? "bg-[#ffd6d6]" // đỏ nhạt đậm hơn
-              : isEven
-              ? "bg-white"
-              : "bg-gray-200";
+            const isErrorSend = row?.debt_log?.remind_status === "Error Send";
+            const rowClass =
+              isEmployeeNull || isErrorSend
+                ? "bg-[#ffd6d6]"
+                : isEven
+                ? "bg-white"
+                : "bg-gray-200";
             if (!row) {
               // Dòng ảo
               return (
@@ -388,13 +390,15 @@ export default function DebtSettingManagement({
                 </TableRow>
               );
             }
-            
+
             // Trạng thái nhắc nợ: lấy trực tiếp từ debt_log (object)
             let remindStatus = "--";
             let remindStatusColor = "";
             if (row.debt_log?.remind_status) {
               const statusObj = remindStatusMap[row.debt_log.remind_status];
-              remindStatus = statusObj ? statusObj.label : row.debt_log.remind_status;
+              remindStatus = statusObj
+                ? statusObj.label
+                : row.debt_log.remind_status;
               remindStatusColor = statusObj ? statusObj.color : "";
             }
 
@@ -443,7 +447,7 @@ export default function DebtSettingManagement({
               lastRemindedDateStr = dateObj.toLocaleDateString("vi-VN");
               lastRemindedDateTime = dateObj.toLocaleTimeString("vi-VN");
             }
-            if (isEmployeeNull) {
+            if (isEmployeeNull || isErrorSend) {
               return (
                 <Tooltip key={row.id || idx}>
                   <TooltipTrigger asChild>
@@ -563,7 +567,10 @@ export default function DebtSettingManagement({
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
-                                  <Switch checked={!!row.is_send} disabled={true} />
+                                  <Switch
+                                    checked={!!row.is_send}
+                                    disabled={true}
+                                  />
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -573,7 +580,10 @@ export default function DebtSettingManagement({
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
-                                  <Switch checked={!!row.is_repeat} disabled={true} />
+                                  <Switch
+                                    checked={!!row.is_repeat}
+                                    disabled={true}
+                                  />
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -591,7 +601,13 @@ export default function DebtSettingManagement({
                       >
                         <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
                           {/* Icon con mắt xem chi tiết */}
-                          <P permission={{ departmentSlug: 'cong-no', action: 'read' }} fallback={null}>
+                          <P
+                            permission={{
+                              departmentSlug: "cong-no",
+                              action: "read",
+                            }}
+                            fallback={null}
+                          >
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <button
@@ -609,7 +625,13 @@ export default function DebtSettingManagement({
                             </Tooltip>
                           </P>
                           {/* Switch gửi tự động */}
-                          <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
+                          <P
+                            permission={{
+                              departmentSlug: "cong-no",
+                              action: "update",
+                            }}
+                            fallback={null}
+                          >
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
@@ -626,11 +648,19 @@ export default function DebtSettingManagement({
                                   />
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent>Bật/Tắt gửi tự động</TooltipContent>
+                              <TooltipContent>
+                                Bật/Tắt gửi tự động
+                              </TooltipContent>
                             </Tooltip>
                           </P>
                           {/* Switch gửi nhắc lại - Chỉ bật được khi gửi tự động đã bật */}
-                          <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
+                          <P
+                            permission={{
+                              departmentSlug: "cong-no",
+                              action: "update",
+                            }}
+                            fallback={null}
+                          >
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
@@ -658,7 +688,13 @@ export default function DebtSettingManagement({
                               </TooltipContent>
                             </Tooltip>
                           </P>
-                          <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
+                          <P
+                            permission={{
+                              departmentSlug: "cong-no",
+                              action: "update",
+                            }}
+                            fallback={null}
+                          >
                             <Button
                               size="sm"
                               variant="edit"
@@ -667,7 +703,13 @@ export default function DebtSettingManagement({
                               Sửa
                             </Button>
                           </P>
-                          <P permission={{ departmentSlug: 'cong-no', action: 'delete' }} fallback={null}>
+                          <P
+                            permission={{
+                              departmentSlug: "cong-no",
+                              action: "delete",
+                            }}
+                            fallback={null}
+                          >
                             <Button
                               size="sm"
                               variant="delete"
@@ -683,7 +725,11 @@ export default function DebtSettingManagement({
                     </TableRow>
                   </TooltipTrigger>
                   <TooltipContent>
-                    Mã khách hàng không trùng so với phiếu nợ
+                    {isEmployeeNull
+                      ? "Mã khách hàng không trùng so với phiếu nợ"
+                      : isErrorSend
+                      ? "Sai tên Zalo khách hàng"
+                      : ""}
                   </TooltipContent>
                 </Tooltip>
               );
@@ -805,14 +851,21 @@ export default function DebtSettingManagement({
                         </TooltipTrigger>
                         <TooltipContent>Bật/Tắt gửi nhắc lại</TooltipContent>
                       </Tooltip>
-                      <Button size="sm" variant="edit" disabled={true}>Sửa</Button>
-                      <Button size="sm" variant="delete" disabled={true}>Xóa</Button>
+                      <Button size="sm" variant="edit" disabled={true}>
+                        Sửa
+                      </Button>
+                      <Button size="sm" variant="delete" disabled={true}>
+                        Xóa
+                      </Button>
                     </TableCell>
                   }
                 >
                   <TableCell className="px-3 py-2 text-center flex items-center justify-center gap-2">
                     {/* Icon con mắt xem chi tiết */}
-                    <P permission={{ departmentSlug: 'cong-no', action: 'read' }} fallback={null}>
+                    <P
+                      permission={{ departmentSlug: "cong-no", action: "read" }}
+                      fallback={null}
+                    >
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
@@ -828,7 +881,13 @@ export default function DebtSettingManagement({
                       </Tooltip>
                     </P>
                     {/* Switch gửi tự động */}
-                    <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
+                    <P
+                      permission={{
+                        departmentSlug: "cong-no",
+                        action: "update",
+                      }}
+                      fallback={null}
+                    >
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
@@ -845,7 +904,13 @@ export default function DebtSettingManagement({
                       </Tooltip>
                     </P>
                     {/* Switch gửi nhắc lại - Chỉ bật được khi gửi tự động đã bật */}
-                    <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
+                    <P
+                      permission={{
+                        departmentSlug: "cong-no",
+                        action: "update",
+                      }}
+                      fallback={null}
+                    >
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
@@ -856,7 +921,11 @@ export default function DebtSettingManagement({
                                 e.preventDefault();
                                 if (row.is_send) {
                                   // Chỉ cho phép toggle khi gửi tự động đã bật
-                                  handleSwitchClick(row, "repeat", !row.is_repeat);
+                                  handleSwitchClick(
+                                    row,
+                                    "repeat",
+                                    !row.is_repeat
+                                  );
                                 }
                               }}
                             />
@@ -869,7 +938,13 @@ export default function DebtSettingManagement({
                         </TooltipContent>
                       </Tooltip>
                     </P>
-                    <P permission={{ departmentSlug: 'cong-no', action: 'update' }} fallback={null}>
+                    <P
+                      permission={{
+                        departmentSlug: "cong-no",
+                        action: "update",
+                      }}
+                      fallback={null}
+                    >
                       <Button
                         size="sm"
                         variant="edit"
@@ -878,7 +953,13 @@ export default function DebtSettingManagement({
                         Sửa
                       </Button>
                     </P>
-                    <P permission={{ departmentSlug: 'cong-no', action: 'delete' }} fallback={null}>
+                    <P
+                      permission={{
+                        departmentSlug: "cong-no",
+                        action: "delete",
+                      }}
+                      fallback={null}
+                    >
                       <Button
                         size="sm"
                         variant="delete"
