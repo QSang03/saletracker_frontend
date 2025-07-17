@@ -348,12 +348,6 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
                     </span>
                   </div>
                 </div>
-                
-                <div className="bg-white rounded-lg p-3 shadow-sm">
-                  <div className="font-semibold text-gray-600 text-sm">Thời gian báo nợ</div>
-                  <div className="text-sm font-medium text-blue-700">{debtDetail?.send_time ? get({ tempField: debtDetail.send_time }, "tempField", '--') : '--'}</div>
-                </div>
-                
                 {/* Thông tin người thực hiện */}
                 {debtDetail?.actor && (
                   <div className="bg-white rounded-lg p-3 shadow-sm">
@@ -378,6 +372,10 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
                   <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                   Tin nhắn báo nợ
                 </h4>
+                <div className="mb-2">
+                  <div className="text-xs text-gray-600 mb-1">Thời gian báo nợ:</div>
+                  <div className="text-sm font-medium text-blue-700">{debtDetail?.send_time ? get({ tempField: debtDetail.send_time }, "tempField", '--') : '--'}</div>
+                </div>
                 <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
                   {debtDetail?.debt_message || '--'}
                 </div>
