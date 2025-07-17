@@ -231,7 +231,7 @@ export default function ZaloManager() {
     setUserFilters({
       search: filters.search,
       statuses: filters.statuses,
-      zaloLinkStatuses: filters.zaloLinkStatuses,
+      zaloLinkStatuses: filters.zaloLinkStatuses ?? [],
       departments: filters.departments,
     });
     setUserPage(1); // Reset to first page when filters change
