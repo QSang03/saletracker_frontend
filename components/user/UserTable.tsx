@@ -260,14 +260,16 @@ export default React.memo(function UserTable({
                             >
                               Sửa
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start"
-                              onClick={() => onDelete(user.id)}
-                            >
-                              Xóa
-                            </Button>
+                            {currentUserRole === "ADMIN" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                onClick={() => onDelete(user.id)}
+                              >
+                                Xóa
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
