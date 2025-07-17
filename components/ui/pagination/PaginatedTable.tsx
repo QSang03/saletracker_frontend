@@ -72,7 +72,7 @@ export type Filters = {
   departments: (string | number)[];
   roles: (string | number)[];
   statuses: (string | number)[];
-  zaloLinkStatuses: (string | number)[];
+  zaloLinkStatuses?: (string | number)[];
   categories: (string | number)[];
   brands: (string | number)[];
   dateRange: DateRange;
@@ -420,7 +420,7 @@ export default function PaginatedTable({
             <MultiSelectCombobox
               className={`min-w-0 w-full`}
               placeholder="Trạng thái liên kết"
-              value={filters.zaloLinkStatuses}
+              value={filters.zaloLinkStatuses!}
               options={zaloLinkStatusOptions}
               onChange={handleZaloLinkStatusesChange}
             />
