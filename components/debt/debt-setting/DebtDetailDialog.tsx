@@ -19,7 +19,7 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
   const [debtDetail, setDebtDetail] = useState<DebtLog | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // State cho image zoom - phải khai báo ở đầu component
+  // State cho image zoom
   const [imageZoom, setImageZoom] = useState({
     isZooming: false,
     x: 0,
@@ -81,6 +81,7 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
     if (!open) {
       setDebtDetail(null);
       setLoading(false);
+      setImageZoom({ isZooming: false, x: 0, y: 0 });
     }
   }, [open]);
 
@@ -196,6 +197,39 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
     return value;
   };
 
+  // Map giới tính từ Chị/Anh sang Nữ/Nam
+  const getGenderDisplay = (gender: string) => {
+    const genderMap: Record<string, string> = {
+      "Chị": "Nữ",
+      "Anh": "Nam",
+      "Nữ": "Nữ", 
+      "Nam": "Nam",
+    };
+    return genderMap[gender] || gender || '--';
+  };
+
+  // Helper function to format image source (handle both URL and base64)
+  const getImageSrc = (imageUrl: string | null) => {
+    if (!imageUrl) return null;
+    
+    // If it's already a data URI or HTTP URL, return as is
+    if (imageUrl.startsWith('data:') || imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    
+    // If it looks like base64 data, format it as a data URI
+    try {
+      // Simple check for base64 data - if it's a long string without protocol
+      if (imageUrl.length > 100 && !imageUrl.includes('://')) {
+        return `data:image/jpeg;base64,${imageUrl}`;
+      }
+    } catch (error) {
+      console.error('Error processing image data:', error);
+    }
+    
+    return imageUrl;
+  };
+
   // Icon helper
   const StatusIcon = ({ status }: { status: string }) => {
     if (status?.toLowerCase().includes("thành công") || status?.toLowerCase().includes("đã gửi"))
@@ -251,11 +285,11 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
                       onMouseMove={handleMouseMove}
                     >
                       <img 
-                        src={debtDetail.image_url} 
+                        src={getImageSrc(debtDetail.image_url) || ''} 
                         alt="Ảnh công nợ" 
                         className="w-full h-auto max-h-[500px] rounded-lg border-2 border-blue-200 shadow-md object-cover"
                         onError={(e) => {
-                          console.error('Image load error:', e);
+                          console.error('Failed to load image. Image URL length:', debtDetail.image_url?.length || 0);
                           (e.target as HTMLImageElement).style.display = 'none';
                         }}
                       />
@@ -263,7 +297,7 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
                         <div 
                           className="absolute top-0 left-full ml-4 w-96 h-96 border-2 border-blue-400 rounded-lg overflow-hidden shadow-xl bg-white z-50"
                           style={{
-                            backgroundImage: `url(${debtDetail.image_url})`,
+                            backgroundImage: `url(${getImageSrc(debtDetail.image_url)})`,
                             backgroundSize: '400%',
                             backgroundPosition: `${imageZoom.x}% ${imageZoom.y}%`,
                             backgroundRepeat: 'no-repeat'
@@ -302,7 +336,7 @@ export default function DebtDetailDialog({ open, onClose, debtConfigId, onShowAl
                 </div>
                 <div className="bg-white rounded-lg p-3 shadow-sm">
                   <div className="font-semibold text-gray-600 text-sm">Giới tính khách hàng</div>
-                  <div className="text-base font-medium text-gray-800">{debtDetail?.customer_gender || '--'}</div>
+                  <div className="text-base font-medium text-gray-800">{getGenderDisplay(debtDetail?.customer_gender || '')}</div>
                 </div>
                 
                 <div className="bg-white rounded-lg p-3 shadow-sm">

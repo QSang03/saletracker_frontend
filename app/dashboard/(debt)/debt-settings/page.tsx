@@ -385,7 +385,7 @@ export default function DebtSettingsPage() {
       <Card className="w-full flex-1">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-bold">
-            ⚙️ Cấu hình công nợ
+            ⚙️ Cấu hình nhắc nợ
           </CardTitle>
           <div className="flex gap-2">
             <PDynamic permission={{ departmentSlug: 'cong-no', action: 'export' }}>
