@@ -108,6 +108,7 @@ export default function DebtSettingManagement({
   const rows = Array.from({ length: pageSize }).map(
     (_, idx) => localData[idx] || null
   );
+  
   const [confirmState, setConfirmState] = useState({
     open: false,
     type: undefined as "send" | "repeat" | undefined,
@@ -387,8 +388,16 @@ export default function DebtSettingManagement({
                 </TableRow>
               );
             }
-            // Map dữ liệu từ backend
-            const debtLogs = Array.isArray(row.debt_logs) ? row.debt_logs : [];
+            
+            // Trạng thái nhắc nợ: lấy trực tiếp từ debt_log (object)
+            let remindStatus = "--";
+            let remindStatusColor = "";
+            if (row.debt_log?.remind_status) {
+              const statusObj = remindStatusMap[row.debt_log.remind_status];
+              remindStatus = statusObj ? statusObj.label : row.debt_log.remind_status;
+              remindStatusColor = statusObj ? statusObj.color : "";
+            }
+
             // Tổng số phiếu và tổng số nợ lấy từ backend
             const totalBills =
               typeof row.total_bills !== "undefined" ? row.total_bills : 0;
@@ -433,28 +442,6 @@ export default function DebtSettingManagement({
               const dateObj = new Date(row.send_last_at);
               lastRemindedDateStr = dateObj.toLocaleDateString("vi-VN");
               lastRemindedDateTime = dateObj.toLocaleTimeString("vi-VN");
-            }
-            // Trạng thái nhắc nợ: lấy remind_status của log mới nhất
-            let remindStatus = "--";
-            let remindStatusColor = "";
-            if (debtLogs.length) {
-              const latestLog = debtLogs.reduce((latest: any, log: any) => {
-                if (!latest) return log;
-                return new Date(log.created_at) > new Date(latest.created_at)
-                  ? log
-                  : latest;
-              }, null);
-              if (
-                latestLog?.remind_status &&
-                remindStatusMap[latestLog.remind_status]
-              ) {
-                remindStatus = remindStatusMap[latestLog.remind_status].label;
-                remindStatusColor =
-                  remindStatusMap[latestLog.remind_status].color;
-              } else {
-                remindStatus = latestLog?.remind_status || "--";
-                remindStatusColor = "";
-              }
             }
             if (isEmployeeNull) {
               return (
