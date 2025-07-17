@@ -197,13 +197,13 @@ export default function ManagerDebtPage() {
         const data = await res.json();
         if (Array.isArray(data)) {
           setCustomerOptions(data.map((c: any) => ({
-            label: c.customer_name || c.name || c.customer_code || c.code,
-            value: c.customer_code || c.code
+            label: c.code,
+            value: c.code
           })));
         } else if (Array.isArray(data.data)) {
           setCustomerOptions(data.data.map((c: any) => ({
-            label: c.customer_name || c.name || c.customer_code || c.code,
-            value: c.customer_code || c.code
+            label: c.code,
+            value: c.code
           })));
         } else {
           setCustomerOptions([]);
