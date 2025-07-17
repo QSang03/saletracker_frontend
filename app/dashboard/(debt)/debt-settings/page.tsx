@@ -438,13 +438,13 @@ export default function DebtSettingsPage() {
             
             <PDynamic permission={{ departmentSlug: 'cong-no', action: 'create' }}>
               <Button variant="add" onClick={() => setShowConfigModal(true)}>
-                + Thêm cấu hình
+                + Cấu hình công nợ
               </Button>
             </PDynamic>
             
             <PDynamic permission={{ departmentSlug: 'cong-no', action: 'create' }}>
               <Button variant="gradient" onClick={() => setShowAddManualModal(true)}>
-                + Thêm thủ công
+                + Thêm công nợ thủ công
               </Button>
             </PDynamic>
             
