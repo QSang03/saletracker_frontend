@@ -12,7 +12,7 @@ export function AdminSocket({
   onUserBlock?: (userId: number, isBlock: boolean) => void;
 }) {
   useEffect(() => {
-    const socket = io(process.env.NEXT_PUBLIC_API_URL!, {
+    const socket = io(process.env.NEXT_PUBLIC_WEBSOCKET_URL!, {
       path: "/socket.io",
       transports: ["websocket"],
     });

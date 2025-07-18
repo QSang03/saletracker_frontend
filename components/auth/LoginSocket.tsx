@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 
 export function LoginSocket({ userId, onBlocked }: { userId: number, onBlocked?: () => void }) {
   useEffect(() => {
-    const socket = io(process.env.NEXT_PUBLIC_API_URL!, {
+    const socket = io(process.env.NEXT_PUBLIC_WEBSOCKET_URL!, {
       path: "/socket.io",
       transports: ["websocket"],
     });

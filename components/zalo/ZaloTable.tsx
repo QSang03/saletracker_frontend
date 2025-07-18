@@ -77,7 +77,8 @@ export default React.memo(function ZaloTable({
     };
   }, [users]);
 
-  const handleListeningToggle = async (user: User, pressed: boolean) => {
+  const handleListeningToggle = React.useCallback(async (user: User, pressed: boolean) => {
+    console.log('Toggle listening:', { id: user.id, pressed });
     if (pressed) {
       setListeningAnim(prev => ({ ...prev, [user.id]: true }));
       setTimeout(() => {
@@ -126,7 +127,7 @@ export default React.memo(function ZaloTable({
     } else {
       onToggleListening(user, pressed);
     }
-  };
+  }, [onRequestListeningConfirm, onToggleListening]);
 
   const handleAutoMessageToggle = (user: User, pressed: boolean) => {
     if (pressed) {
@@ -242,7 +243,7 @@ export default React.memo(function ZaloTable({
                       <TooltipTrigger asChild>
                         <Toggle
                           pressed={listeningStates[user.id] || false}
-                          onPressedChange={(pressed) => handleListeningToggle(user, pressed)}
+                          onPressedChange={React.useCallback((pressed) => handleListeningToggle(user, pressed), [user.id, handleListeningToggle])}
                           variant="outline"
                           size="sm"
                           className={`toggle-btn h-8 w-8 p-0 relative${listeningAnim[user.id] ? ' toggle-activated-anim' : ''}${listeningStates[user.id] ? ' toggle-activated-anim' : ''}`}
