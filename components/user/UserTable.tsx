@@ -34,6 +34,7 @@ interface UserTableProps {
 export default React.memo(function UserTable({
   users,
   currentUserRole,
+  currentUserId,
   onEdit,
   onDelete,
   onToggleBlock,
@@ -260,7 +261,9 @@ export default React.memo(function UserTable({
                             >
                               Sửa
                             </Button>
-                            {currentUserRole === "ADMIN" && (
+                            {currentUserRole === "ADMIN" && 
+                             !user.roles?.some(role => role.name === "admin") && 
+                             user.id !== currentUserId && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -278,30 +281,33 @@ export default React.memo(function UserTable({
                             >
                               Reset pass
                             </Button>
-                            <div className="flex items-center w-full px-2 py-1">
-                              <Switch
-                                checked={user.isBlock}
-                                onCheckedChange={(checked) => {
-                                  if (
-                                    typeof onRequestBlockConfirm === "function"
-                                  ) {
-                                    onRequestBlockConfirm(user, checked);
-                                  } else {
-                                    onToggleBlock(user, checked);
+                            {!user.roles?.some(role => role.name === "admin") && 
+                             user.id !== currentUserId && (
+                              <div className="flex items-center w-full px-2 py-1">
+                                <Switch
+                                  checked={user.isBlock}
+                                  onCheckedChange={(checked) => {
+                                    if (
+                                      typeof onRequestBlockConfirm === "function"
+                                    ) {
+                                      onRequestBlockConfirm(user, checked);
+                                    } else {
+                                      onToggleBlock(user, checked);
+                                    }
+                                  }}
+                                  className="mr-2"
+                                  aria-label="Khóa tài khoản"
+                                  title={
+                                    user.isBlock
+                                      ? "Mở khóa tài khoản"
+                                      : "Khóa tài khoản"
                                   }
-                                }}
-                                className="mr-2"
-                                aria-label="Khóa tài khoản"
-                                title={
-                                  user.isBlock
-                                    ? "Mở khóa tài khoản"
-                                    : "Khóa tài khoản"
-                                }
-                              />
-                              <span className="text-xs">
-                                {user.isBlock ? "Mở khóa" : "Khóa"}
-                              </span>
-                            </div>
+                                />
+                                <span className="text-xs">
+                                  {user.isBlock ? "Mở khóa" : "Khóa"}
+                                </span>
+                              </div>
+                            )}
                           </PopoverContent>
                         </Popover>
                       </div>
