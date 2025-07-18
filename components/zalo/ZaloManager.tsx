@@ -31,6 +31,7 @@ export default function ZaloManager() {
     type: "listening" | "autoMessage" | null;
     user?: User;
     checked?: boolean;
+    onConfirm?: (() => void) | null;
   }>({ type: null });
 
   // State để quản lý trạng thái toggle của từng user
@@ -219,7 +220,9 @@ export default function ZaloManager() {
   };
 
   const handleConfirm = async () => {
-    if (confirmAction.type === "listening" && confirmAction.user) {
+    if (typeof confirmAction.onConfirm === 'function') {
+      await confirmAction.onConfirm();
+    } else if (confirmAction.type === "listening" && confirmAction.user) {
       await handleToggleListening(confirmAction.user, !!confirmAction.checked);
     } else if (confirmAction.type === "autoMessage" && confirmAction.user) {
       await handleToggleAutoMessage(confirmAction.user, !!confirmAction.checked);
@@ -248,12 +251,12 @@ export default function ZaloManager() {
   }, []);
 
   // Memoized callback functions to prevent ZaloTable re-renders
-  const handleRequestListeningConfirm = useCallback((user: User, checked: boolean) => {
-    setConfirmAction({ type: "listening", user, checked });
+  const handleRequestListeningConfirm = useCallback((user: User, checked: boolean, onConfirm?: () => void) => {
+    setConfirmAction({ type: "listening", user, checked, onConfirm });
   }, []);
 
-  const handleRequestAutoMessageConfirm = useCallback((user: User, checked: boolean) => {
-    setConfirmAction({ type: "autoMessage", user, checked });
+  const handleRequestAutoMessageConfirm = useCallback((user: User, checked: boolean, onConfirm?: () => void) => {
+    setConfirmAction({ type: "autoMessage", user, checked, onConfirm });
   }, []);
 
   // Calculate startIndex once to avoid re-computation
