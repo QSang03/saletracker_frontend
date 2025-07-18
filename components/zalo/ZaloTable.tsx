@@ -143,7 +143,7 @@ export default React.memo(function ZaloTable({
   // Hàm trung gian: chỉ gọi handleListeningToggle sau khi confirm
   const handleListeningToggleRequest = (user: User, pressed: boolean) => {
     if (typeof onRequestListeningConfirm === "function") {
-      onRequestListeningConfirm(user, pressed, () => handleListeningToggle(user, pressed));
+      onRequestListeningConfirm(user, pressed);
     } else {
       handleListeningToggle(user, pressed);
     }
