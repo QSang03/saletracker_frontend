@@ -43,9 +43,12 @@ interface LogMessage {
 export default function ServiceMonitorPage() {
     const [status, setStatus] = useState<Record<string, ServiceStatus>>({});
     const [logs, setLogs] = useState<Record<string, string[]>>({});
-    const [realtimeLogs, setRealtimeLogs] = useState<Record<string, string[]>>(
-        {}
-    );
+    const logsRef = useRef<Record<string, string[]>>({});
+    const [realtimeLogs, setRealtimeLogs] = useState<Record<string, string[]>>({});
+    // Luôn cập nhật logsRef khi logs thay đổi
+    useEffect(() => {
+        logsRef.current = logs;
+    }, [logs]);
     const [connecting, setConnecting] = useState(true);
     const [connected, setConnected] = useState(false);
     const [loadingLogs, setLoadingLogs] = useState<Record<string, boolean>>({});
@@ -129,7 +132,7 @@ export default function ServiceMonitorPage() {
             setStatus(data);
             setLastUpdate(new Date());
             Object.keys(data).forEach(category => {
-                if (data[category]?.running && (!logs[category] || logs[category].length === 0)) {
+                if (data[category]?.running && (!logsRef.current[category] || logsRef.current[category].length === 0)) {
                     // Chỉ gọi get_logs nếu logs chưa có (lần đầu hoặc reconnect)
                     socket.emit("get_logs", { category, limit: 100 });
                 }
@@ -187,9 +190,15 @@ export default function ServiceMonitorPage() {
                 } else {
                     console.log("⚠️ No logs returned for category:", data.category);
                 }
-                // Thay thế toàn bộ logs hiện tại bằng logs mới nhất từ backend
-                setLogs((prev) => ({ ...prev, [data.category]: data.logs || [] }));
-                setLoadingLogs((prev) => ({ ...prev, [data.category]: false }));
+                // Chỉ replace logs nếu đang loadingLogs (tức là do user bấm nút hoặc reconnect)
+                setLoadingLogs((prev) => {
+                    if (prev[data.category]) {
+                        setLogs((logsPrev) => ({ ...logsPrev, [data.category]: data.logs || [] }));
+                        return { ...prev, [data.category]: false };
+                    }
+                    // Nếu không phải do FE chủ động fetch thì bỏ qua, không replace logs
+                    return prev;
+                });
             }
         });
 
@@ -215,7 +224,7 @@ export default function ServiceMonitorPage() {
         return () => {
             socket.disconnect();
         };
-    }, [logs]);
+    }, []);
 
     useEffect(() => {
         console.log("🎯 ServiceMonitor component mounted");
@@ -243,7 +252,7 @@ export default function ServiceMonitorPage() {
         // Timeout để auto-clear pending state nếu không nhận được response
         setTimeout(() => {
             setPendingStart((prev) => ({ ...prev, [category]: false }));
-        }, 10000); // 10 giây timeout
+        }, 2000); // 10 giây timeout
     };
 
     const handleStop = (category: string) => {
