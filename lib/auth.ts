@@ -30,7 +30,23 @@ export function getRefreshToken(): string | null {
 
 export function getUserFromToken(token: string): any | null {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!token || typeof token !== 'string') {
+      return null;
+    }
+    
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+    
+    // Decode base64url (JWT uses base64url encoding, not base64)
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    // Pad with = if necessary
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    
+    const payload = JSON.parse(atob(base64));
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
@@ -61,7 +77,23 @@ export function getUserFromToken(token: string): any | null {
 
 export function getUserRolesFromToken(token: string): string[] {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!token || typeof token !== 'string') {
+      return [];
+    }
+    
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return [];
+    }
+    
+    // Decode base64url (JWT uses base64url encoding, not base64)
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    // Pad with = if necessary
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    
+    const payload = JSON.parse(atob(base64));
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {

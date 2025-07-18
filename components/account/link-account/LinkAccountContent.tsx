@@ -4,7 +4,7 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import type { User } from "@/types";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import type { AlertType } from "@/components/ui/loading/ServerResponseAlert";
-import { getAccessToken } from "@/lib/auth";
+import { getAccessToken, getUserFromToken } from "@/lib/auth";
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
@@ -40,21 +40,39 @@ export default function LinkAccountContent({
   const zaloAvatar = useMemo(() => currentUser?.avatarZalo || null, [currentUser?.avatarZalo]);
   const zaloName = useMemo(() => currentUser?.zaloName || null, [currentUser?.zaloName]);
 
-  const refetchUser = useCallback(async () => {
+  const refreshUserToken = useCallback(async () => {
     if (!currentUser?.id) return;
     const token = getAccessToken();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
     try {
-      const res = await fetch(`${apiUrl}/users/${currentUser.id}`, {
+      const res = await fetch(`${apiUrl}/auth/refresh-after-update`, {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
       if (res.ok) {
         const data = await res.json();
-        setCurrentUser(data);
+        if (data.access_token) {
+          // Import function để set access token
+          const { setAccessToken } = await import("@/lib/auth");
+          
+          // Chỉ cập nhật access token, giữ nguyên refresh token
+          setAccessToken(data.access_token);
+          
+          // Cập nhật current user từ JWT token mới
+          const updatedUser = getUserFromToken(data.access_token);
+          if (updatedUser) {
+            setCurrentUser(updatedUser);
+          } else {
+            console.error("❌ [LinkAccount] Failed to parse user from token");
+          }
+        }
       }
-    } catch {}
+    } catch (error) {
+      console.error("❌ [LinkAccount] Failed to refresh token:", error);
+    }
   }, [currentUser?.id, setCurrentUser]);
 
   useEffect(() => {
@@ -121,37 +139,8 @@ export default function LinkAccountContent({
       });
       
       if (response.ok) {
-        // Gọi API refresh token để cập nhật thông tin Zalo trong JWT
-        await refreshTokenAfterZaloUpdate();
-      }
-    } catch (e) {
-      // ignore
-    }
-  };
-
-  const refreshTokenAfterZaloUpdate = async () => {
-    try {
-      const token = getAccessToken();
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-      const response = await fetch(`${apiUrl}/auth/refresh-after-update`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.access_token) {
-          // Import function để set access token
-          const { setAccessToken } = await import("@/lib/auth");
-          
-          // Chỉ cập nhật access token, giữ nguyên refresh token
-          setAccessToken(data.access_token);
-          
-          console.log("✅ [LinkAccount] Access token updated with new Zalo info");
-        }
+        // Gọi refresh token để cập nhật thông tin Zalo trong JWT
+        await refreshUserToken();
       }
     } catch (e) {
       // ignore
@@ -285,8 +274,8 @@ export default function LinkAccountContent({
             setUserAvatar(msg.data.avatar);
           }
           updateZaloLinkStatus(1, msg.data?.zaloUsername, msg.data?.avatar);
-          // Fetch lại data ngay lập tức để cập nhật giao diện
-          refetchUser();
+          // Refresh token để cập nhật thông tin Zalo trong JWT
+          refreshUserToken();
           ws.close();
         } else if (msg.type === "error") {
           setAlerts([
@@ -400,15 +389,15 @@ export default function LinkAccountContent({
     }
     if (webhookSuccess) {
       updateZaloLinkStatus(0, null, null);
-      refetchUser();
+      refreshUserToken();
     }
   };
 
   useEffect(() => {
     if (isLinked) {
-      refetchUser();
+      refreshUserToken();
     }
-  }, [isLinked, refetchUser]);
+  }, [isLinked, refreshUserToken]);
 
   // Đảm bảo hiển thị loading khi đang chờ currentUser
   if (!currentUser) {
