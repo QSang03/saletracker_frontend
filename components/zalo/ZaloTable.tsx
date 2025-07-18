@@ -243,7 +243,7 @@ export default React.memo(function ZaloTable({
                       <TooltipTrigger asChild>
                         <Toggle
                           pressed={listeningStates[user.id] || false}
-                          onPressedChange={React.useCallback((pressed) => handleListeningToggle(user, pressed), [user.id, handleListeningToggle])}
+                          onPressedChange={React.useCallback((pressed: boolean) => handleListeningToggle(user, pressed), [user.id, handleListeningToggle])}
                           variant="outline"
                           size="sm"
                           className={`toggle-btn h-8 w-8 p-0 relative${listeningAnim[user.id] ? ' toggle-activated-anim' : ''}${listeningStates[user.id] ? ' toggle-activated-anim' : ''}`}
