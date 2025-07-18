@@ -19,8 +19,8 @@ interface ZaloTableProps {
   users: User[];
   onToggleListening: (user: User, checked: boolean) => void;
   onToggleAutoMessage: (user: User, checked: boolean) => void;
-  onRequestListeningConfirm?: (user: User, checked: boolean) => void;
-  onRequestAutoMessageConfirm?: (user: User, checked: boolean) => void;
+  onRequestListeningConfirm?: (user: User, checked: boolean, onConfirm?: () => void) => void;
+  onRequestAutoMessageConfirm?: (user: User, checked: boolean, onConfirm?: () => void) => void;
   startIndex?: number;
   expectedRowCount?: number;
   listeningStates?: Record<number, boolean>;
