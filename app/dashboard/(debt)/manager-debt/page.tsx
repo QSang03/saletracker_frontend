@@ -30,7 +30,7 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
 
 interface DebtFilters {
   search: string;
-  singleDate?: Date | string;
+  singleDate: string; // Change to string for ISO date format
   statuses: string[];
   employees: string[];
 }
@@ -58,11 +58,11 @@ export default function ManagerDebtPage() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [filters, setFilters] = useState<DebtFilters>({
+  const [filters, setFilters] = useState({
     search: "",
-    singleDate: new Date(),
-    statuses: [],
-    employees: [],
+    singleDate: new Date().toLocaleDateString("en-CA"), // Use toLocaleDateString to avoid timezone issues
+    statuses: [] as string[],
+    employees: [] as string[],
   });
 
   const [customerOptions, setCustomerOptions] = useState<
@@ -84,18 +84,8 @@ export default function ManagerDebtPage() {
     const params: Record<string, any> = {
       page,
       pageSize,
+      date: filters.singleDate, // Use the string date directly
     };
-
-    let queryDate: string;
-    if (filters.singleDate) {
-      queryDate =
-        filters.singleDate instanceof Date
-          ? filters.singleDate.toLocaleDateString("en-CA")
-          : filters.singleDate;
-    } else {
-      queryDate = new Date().toLocaleDateString("en-CA");
-    }
-    params.date = queryDate;
 
     if (filters.search) params.search = filters.search;
     if (filters.statuses && filters.statuses.length > 0)
@@ -142,17 +132,10 @@ export default function ManagerDebtPage() {
       };
 
     try {
-      let queryDate: string;
-      if (filters.singleDate) {
-        queryDate =
-          filters.singleDate instanceof Date
-            ? filters.singleDate.toLocaleDateString("en-CA")
-            : filters.singleDate;
-      } else {
-        queryDate = new Date().toLocaleDateString("en-CA");
-      }
-
-      const params: Record<string, any> = { date: queryDate, stats: 1 };
+      const params: Record<string, any> = { 
+        date: filters.singleDate, // Use the string date directly
+        stats: 1 
+      };
 
       if (filters.search) params.search = filters.search;
       if (filters.statuses && filters.statuses.length > 0)
@@ -209,10 +192,8 @@ export default function ManagerDebtPage() {
   const debts = debtsData.data;
   const total = debtsData.total;
 
-  useEffect(() => {
-    forceUpdate();
-    refreshStats();
-  }, [page, pageSize, filters, forceUpdate, refreshStats]);
+  // useApiState automatically handles re-fetching when dependencies change
+  // No need for manual useEffect triggers
 
   // Status options for filter
   const statusOptions = [
@@ -270,8 +251,9 @@ export default function ManagerDebtPage() {
         const token = getAccessToken();
         if (!token) return;
 
+        // Fetch employees from a more appropriate endpoint
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/debts?all=1&page=1&pageSize=10000`,
+          `${process.env.NEXT_PUBLIC_API_URL}/debts/employees`, // Use dedicated employees endpoint
           {
             headers: {
               "Content-Type": "application/json",
@@ -280,24 +262,51 @@ export default function ManagerDebtPage() {
           }
         );
         const data = await res.json();
-        if (Array.isArray(data.data)) {
-          // Get unique employees
-          const names = data.data
-            .map(
-              (d: any) =>
-                d.debt_config?.employee?.fullName ||
-                d.employee_code_raw ||
-                d.sale?.fullName ||
-                d.sale_name_raw
-            )
-            .filter(Boolean);
-
-          const uniqueNames = [...new Set(names)].filter(
-            (name): name is string => typeof name === "string"
-          );
+        if (Array.isArray(data)) {
           setAllEmployeeOptions(
-            uniqueNames.map((name) => ({ label: name, value: name }))
+            data.map((emp: any) => ({ 
+              label: emp.name || emp.fullName || emp.employee_name, 
+              value: emp.name || emp.fullName || emp.employee_name 
+            }))
           );
+        } else if (Array.isArray(data.data)) {
+          setAllEmployeeOptions(
+            data.data.map((emp: any) => ({ 
+              label: emp.name || emp.fullName || emp.employee_name, 
+              value: emp.name || emp.fullName || emp.employee_name 
+            }))
+          );
+        } else {
+          // Fallback: get from all debts if employees endpoint doesn't exist
+          const fallbackRes = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/debts?all=1&page=1&pageSize=10000`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+          const fallbackData = await fallbackRes.json();
+          if (Array.isArray(fallbackData.data)) {
+            // Get unique employees
+            const names = fallbackData.data
+              .map(
+                (d: any) =>
+                  d.debt_config?.employee?.fullName ||
+                  d.employee_code_raw ||
+                  d.sale?.fullName ||
+                  d.sale_name_raw
+              )
+              .filter(Boolean);
+
+            const uniqueNames = [...new Set(names)].filter(
+              (name): name is string => typeof name === "string"
+            );
+            setAllEmployeeOptions(
+              uniqueNames.map((name) => ({ label: name, value: name }))
+            );
+          }
         }
       } catch (error) {
         console.error("Error fetching filter options:", error);
@@ -307,30 +316,30 @@ export default function ManagerDebtPage() {
     fetchAllFilterOptions();
   }, []);
 
-  // Handle filter changes
-  const handleFilterChange = (newFilters: any) => {
+  // Handle filter changes - following User Manager pattern
+  const handleFilterChange = useCallback((newFilters: any) => {
     setFilters(newFilters);
     setPage(1); // Reset to first page when filters change
-  };
+  }, []);
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-  };
+  }, []);
 
-  const handlePageSizeChange = (newPageSize: number) => {
+  const handlePageSizeChange = useCallback((newPageSize: number) => {
     setPageSize(newPageSize);
     setPage(1);
-  };
+  }, []);
 
-  const handleResetFilter = () => {
+  const handleResetFilter = useCallback(() => {
     setFilters({
       search: "",
-      singleDate: new Date(),
+      singleDate: new Date().toLocaleDateString("en-CA"), // Use toLocaleDateString to avoid timezone issues
       statuses: [],
       employees: [],
     });
     setPage(1);
-  };
+  }, []);
 
   // Handle Excel import
   const handleExcelImport = async (file: File) => {

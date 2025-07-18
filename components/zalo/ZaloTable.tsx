@@ -10,12 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { User } from "@/types";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Volume2, VolumeX, MessageSquare, MessageSquareOff } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 
 interface ZaloTableProps {
   users: User[];
@@ -37,25 +35,95 @@ export default React.memo(function ZaloTable({
   expectedRowCount = users.length,
   onRequestListeningConfirm,
   onRequestAutoMessageConfirm,
-  listeningStates = {},
+  listeningStates: listeningStatesProp = {},
   autoMessageStates = {},
 }: ZaloTableProps) {
   // State để trigger animation mỗi lần bật
   const [listeningAnim, setListeningAnim] = useState<Record<number, boolean>>({});
   const [autoMessageAnim, setAutoMessageAnim] = useState<Record<number, boolean>>({});
 
-  const handleListeningToggle = (user: User, pressed: boolean) => {
+  // State để lưu trạng thái listening thực tế từ API
+  const [listeningStates, setListeningStates] = useState<Record<number, boolean>>(listeningStatesProp);
+
+  // Fetch trạng thái listening từ API cho từng user
+  useEffect(() => {
+    let isMounted = true;
+    const fetchListeningStates = async () => {
+      const results: Record<number, boolean> = {};
+      await Promise.all(
+        users.map(async (user) => {
+          if (!user?.id || user.zaloLinkStatus !== 1) return;
+          // Lọc phòng ban có server_ip hợp lệ
+          const departmentWithIp = user.departments?.find(dep => !!dep?.server_ip);
+          const serverIp = departmentWithIp?.server_ip;
+          if (!serverIp) return;
+          try {
+            const res = await fetch(`http://${serverIp}:4000/api/workers/${user.id}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            // Nếu status === 'running' thì bật listening
+            results[user.id] = data?.worker?.status === 'running';
+          } catch (e) {
+            // Nếu lỗi thì coi như tắt
+            results[user.id] = false;
+          }
+        })
+      );
+      if (isMounted) setListeningStates((prev) => ({ ...prev, ...results }));
+    };
+    fetchListeningStates();
+    return () => {
+      isMounted = false;
+    };
+  }, [users]);
+
+  const handleListeningToggle = async (user: User, pressed: boolean) => {
     if (pressed) {
       setListeningAnim(prev => ({ ...prev, [user.id]: true }));
       setTimeout(() => {
         setListeningAnim(prev => ({ ...prev, [user.id]: false }));
       }, 500);
     }
+    // Lọc phòng ban có server_ip hợp lệ
+    const departmentWithIp = user.departments?.find(dep => !!dep?.server_ip);
+    const serverIp = departmentWithIp?.server_ip;
+    if (!serverIp) {
+      setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+      return;
+    }
+    try {
+      if (pressed) {
+        // Bật: lấy credentials rồi gọi API start
+        const credRes = await fetch(`/api/users/${user.id}/credentials`);
+        if (!credRes.ok) throw new Error('Không lấy được credentials');
+        const credData = await credRes.json();
+        const { userDataDirPath, decryptionKey } = credData;
+        if (!userDataDirPath || !decryptionKey) throw new Error('Thiếu thông tin credentials');
+        const startRes = await fetch(`http://${serverIp}:4000/api/workers/${user.id}/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: user.username,
+            decryptionKey,
+            userDataDir: userDataDirPath
+          })
+        });
+        if (!startRes.ok) throw new Error('Start worker thất bại');
+        setListeningStates((prev) => ({ ...prev, [user.id]: true }));
+      } else {
+        // Tắt: gọi API stop
+        const stopRes = await fetch(`http://${serverIp}:4000/api/workers/${user.id}/stop`, {
+          method: 'POST'
+        });
+        if (!stopRes.ok) throw new Error('Stop worker thất bại');
+        setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+      }
+    } catch (e) {
+      setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+    }
     if (typeof onRequestListeningConfirm === "function") {
-      // Nếu có confirm dialog, gọi confirm callback
       onRequestListeningConfirm(user, pressed);
     } else {
-      // Nếu không có confirm dialog, gọi toggle callback trực tiếp
       onToggleListening(user, pressed);
     }
   };

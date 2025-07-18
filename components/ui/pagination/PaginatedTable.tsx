@@ -76,7 +76,7 @@ export type Filters = {
   categories: (string | number)[];
   brands: (string | number)[];
   dateRange: DateRange;
-  singleDate?: Date;
+  singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
 };
 
@@ -181,7 +181,7 @@ export default function PaginatedTable({
     categories: initialFilters?.categories || [],
     brands: initialFilters?.brands || [],
     dateRange: initialFilters?.dateRange || { from: undefined, to: undefined },
-    singleDate: initialFilters?.singleDate || undefined,
+    singleDate: initialFilters?.singleDate || new Date().toLocaleDateString("en-CA"),
     employees: initialFilters?.employees || [],
   }));
 
@@ -313,7 +313,7 @@ export default function PaginatedTable({
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
-      singleDate: undefined,
+      singleDate: new Date().toLocaleDateString("en-CA"), // Reset to today's date in string format
       employees: [],
     };
     setFilters(reset);
@@ -427,8 +427,8 @@ export default function PaginatedTable({
           )}
           {enableSingleDateFilter && (
             <DatePicker
-              value={filters.singleDate}
-              onChange={(date) => updateFilter("singleDate", date)}
+              value={filters.singleDate ? new Date(filters.singleDate) : undefined}
+              onChange={(date) => updateFilter("singleDate", date ? date.toLocaleDateString("en-CA") : "")}
               placeholder={singleDateLabel || "Chọn ngày"}
               className="min-w-0 w-full"
             />
