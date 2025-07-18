@@ -1,40 +1,34 @@
 "use client";
-import { useEffect } from "react";
-import { io } from "socket.io-client";
 
-export function AdminSocket({
+import { memo, useEffect } from 'react';
+import { useWSHandler } from '@/hooks/useWSHandler';
+
+export const AdminSocket = memo(function AdminSocket({
   onUserLogin,
   onUserLogout,
   onUserBlock,
+  onUserBlocked,
 }: {
-  onUserLogin?: () => void;
-  onUserLogout?: (userId: number) => void;
+  onUserLogin?: (userId: number, status: string, lastLogin: string) => void;
+  onUserLogout?: (userId: number, status: string) => void;
   onUserBlock?: (userId: number, isBlock: boolean) => void;
+  onUserBlocked?: (userId: number, message: string) => void;
 }) {
-  useEffect(() => {
-    const socket = io(process.env.NEXT_PUBLIC_WEBSOCKET_URL!, {
-      path: "/socket.io",
-      transports: ["websocket"],
-    });
+  useWSHandler('user_login', (data: any) => {
+    onUserLogin?.(data.userId, data.status, data.last_login);
+  });
+  
+  useWSHandler('user_logout', (data: any) => {
+    onUserLogout?.(data.userId, data.status);
+  });
+  
+  useWSHandler('user_block', (data: any) => {
+    onUserBlock?.(data.userId, data.isBlock);
+  });
 
-    socket.emit("joinAdmin");
-
-    socket.on("user_login", () => {
-      if (onUserLogin) onUserLogin();
-    });
-
-    socket.on("user_logout", (data) => {
-      if (onUserLogout) onUserLogout(data.userId);
-    });
-
-    socket.on("user_block", (data) => {
-      if (onUserBlock) onUserBlock(data.userId, data.isBlock);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [onUserLogin, onUserLogout, onUserBlock]);
-
+  useWSHandler('user_blocked', (data: any) => {
+    onUserBlocked?.(data.userId, data.message);
+  });
+  
   return null;
-}
+});

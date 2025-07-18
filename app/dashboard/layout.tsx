@@ -27,6 +27,7 @@ import ZaloLinkStatusChecker from "@/components/common/ZaloLinkStatusChecker";
 import NotificationBell from "@/components/common/NotificationBell";
 import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
+import { SocketPortal } from "@/components/common/SocketPortal";
 
 
 export default function DashboardLayout({
@@ -102,6 +103,7 @@ export default function DashboardLayout({
   return (
     <SidebarProvider>
       <CurrentUserContext.Provider value={{ currentUser, setCurrentUser }}>
+        <SocketPortal />
         {currentUser && (
           <LoginSocket
             userId={currentUser.id}

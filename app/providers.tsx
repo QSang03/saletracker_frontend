@@ -1,8 +1,10 @@
 "use client";
 
+import { TokenRefreshProvider } from "@/components/providers/TokenRefreshProvider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from '@/contexts/AuthContext';
-import { TokenRefreshProvider } from '@/components/providers/TokenRefreshProvider';
+
+import { WebSocketProvider } from '@/contexts/WebSocketContext';
 
 type Props = {
   children: React.ReactNode;
@@ -13,7 +15,9 @@ export function Providers({ children }: Props) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <TokenRefreshProvider>
-          {children}
+          <WebSocketProvider>
+            {children}
+          </WebSocketProvider>
         </TokenRefreshProvider>
       </AuthProvider>
     </ThemeProvider>

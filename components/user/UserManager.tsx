@@ -11,7 +11,6 @@ import EditUserModal from "@/components/user/EditUserModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import { Button } from "@/components/ui/button";
-import { AdminSocket } from "@/components/auth/AdminSocket";
 import {
   Dialog,
   DialogContent,
@@ -147,19 +146,72 @@ export default function UserManager() {
   const users = usersData.data;
   const userTotal = usersData.total;
 
-  // Remove problematic useEffect that causes dropdown to close
-  // useApiState already handles re-fetching when dependencies change
+  // Fixed WebSocket handlers trong UserManager
+  useEffect(() => {
+    const handleWSUserLogin = (event: CustomEvent) => {
+      const { userId, status, lastLogin } = event.detail;
+      console.log("[UserManager] Received ws_user_login:", {
+        userId,
+        status,
+        lastLogin,
+      });
 
-  const handleUserLogin = useCallback(() => {
-    forceUpdate();
-  }, [forceUpdate]);
+      if (!userId) return forceUpdate();
 
-  const handleUserLogout = useCallback(() => {
-    forceUpdate();
-  }, [forceUpdate]);
+      // Chỉ dùng forceUpdate để refetch data
+      console.log("[UserManager] Force updating after user login");
+      forceUpdate();
+    };
 
-  const handleUserBlock = useCallback(() => {
-    forceUpdate();
+    const handleWSUserLogout = (event: CustomEvent) => {
+      const { userId, status } = event.detail;
+      console.log("[UserManager] Received ws_user_logout:", { userId, status });
+
+      if (!userId) return;
+
+      // Chỉ dùng forceUpdate để refetch data
+      console.log("[UserManager] Force updating after user logout");
+      forceUpdate();
+    };
+
+    const handleWSUserBlock = (event: CustomEvent) => {
+      const { userId, isBlock } = event.detail;
+      console.log("[UserManager] Received ws_user_block:", { userId, isBlock });
+
+      // Force update để reload user list với trạng thái mới
+      console.log("[UserManager] Force updating after user block");
+      forceUpdate();
+    };
+
+    // Add event listeners
+    window.addEventListener(
+      "ws_user_login",
+      handleWSUserLogin as EventListener
+    );
+    window.addEventListener(
+      "ws_user_logout",
+      handleWSUserLogout as EventListener
+    );
+    window.addEventListener(
+      "ws_user_block",
+      handleWSUserBlock as EventListener
+    );
+
+    return () => {
+      // Cleanup
+      window.removeEventListener(
+        "ws_user_login",
+        handleWSUserLogin as EventListener
+      );
+      window.removeEventListener(
+        "ws_user_logout",
+        handleWSUserLogout as EventListener
+      );
+      window.removeEventListener(
+        "ws_user_block",
+        handleWSUserBlock as EventListener
+      );
+    };
   }, [forceUpdate]);
 
   const [alert, setAlert] = useState<{
@@ -484,11 +536,6 @@ export default function UserManager() {
           onClose={() => setAlert(null)}
         />
       )}
-      <AdminSocket
-        onUserLogin={handleUserLogin}
-        onUserLogout={handleUserLogout}
-        onUserBlock={handleUserBlock}
-      />
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">

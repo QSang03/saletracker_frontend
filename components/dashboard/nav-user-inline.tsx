@@ -153,7 +153,7 @@ export function NavUserInline({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuGroup>
+        {/* <DropdownMenuGroup>
           <DropdownMenuItem className="gap-2 font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all cursor-pointer">
             <Sparkles className="size-4 text-yellow-400 animate-pulse" />
             <motion.span
@@ -179,11 +179,11 @@ export function NavUserInline({
               Nâng cấp tài khoản
             </motion.span>
           </DropdownMenuItem>
-        </DropdownMenuGroup>
+        </DropdownMenuGroup> */}
 
-        <DropdownMenuSeparator />
+        {/* <DropdownMenuSeparator /> */}
 
-        <DropdownMenuGroup>
+        {/* <DropdownMenuGroup>
           <DropdownMenuItem className="gap-2 cursor-pointer">
             <BadgeCheck className="size-4 text-green-500" />
             Tài khoản
@@ -196,9 +196,9 @@ export function NavUserInline({
             <Bell className="size-4 text-yellow-500" />
             Thông báo
           </DropdownMenuItem>
-        </DropdownMenuGroup>
+        </DropdownMenuGroup> */}
 
-        <DropdownMenuSeparator />
+        {/* <DropdownMenuSeparator /> */}
 
         <DropdownMenuItem
           onClick={handleLogout}
