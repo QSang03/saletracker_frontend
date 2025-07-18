@@ -201,35 +201,8 @@ export default React.memo(function ZaloTable({
         </TableHeader>
 
         <TableBody>
-          {Array.from({ length: expectedRowCount }).map((_, index) => {
-            const user = users[index];
+          {users.map((user, index) => {
             const isEven = index % 2 === 0;
-
-            if (!user) {
-              return (
-                <TableRow
-                  key={`empty-${index}`}
-                  className={`bg-white dark:bg-muted/20 select-none`}
-                  style={{ height: 49, opacity: 0, pointerEvents: "none" }}
-                  aria-hidden="true"
-                >
-                  <TableCell className={cellCenterClass}>
-                    {/* Ẩn số thứ tự */}
-                  </TableCell>
-                  {headers.map((_, i) => (
-                    <TableCell
-                      key={i}
-                      className={
-                        centerIndexes.includes(i)
-                          ? cellCenterClass
-                          : cellLeftClass
-                      }
-                    />
-                  ))}
-                </TableRow>
-              );
-            }
-
             return (
               <TableRow
                 key={user.id}
