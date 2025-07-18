@@ -59,6 +59,11 @@ export default React.memo(function ZaloTable({
           if (!serverIp) return;
           try {
             const res = await fetch(`http://${serverIp}:4000/api/workers/${user.id}`);
+            if (res.status === 404) {
+              // Chưa bật lắng nghe
+              results[user.id] = false;
+              return;
+            }
             if (!res.ok) return;
             const data = await res.json();
             // Nếu status === 'running' thì bật listening
@@ -109,15 +114,22 @@ export default React.memo(function ZaloTable({
             userDataDir: userDataDirPath
           })
         });
-        if (!startRes.ok) throw new Error('Start worker thất bại');
+        if (!startRes.ok) {
+          setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+          return;
+        }
         setListeningStates((prev) => ({ ...prev, [user.id]: true }));
       } else {
         // Tắt: gọi API stop
-        const stopRes = await fetch(`http://${serverIp}:4000/api/workers/${user.id}/stop`, {
-          method: 'POST'
-        });
-        if (!stopRes.ok) throw new Error('Stop worker thất bại');
-        setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+        try {
+          const stopRes = await fetch(`http://${serverIp}:4000/api/workers/${user.id}/stop`, {
+            method: 'POST'
+          });
+          // Nếu trả về lỗi (404, 500...) vẫn set false, không throw
+          setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+        } catch (e) {
+          setListeningStates((prev) => ({ ...prev, [user.id]: false }));
+        }
       }
     } catch (e) {
       setListeningStates((prev) => ({ ...prev, [user.id]: false }));
@@ -243,7 +255,7 @@ export default React.memo(function ZaloTable({
                       <TooltipTrigger asChild>
                         <Toggle
                           pressed={listeningStates[user.id] || false}
-                          onPressedChange={React.useCallback((pressed: boolean) => handleListeningToggle(user, pressed), [user.id, handleListeningToggle])}
+                          onPressedChange={(pressed: boolean) => handleListeningToggle(user, pressed)}
                           variant="outline"
                           size="sm"
                           className={`toggle-btn h-8 w-8 p-0 relative${listeningAnim[user.id] ? ' toggle-activated-anim' : ''}${listeningStates[user.id] ? ' toggle-activated-anim' : ''}`}
