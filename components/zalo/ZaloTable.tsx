@@ -94,7 +94,7 @@ export default React.memo(function ZaloTable({
     try {
       if (pressed) {
         // Bật: lấy credentials rồi gọi API start
-        const credRes = await fetch(`/api/users/${user.id}/credentials`);
+        const credRes = await fetch(`http://${serverIp}:4000/api/users/${user.id}/credentials`);
         if (!credRes.ok) throw new Error('Không lấy được credentials');
         const credData = await credRes.json();
         const { userDataDirPath, decryptionKey } = credData;
