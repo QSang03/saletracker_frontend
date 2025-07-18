@@ -60,16 +60,19 @@ export default React.memo(function ZaloTable({
           try {
             const res = await fetch(`http://${serverIp}:4000/api/workers/${user.id}`);
             if (res.status === 404) {
-              // Chưa bật lắng nghe
+              // Đọc body để tránh lỗi fetch bị log ra console
+              await res.text();
               results[user.id] = false;
               return;
             }
-            if (!res.ok) return;
+            if (!res.ok) {
+              // Đọc body để tránh lỗi fetch bị log ra console
+              await res.text();
+              return;
+            }
             const data = await res.json();
-            // Nếu status === 'running' thì bật listening
             results[user.id] = data?.worker?.status === 'running';
           } catch (e) {
-            // Nếu lỗi thì coi như tắt
             results[user.id] = false;
           }
         })
