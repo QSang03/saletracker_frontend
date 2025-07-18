@@ -128,7 +128,6 @@ export default React.memo(function ZaloTable({
           const stopRes = await fetch(`http://${serverIp}:4000/api/workers/${user.id}/stop`, {
             method: 'POST'
           });
-          // Nếu trả về lỗi (404, 500...) vẫn set false, không throw
           setListeningStates((prev) => ({ ...prev, [user.id]: false }));
         } catch (e) {
           setListeningStates((prev) => ({ ...prev, [user.id]: false }));
@@ -137,12 +136,18 @@ export default React.memo(function ZaloTable({
     } catch (e) {
       setListeningStates((prev) => ({ ...prev, [user.id]: false }));
     }
+    // Không gọi confirm ở đây nữa
+    onToggleListening(user, pressed);
+  }, [onToggleListening]);
+
+  // Hàm trung gian: chỉ gọi handleListeningToggle sau khi confirm
+  const handleListeningToggleRequest = (user: User, pressed: boolean) => {
     if (typeof onRequestListeningConfirm === "function") {
-      onRequestListeningConfirm(user, pressed);
+      onRequestListeningConfirm(user, pressed, () => handleListeningToggle(user, pressed));
     } else {
-      onToggleListening(user, pressed);
+      handleListeningToggle(user, pressed);
     }
-  }, [onRequestListeningConfirm, onToggleListening]);
+  };
 
   const handleAutoMessageToggle = (user: User, pressed: boolean) => {
     if (pressed) {
@@ -258,7 +263,7 @@ export default React.memo(function ZaloTable({
                       <TooltipTrigger asChild>
                         <Toggle
                           pressed={listeningStates[user.id] || false}
-                          onPressedChange={(pressed: boolean) => handleListeningToggle(user, pressed)}
+                          onPressedChange={(pressed: boolean) => handleListeningToggleRequest(user, pressed)}
                           variant="outline"
                           size="sm"
                           className={`toggle-btn h-8 w-8 p-0 relative${listeningAnim[user.id] ? ' toggle-activated-anim' : ''}${listeningStates[user.id] ? ' toggle-activated-anim' : ''}`}
