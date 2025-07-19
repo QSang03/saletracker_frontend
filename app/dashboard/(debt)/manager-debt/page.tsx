@@ -619,6 +619,7 @@ export default function ManagerDebtPage() {
                       const file = e.target.files && e.target.files[0];
                       if (file) {
                         handleExcelImport(file);
+                        e.target.value = "";
                       }
                     }}
                   />

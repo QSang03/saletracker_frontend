@@ -451,6 +451,7 @@ export default function DebtSettingsPage() {
                     const file = e.target.files && e.target.files[0];
                     if (file) {
                       handleImportExcel(file);
+                      e.target.value = "";
                     }
                   }}
                 />
