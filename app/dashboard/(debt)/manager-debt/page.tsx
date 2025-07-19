@@ -18,6 +18,7 @@ import {
 import { useApiState } from "@/hooks/useApiState";
 import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { DebtSocket } from "@/components/socket/DebtSocket";
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
@@ -132,9 +133,9 @@ export default function ManagerDebtPage() {
       };
 
     try {
-      const params: Record<string, any> = { 
+      const params: Record<string, any> = {
         date: filters.singleDate, // Use the string date directly
-        stats: 1 
+        stats: 1,
       };
 
       if (filters.search) params.search = filters.search;
@@ -192,8 +193,16 @@ export default function ManagerDebtPage() {
   const debts = debtsData.data;
   const total = debtsData.total;
 
-  // useApiState automatically handles re-fetching when dependencies change
-  // No need for manual useEffect triggers
+  const handleDebtUpdate = useCallback(
+    (data: any) => {
+      console.log("[ManagerDebtPage] Debt updated:", data);
+      if (data.refresh_request) {
+        forceUpdate();
+        refreshStats();
+      }
+    },
+    [forceUpdate]
+  );
 
   // Status options for filter
   const statusOptions = [
@@ -264,16 +273,16 @@ export default function ManagerDebtPage() {
         const data = await res.json();
         if (Array.isArray(data)) {
           setAllEmployeeOptions(
-            data.map((emp: any) => ({ 
-              label: emp.name || emp.fullName || emp.employee_name, 
-              value: emp.name || emp.fullName || emp.employee_name 
+            data.map((emp: any) => ({
+              label: emp.name || emp.fullName || emp.employee_name,
+              value: emp.name || emp.fullName || emp.employee_name,
             }))
           );
         } else if (Array.isArray(data.data)) {
           setAllEmployeeOptions(
-            data.data.map((emp: any) => ({ 
-              label: emp.name || emp.fullName || emp.employee_name, 
-              value: emp.name || emp.fullName || emp.employee_name 
+            data.data.map((emp: any) => ({
+              label: emp.name || emp.fullName || emp.employee_name,
+              value: emp.name || emp.fullName || emp.employee_name,
             }))
           );
         } else {
@@ -571,6 +580,7 @@ export default function ManagerDebtPage() {
   return (
     <div className="h-full overflow-hidden">
       <div className="h-full overflow-y-auto overflow-x-hidden p-6">
+        <DebtSocket onDebtUpdate={handleDebtUpdate} />
         <Card className="w-full max-w-full">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-xl font-bold">
@@ -760,13 +770,6 @@ export default function ManagerDebtPage() {
                 </PaginatedTable>
               </div>
             </div>
-
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex justify-center py-8">
-                <LoadingSpinner size={32} />
-              </div>
-            )}
           </CardContent>
         </Card>
 

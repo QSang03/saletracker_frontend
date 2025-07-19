@@ -303,7 +303,7 @@ export default function DebtSettingManagement({
 
       // Call refresh để đảm bảo data consistency (optional, silent)
       if (onRefresh) {
-        setTimeout(() => onRefresh(), 1000);
+        setTimeout(() => onRefresh(), 500);
       }
     } catch (e) {
       console.error("Update error:", e);

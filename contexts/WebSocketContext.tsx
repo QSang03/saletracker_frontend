@@ -8,6 +8,7 @@ import React, {
   ReactNode,
 } from "react";
 import { wsClient, WSClientEvents } from "@/lib/wsClient";
+import { getUserFromToken } from "@/lib/auth";
 import { AuthContext } from "@/contexts/AuthContext";
 
 // Kiểu cho handler
@@ -85,11 +86,26 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!token) return;
     wsClient.connect(token);
-    
+
     // Listen for connection events
     const handleConnect = () => {
       setIsConnected(true);
-      
+
+      // Join department rooms dựa trên slug
+      try {
+        const user = getUserFromToken(token);
+        if (user && Array.isArray(user.departments)) {
+          user.departments.forEach((dept: any) => {
+            if (dept.slug) {
+              console.log(`[WebSocketContext] Joining room: department:${dept.slug}`);
+              wsClient.emit('joinRoom', `department:${dept.slug}`);
+            }
+          });
+        }
+      } catch (e) {
+        console.error('[WebSocketContext] Failed to join department rooms:', e);
+      }
+
       // Process pending subscriptions
       const uniqueEvents = new Set(pendingSubscriptionsRef.current.map(p => p.event));
       uniqueEvents.forEach(event => {
@@ -109,7 +125,6 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
     wsClient.socket?.on('disconnect', handleDisconnect);
 
     return () => {
-      
       // Clean up all event handlers
       eventHandlersRef.current.forEach((handler, event) => {
         wsClient.off(event, handler);
@@ -117,7 +132,6 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
       eventHandlersRef.current.clear();
       handlersRef.current = {};
       pendingSubscriptionsRef.current = [];
-      
       setIsConnected(false);
       wsClient.disconnect();
     };

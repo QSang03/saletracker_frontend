@@ -21,13 +21,13 @@ import { NavUserInline } from "@/components/dashboard/nav-user-inline";
 import { getAccessToken, clearAccessToken } from "@/lib/auth";
 import { toast, Toaster } from "sonner";
 import type { User } from "@/types";
-import { LoginSocket } from "@/components/auth/LoginSocket";
+import { LoginSocket } from "@/components/socket/LoginSocket";
 import { CurrentUserContext } from "@/contexts/CurrentUserContext";
 import ZaloLinkStatusChecker from "@/components/common/ZaloLinkStatusChecker";
 import NotificationBell from "@/components/common/NotificationBell";
 import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
-import { SocketPortal } from "@/components/common/SocketPortal";
+import { SocketPortal } from "@/components/socket/SocketPortal";
 
 
 export default function DashboardLayout({
