@@ -19,6 +19,7 @@ import { useApiState } from "@/hooks/useApiState";
 import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { DebtSocket } from "@/components/socket/DebtSocket";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
@@ -833,11 +834,38 @@ export default function ManagerDebtPage() {
         <ConfirmDialog
           isOpen={showDeleteAllConfirm}
           title="⚠️ Xác nhận xóa tất cả công nợ"
-          message={`Bạn có chắc chắn muốn xóa TẤT CẢ phiếu công nợ có ngày cập nhật hôm nay (${new Date().toLocaleDateString(
-            "vi-VN"
-          )})?
-
-Thao tác này không thể hoàn tác!`}
+          message={
+            <Alert className="text-left border-gray-200 bg-white">
+              <AlertDescription>
+                <div className="space-y-3 text-black text-lg">
+                  <div>
+                    Bạn có chắc chắn muốn xóa{" "}
+                    <span className="text-red-600 font-semibold">TẤT CẢ</span>{" "}
+                    phiếu công nợ có ngày cập nhật hôm nay (
+                    <span className="text-red-600 font-semibold">
+                      {new Date().toLocaleDateString("vi-VN")}
+                    </span>
+                    )?
+                  </div>
+                  <div className="font-semibold text-red-600">
+                    Thao tác này không thể hoàn tác!
+                  </div>
+                  <div>
+                    <div className="mb-2">
+                      ⚠️{" "}
+                      <span className="text-red-600 font-semibold">Lưu ý:</span>{" "}
+                      Những thông tin sau đây có thể không chính xác sau khi xóa
+                      và nhập lại:
+                    </div>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li className="text-red-600">Ngày hẹn thanh toán</li>
+                      <li className="text-red-600">Thông tin thanh toán</li>
+                    </ul>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          }
           onConfirm={handleDeleteAllTodayDebts}
           onCancel={() => setShowDeleteAllConfirm(false)}
         />
