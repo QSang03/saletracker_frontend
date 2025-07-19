@@ -343,7 +343,7 @@ export default function DebtDetailDialog({
   };
 
   return (
-    <Fragment>
+    <>
       <DebtSocket onDebtLogUpdate={handleDebtLogUpdate} />
       <Dialog open={open} onOpenChange={onClose}>
         {open ? (
@@ -599,12 +599,8 @@ export default function DebtDetailDialog({
             </Button>
           </div>
         </DialogContent>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">Đang tải...</p>
-          </div>
-        )}
+        ) : null}
       </Dialog>
-    </Fragment>
+    </>
   );
 }
