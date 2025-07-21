@@ -25,6 +25,7 @@ import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import type { User } from "@/types";
 
 import { clearAllTokens } from "@/lib/auth";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 
 // Hàm lấy cookie từ client-side
 function getCookie(name: string): string | null {
@@ -51,6 +52,7 @@ export function NavUserInline({
   const router = useRouter();
   const [showProfile, setShowProfile] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
+  const { disconnect } = useWebSocketContext();
 
   const handleLogout = async () => {
     try {
@@ -65,6 +67,7 @@ export function NavUserInline({
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
+      disconnect();
       clearAllTokens();
       router.push("/login");
     }

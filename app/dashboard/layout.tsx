@@ -28,7 +28,7 @@ import NotificationBell from "@/components/common/NotificationBell";
 import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
 import { SocketPortal } from "@/components/socket/SocketPortal";
-
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 
 export default function DashboardLayout({
   children,
@@ -40,6 +40,7 @@ export default function DashboardLayout({
   const [activeUrl, setActiveUrl] = useState(pathname);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const { disconnect } = useWebSocketContext();
 
   useEffect(() => {
     setActiveUrl(pathname);
@@ -108,6 +109,7 @@ export default function DashboardLayout({
           <LoginSocket
             userId={currentUser.id}
             onBlocked={() => {
+              disconnect();
               clearAccessToken();
               toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
               router.push("/login");

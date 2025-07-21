@@ -20,6 +20,7 @@ interface IWebSocketContext {
   unsubscribe: (event: WSClientEvents, handler: WSHandler) => void;
   emit: (event: WSClientEvents, data: any) => void;
   isConnected: boolean;
+  disconnect: () => void;
 }
 
 const WebSocketContext = createContext<IWebSocketContext | undefined>(
@@ -27,11 +28,12 @@ const WebSocketContext = createContext<IWebSocketContext | undefined>(
 );
 
 export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
-  const { token } = useContext(AuthContext);
+  const { token, user } = useContext(AuthContext);
   const handlersRef = useRef<WSHandlersMap>({});
   const eventHandlersRef = useRef<Map<WSClientEvents, (data: any) => void>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
   const pendingSubscriptionsRef = useRef<Array<{ event: WSClientEvents; handler: WSHandler }>>([]);
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
 
   // Tạo hoặc lấy event handler cho event cụ thể
   const getEventHandler = (event: WSClientEvents) => {
@@ -141,8 +143,26 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
     wsClient.emit(event, data);
   };
 
+  useEffect(() => {
+    if (!user) return;
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    if (isConnected) {
+      heartbeatRef.current = setInterval(() => {
+        wsClient.emit('heartbeat', {});
+      }, 30000);
+    }
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, [isConnected, user]);
+
+  const disconnect = () => {
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    wsClient.disconnect();
+  };
+
   return (
-    <WebSocketContext.Provider value={{ subscribe, unsubscribe, emit, isConnected }}>
+    <WebSocketContext.Provider value={{ subscribe, unsubscribe, emit, isConnected, disconnect }}>
       {children}
     </WebSocketContext.Provider>
   );

@@ -57,6 +57,7 @@ export default React.memo(function UserTable({
     "Trạng thái hoạt động",
     "Ngày tạo",
     "Đăng nhập cuối",
+    "Thời gian hoạt động cuối cùng",
     "Thao tác",
   ];
 
@@ -233,6 +234,18 @@ export default React.memo(function UserTable({
                 >
                   {user.lastLogin
                     ? new Date(user.lastLogin).toLocaleString("vi-VN")
+                    : "-"}
+                </TableCell>
+                <TableCell
+                  className={cellCenterClass}
+                  title={
+                    user.lastOnlineAt
+                      ? new Date(user.lastOnlineAt).toLocaleString("vi-VN")
+                      : "-"
+                  }
+                >
+                  {user.lastOnlineAt
+                    ? new Date(user.lastOnlineAt).toLocaleString("vi-VN")
                     : "-"}
                 </TableCell>
                 <TableCell className={cellCenterClass}>

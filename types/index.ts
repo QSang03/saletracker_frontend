@@ -56,6 +56,7 @@ export interface User {
   zaloLinkStatus?: number;
   zaloName?: string;
   avatarZalo?: string;
+  lastOnlineAt?: Date | string;
 }
 
 export interface UserWithPermissions extends User {
