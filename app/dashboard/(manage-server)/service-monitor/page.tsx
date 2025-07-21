@@ -40,6 +40,20 @@ interface LogMessage {
     message: string;
 }
 
+// Mảng màu động
+const COLORS = [
+  "#60a5fa", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#f472b6", "#38bdf8", "#facc15", "#4ade80"
+];
+
+function getColorForCategory(category: string) {
+  let hash = 0;
+  for (let i = 0; i < category.length; i++) {
+    hash = category.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const idx = Math.abs(hash) % COLORS.length;
+  return COLORS[idx];
+}
+
 export default function ServiceMonitorPage() {
     const [status, setStatus] = useState<Record<string, ServiceStatus>>({});
     const [logs, setLogs] = useState<Record<string, string[]>>({});
@@ -400,20 +414,19 @@ export default function ServiceMonitorPage() {
                     serviceCategories.map((category) => {
                         const service = status[category];
                         const serviceLogs = logs[category] || [];
-                        // Chỉ dùng logs, không cần combine với realtimeLogs nữa
                         const combinedLogs = serviceLogs;
-
+                        const color = getColorForCategory(category);
                         return (
                             <Card key={category} className="overflow-hidden">
                                 <CardHeader>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
-                                            <div className="p-2 rounded-lg bg-primary/10">
-                                                <Server className="size-5 text-primary" />
+                                            <div className="p-2 rounded-lg" style={{ background: color + "22" }}>
+                                                <Server className="size-5" style={{ color }} />
                                             </div>
                                             <div>
                                                 <CardTitle className="text-xl capitalize">
-                                                    {category.replace("_", " ")} Service
+                                                    {category.replace(/_/g, " ")} Service
                                                 </CardTitle>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <ServiceStatusIndicator
@@ -434,14 +447,13 @@ export default function ServiceMonitorPage() {
                                                     )}
                                                     {serviceLogs.length > 0 && service?.running && (
                                                         <Badge variant="outline" className="gap-1">
-                                                            <Activity className="size-3 text-blue-500 animate-pulse" />
+                                                            <Activity className="size-3" style={{ color }} />
                                                             Live
                                                         </Badge>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
-
                                         <div className="flex items-center gap-2">
                                             {service?.running ? (
                                                 <Button
@@ -480,14 +492,9 @@ export default function ServiceMonitorPage() {
                                         </div>
                                     </div>
                                 </CardHeader>
-
                                 <CardContent className="space-y-4">
-                                    {/* Service Metrics */}
                                     <ServiceMetrics processCount={service?.process_count || 0} />
-
                                     <Separator />
-
-                                    {/* Log Viewer */}
                                     <LogViewer
                                         logs={combinedLogs}
                                         title="Service Logs"

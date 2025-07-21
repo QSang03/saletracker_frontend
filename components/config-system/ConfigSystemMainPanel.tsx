@@ -5,18 +5,16 @@ import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { getAccessToken } from "@/lib/auth";
 
-// ...existing code...
-
 const SECTION_TITLES: Record<string, string> = {
   system: "HỆ THỐNG",
   debt: "CÔNG NỢ",
-  sale: "KINH DOANH",
   holiday: "LỊCH NGHỈ",
-  transaction: "GIAO DỊCH"
+  transaction: "GIAO DỊCH",
+  campaign: "CHIẾN DỊCH KINH DOANH",
   // Thêm các section khác nếu cần
 };
 
-const SECTION_ALLOWED = ["system", "debt", "sale", "transaction"];
+const SECTION_ALLOWED = ["system", "debt", "campaign", "transaction"];
 
 interface ConfigSystemMainPanelProps {
   allConfigs: any[];

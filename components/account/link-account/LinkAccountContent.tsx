@@ -119,7 +119,8 @@ export default function LinkAccountContent({
   const updateZaloLinkStatus = async (
     status: number,
     zaloName?: string | null,
-    avatarZalo?: string | null
+    avatarZalo?: string | null,
+    zaloGender?: string | null
   ) => {
     if (!currentUser) return;
     try {
@@ -135,6 +136,7 @@ export default function LinkAccountContent({
           zaloLinkStatus: status,
           zaloName,
           avatarZalo,
+          zaloGender,
         }),
       });
       
@@ -273,7 +275,7 @@ export default function LinkAccountContent({
           if (msg.data && msg.data.avatar) {
             setUserAvatar(msg.data.avatar);
           }
-          updateZaloLinkStatus(1, msg.data?.zaloUsername, msg.data?.avatar);
+          updateZaloLinkStatus(1, msg.data?.zaloUsername, msg.data?.avatar, msg.data?.gender);
           // Refresh token để cập nhật thông tin Zalo trong JWT
           refreshUserToken();
           ws.close();

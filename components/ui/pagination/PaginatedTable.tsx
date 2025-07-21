@@ -21,6 +21,7 @@ interface PaginatedTableProps {
   enableStatusFilter?: boolean;
   enableEmployeeFilter?: boolean;
   enableZaloLinkStatusFilter?: boolean;
+  enableCategoriesFilter?: boolean;
   availableEmployees?: Option[];
   enableDateRangeFilter?: boolean;
   enableSingleDateFilter?: boolean;
@@ -90,6 +91,7 @@ export default function PaginatedTable({
   availableEmployees = [],
   // Thêm các props mới
   enableZaloLinkStatusFilter,
+  enableCategoriesFilter,
   availableZaloLinkStatuses = [
     { value: 0, label: "Chưa liên kết" },
     { value: 1, label: "Đã liên kết" },
@@ -181,7 +183,7 @@ export default function PaginatedTable({
     categories: initialFilters?.categories || [],
     brands: initialFilters?.brands || [],
     dateRange: initialFilters?.dateRange || { from: undefined, to: undefined },
-    singleDate: initialFilters?.singleDate || new Date().toLocaleDateString("en-CA"),
+    singleDate: initialFilters?.singleDate || undefined, // Không set mặc định
     employees: initialFilters?.employees || [],
   }));
 
@@ -313,7 +315,7 @@ export default function PaginatedTable({
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
-      singleDate: new Date().toLocaleDateString("en-CA"), // Reset to today's date in string format
+      singleDate: undefined, // Reset về undefined thay vì ngày hiện tại
       employees: [],
     };
     setFilters(reset);
@@ -425,10 +427,28 @@ export default function PaginatedTable({
               onChange={handleZaloLinkStatusesChange}
             />
           )}
+          {enableCategoriesFilter && availableCategories.length > 0 && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full ${filterClassNames.categories ?? ''}`}
+              placeholder="Danh mục"
+              value={filters.categories}
+              options={categoryOptions}
+              onChange={handleCategoriesChange}
+            />
+          )}
+          {availableBrands.length > 0 && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full ${filterClassNames.brands ?? ''}`}
+              placeholder="Brand"
+              value={filters.brands}
+              options={brandOptions}
+              onChange={handleBrandsChange}
+            />
+          )}
           {enableSingleDateFilter && (
             <DatePicker
               value={filters.singleDate ? new Date(filters.singleDate) : undefined}
-              onChange={(date) => updateFilter("singleDate", date ? date.toLocaleDateString("en-CA") : "")}
+              onChange={(date) => updateFilter("singleDate", date ? date.toLocaleDateString("en-CA") : undefined)} // Set undefined khi clear
               placeholder={singleDateLabel || "Chọn ngày"}
               className="min-w-0 w-full"
             />
@@ -484,40 +504,6 @@ export default function PaginatedTable({
         {/* Tổng số dòng dưới filter */}
         <div className="mt-4 ml-0.5 text font-medium">
           Tổng số dòng: <span className="text-red-500">{totalRows}</span>
-        </div>
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          {availableCategories.length > 0 && (
-            <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.categories ?? ''}`}
-              placeholder="Danh mục"
-              value={filters.categories}
-              options={categoryOptions}
-              onChange={handleCategoriesChange}
-            />
-          )}
-          {availableBrands.length > 0 && (
-            <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.brands ?? ''}`}
-              placeholder="Brand"
-              value={filters.brands}
-              options={brandOptions}
-              onChange={handleBrandsChange}
-            />
-          )}
-          {enableDateRangeFilter && (
-            <DateRangePicker
-              className={`min-w-0 w-full ${filterClassNames.dateRange ?? ''}`}
-              initialDateRange={filters.dateRange}
-              onUpdate={({ range }) =>
-                updateFilter(
-                  "dateRange",
-                  range ?? { from: undefined, to: undefined }
-                )
-              }
-              locale="vi"
-              align="start"
-            />
-          )}
         </div>
       </div>
 

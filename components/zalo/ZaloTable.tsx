@@ -86,7 +86,6 @@ export default React.memo(function ZaloTable({
   }, [users]);
 
   const handleListeningToggle = React.useCallback(async (user: User, pressed: boolean) => {
-    console.log('Toggle listening:', { id: user.id, pressed });
     if (pressed) {
       setListeningAnim(prev => ({ ...prev, [user.id]: true }));
       setTimeout(() => {
@@ -118,6 +117,7 @@ export default React.memo(function ZaloTable({
           })
         });
         if (!startRes.ok) {
+          const errText = await startRes.text();
           setListeningStates((prev) => ({ ...prev, [user.id]: false }));
           return;
         }
@@ -169,6 +169,7 @@ export default React.memo(function ZaloTable({
     "Tên Người Dùng",
     "Trạng Thái Liên Kết",
     "Tên Zalo",
+    "Giới Tính",
     "Thao Tác",
   ];
 
@@ -256,6 +257,9 @@ export default React.memo(function ZaloTable({
                       ? user.zaloName.slice(0, 19) + "…"
                       : user.zaloName
                     : "-"}
+                </TableCell>
+                <TableCell className={cellCenterClass}>
+                  {user.zaloGender || "-"}
                 </TableCell>
                 <TableCell className={cellCenterClass}>
                   <div className="flex items-center justify-center gap-3">

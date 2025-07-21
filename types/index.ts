@@ -56,6 +56,7 @@ export interface User {
   zaloLinkStatus?: number;
   zaloName?: string;
   avatarZalo?: string;
+  zaloGender?: string;
   lastOnlineAt?: Date | string;
 }
 
@@ -289,4 +290,156 @@ export interface UpdateUserRolesPermissionsDto {
 export interface PermissionCheckParams {
   departmentSlug: string;
   action: string;
+}
+
+// Campaign Types
+export enum CampaignType {
+  HOURLY_KM = 'hourly_km',
+  DAILY_KM = 'daily_km',
+  THREE_DAY_KM = '3_day_km',
+  WEEKLY_SP = 'weekly_sp',
+  WEEKLY_BBG = 'weekly_bbg',
+}
+
+export enum CampaignStatus {
+  DRAFT = 'draft',
+  SCHEDULED = 'scheduled',
+  RUNNING = 'running',
+  PAUSED = 'paused',
+  COMPLETED = 'completed',
+  ARCHIVED = 'archived',
+}
+
+export enum SendMethod {
+  API = 'api',
+  BOT = 'bot',
+}
+
+export enum LogStatus {
+  PENDING = 'pending',
+  SENT = 'sent',
+  FAILED = 'failed',
+  CUSTOMER_REPLIED = 'customer_replied',
+  STAFF_HANDLED = 'staff_handled',
+  REMINDER_SENT = 'reminder_sent',
+}
+
+// Campaign Interfaces
+export interface Campaign {
+  id: string;
+  name: string;
+  campaign_type: CampaignType;
+  status: CampaignStatus;
+  send_method: SendMethod;
+  department: Department;
+  created_by: User;
+  created_at: Date;
+  updated_at: Date;
+  customer_count?: number;
+  progress_percentage?: number;
+  response_rate?: number;
+}
+
+export interface CampaignCustomer {
+  id: string;
+  phone_number: string;
+  full_name: string;
+  salutation?: string;
+  metadata?: Record<string, any>;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface CampaignInteractionLog {
+  id: string;
+  campaign: Campaign;
+  customer: CampaignCustomer;
+  message_content_sent: string;
+  attachment_sent?: Record<string, any>;
+  status: LogStatus;
+  sent_at?: Date;
+  customer_replied_at?: Date;
+  customer_reply_content?: string;
+  staff_handled_at?: Date;
+  staff_reply_content?: string;
+  staff_handler?: User;
+  error_details?: Record<string, any>;
+  conversation_metadata?: Record<string, any>;
+  reminder_metadata?: ReminderMetadata;
+}
+
+// Campaign Configuration Types
+export type Attachment =
+  | { type: "image"; base64: string }
+  | { type: "link"; url: string }
+  | { type: "file"; base64: string; filename: string }
+  | null;
+
+export type InitialMessage = {
+  type: "initial";
+  text: string;
+  attachment: Attachment;
+};
+
+export type ReminderMessage = {
+  type: "reminder";
+  offset_minutes: number;
+  text: string;
+  attachment: Attachment;
+};
+
+export type PromoMessageStep = InitialMessage | ReminderMessage;
+export type PromoMessageFlow = [InitialMessage, ...ReminderMessage[]] | [InitialMessage];
+
+export type DailyPromotion = {
+  type: "hourly";
+  start_time: string;
+  end_time: string;
+  remind_after_minutes: number;
+};
+
+export type WeeklyPromotion = {
+  type: "weekly";
+  day_of_week: number;
+  time_of_day: string;
+};
+
+export type ThreeDayPromotion = {
+  type: "3_day";
+  days_of_week: number[];
+  time_of_day: string;
+};
+
+export type ReminderMetadataItem = {
+  message: string;
+  remindAt: string;
+  attachment_sent?: Record<string, any>;
+  error?: string;
+};
+
+export type ReminderMetadata = ReminderMetadataItem[];
+
+// Campaign Form Data
+export interface CampaignFormData {
+  name: string;
+  campaign_type: CampaignType;
+  schedule_config?: DailyPromotion | WeeklyPromotion | ThreeDayPromotion;
+  messages?: PromoMessageFlow;
+  reminders?: Array<{
+    content: string;
+    minutes: number;
+  }>;
+  email_reports?: {
+    recipients_to: string;
+    recipients_cc?: string[];
+    report_interval_minutes?: number;
+    stop_sending_at_time?: string;
+    is_active: boolean;
+    send_when_campaign_completed: boolean;
+  };
+  customers?: Array<{
+    phone_number: string;
+    full_name: string;
+    salutation?: string;
+  }>;
 }

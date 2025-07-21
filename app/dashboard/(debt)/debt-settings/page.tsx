@@ -10,7 +10,7 @@ import AddManualDebtModal from "@/components/debt/debt-setting/AddManualDebtModa
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { getAccessToken } from "@/lib/auth";
-import { useApiState } from "@/hooks/useApiState";
+import { useDebtConfigs } from "@/hooks/useDebtConfigs";
 import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { DebtSocket } from "@/components/socket/DebtSocket";
@@ -46,38 +46,19 @@ export default function DebtSettingsPage() {
     user,
   } = useDynamicPermission();
 
-  // Fetch function for debt configs
-  const fetchDebtConfigs = useCallback(async (): Promise<any[]> => {
-    const token = getAccessToken();
-    if (!token) {
-      throw new Error("No token available");
-    }
-
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/debt-configs`, {
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to fetch debt configs");
-    }
-
-    const data = await res.json();
-    return data;
-  }, []);
-
   // Use the custom hook for debt configs
   const {
     data: apiData,
+    total,
+    totalPages,
     isLoading,
     error,
     forceUpdate,
-  } = useApiState(fetchDebtConfigs, []);
+    employeeOptions,
+    loadingEmployees,
+  } = useDebtConfigs(filters, page, pageSize);
 
-  // Realtime event handlers
+  // Realtime event handlers - refetch with current filters
   const handleDebtLogUpdate = useCallback(
     (data: any) => {
       if (data.refresh_request) {
@@ -96,93 +77,9 @@ export default function DebtSettingsPage() {
     [forceUpdate]
   );
 
-  // Calculate total
-  const total = apiData.length;
-
-  // Lấy danh sách nhân viên từ apiData (unique employee_id + fullName)
-  const employeeOptions = useMemo(() => {
-    const map = new Map();
-    apiData.forEach((item) => {
-      if (item.employee && item.employee.id && item.employee.fullName) {
-        map.set(item.employee.id, item.employee.fullName);
-      }
-    });
-    return Array.from(map.entries()).map(([id, label]) => ({
-      value: id,
-      label,
-    }));
-  }, [apiData]);
-
-  // Hàm kiểm tra filter rỗng
-  const isAllFilterEmpty = useCallback((f: Filters) => {
-    return (
-      (!f.search || f.search.trim() === "") &&
-      (!f.employees || f.employees.length === 0) &&
-      !f.singleDate &&
-      (!f.departments || f.departments.length === 0) &&
-      (!f.roles || f.roles.length === 0) &&
-      (!f.statuses || f.statuses.length === 0) &&
-      (!f.categories || f.categories.length === 0) &&
-      (!f.brands || f.brands.length === 0) &&
-      (!f.dateRange || (!f.dateRange.from && !f.dateRange.to))
-    );
-  }, []);
-
-  // Filter data locally when filters are applied
-  const filteredData = useMemo(() => {
-    // Check if filter is empty inline to avoid dependency issues
-    const isFilterEmpty =
-      (!filters.search || filters.search.trim() === "") &&
-      (!filters.employees || filters.employees.length === 0) &&
-      !filters.singleDate &&
-      (!filters.departments || filters.departments.length === 0) &&
-      (!filters.roles || filters.roles.length === 0) &&
-      (!filters.statuses || filters.statuses.length === 0) &&
-      (!filters.categories || filters.categories.length === 0) &&
-      (!filters.brands || filters.brands.length === 0) &&
-      (!filters.dateRange ||
-        (!filters.dateRange.from && !filters.dateRange.to));
-
-    if (isFilterEmpty) {
-      return apiData;
-    }
-
-    return apiData.filter((item) => {
-      // Search filter
-      if (filters.search && filters.search.trim() !== "") {
-        const searchTerm = filters.search.toLowerCase();
-        const matchesSearch =
-          item.customer_name?.toLowerCase().includes(searchTerm) ||
-          item.customer_code?.toLowerCase().includes(searchTerm) ||
-          item.employee?.fullName?.toLowerCase().includes(searchTerm) ||
-          item.note?.toLowerCase().includes(searchTerm);
-        if (!matchesSearch) return false;
-      }
-
-      // Employee filter
-      if (filters.employees && filters.employees.length > 0) {
-        const matchesEmployee = filters.employees.some(
-          (empId) => item.employee?.id?.toString() === empId.toString()
-        );
-        if (!matchesEmployee) return false;
-      }
-
-      // Date filter
-      if (filters.singleDate) {
-        const itemDate = new Date(item.send_last_at);
-        const filterDate = new Date(filters.singleDate);
-        if (itemDate.toDateString() !== filterDate.toDateString()) return false;
-      }
-
-      return true;
-    });
-  }, [apiData, filters]);
-
-  // Paginated data
-  const paginatedData = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, page, pageSize]);
+  // Backend đã xử lý filter và pagination, không cần filter ở frontend nữa
+  const filteredData = apiData;
+  const paginatedData = apiData; // Backend đã trả về đúng dữ liệu cho trang hiện tại
 
   // Callback filter
   const handleFilterChange = useCallback((f: Filters) => {
@@ -331,7 +228,7 @@ export default function DebtSettingsPage() {
   // Export Excel handler - simplified to avoid complex type matching
   const handleExportExcel = useCallback(() => {
     // Simple export format to avoid type errors
-    const data = filteredData.map((item, index) => [
+    const data = filteredData.map((item: any, index: number) => [
       index + 1,
       item.customer_code || "",
       item.customer_name || "",
@@ -516,7 +413,7 @@ export default function DebtSettingsPage() {
             singleDateLabel="Ngày đã nhắc"
             page={page}
             pageSize={pageSize}
-            total={filteredData.length}
+            total={total} // Sử dụng total từ backend
             onPageChange={setPage}
             onPageSizeChange={(newSize) => {
               setPageSize(newSize);
@@ -529,7 +426,7 @@ export default function DebtSettingsPage() {
             pageSizeOptions={[5, 10, 20, 50]}
           >
             <DebtSettingManagement
-              data={paginatedData}
+              data={paginatedData} // Sử dụng data từ backend (đã phân trang)
               page={page}
               pageSize={pageSize}
               onToggle={handleToggle}

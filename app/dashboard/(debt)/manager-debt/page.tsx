@@ -45,6 +45,7 @@ export default function ManagerDebtPage() {
   const [showImportPayDate, setShowImportPayDate] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [isImporting, setIsImporting] = useState(false); // Thêm state loading cho import
 
   const {
     canReadDepartment,
@@ -91,9 +92,9 @@ export default function ManagerDebtPage() {
 
     if (filters.search) params.search = filters.search;
     if (filters.statuses && filters.statuses.length > 0)
-      params.status = filters.statuses[0];
+      params.statuses = filters.statuses;
     if (filters.employees && filters.employees.length > 0)
-      params.employee = filters.employees[0];
+      params.employeeCodes = filters.employees;
 
     const queryStr = Object.entries(params)
       .filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -141,9 +142,9 @@ export default function ManagerDebtPage() {
 
       if (filters.search) params.search = filters.search;
       if (filters.statuses && filters.statuses.length > 0)
-        params.status = filters.statuses[0];
+        params.statuses = filters.statuses;
       if (filters.employees && filters.employees.length > 0)
-        params.employee = filters.employees[0];
+        params.employeeCodes = filters.employees;
 
       const queryStr = Object.entries(params)
         .filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -356,6 +357,8 @@ export default function ManagerDebtPage() {
     const token = getAccessToken();
     if (!token) return;
 
+    setIsImporting(true); // Bắt đầu loading
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -372,23 +375,76 @@ export default function ManagerDebtPage() {
       );
 
       const result = await res.json();
+      console.log('Import result:', result); // Debug log
 
       if (res.ok) {
+        // Debug: Log raw result
+        console.log('Raw imported:', result.imported);
+        console.log('Raw errors:', result.errors);
+        
+        // Xử lý kết quả import với thông tin chi tiết - type safety
+        let importedCount = 0;
+        let errorCount = 0;
+        
+        if (Array.isArray(result.imported)) {
+          importedCount = result.imported.length;
+        } else if (typeof result.imported === 'number') {
+          importedCount = result.imported;
+        } else if (result.imported) {
+          importedCount = Number(result.imported) || 0;
+        }
+        
+        if (Array.isArray(result.errors)) {
+          errorCount = result.errors.length;
+        } else if (typeof result.errors === 'number') {
+          errorCount = result.errors;
+        } else if (result.errors) {
+          errorCount = Number(result.errors) || 0;
+        }
+        
+        console.log('Processed importedCount:', importedCount, 'errorCount:', errorCount);
+        
+        // Đảm bảo message luôn là string hợp lệ
+        let message = `Import thành công ${importedCount} bản ghi`;
+        if (errorCount > 0) {
+          message += ` (có ${errorCount} lỗi)`;
+        } else {
+          message += "!";
+        }
+        
+        console.log('Final message:', message);
+        
         setAlert({
           type: "success",
-          message: `Import thành công ${result.imported || 0} bản ghi!`,
+          message: message,
         });
         forceUpdate(); // Refresh data
         refreshStats(); // Refresh stats
       } else {
+        // Đảm bảo message luôn là string
+        let errorMessage = "Import thất bại!";
+        if (result.message) {
+          if (typeof result.message === 'string') {
+            errorMessage = result.message;
+          } else if (Array.isArray(result.message)) {
+            errorMessage = result.message.join(', ');
+          } else if (typeof result.message === 'object') {
+            errorMessage = JSON.stringify(result.message);
+          } else {
+            errorMessage = String(result.message);
+          }
+        }
+        
         setAlert({
           type: "error",
-          message: result.message || "Import thất bại!",
+          message: errorMessage,
         });
       }
     } catch (error) {
       console.error("Import error:", error);
       setAlert({ type: "error", message: "Lỗi khi import file!" });
+    } finally {
+      setIsImporting(false); // Kết thúc loading
     }
   };
 
@@ -542,7 +598,15 @@ export default function ManagerDebtPage() {
   // Update alert when there's an error
   useEffect(() => {
     if (error) {
-      setAlert({ type: "error", message: "Lỗi khi tải dữ liệu công nợ!" });
+      console.log('Error from useApiState:', error, typeof error);
+      // Đảm bảo error message luôn là string
+      let errorMessage = "Lỗi khi tải dữ liệu công nợ!";
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = (error as any).message || String(error);
+      }
+      setAlert({ type: "error", message: errorMessage });
     }
   }, [error]);
 
@@ -579,7 +643,17 @@ export default function ManagerDebtPage() {
   }
 
   return (
-    <div className="h-full overflow-hidden">
+    <div className="h-full overflow-hidden relative">
+      {/* Loading overlay cho import */}
+      {isImporting && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent border-r-pink-500 border-b-purple-500 border-l-indigo-500"></div>
+            <span className="text-lg font-semibold">Đang import file Excel...</span>
+          </div>
+        </div>
+      )}
+      
       <div className="h-full overflow-y-auto overflow-x-hidden p-6">
         <DebtSocket onDebtUpdate={handleDebtUpdate} />
         <Card className="w-full max-w-full">
@@ -616,7 +690,9 @@ export default function ManagerDebtPage() {
                     accept=".xlsx,.xls,.csv"
                     id="excel-upload-input"
                     style={{ display: "none" }}
+                    disabled={isImporting}
                     onChange={(e) => {
+                      if (isImporting) return; // Ngăn import khi đang loading
                       const file = e.target.files && e.target.files[0];
                       if (file) {
                         handleExcelImport(file);
@@ -627,14 +703,16 @@ export default function ManagerDebtPage() {
                   <Button
                     variant="import"
                     type="button"
+                    disabled={isImporting}
                     onClick={() => {
+                      if (isImporting) return; // Ngăn click khi đang import
                       const input = document.getElementById(
                         "excel-upload-input"
                       ) as HTMLInputElement | null;
                       if (input) input.click();
                     }}
                   >
-                    + Nhập file Excel
+                    {isImporting ? "Đang import..." : "+ Nhập file Excel"}
                   </Button>
                 </form>
               </PDynamic>

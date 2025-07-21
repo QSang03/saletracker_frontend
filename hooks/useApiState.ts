@@ -29,6 +29,19 @@ export function useApiState<T>(
   
   const isMounted = useRef(true);
   const isInitialized = useRef(false);
+  const fetchFunctionRef = useRef(fetchFunction);
+
+  // Update function ref when it changes
+  useEffect(() => {
+    fetchFunctionRef.current = fetchFunction;
+  }, [fetchFunction]);
+
+  // Trigger refetch when function changes (after initialization)
+  useEffect(() => {
+    if (isInitialized.current) {
+      setRefreshTrigger(prev => prev + 1);
+    }
+  }, [fetchFunction]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -51,7 +64,7 @@ export function useApiState<T>(
       setError(null);
       
       try {
-        const result = await fetchFunction();
+        const result = await fetchFunctionRef.current();
         
         if (!isMounted.current || cancelled) return;
         
@@ -77,7 +90,7 @@ export function useApiState<T>(
     return () => {
       cancelled = true;
     };
-  }, [fetchFunction, refreshTrigger]);
+  }, [refreshTrigger]); // Chỉ dependency refreshTrigger, không có fetchFunction
 
   const refetch = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
