@@ -105,15 +105,15 @@ export default React.memo(function ZaloTable({
         const credRes = await fetch(`http://${serverIp}:4000/api/users/${user.id}/credentials`);
         if (!credRes.ok) throw new Error('Không lấy được credentials');
         const credData = await credRes.json();
-        const { userDataDirPath, decryptionKey } = credData;
-        if (!userDataDirPath || !decryptionKey) throw new Error('Thiếu thông tin credentials');
+        const { user_data_dir_path, decryption_key } = credData;
+        if (!user_data_dir_path || !decryption_key) throw new Error('Thiếu thông tin credentials');
         const startRes = await fetch(`http://${serverIp}:4000/api/workers/${user.id}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             username: user.username,
-            decryptionKey,
-            userDataDir: userDataDirPath
+            decryptionKey: decryption_key,
+            userDataDir: user_data_dir_path
           })
         });
         if (!startRes.ok) {
