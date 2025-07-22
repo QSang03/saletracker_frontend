@@ -89,7 +89,7 @@ export default function LinkAccountContent({
     const token = getAccessToken();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
     try {
-      const res = await fetch(`${apiUrl}/users/profile`, {
+      const res = await fetch(`${apiUrl}/auth/profile`, {
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
