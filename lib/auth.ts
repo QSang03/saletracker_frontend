@@ -61,6 +61,7 @@ export function getUserFromToken(token: string): any | null {
       isBlock: payload.isBlock ?? false,
       roles: payload.roles || [],
       departments: payload.departments || [],
+      server_ip: payload.server_ip,
       permissions: payload.permissions || [],
       zaloLinkStatus: payload.zaloLinkStatus || 0,
       zaloName: payload.zaloName || null,
