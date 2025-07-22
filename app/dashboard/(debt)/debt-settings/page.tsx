@@ -363,7 +363,7 @@ export default function DebtSettingsPage() {
                   }}
                   disabled={importing}
                 >
-                  {importing ? "Đang import..." : "+ Nhập file Excel"}
+                  {importing ? "Đang import..." : "+ Nhập file Cấu hình công nợ"}
                 </Button>
               </form>
             </PDynamic>

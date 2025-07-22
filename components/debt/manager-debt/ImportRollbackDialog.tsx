@@ -110,11 +110,11 @@ export default function ImportRollbackDialog({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Rollback thất bại");
+        throw new Error(errorData.message || "Khôi phục thất bại");
       }
 
       const result = await response.json();
-      onSuccess?.(result.message || "Rollback thành công");
+      onSuccess?.(result.message || "Khôi phục thành công");
       onOpenChange(false);
       
       // Reset state
@@ -140,7 +140,7 @@ export default function ImportRollbackDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Rollback Import Công Nợ</DialogTitle>
+            <DialogTitle>Khôi phục dữ liệu công nợ</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -158,8 +158,8 @@ export default function ImportRollbackDialog({
 
             {/* Hiển thị danh sách sessions */}
             <div className="space-y-2">
-              <Label>Chọn session import để rollback</Label>
-              
+              <Label>Chọn session import để khôi phục</Label>
+
               {isLoading ? (
                 <div className="flex items-center justify-center p-4">
                   <LoadingSpinner />
@@ -207,7 +207,7 @@ export default function ImportRollbackDialog({
 
             <Alert className="border-orange-200 bg-orange-50">
               <AlertDescription className="text-orange-800">
-                ⚠️ <strong>Cảnh báo:</strong> Thao tác rollback sẽ khôi phục dữ liệu về trạng thái trước khi import. 
+                ⚠️ <strong>Cảnh báo:</strong> Thao tác sẽ khôi phục dữ liệu về trạng thái trước khi import. 
                 Hành động này không thể hoàn tác!
               </AlertDescription>
             </Alert>

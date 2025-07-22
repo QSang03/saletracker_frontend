@@ -723,11 +723,11 @@ export default function ManagerDebtPage() {
                 permission={{ departmentSlug: "cong-no", action: "delete" }}
               >
                 <Button
-                  variant="destructive"
+                  variant="edit"
                   onClick={() => setShowImportRollback(true)}
                   disabled={isImporting}
                 >
-                  🔄 Rollback Import
+                  🔄 Khôi phục dữ liệu công nợ
                 </Button>
               </PDynamic>
 
