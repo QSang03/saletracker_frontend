@@ -7,6 +7,7 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import DebtManagement from "../../../../components/debt/manager-debt/DebtManagement";
 import ImportPayDateModal from "../../../../components/debt/manager-debt/ImportPayDateModal";
+import ImportRollbackDialog from "../../../../components/debt/manager-debt/ImportRollbackDialog";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { getAccessToken } from "@/lib/auth";
 import {
@@ -43,6 +44,7 @@ export default function ManagerDebtPage() {
     message: string;
   } | null>(null);
   const [showImportPayDate, setShowImportPayDate] = useState(false);
+  const [showImportRollback, setShowImportRollback] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false); // Thêm state loading cho import
@@ -718,6 +720,18 @@ export default function ManagerDebtPage() {
               </PDynamic>
 
               <PDynamic
+                permission={{ departmentSlug: "cong-no", action: "delete" }}
+              >
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowImportRollback(true)}
+                  disabled={isImporting}
+                >
+                  🔄 Rollback Import
+                </Button>
+              </PDynamic>
+
+              <PDynamic
                 permission={{ departmentSlug: "cong-no", action: "update" }}
               >
                 <Button
@@ -905,6 +919,21 @@ export default function ManagerDebtPage() {
                 message: "Lỗi khi cập nhật ngày hẹn!",
               });
             }
+          }}
+        />
+
+        {/* Import Rollback Dialog */}
+        <ImportRollbackDialog
+          open={showImportRollback}
+          onOpenChange={setShowImportRollback}
+          onSuccess={(message) => {
+            setAlert({ type: "success", message });
+            // Refresh data sau khi rollback thành công
+            forceUpdate();
+            refreshStats();
+          }}
+          onError={(message) => {
+            setAlert({ type: "error", message });
           }}
         />
 
