@@ -39,7 +39,8 @@ export default function LinkAccountContent({
 
   const zaloAvatar = useMemo(() => currentUser?.avatarZalo || null, [currentUser?.avatarZalo]);
   const zaloName = useMemo(() => currentUser?.zaloName || null, [currentUser?.zaloName]);
-
+  const serverIP = useMemo(() => currentUser?.server_ip || null, [currentUser?.server_ip]);
+  
   const refreshUserToken = useCallback(async () => {
     if (!currentUser?.id) return;
     const token = getAccessToken();
@@ -149,9 +150,9 @@ export default function LinkAccountContent({
     }
   };
 
-  const WS_URL = process.env.NEXT_PUBLIC_ZALO_WS_URL || "";
-  const UNLINK_WEBHOOK_URL = process.env.NEXT_PUBLIC_ZALO_UNLINK_URL || "";
-  
+  const WS_URL = "ws://" + serverIP + ":3000" || "";
+  const UNLINK_WEBHOOK_URL = "http://" + serverIP + ":3000/api/unlink" || "";
+
   const stopAllConnections = () => {
     if (wsRef.current) {
       wsRef.current.close();
