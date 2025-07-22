@@ -742,7 +742,7 @@ export default function ManagerDebtPage() {
                 </Button>
               </PDynamic>
 
-              <PDynamic
+              {/* <PDynamic
                 permission={{ departmentSlug: "cong-no", action: "delete" }}
               >
                 <Button
@@ -752,7 +752,7 @@ export default function ManagerDebtPage() {
                 >
                   {isDeletingAll ? "Đang xóa..." : "🗑️ Xóa tất cả hôm nay"}
                 </Button>
-              </PDynamic>
+              </PDynamic> */}
 
               <Button
                 onClick={() => {
