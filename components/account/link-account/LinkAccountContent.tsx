@@ -37,10 +37,19 @@ export default function LinkAccountContent({
 
   const qrTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const zaloAvatar = useMemo(() => currentUser?.avatarZalo || null, [currentUser?.avatarZalo]);
-  const zaloName = useMemo(() => currentUser?.zaloName || null, [currentUser?.zaloName]);
-  const serverIP = useMemo(() => currentUser?.server_ip || null, [currentUser?.server_ip]);
-  
+  const zaloAvatar = useMemo(
+    () => currentUser?.avatarZalo || null,
+    [currentUser?.avatarZalo]
+  );
+  const zaloName = useMemo(
+    () => currentUser?.zaloName || null,
+    [currentUser?.zaloName]
+  );
+  const serverIP = useMemo(
+    () => currentUser?.server_ip || null,
+    [currentUser?.server_ip]
+  );
+
   const refreshUserToken = useCallback(async () => {
     if (!currentUser?.id) return;
     const token = getAccessToken();
@@ -58,10 +67,10 @@ export default function LinkAccountContent({
         if (data.access_token) {
           // Import function để set access token
           const { setAccessToken } = await import("@/lib/auth");
-          
+
           // Chỉ cập nhật access token, giữ nguyên refresh token
           setAccessToken(data.access_token);
-          
+
           // Cập nhật current user từ JWT token mới
           const updatedUser = getUserFromToken(data.access_token);
           if (updatedUser) {
@@ -75,6 +84,25 @@ export default function LinkAccountContent({
       console.error("❌ [LinkAccount] Failed to refresh token:", error);
     }
   }, [currentUser?.id, setCurrentUser]);
+
+  const fetchUserProfile = useCallback(async () => {
+    const token = getAccessToken();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    try {
+      const res = await fetch(`${apiUrl}/users/profile`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data);
+      }
+    } catch (error) {
+      // ignore
+    }
+  }, [setCurrentUser]);
 
   useEffect(() => {
     return () => {
@@ -99,6 +127,7 @@ export default function LinkAccountContent({
       }
     }, 20000);
   };
+
   const stopPing = () => {
     if (pingInterval.current) {
       clearInterval(pingInterval.current);
@@ -140,7 +169,7 @@ export default function LinkAccountContent({
           zaloGender,
         }),
       });
-      
+
       if (response.ok) {
         // Gọi refresh token để cập nhật thông tin Zalo trong JWT
         await refreshUserToken();
@@ -194,7 +223,13 @@ export default function LinkAccountContent({
         setQrData(null);
         setLoading(false);
         setIsLinked(false);
-        setAlerts([{ type: 'warning', message: 'Mã QR đã hết hạn do không quét trong 1 phút. Vui lòng thử lại.' }]);
+        setAlerts([
+          {
+            type: "warning",
+            message:
+              "Mã QR đã hết hạn do không quét trong 1 phút. Vui lòng thử lại.",
+          },
+        ]);
         updateZaloLinkStatus(0);
       }, 60000);
     };
@@ -212,63 +247,140 @@ export default function LinkAccountContent({
           ]);
         } else if (msg.type === "status") {
           switch (msg.message) {
-            case 'CONNECTED':
-              setAlerts([{ type: 'success', message: 'Đã kết nối thành công tới máy chủ liên kết Zalo.' }]);
+            case "CONNECTED":
+              setAlerts([
+                {
+                  type: "success",
+                  message: "Đã kết nối thành công tới máy chủ liên kết Zalo.",
+                },
+              ]);
               break;
-            case 'LOGIN_STARTED':
-              setAlerts([{ type: 'info', message: 'Quy trình liên kết Zalo đã bắt đầu. Vui lòng mở ứng dụng Zalo và quét mã QR bên dưới để tiếp tục.' }]);
+            case "LOGIN_STARTED":
+              setAlerts([
+                {
+                  type: "info",
+                  message:
+                    "Quy trình liên kết Zalo đã bắt đầu. Vui lòng mở ứng dụng Zalo và quét mã QR bên dưới để tiếp tục.",
+                },
+              ]);
               setLoading(false);
               break;
-            case 'LOGIN_STOPPED':
-              setAlerts([{ type: 'warning', message: 'Quy trình liên kết đã được dừng. Nếu bạn muốn tiếp tục, hãy bắt đầu lại.' }]);
+            case "LOGIN_STOPPED":
+              setAlerts([
+                {
+                  type: "warning",
+                  message:
+                    "Quy trình liên kết đã được dừng. Nếu bạn muốn tiếp tục, hãy bắt đầu lại.",
+                },
+              ]);
               setLoading(false);
               setQrData(null);
               stopAllConnections();
               break;
-            case 'QR_EXPIRED':
-              setAlerts([{ type: 'warning', message: 'Mã QR đã hết hạn. Vui lòng nhấn "Liên kết tài khoản Zalo" để lấy mã mới và đảm bảo quét trong thời gian hiệu lực.' }]);
+            case "QR_EXPIRED":
+              setAlerts([
+                {
+                  type: "warning",
+                  message:
+                    'Mã QR đã hết hạn. Vui lòng nhấn "Liên kết tài khoản Zalo" để lấy mã mới và đảm bảo quét trong thời gian hiệu lực.',
+                },
+              ]);
               setLoading(false);
               setQrData(null);
               setIsLinked(false);
               updateZaloLinkStatus(0);
               stopAllConnections();
               break;
-            case 'QR_SCANNED':
-              setAlerts([{ type: 'info', message: `Đã quét mã QR${msg.data?.displayName ? ' bởi ' + msg.data.displayName : ''}. Đang xác thực thông tin, vui lòng chờ trong giây lát...` }]);
+            case "QR_SCANNED":
+              setAlerts([
+                {
+                  type: "info",
+                  message: `Đã quét mã QR${
+                    msg.data?.displayName ? " bởi " + msg.data.displayName : ""
+                  }. Đang xác thực thông tin, vui lòng chờ trong giây lát...`,
+                },
+              ]);
               setLoading(true);
               break;
-            case 'PROCESSING':
-              setAlerts([{ type: 'info', message: 'Đang xử lý liên kết tài khoản Zalo...' }]);
+            case "PROCESSING":
+              setAlerts([
+                {
+                  type: "info",
+                  message: "Đang xử lý liên kết tài khoản Zalo...",
+                },
+              ]);
               setLoading(true);
               break;
-            case 'QR_AVAILABLE':
-              setAlerts([{ type: 'info', message: 'Mã QR mới đã sẵn sàng. Hãy sử dụng ứng dụng Zalo để quét lại và hoàn tất liên kết.' }]);
+            case "QR_AVAILABLE":
+              setAlerts([
+                {
+                  type: "info",
+                  message:
+                    "Mã QR mới đã sẵn sàng. Hãy sử dụng ứng dụng Zalo để quét lại và hoàn tất liên kết.",
+                },
+              ]);
               setLoading(false);
               break;
-            case 'LOGIN_SUCCESS':
-              setAlerts([{ type: 'success', message: 'Liên kết tài khoản Zalo thành công! Bạn đã có thể sử dụng các tính năng nâng cao.' }]);
+            case "LOGIN_SUCCESS":
+              setAlerts([
+                {
+                  type: "success",
+                  message:
+                    "Liên kết tài khoản Zalo thành công! Bạn đã có thể sử dụng các tính năng nâng cao.",
+                },
+              ]);
               setLoading(false);
               setTimeout(() => {
                 stopAllConnections();
               }, 10000);
               break;
-            case 'LOGIN_FAILED':
-              setAlerts([{ type: 'error', message: 'Liên kết thất bại: ' + (msg.data?.reason || 'Đã xảy ra lỗi không xác định. Vui lòng thử lại hoặc liên hệ hỗ trợ.') }]);
+            case "LOGIN_FAILED":
+              setAlerts([
+                {
+                  type: "error",
+                  message:
+                    "Liên kết thất bại: " +
+                    (msg.data?.reason ||
+                      "Đã xảy ra lỗi không xác định. Vui lòng thử lại hoặc liên hệ hỗ trợ."),
+                },
+              ]);
               setLoading(false);
               setQrData(null);
               stopAllConnections();
               break;
-            case 'SESSION_DELETED':
-              setAlerts([{ type: 'success', message: 'Phiên đăng nhập đã được xóa thành công.' }]);
+            case "SESSION_DELETED":
+              setAlerts([
+                {
+                  type: "success",
+                  message: "Phiên đăng nhập đã được xóa thành công.",
+                },
+              ]);
               break;
             default:
-              setAlerts([{ type: 'info', message: 'Trạng thái hệ thống: ' + msg.message }]);
+              setAlerts([
+                {
+                  type: "info",
+                  message: "Trạng thái hệ thống: " + msg.message,
+                },
+              ]);
           }
         } else if (msg.type === "login_processing") {
-          setAlerts([{ type: "info", message: "Hệ thống đang tiến hành liên kết tài khoản Zalo của bạn. Vui lòng chờ trong giây lát và không đóng trang này." }]);
+          setAlerts([
+            {
+              type: "info",
+              message:
+                "Hệ thống đang tiến hành liên kết tài khoản Zalo của bạn. Vui lòng chờ trong giây lát và không đóng trang này.",
+            },
+          ]);
           setLoading(true);
         } else if (msg.type === "login_complete") {
-          setAlerts([{ type: "success", message: "Liên kết tài khoản Zalo thành công! Chào mừng bạn đến với hệ sinh thái tự động hóa của chúng tôi." }]);
+          setAlerts([
+            {
+              type: "success",
+              message:
+                "Liên kết tài khoản Zalo thành công! Chào mừng bạn đến với hệ sinh thái tự động hóa của chúng tôi.",
+            },
+          ]);
           setIsLinked(true);
           setQrData(null);
           setLoading(false);
@@ -276,13 +388,24 @@ export default function LinkAccountContent({
           if (msg.data && msg.data.avatar) {
             setUserAvatar(msg.data.avatar);
           }
-          updateZaloLinkStatus(1, msg.data?.zaloUsername, msg.data?.avatar, msg.data?.gender);
+          updateZaloLinkStatus(
+            1,
+            msg.data?.zaloUsername,
+            msg.data?.avatar,
+            msg.data?.gender
+          );
           // Refresh token để cập nhật thông tin Zalo trong JWT
           refreshUserToken();
+          fetchUserProfile();
           ws.close();
         } else if (msg.type === "error") {
           setAlerts([
-            { type: "error", message: msg.message || "Đã xảy ra lỗi trong quá trình liên kết. Vui lòng thử lại hoặc liên hệ bộ phận hỗ trợ để được trợ giúp." },
+            {
+              type: "error",
+              message:
+                msg.message ||
+                "Đã xảy ra lỗi trong quá trình liên kết. Vui lòng thử lại hoặc liên hệ bộ phận hỗ trợ để được trợ giúp.",
+            },
           ]);
           setLoading(false);
           setIsLinked(false);
@@ -316,7 +439,9 @@ export default function LinkAccountContent({
   const handleUnlink = async () => {
     setShowConfirm(false);
     setLoading(true);
-    setAlerts([{ type: 'info', message: 'Đang xử lý yêu cầu hủy liên kết Zalo...' }]);
+    setAlerts([
+      { type: "info", message: "Đang xử lý yêu cầu hủy liên kết Zalo..." },
+    ]);
     let wsError = false;
     let wsUnlinkSuccess = false;
     if (wsRef.current && wsRef.current.readyState === 1) {
@@ -328,31 +453,43 @@ export default function LinkAccountContent({
             if (msg.type === "unlink_success") {
               wsUnlinkSuccess = true;
               setLoading(false);
-              setAlerts([{ type: 'success', message: 'Đã hủy liên kết.' }]);
+              setAlerts([{ type: "success", message: "Đã hủy liên kết." }]);
               doUnlinkWebhookAndUpdate();
             } else if (msg.type === "unlink_error") {
               wsError = true;
               setLoading(false);
-              addAlert({ type: "error", message: msg.message || "Hủy liên kết thất bại (websocket)!" });
+              addAlert({
+                type: "error",
+                message: msg.message || "Hủy liên kết thất bại (websocket)!",
+              });
             }
           } catch (e) {
             wsError = true;
             setLoading(false);
-            addAlert({ type: "error", message: "Lỗi xử lý phản hồi hủy liên kết từ websocket!" });
+            addAlert({
+              type: "error",
+              message: "Lỗi xử lý phản hồi hủy liên kết từ websocket!",
+            });
           }
         };
         setTimeout(() => {
           if (!wsUnlinkSuccess && !wsError) {
             wsError = true;
             setLoading(false);
-            addAlert({ type: "error", message: "Không nhận được phản hồi hủy liên kết từ websocket!" });
+            addAlert({
+              type: "error",
+              message: "Không nhận được phản hồi hủy liên kết từ websocket!",
+            });
           }
         }, 5000);
         wsRef.current.close();
       } catch (e) {
         wsError = true;
         setLoading(false);
-        addAlert({ type: "error", message: "Lỗi khi gửi stop_login qua websocket." });
+        addAlert({
+          type: "error",
+          message: "Lỗi khi gửi stop_login qua websocket.",
+        });
       }
     } else {
       setLoading(false);
@@ -368,9 +505,12 @@ export default function LinkAccountContent({
     let webhookSuccess = false;
     if (currentUser?.id && currentUser?.username) {
       try {
-        const res = await fetch(`${UNLINK_WEBHOOK_URL}/${currentUser.id}/${currentUser.username}`, {
-          method: "DELETE",
-        });
+        const res = await fetch(
+          `${UNLINK_WEBHOOK_URL}/${currentUser.id}/${currentUser.username}`,
+          {
+            method: "DELETE",
+          }
+        );
         let json = null;
         try {
           json = await res.json();
@@ -378,21 +518,34 @@ export default function LinkAccountContent({
         if (!res.ok || !json?.success) {
           webhookError = true;
           setLoading(false);
-          addAlert({ type: "error", message: json?.message || "Hủy liên kết thất bại (webhook)!" });
+          addAlert({
+            type: "error",
+            message: json?.message || "Hủy liên kết thất bại (webhook)!",
+          });
         } else {
           webhookSuccess = true;
           setLoading(false);
-          setAlerts((prev) => prev.some(a => a.type === 'success' && a.message === 'Đã hủy liên kết.') ? prev : [{ type: 'success', message: 'Đã hủy liên kết.' }]);
+          setAlerts((prev) =>
+            prev.some(
+              (a) => a.type === "success" && a.message === "Đã hủy liên kết."
+            )
+              ? prev
+              : [{ type: "success", message: "Đã hủy liên kết." }]
+          );
         }
       } catch (e) {
         webhookError = true;
         setLoading(false);
-        addAlert({ type: "error", message: "Lỗi khi gọi webhook hủy liên kết!" });
+        addAlert({
+          type: "error",
+          message: "Lỗi khi gọi webhook hủy liên kết!",
+        });
       }
     }
     if (webhookSuccess) {
       updateZaloLinkStatus(0, null, null);
       refreshUserToken();
+      fetchUserProfile();
     }
   };
 
@@ -405,7 +558,11 @@ export default function LinkAccountContent({
   // Đảm bảo hiển thị loading khi đang chờ currentUser
   if (!currentUser) {
     return (
-      <LoadingSpinner message="Đang tải thông tin tài khoản..." size={48} fullScreen={false} />
+      <LoadingSpinner
+        message="Đang tải thông tin tài khoản..."
+        size={48}
+        fullScreen={false}
+      />
     );
   }
 
@@ -419,8 +576,18 @@ export default function LinkAccountContent({
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0">
-                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 20 20">
-                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 11V6m0 8h.01M19 10a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                <svg
+                  className="w-5 h-5 text-red-400"
+                  fill="none"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 11V6m0 8h.01M19 10a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                  />
                 </svg>
               </div>
               <div>
@@ -428,14 +595,15 @@ export default function LinkAccountContent({
                   Lỗi liên kết tài khoản Zalo
                 </h3>
                 <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                  Tài khoản Zalo của bạn đã bị ngắt kết nối. Vui lòng liên kết lại để tiếp tục sử dụng hệ thống.
+                  Tài khoản Zalo của bạn đã bị ngắt kết nối. Vui lòng liên kết
+                  lại để tiếp tục sử dụng hệ thống.
                 </p>
               </div>
             </div>
           </div>
         </div>
       )}
-      
+
       <div className="w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 p-8 flex flex-col md:flex-row gap-8">
         <div className="flex-1 flex flex-col gap-6 justify-center items-center border-r border-zinc-200 dark:border-zinc-800 pr-0 md:pr-8">
           <h2 className="text-2xl font-bold text-center text-primary flex items-center justify-center gap-2">
@@ -495,7 +663,10 @@ export default function LinkAccountContent({
                   onConfirm={handleUnlink}
                   onCancel={() => setShowConfirm(false)}
                 />
-                <p className="text-xs text-zinc-400 mt-2 text-center">Tài khoản đã liên kết thành công với Zalo. Bạn có thể hủy liên kết bất cứ lúc nào.</p>
+                <p className="text-xs text-zinc-400 mt-2 text-center">
+                  Tài khoản đã liên kết thành công với Zalo. Bạn có thể hủy liên
+                  kết bất cứ lúc nào.
+                </p>
               </>
             ) : zaloLinkStatus === 0 || zaloLinkStatus === 2 ? (
               <>
@@ -512,14 +683,17 @@ export default function LinkAccountContent({
                       Đang kết nối...
                     </span>
                   ) : (
-                    <span>{zaloLinkStatus === 2 ? 'Liên kết lại Zalo' : 'Liên kết tài khoản Zalo'}</span>
+                    <span>
+                      {zaloLinkStatus === 2
+                        ? "Liên kết lại Zalo"
+                        : "Liên kết tài khoản Zalo"}
+                    </span>
                   )}
                 </Button>
                 <p className="text-xs text-zinc-400 mt-2 text-center">
-                  {zaloLinkStatus === 2 
-                    ? 'Tài khoản Zalo gặp lỗi liên kết. Nhấn nút để liên kết lại.' 
-                    : 'Chưa liên kết Zalo. Nhấn nút để bắt đầu quá trình liên kết.'
-                  }
+                  {zaloLinkStatus === 2
+                    ? "Tài khoản Zalo gặp lỗi liên kết. Nhấn nút để liên kết lại."
+                    : "Chưa liên kết Zalo. Nhấn nút để bắt đầu quá trình liên kết."}
                 </p>
               </>
             ) : null}
@@ -560,23 +734,23 @@ export default function LinkAccountContent({
             <span className="font-semibold text-lg text-zinc-800 dark:text-zinc-100">
               {zaloLinkStatus === 1 && zaloName
                 ? zaloName
-                : zaloLinkStatus === 2 
-                  ? "Lỗi liên kết"
-                  : "Chưa liên kết"}
+                : zaloLinkStatus === 2
+                ? "Lỗi liên kết"
+                : "Chưa liên kết"}
             </span>
             <span className="text-sm text-zinc-500 dark:text-zinc-400">
               {zaloLinkStatus === 1 && currentUser.email
                 ? currentUser.email
                 : zaloLinkStatus === 2
-                  ? "Cần liên kết lại để sử dụng"
-                  : "Vui lòng liên kết để hiển thị thông tin"}
+                ? "Cần liên kết lại để sử dụng"
+                : "Vui lòng liên kết để hiển thị thông tin"}
             </span>
             <p className="text-xs text-zinc-400 mt-2 text-center max-w-[220px]">
               {zaloLinkStatus === 1
                 ? "Bạn đã liên kết thành công với Zalo. Thông tin tài khoản sẽ được đồng bộ tự động."
                 : zaloLinkStatus === 2
-                  ? "Tài khoản Zalo gặp lỗi liên kết. Vui lòng liên kết lại để tiếp tục sử dụng."
-                  : "Liên kết Zalo để hiển thị avatar và tên tài khoản Zalo tại đây."}
+                ? "Tài khoản Zalo gặp lỗi liên kết. Vui lòng liên kết lại để tiếp tục sử dụng."
+                : "Liên kết Zalo để hiển thị avatar và tên tài khoản Zalo tại đây."}
             </p>
           </div>
         </div>
