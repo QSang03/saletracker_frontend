@@ -58,6 +58,7 @@ export interface User {
   avatarZalo?: string;
   zaloGender?: string;
   lastOnlineAt?: Date | string;
+  server_ip?: string;
 }
 
 export interface UserWithPermissions extends User {
@@ -442,4 +443,66 @@ export interface CampaignFormData {
     full_name: string;
     salutation?: string;
   }>;
+}
+
+// Campaign Content Types
+export interface CampaignContent {
+  id: string;
+  campaign_id: string;
+  message_content: string;
+  attachment_type?: 'image' | 'file' | 'link';
+  attachment_url?: string;
+  attachment_filename?: string;
+  created_at: string | Date;
+  updated_at: string | Date;
+}
+
+// Campaign Customer Types
+export interface CampaignCustomer {
+  id: string;
+  phone_number: string;
+  full_name: string;
+  salutation?: string;
+  metadata?: Record<string, any>;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Campaign Email Report Types
+export interface CampaignEmailReport {
+  id: string;
+  campaign_id: string;
+  recipients_to: string;
+  recipients_cc?: string[];
+  report_interval_minutes?: number;
+  stop_sending_at_time?: string;
+  is_active: boolean;
+  send_when_campaign_completed: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Campaign Interaction Log Types
+
+export interface CampaignInteractionLog {
+  id: string;
+  campaign_id: string;
+  customer_phone: string;
+  customer_name: string;
+  customer_salutation?: string;
+  message_content: string;
+  sent_at?: Date;
+  reminder_times?: Array<{
+    reminder_number: number;
+    sent_at: Date;
+    content: string;
+  }>;
+  status: LogStatus;
+  customer_response?: string;
+  customer_response_at?: Date;
+  sale_response?: string;
+  sale_response_at?: Date;
+  error_message?: string;
+  created_at: Date;
+  updated_at: Date;
 }
