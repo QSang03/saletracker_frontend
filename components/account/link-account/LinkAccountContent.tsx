@@ -179,8 +179,8 @@ export default function LinkAccountContent({
     }
   };
 
-  const WS_URL = "ws://" + serverIP + ":3000" || "";
-  const UNLINK_WEBHOOK_URL = "http://" + serverIP + ":3000/api/unlink" || "";
+  // const WS_URL = "ws://" + serverIP + ":3000" || "";
+  // const UNLINK_WEBHOOK_URL = "http://" + serverIP + ":3000/api/unlink" || "";
 
   const stopAllConnections = () => {
     if (wsRef.current) {
@@ -200,6 +200,19 @@ export default function LinkAccountContent({
       stopAllConnections();
       return;
     }
+
+    const serverIP = currentUser.server_ip;
+    if (!serverIP) {
+      addAlert({
+        type: "error",
+        message:
+          "Không tìm thấy máy chủ liên kết. Vui lòng thử lại hoặc liên hệ quản trị viên.",
+      });
+      stopAllConnections();
+      return;
+    }
+
+    const WS_URL = `ws://${serverIP}:3000`;
     setLoading(true);
     setAlerts([{ type: "info", message: "Đang lấy mã QR..." }]);
     setQrData(null);
@@ -503,14 +516,14 @@ export default function LinkAccountContent({
   const doUnlinkWebhookAndUpdate = async () => {
     let webhookError = false;
     let webhookSuccess = false;
-    if (currentUser?.id && currentUser?.username) {
+    // Lấy serverIP mới nhất từ currentUser mỗi lần gọi
+    const serverIP = currentUser?.server_ip;
+    if (currentUser?.id && currentUser?.username && serverIP) {
       try {
-        const res = await fetch(
-          `${UNLINK_WEBHOOK_URL}/${currentUser.id}/${currentUser.username}`,
-          {
-            method: "DELETE",
-          }
-        );
+        const url = `http://${serverIP}:3000/api/unlink/${currentUser.id}/${currentUser.username}`;
+        const res = await fetch(url, {
+          method: "DELETE",
+        });
         let json = null;
         try {
           json = await res.json();
@@ -541,6 +554,13 @@ export default function LinkAccountContent({
           message: "Lỗi khi gọi webhook hủy liên kết!",
         });
       }
+    } else {
+      // Nếu thiếu serverIP, báo lỗi rõ ràng
+      setLoading(false);
+      addAlert({
+        type: "error",
+        message: "Không tìm thấy server IP để gọi webhook hủy liên kết!",
+      });
     }
     if (webhookSuccess) {
       updateZaloLinkStatus(0, null, null);
