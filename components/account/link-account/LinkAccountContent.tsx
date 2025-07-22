@@ -45,10 +45,6 @@ export default function LinkAccountContent({
     () => currentUser?.zaloName || null,
     [currentUser?.zaloName]
   );
-  const serverIP = useMemo(
-    () => currentUser?.server_ip || null,
-    [currentUser?.server_ip]
-  );
 
   const refreshUserToken = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -84,25 +80,6 @@ export default function LinkAccountContent({
       console.error("❌ [LinkAccount] Failed to refresh token:", error);
     }
   }, [currentUser?.id, setCurrentUser]);
-
-  const fetchUserProfile = useCallback(async () => {
-    const token = getAccessToken();
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    try {
-      const res = await fetch(`${apiUrl}/auth/profile`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentUser(data);
-      }
-    } catch (error) {
-      // ignore
-    }
-  }, [setCurrentUser]);
 
   useEffect(() => {
     return () => {
@@ -179,9 +156,6 @@ export default function LinkAccountContent({
     }
   };
 
-  // const WS_URL = "ws://" + serverIP + ":3000" || "";
-  // const UNLINK_WEBHOOK_URL = "http://" + serverIP + ":3000/api/unlink" || "";
-
   const stopAllConnections = () => {
     if (wsRef.current) {
       wsRef.current.close();
@@ -200,7 +174,6 @@ export default function LinkAccountContent({
       stopAllConnections();
       return;
     }
-
     const serverIP = currentUser.server_ip;
     if (!serverIP) {
       addAlert({
@@ -409,7 +382,6 @@ export default function LinkAccountContent({
           );
           // Refresh token để cập nhật thông tin Zalo trong JWT
           refreshUserToken();
-          fetchUserProfile();
           ws.close();
         } else if (msg.type === "error") {
           setAlerts([
@@ -520,10 +492,12 @@ export default function LinkAccountContent({
     const serverIP = currentUser?.server_ip;
     if (currentUser?.id && currentUser?.username && serverIP) {
       try {
-        const url = `http://${serverIP}:3000/api/unlink/${currentUser.id}/${currentUser.username}`;
-        const res = await fetch(url, {
-          method: "DELETE",
-        });
+        const res = await fetch(
+          `http://${serverIP}:3000/api/unlink/${currentUser.id}/${currentUser.username}`,
+          {
+            method: "DELETE",
+          }
+        );
         let json = null;
         try {
           json = await res.json();
@@ -555,7 +529,6 @@ export default function LinkAccountContent({
         });
       }
     } else {
-      // Nếu thiếu serverIP, báo lỗi rõ ràng
       setLoading(false);
       addAlert({
         type: "error",
@@ -564,8 +537,7 @@ export default function LinkAccountContent({
     }
     if (webhookSuccess) {
       updateZaloLinkStatus(0, null, null);
-      refreshUserToken();
-      fetchUserProfile();
+      refreshUserToken(); // Chỉ cần gọi hàm này, không cần fetch lại profile nữa
     }
   };
 
