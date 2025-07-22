@@ -22,6 +22,9 @@ import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { DebtSocket } from "@/components/socket/DebtSocket";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+// Unique page size key for debt management
+const PAGE_SIZE_KEY = "debtPageSize";
+
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-2xl border p-4 shadow-sm bg-white dark:bg-muted min-w-[120px] text-center">
@@ -47,8 +50,7 @@ export default function ManagerDebtPage() {
   const [showImportRollback, setShowImportRollback] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
-  const [isImporting, setIsImporting] = useState(false); // Thêm state loading cho import
-
+  const [isImporting, setIsImporting] = useState(false);
   const {
     canReadDepartment,
     canCreateInDepartment,
@@ -62,7 +64,13 @@ export default function ManagerDebtPage() {
   const canAccessDebtManagement = canReadDepartment("cong-no");
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedPageSize = localStorage.getItem(PAGE_SIZE_KEY);
+      return savedPageSize ? parseInt(savedPageSize, 10) : 10;
+    }
+    return 10;
+  });
   const [filters, setFilters] = useState({
     search: "",
     singleDate: new Date().toLocaleDateString("en-CA"), // Use toLocaleDateString to avoid timezone issues
@@ -342,6 +350,10 @@ export default function ManagerDebtPage() {
   const handlePageSizeChange = useCallback((newPageSize: number) => {
     setPageSize(newPageSize);
     setPage(1);
+    // Save to localStorage for persistence
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PAGE_SIZE_KEY, newPageSize.toString());
+    }
   }, []);
 
   const handleResetFilter = useCallback(() => {
@@ -352,6 +364,11 @@ export default function ManagerDebtPage() {
       employees: [],
     });
     setPage(1);
+    // Reset pageSize to default and clear localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(PAGE_SIZE_KEY);
+    }
+    setPageSize(10);
   }, []);
 
   // Handle Excel import
