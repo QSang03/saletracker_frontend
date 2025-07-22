@@ -96,16 +96,23 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
       // Join department rooms dựa trên slug
       try {
         const user = getUserFromToken(token);
-        if (user && Array.isArray(user.departments)) {
-          user.departments.forEach((dept: any) => {
-            if (dept.slug) {
-              console.log(`[WebSocketContext] Joining room: department:${dept.slug}`);
-              wsClient.emit('joinRoom', `department:${dept.slug}`);
-            }
-          });
+        if (user) {
+          // Join user room để nhận event force_token_refresh
+          console.log(`[WebSocketContext] Joining room: user_${user.id}`);
+          wsClient.emit('joinRoom', `user_${user.id}`);
+
+          // Join department rooms
+          if (Array.isArray(user.departments)) {
+            user.departments.forEach((dept: any) => {
+              if (dept.slug) {
+                console.log(`[WebSocketContext] Joining room: department:${dept.slug}`);
+                wsClient.emit('joinRoom', `department:${dept.slug}`);
+              }
+            });
+          }
         }
       } catch (e) {
-        console.error('[WebSocketContext] Failed to join department rooms:', e);
+        console.error('[WebSocketContext] Failed to join rooms:', e);
       }
 
       // Process pending subscriptions

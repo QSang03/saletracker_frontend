@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import type { User } from "@/types";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import type { AlertType } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken, getUserFromToken } from "@/lib/auth";
 import { LoadingSpinner } from "@/components/ui/loading/loading-spinner";
@@ -24,6 +25,7 @@ export default function LinkAccountContent({
   debugLabel?: string;
 }) {
   const { currentUser, setCurrentUser } = useCurrentUser();
+  const { subscribe, unsubscribe } = useWebSocketContext();
   const [alerts, setAlerts] = useState<
     Array<{ type: AlertType; message: string }>
   >([]);
@@ -88,6 +90,24 @@ export default function LinkAccountContent({
       clearQrTimeout();
     };
   }, []);
+
+  // Lắng nghe event force_token_refresh từ WebSocket context
+  useEffect(() => {
+    if (!subscribe || !unsubscribe) return;
+
+    const handleForceTokenRefresh = (data: any) => {
+      console.log("🔄 [LinkAccount] Received force_token_refresh event from WebSocket context, refreshing token...");
+      refreshUserToken();
+    };
+
+    // Subscribe to force_token_refresh event
+    subscribe("force_token_refresh", handleForceTokenRefresh);
+
+    // Cleanup subscription on unmount
+    return () => {
+      unsubscribe("force_token_refresh", handleForceTokenRefresh);
+    };
+  }, [subscribe, unsubscribe, refreshUserToken]);
 
   const startPing = () => {
     if (pingInterval.current) clearInterval(pingInterval.current);
@@ -190,7 +210,6 @@ export default function LinkAccountContent({
     setAlerts([{ type: "info", message: "Đang lấy mã QR..." }]);
     setQrData(null);
     setIsLinked(false);
-    updateZaloLinkStatus(0);
     stopAllConnections();
     const ws = new window.WebSocket(WS_URL);
     wsRef.current = ws;
@@ -397,6 +416,10 @@ export default function LinkAccountContent({
           setQrData(null);
           updateZaloLinkStatus(0);
           stopAllConnections();
+        } else if (msg.type === "force_token_refresh") {
+          // Tự động refresh token khi user bị đá liên kết (status = 2)
+          console.log("🔄 [LinkAccount] Received force_token_refresh event, refreshing token...");
+          refreshUserToken();
         }
       } catch (e) {
         setAlerts([
