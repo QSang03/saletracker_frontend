@@ -798,7 +798,7 @@ export default function ManagerDebtPage() {
               <AccordionItem value="stats">
                 <AccordionTrigger>Thống Kê Công Nợ Trong Ngày</AccordionTrigger>
                 <AccordionContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pb-2">
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-4 pb-2">
                     <StatBox
                       label="Tổng Tiền Công Nợ"
                       value={
