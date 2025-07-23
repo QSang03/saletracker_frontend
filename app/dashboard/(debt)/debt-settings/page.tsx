@@ -56,7 +56,7 @@ export default function DebtSettingsPage() {
     forceUpdate,
     employeeOptions,
     loadingEmployees,
-  } = useDebtConfigs(filters, page, pageSize);
+  } = useDebtConfigs(filters, page, pageSize, user);
 
   // Realtime event handlers - refetch with current filters
   const handleDebtLogUpdate = useCallback(
