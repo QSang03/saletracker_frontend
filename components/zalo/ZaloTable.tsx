@@ -173,7 +173,7 @@ export default React.memo(function ZaloTable({
     "Thao Tác",
   ];
 
-  const centerIndexes = [1, 3];
+  const centerIndexes = [0, 1, 3, 4];
 
   const cellClass =
     "overflow-hidden text-ellipsis whitespace-nowrap max-w-[160px] px-3 py-2";
@@ -236,7 +236,7 @@ export default React.memo(function ZaloTable({
                   {startIndex + index + 1}
                 </TableCell>
                 <TableCell
-                  className={cellLeftClass}
+                  className={cellCenterClass}
                   title={user.fullName || "-"}
                 >
                   {user.fullName
@@ -261,7 +261,7 @@ export default React.memo(function ZaloTable({
                 <TableCell className={cellCenterClass}>
                   {user.zaloGender || "-"}
                 </TableCell>
-                <TableCell className={cellCenterClass}>
+                <TableCell className={cellLeftClass}>
                   <div className="flex items-center justify-center gap-3">
                     <Tooltip>
                       <TooltipTrigger asChild>
