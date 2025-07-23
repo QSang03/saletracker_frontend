@@ -16,8 +16,15 @@ import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { DebtSocket } from "@/components/socket/DebtSocket";
 
 export default function DebtSettingsPage() {
+  const PAGE_SIZE_KEY = "debtConfigPageSize";
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(PAGE_SIZE_KEY);
+      return saved ? parseInt(saved, 10) : 10;
+    }
+    return 10;
+  });
   const [filters, setFilters] = useState<Filters>({
     search: "",
     departments: [],
@@ -363,7 +370,9 @@ export default function DebtSettingsPage() {
                   }}
                   disabled={importing}
                 >
-                  {importing ? "Đang import..." : "+ Nhập file Cấu hình công nợ"}
+                  {importing
+                    ? "Đang import..."
+                    : "+ Nhập file Cấu hình công nợ"}
                 </Button>
               </form>
             </PDynamic>
@@ -419,6 +428,9 @@ export default function DebtSettingsPage() {
             onPageSizeChange={(newSize) => {
               setPageSize(newSize);
               setPage(1);
+              if (typeof window !== "undefined") {
+                localStorage.setItem(PAGE_SIZE_KEY, newSize.toString());
+              }
             }}
             onFilterChange={handleFilterChange}
             onResetFilter={handleResetFilter}
