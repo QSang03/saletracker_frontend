@@ -30,12 +30,7 @@ export default function DebtDetailDialog({
   const [debtDetail, setDebtDetail] = useState<DebtLog | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // State cho image zoom
-  const [imageZoom, setImageZoom] = useState({
-    isZooming: false,
-    x: 0,
-    y: 0,
-  });
+  const [showImageModal, setShowImageModal] = useState(false);
 
   const fetchDebtDetail = async () => {
     if (!open || !debtConfigId) {
@@ -90,7 +85,11 @@ export default function DebtDetailDialog({
 
   // Fetch data khi dialog mở và có debtConfigId
   // Memoize fetchDebtDetail to avoid unnecessary re-creations
-  const fetchDebtDetailCallback = useCallback(fetchDebtDetail, [open, debtConfigId, onShowAlert]);
+  const fetchDebtDetailCallback = useCallback(fetchDebtDetail, [
+    open,
+    debtConfigId,
+    onShowAlert,
+  ]);
 
   useEffect(() => {
     fetchDebtDetailCallback();
@@ -101,16 +100,12 @@ export default function DebtDetailDialog({
     if (!open) {
       setDebtDetail(null);
       setLoading(false);
-      setImageZoom({ isZooming: false, x: 0, y: 0 });
+      setShowImageModal(false);
     }
   }, [open]);
 
   const handleDebtLogUpdate = useCallback(
     (data: any) => {
-      console.log(
-        "[DebtDetailDialog] Received debt_log_realtime_updated:",
-        data
-      );
 
       // Kiểm tra xem có phải cùng debtConfigId không
       if (
@@ -326,279 +321,305 @@ export default function DebtDetailDialog({
     );
   };
 
-  // Image zoom handlers
-  const handleMouseEnter = () => {
-    setImageZoom((prev) => ({ ...prev, isZooming: true }));
-  };
-
-  const handleMouseLeave = () => {
-    setImageZoom((prev) => ({ ...prev, isZooming: false }));
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setImageZoom((prev) => ({ ...prev, x, y }));
-  };
-
   return (
     <>
       <DebtSocket onDebtLogUpdate={handleDebtLogUpdate} />
       <Dialog open={open} onOpenChange={onClose}>
         {open ? (
-        <DialogContent className="!w-[85vw] !max-w-[85vw] !h-[80vh] !max-h-[80vh] !p-0 overflow-hidden">
-          {/* DialogTitle for accessibility */}
-          <DialogTitle asChild>
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4">
-              <h2 className="text-xl font-bold">Chi Tiết Công Nợ</h2>
-              <p className="text-blue-100 mt-1 text-sm">
-                Thông tin chi tiết về cấu hình công nợ khách hàng
-              </p>
-            </div>
-          </DialogTitle>
+          <DialogContent className="!w-[85vw] !max-w-[85vw] !h-[80vh] !max-h-[80vh] !p-0 overflow-hidden">
+            {/* DialogTitle for accessibility */}
+            <DialogTitle asChild>
+              <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4">
+                <h2 className="text-xl font-bold">Chi Tiết Công Nợ</h2>
+                <p className="text-blue-100 mt-1 text-sm">
+                  Thông tin chi tiết về cấu hình công nợ khách hàng
+                </p>
+              </div>
+            </DialogTitle>
 
-          {/* Content */}
-          <div className="flex-1 overflow-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
-              {/* Left: Ảnh và thông tin cơ bản */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="text-center mb-4">
-                  <h3 className="font-semibold text-lg text-gray-800 mb-3">
-                    Ảnh công nợ
-                  </h3>
+            {/* Content */}
+            <div className="flex-1 overflow-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+                {/* Left: Ảnh và thông tin cơ bản */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="text-center mb-4">
+                    <h3 className="font-semibold text-lg text-gray-800 mb-3">
+                      Ảnh công nợ
+                    </h3>
 
-                  <div className="mb-4">
-                    {debtDetail?.image_url ? (
-                      <div
-                        className="relative w-full max-w-[600px] mx-auto cursor-zoom-in"
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                        onMouseMove={handleMouseMove}
-                      >
-                        <img
-                          src={getImageSrc(debtDetail.image_url) || ""}
-                          alt="Ảnh công nợ"
-                          className="w-full h-auto max-h-[500px] rounded-lg border-2 border-blue-200 shadow-md object-cover"
-                          onError={(e) => {
-                            console.error(
-                              "Failed to load image. Image URL length:",
-                              debtDetail.image_url?.length || 0
-                            );
-                            (e.target as HTMLImageElement).style.display =
-                              "none";
-                          }}
-                        />
-                        {imageZoom.isZooming && (
-                          <div
-                            className="absolute top-0 left-full ml-4 w-96 h-96 border-2 border-blue-400 rounded-lg overflow-hidden shadow-xl bg-white z-50"
-                            style={{
-                              backgroundImage: `url(${getImageSrc(
-                                debtDetail.image_url
-                              )})`,
-                              backgroundSize: "400%",
-                              backgroundPosition: `${imageZoom.x}% ${imageZoom.y}%`,
-                              backgroundRepeat: "no-repeat",
-                            }}
-                          >
-                            <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                              🔍 Zoom
+                    <div className="mb-4">
+                      {debtDetail?.image_url ? (
+                        <div className="mb-4">
+                          {debtDetail?.image_url ? (
+                            <div
+                              className="relative w-full max-w-[600px] mx-auto cursor-zoom-in"
+                              onClick={() => setShowImageModal(true)}
+                            >
+                              <img
+                                src={getImageSrc(debtDetail.image_url) || ""}
+                                alt="Ảnh công nợ"
+                                className="w-full h-auto max-h-[500px] rounded-lg border-2 border-blue-200 shadow-md object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display =
+                                    "none";
+                                }}
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/20 rounded-lg">
+                                <span className="text-white text-lg font-semibold">
+                                  Click để phóng to
+                                </span>
+                              </div>
                             </div>
+                          ) : (
+                            <div className="w-full max-w-[600px] mx-auto h-[500px] rounded-lg border-2 border-gray-300 border-dashed flex items-center justify-center bg-gray-100">
+                              <div className="text-center text-gray-500">
+                                <div className="text-6xl mb-3">📷</div>
+                                <p className="text-lg">Không có ảnh</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Thêm modal zoom ảnh ngay sau đây */}
+                          {showImageModal && (
+                            <div
+                              className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                              onClick={() => setShowImageModal(false)}
+                            >
+                              <div
+                                className="relative bg-transparent flex flex-col items-center justify-center"
+                                style={{ width: "90vw", maxWidth: "1300px" }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* Header và nút đóng luôn hiển thị */}
+                                <button
+                                  className="absolute bg-black/60 text-white rounded-full px-3 py-1 text-sm"
+                                  onClick={() => setShowImageModal(false)}
+                                  type="button"
+                                  style={{ zIndex: 10, right: "-100px", top: "20px", cursor: "pointer" }}
+                                >
+                                  Đóng
+                                </button>
+                                {/* Scroll phần ảnh nếu quá dài */}
+                                <div
+                                  className="overflow-y-auto w-full"
+                                  style={{
+                                    maxHeight: "80vh",
+                                    paddingTop: "10px",
+                                    paddingBottom: "50px",
+                                    scrollbarWidth: "none",
+                                    msOverflowStyle: "none",
+                                  }}
+                                >
+                                  <img
+                                    src={
+                                      getImageSrc(debtDetail.image_url) || ""
+                                    }
+                                    alt="Zoom ảnh công nợ"
+                                    className="w-full h-auto rounded-xl shadow-2xl"
+                                    style={{
+                                      display: "block",
+                                      margin: "auto",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-[600px] mx-auto h-[500px] rounded-lg border-2 border-gray-300 border-dashed flex items-center justify-center bg-gray-100">
+                          <div className="text-center text-gray-500">
+                            <div className="text-6xl mb-3">📷</div>
+                            <p className="text-lg">Không có ảnh</p>
                           </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Thông tin khách hàng */}
+                  <div className="space-y-2 text-left">
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <div className="font-semibold text-gray-600 text-sm">
+                        Mã khách hàng
+                      </div>
+                      <div className="text-base font-medium text-gray-800">
+                        {debtDetail?.customer_code || "--"}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <div className="font-semibold text-gray-600 text-sm">
+                        Tên khách hàng
+                      </div>
+                      <div className="text-base font-medium text-gray-800">
+                        {debtDetail?.customer_name || "--"}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <div className="font-semibold text-gray-600 text-sm">
+                        Loại khách hàng
+                      </div>
+                      <div className="text-base font-medium text-gray-800">
+                        {getCustomerTypeDisplay(
+                          debtDetail?.customer_type || ""
                         )}
                       </div>
-                    ) : (
-                      <div className="w-full max-w-[600px] mx-auto h-[500px] rounded-lg border-2 border-gray-300 border-dashed flex items-center justify-center bg-gray-100">
-                        <div className="text-center text-gray-500">
-                          <div className="text-6xl mb-3">📷</div>
-                          <p className="text-lg">Không có ảnh</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <div className="font-semibold text-gray-600 text-sm">
+                        Giới tính khách hàng
+                      </div>
+                      <div className="text-base font-medium text-gray-800">
+                        {getGenderDisplay(debtDetail?.customer_gender || "")}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <div className="font-semibold text-gray-600 text-sm">
+                        Tình trạng nhắc nợ
+                      </div>
+                      <div className="flex items-center">
+                        <StatusIcon status={debtDetail?.remind_status || ""} />
+                        <span
+                          className={`text-sm ${
+                            getRemindStatusDisplay(
+                              debtDetail?.remind_status || ""
+                            ).color
+                          }`}
+                        >
+                          {
+                            getRemindStatusDisplay(
+                              debtDetail?.remind_status || ""
+                            ).label
+                          }
+                        </span>
+                      </div>
+                    </div>
+                    {/* Thông tin người thực hiện */}
+                    {debtDetail?.actor && (
+                      <div className="bg-white rounded-lg p-3 shadow-sm">
+                        <div className="font-semibold text-gray-600 text-sm">
+                          Người chỉnh sửa cuối cùng
+                        </div>
+                        <div className="text-sm font-medium text-green-700">
+                          {debtDetail.actor.fullName}
+                        </div>
+                      </div>
+                    )}
+                    {debtDetail?.employee && (
+                      <div className="bg-white rounded-lg p-3 shadow-sm">
+                        <div className="font-semibold text-gray-600 text-sm">
+                          Nhân viên công nợ
+                        </div>
+                        <div className="text-sm font-medium text-purple-700">
+                          {debtDetail.employee.fullName}
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Thông tin khách hàng */}
-                <div className="space-y-2 text-left">
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="font-semibold text-gray-600 text-sm">
-                      Mã khách hàng
-                    </div>
-                    <div className="text-base font-medium text-gray-800">
-                      {debtDetail?.customer_code || "--"}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="font-semibold text-gray-600 text-sm">
-                      Tên khách hàng
-                    </div>
-                    <div className="text-base font-medium text-gray-800">
-                      {debtDetail?.customer_name || "--"}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="font-semibold text-gray-600 text-sm">
-                      Loại khách hàng
-                    </div>
-                    <div className="text-base font-medium text-gray-800">
-                      {getCustomerTypeDisplay(debtDetail?.customer_type || "")}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="font-semibold text-gray-600 text-sm">
-                      Giới tính khách hàng
-                    </div>
-                    <div className="text-base font-medium text-gray-800">
-                      {getGenderDisplay(debtDetail?.customer_gender || "")}
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="font-semibold text-gray-600 text-sm">
-                      Tình trạng nhắc nợ
-                    </div>
-                    <div className="flex items-center">
-                      <StatusIcon status={debtDetail?.remind_status || ""} />
-                      <span
-                        className={`text-sm ${
-                          getRemindStatusDisplay(
-                            debtDetail?.remind_status || ""
-                          ).color
-                        }`}
-                      >
-                        {
-                          getRemindStatusDisplay(
-                            debtDetail?.remind_status || ""
-                          ).label
-                        }
-                      </span>
-                    </div>
-                  </div>
-                  {/* Thông tin người thực hiện */}
-                  {debtDetail?.actor && (
-                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                      <div className="font-semibold text-gray-600 text-sm">
-                        Người chỉnh sửa cuối cùng
+                {/* Right: Tin nhắn chi tiết */}
+                <div className="space-y-4">
+                  {/* Tin nhắn báo nợ */}
+                  <div className="bg-blue-50 rounded-lg p-3 border-l-4 border-blue-400">
+                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
+                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                      Tin nhắn báo nợ
+                    </h4>
+                    <div className="mb-2">
+                      <div className="text-xs text-gray-600 mb-1">
+                        Thời gian báo nợ:
                       </div>
-                      <div className="text-sm font-medium text-green-700">
-                        {debtDetail.actor.fullName}
+                      <div className="text-sm font-medium text-blue-700">
+                        {debtDetail?.send_time
+                          ? get(
+                              { tempField: debtDetail.send_time },
+                              "tempField",
+                              "--"
+                            )
+                          : "--"}
                       </div>
                     </div>
-                  )}
-                  {debtDetail?.employee && (
-                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                      <div className="font-semibold text-gray-600 text-sm">
-                        Nhân viên công nợ
+                    <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
+                      {debtDetail?.debt_message || "--"}
+                    </div>
+                  </div>
+
+                  {/* Tin nhắc nợ lần 1 */}
+                  <div className="bg-yellow-50 rounded-lg p-3 border-l-4 border-yellow-400">
+                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
+                      <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                      Nhắc nợ lần 1
+                    </h4>
+                    <div className="mb-2">
+                      <div className="text-xs text-gray-600 mb-1">
+                        Thời gian nhắc:
                       </div>
-                      <div className="text-sm font-medium text-purple-700">
-                        {debtDetail.employee.fullName}
+                      <div className="text-sm font-medium text-yellow-700">
+                        {debtDetail?.remind_time_1
+                          ? get(
+                              { tempField: debtDetail.remind_time_1 },
+                              "tempField",
+                              "Chưa nhắc"
+                            )
+                          : "Chưa nhắc"}
                       </div>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
+                      {debtDetail?.remind_message_1 || "--"}
+                    </div>
+                  </div>
 
-              {/* Right: Tin nhắn chi tiết */}
-              <div className="space-y-4">
-                {/* Tin nhắn báo nợ */}
-                <div className="bg-blue-50 rounded-lg p-3 border-l-4 border-blue-400">
-                  <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
-                    <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                    Tin nhắn báo nợ
-                  </h4>
-                  <div className="mb-2">
-                    <div className="text-xs text-gray-600 mb-1">
-                      Thời gian báo nợ:
+                  {/* Tin nhắc nợ lần 2 */}
+                  <div className="bg-orange-50 rounded-lg p-3 border-l-4 border-orange-400">
+                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
+                      <span className="inline-block w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                      Nhắc nợ lần 2
+                    </h4>
+                    <div className="mb-2">
+                      <div className="text-xs text-gray-600 mb-1">
+                        Thời gian nhắc:
+                      </div>
+                      <div className="text-sm font-medium text-orange-700">
+                        {debtDetail?.remind_time_2
+                          ? get(
+                              { tempField: debtDetail.remind_time_2 },
+                              "tempField",
+                              "Chưa nhắc"
+                            )
+                          : "Chưa nhắc"}
+                      </div>
                     </div>
-                    <div className="text-sm font-medium text-blue-700">
-                      {debtDetail?.send_time
-                        ? get(
-                            { tempField: debtDetail.send_time },
-                            "tempField",
-                            "--"
-                          )
-                        : "--"}
+                    <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
+                      {debtDetail?.remind_message_2 || "--"}
                     </div>
                   </div>
-                  <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
-                    {debtDetail?.debt_message || "--"}
-                  </div>
-                </div>
 
-                {/* Tin nhắc nợ lần 1 */}
-                <div className="bg-yellow-50 rounded-lg p-3 border-l-4 border-yellow-400">
-                  <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
-                    <span className="inline-block w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                    Nhắc nợ lần 1
-                  </h4>
-                  <div className="mb-2">
-                    <div className="text-xs text-gray-600 mb-1">
-                      Thời gian nhắc:
+                  {/* Tin nhắn nhắc kinh doanh */}
+                  <div className="bg-green-50 rounded-lg p-3 border-l-4 border-green-400">
+                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
+                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                      Tin nhắn nhắc kinh doanh
+                    </h4>
+                    <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
+                      {debtDetail?.business_remind_message || "--"}
                     </div>
-                    <div className="text-sm font-medium text-yellow-700">
-                      {debtDetail?.remind_time_1
-                        ? get(
-                            { tempField: debtDetail.remind_time_1 },
-                            "tempField",
-                            "Chưa nhắc"
-                          )
-                        : "Chưa nhắc"}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
-                    {debtDetail?.remind_message_1 || "--"}
-                  </div>
-                </div>
-
-                {/* Tin nhắc nợ lần 2 */}
-                <div className="bg-orange-50 rounded-lg p-3 border-l-4 border-orange-400">
-                  <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
-                    <span className="inline-block w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
-                    Nhắc nợ lần 2
-                  </h4>
-                  <div className="mb-2">
-                    <div className="text-xs text-gray-600 mb-1">
-                      Thời gian nhắc:
-                    </div>
-                    <div className="text-sm font-medium text-orange-700">
-                      {debtDetail?.remind_time_2
-                        ? get(
-                            { tempField: debtDetail.remind_time_2 },
-                            "tempField",
-                            "Chưa nhắc"
-                          )
-                        : "Chưa nhắc"}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
-                    {debtDetail?.remind_message_2 || "--"}
-                  </div>
-                </div>
-
-                {/* Tin nhắn nhắc kinh doanh */}
-                <div className="bg-green-50 rounded-lg p-3 border-l-4 border-green-400">
-                  <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
-                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                    Tin nhắn nhắc kinh doanh
-                  </h4>
-                  <div className="bg-white rounded p-3 text-gray-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
-                    {debtDetail?.business_remind_message || "--"}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Footer */}
-          <div className="border-t bg-gray-50 p-3 flex justify-end">
-            <Button
-              onClick={onClose}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-lg shadow-md transition-colors"
-            >
-              Đóng
-            </Button>
-          </div>
-        </DialogContent>
+            {/* Footer */}
+            <div className="border-t bg-gray-50 p-3 flex justify-end">
+              <Button
+                onClick={onClose}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded-lg shadow-md transition-colors"
+              >
+                Đóng
+              </Button>
+            </div>
+          </DialogContent>
         ) : null}
       </Dialog>
     </>
