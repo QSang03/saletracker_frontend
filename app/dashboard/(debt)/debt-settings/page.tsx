@@ -412,6 +412,7 @@ export default function DebtSettingsPage() {
             enableSingleDateFilter
             singleDateLabel="Ngày đã nhắc"
             page={page}
+            enablePageSize={true}
             pageSize={pageSize}
             total={total} // Sử dụng total từ backend
             onPageChange={setPage}
