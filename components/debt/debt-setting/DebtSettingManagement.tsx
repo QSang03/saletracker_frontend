@@ -372,11 +372,13 @@ export default function DebtSettingManagement({
             const isEmployeeNull = row && row.employee == null;
             const isErrorSend = row?.debt_log?.remind_status === "Error Send";
             const rowClass =
-              isEmployeeNull || isErrorSend
-                ? "bg-[#ffd6d6]"
-                : isEven
-                ? "bg-white"
-                : "bg-gray-200";
+              isEmployeeNull
+              ? "bg-[#ffd6d6]"
+              : isErrorSend
+              ? "bg-[#ffe9b3]"
+              : isEven
+              ? "bg-white"
+              : "bg-gray-200";
             if (!row) {
               // Dòng ảo
               return (
