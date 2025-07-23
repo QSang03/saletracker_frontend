@@ -142,6 +142,7 @@ export default function ManagerDebtPage() {
         totalCollected: 0,
         totalPaidAmount: 0,
         totalPaidBills: 0,
+        totalRemaining: 0,
       };
 
     try {
@@ -184,6 +185,7 @@ export default function ManagerDebtPage() {
       totalCollected: 0,
       totalPaidAmount: 0,
       totalPaidBills: 0,
+      totalRemaining: 0,
     };
   }, [filters]);
 
@@ -200,6 +202,7 @@ export default function ManagerDebtPage() {
     totalCollected: 0,
     totalPaidAmount: 0,
     totalPaidBills: 0,
+    totalRemaining: 0,
   });
 
   const debts = debtsData.data;
@@ -397,9 +400,6 @@ export default function ManagerDebtPage() {
       console.log('Import result:', result); // Debug log
 
       if (res.ok) {
-        // Debug: Log raw result
-        console.log('Raw imported:', result.imported);
-        console.log('Raw errors:', result.errors);
         
         // Xử lý kết quả import với thông tin chi tiết - type safety
         let importedCount = 0;
@@ -812,6 +812,14 @@ export default function ManagerDebtPage() {
                       value={
                         stats && typeof stats.totalBills === "number"
                           ? stats.totalBills
+                          : "0"
+                      }
+                    />
+                    <StatBox
+                      label="Tổng Tiền Còn Lại"
+                      value={
+                        stats && typeof stats.totalRemaining === "number"
+                          ? stats.totalRemaining.toLocaleString()
                           : "0"
                       }
                     />
