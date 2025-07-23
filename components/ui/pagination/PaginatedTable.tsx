@@ -79,6 +79,7 @@ export type Filters = {
   dateRange: DateRange;
   singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
+  sort?: 'asc' | 'desc';
 };
 
 export default function PaginatedTable({

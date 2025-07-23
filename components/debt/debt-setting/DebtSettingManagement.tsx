@@ -39,6 +39,7 @@ interface DebtSettingManagementProps {
   onDelete?: (id: string) => void;
   onEdit?: (row: any) => void;
   onRefresh?: () => void;
+  onSortChange?: (sort: "asc" | "desc" | undefined) => void;
   onShowAlert?: (alert: { type: "success" | "error"; message: string }) => void;
   onUpdateRow?: (id: string, updatedData: any) => void; // Thêm prop mới để cập nhật row
 }
@@ -53,6 +54,7 @@ export default function DebtSettingManagement({
   onRefresh,
   onShowAlert,
   onUpdateRow,
+  onSortChange,
 }: DebtSettingManagementProps) {
   // Map loại khách hàng
   const customerTypeMap: Record<string, string> = {
@@ -136,8 +138,7 @@ export default function DebtSettingManagement({
   }>({ open: false, debtConfigId: null });
 
   // Debug useEffect để theo dõi state changes
-  React.useEffect(() => {
-  }, [editModal]);
+  React.useEffect(() => {}, [editModal]);
 
   // Utility function để format date an toàn
   const formatUpdateInfo = (actor: any, lastUpdateAt: any) => {
@@ -329,6 +330,7 @@ export default function DebtSettingManagement({
       nextValue: false,
       loading: false,
     });
+
   const handleEdit = (row: any) => {
     setEditModal({ open: true, id: row.id });
   };
@@ -336,6 +338,8 @@ export default function DebtSettingManagement({
   const handleViewDetail = (row: any) => {
     setDetailDialog({ open: true, debtConfigId: row.id });
   };
+
+  const [sortState, setSortState] = useState<"none" | "asc" | "desc">("none");
 
   return (
     <div className="border rounded-xl shadow-inner overflow-x-auto always-show-scrollbar">
@@ -353,8 +357,24 @@ export default function DebtSettingManagement({
             <TableHead className="px-3 py-2 text-center">
               Lịch Nhắc Nợ
             </TableHead>
-            <TableHead className="px-3 py-2 text-center">
+            <TableHead
+              className="px-3 py-2 text-center select-none cursor-pointer"
+              onDoubleClick={() => {
+                const next =
+                  sortState === "none"
+                    ? "asc"
+                    : sortState === "asc"
+                    ? "desc"
+                    : "none";
+                setSortState(next);
+                if (onSortChange) {
+                  onSortChange(next === "none" ? undefined : next);
+                }
+              }}
+            >
               Ngày Đã Nhắc
+              {sortState === "asc" && <span> ▲</span>}
+              {sortState === "desc" && <span> ▼</span>}
             </TableHead>
             <TableHead className="px-3 py-2 text-center">
               Trạng Thái Nhắc Nợ
@@ -371,8 +391,7 @@ export default function DebtSettingManagement({
             const isEven = idx % 2 === 0;
             const isEmployeeNull = row && row.employee == null;
             const isErrorSend = row?.debt_log?.remind_status === "Error Send";
-            const rowClass =
-              isEmployeeNull
+            const rowClass = isEmployeeNull
               ? "bg-[#ffd6d6]"
               : isErrorSend
               ? "bg-[#ffe9b3]"

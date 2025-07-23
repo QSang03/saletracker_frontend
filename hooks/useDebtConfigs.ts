@@ -182,6 +182,9 @@ export function useDebtConfigs(
           params.append("singleDate", dateStr);
         }
       }
+      if (filters?.sort) {
+        params.append("sort", filters.sort);
+      }
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/debt-configs?${params.toString()}`,

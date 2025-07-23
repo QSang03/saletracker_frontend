@@ -35,6 +35,7 @@ export default function DebtSettingsPage() {
     dateRange: { from: undefined, to: undefined },
     singleDate: undefined,
     employees: [],
+    sort: undefined,
   });
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showAddManualModal, setShowAddManualModal] = useState(false);
@@ -453,6 +454,7 @@ export default function DebtSettingsPage() {
               onDelete={handleDelete}
               onEdit={handleEditWrapper}
               onRefresh={() => forceUpdate()}
+              onSortChange={(sort) => setFilters((f) => ({ ...f, sort }))}
               onShowAlert={setAlert}
             />
           </PaginatedTable>
