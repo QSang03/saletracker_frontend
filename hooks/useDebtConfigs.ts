@@ -143,6 +143,18 @@ export function useDebtConfigs(
       }
 
       if (
+        filters?.statuses &&
+        Array.isArray(filters.statuses) &&
+        filters.statuses.length > 0
+      ) {
+        filters.statuses.forEach((status) => {
+          if (status && status.toString().trim() !== "") {
+            params.append("statuses", status.toString());
+          }
+        });
+      }
+
+      if (
         filters?.employees &&
         Array.isArray(filters.employees) &&
         filters.employees.length > 0

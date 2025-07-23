@@ -87,11 +87,14 @@ export default function DebtSettingsPage() {
   // Backend đã xử lý filter và pagination, không cần filter ở frontend nữa
   const filteredData = apiData;
   const paginatedData = apiData; // Backend đã trả về đúng dữ liệu cho trang hiện tại
-
+  const statusFilterOptions = [
+    { value: "normal", label: "Bình thường" },
+    { value: "not_matched_debt", label: "Không trùng phiếu nợ" },
+    { value: "wrong_customer_name", label: "Sai tên khách hàng" },
+  ];
   // Callback filter
   const handleFilterChange = useCallback((f: Filters) => {
     setFilters(f);
-    setPage(1);
   }, []);
 
   // Hàm reset filter
@@ -421,8 +424,12 @@ export default function DebtSettingsPage() {
             enableSingleDateFilter
             singleDateLabel="Ngày đã nhắc"
             page={page}
+            enableStatusFilter={true}
+            availableStatuses={statusFilterOptions}
             enablePageSize={true}
             pageSize={pageSize}
+            preserveFiltersOnEmpty={true}
+            initialFilters={filters}
             total={total} // Sử dụng total từ backend
             onPageChange={setPage}
             onPageSizeChange={(newSize) => {
