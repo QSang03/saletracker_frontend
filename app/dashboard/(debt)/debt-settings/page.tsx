@@ -14,6 +14,7 @@ import { useDebtConfigs } from "@/hooks/useDebtConfigs";
 import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { DebtSocket } from "@/components/socket/DebtSocket";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function DebtSettingsPage() {
   const PAGE_SIZE_KEY = "debtConfigPageSize";
@@ -43,6 +44,11 @@ export default function DebtSettingsPage() {
     null
   );
   const [importing, setImporting] = useState(false);
+  const [processDebtEnabled, setProcessDebtEnabled] = useState<boolean | null>(
+    null
+  );
+  const [showConfirmToggle, setShowConfirmToggle] = useState(false);
+  const [toggleLoading, setToggleLoading] = useState(false);
 
   // Check permissions for debt configuration access
   const {
@@ -267,6 +273,41 @@ export default function DebtSettingsPage() {
     };
   }, [filteredData]);
 
+  const handleToggleProcessDebt = async () => {
+    setToggleLoading(true);
+    try {
+      const token = getAccessToken();
+      const newValue = processDebtEnabled ? "0" : "1";
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/system-config/by-section/system/system_processDebt`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ value: newValue }),
+        }
+      );
+      if (res.ok) {
+        setProcessDebtEnabled(!processDebtEnabled);
+        setAlert({
+          type: "success",
+          message: `Đã ${
+            !processDebtEnabled ? "bật" : "tắt"
+          } chương trình công nợ!`,
+        });
+      } else {
+        setAlert({ type: "error", message: "Cập nhật thất bại!" });
+      }
+    } catch (err) {
+      setAlert({ type: "error", message: "Lỗi khi cập nhật!" });
+    } finally {
+      setToggleLoading(false);
+      setShowConfirmToggle(false);
+    }
+  };
+
   // Update alert when there's an error
   useEffect(() => {
     if (error) {
@@ -276,6 +317,28 @@ export default function DebtSettingsPage() {
       });
     }
   }, [error]);
+
+  useEffect(() => {
+    async function fetchProcessDebtStatus() {
+      try {
+        const token = getAccessToken();
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/system-config/by-section/system/system_processDebt`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const data = await res.json();
+        // Nếu value là "1" thì bật, "0" thì tắt
+        setProcessDebtEnabled(data?.value === "1");
+      } catch (err) {
+        setProcessDebtEnabled(null);
+      }
+    }
+    fetchProcessDebtStatus();
+  }, []);
 
   // Check if user has read access to debt department
   const canAccessDebtConfig = canReadDepartment("cong-no");
@@ -326,6 +389,23 @@ export default function DebtSettingsPage() {
             ⚙️ Cấu hình nhắc nợ
           </CardTitle>
           <div className="flex gap-2">
+            <PDynamic
+              permission={{ departmentSlug: "cong-no", action: "create" }}
+            >
+              <Button
+                variant={processDebtEnabled ? "add" : "delete"}
+                type="button"
+                onClick={() => setShowConfirmToggle(true)}
+                disabled={toggleLoading || processDebtEnabled === null}
+                className="text-sm"
+              >
+                {processDebtEnabled === null
+                  ? "Đang kiểm tra trạng thái..."
+                  : processDebtEnabled
+                  ? "Tắt chương trình công nợ"
+                  : "Bật chương trình công nợ"}
+              </Button>
+            </PDynamic>
             <PDynamic
               permission={{ departmentSlug: "cong-no", action: "export" }}
             >
@@ -479,6 +559,24 @@ export default function DebtSettingsPage() {
             forceUpdate();
           }
         }}
+      />
+
+      <ConfirmDialog
+        isOpen={showConfirmToggle}
+        title={
+          processDebtEnabled
+            ? "Tắt chương trình công nợ"
+            : "Bật chương trình công nợ"
+        }
+        message={
+          processDebtEnabled
+            ? "Bạn có chắc chắn muốn tắt chương trình công nợ? Các chức năng liên quan sẽ bị vô hiệu hóa."
+            : "Bạn có chắc chắn muốn bật chương trình công nợ?"
+        }
+        onConfirm={handleToggleProcessDebt}
+        onCancel={() => setShowConfirmToggle(false)}
+        confirmText={processDebtEnabled ? "Tắt" : "Bật"}
+        cancelText="Hủy"
       />
 
       <AddManualDebtModal
