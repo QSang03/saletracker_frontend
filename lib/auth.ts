@@ -52,7 +52,7 @@ export function getUserFromToken(token: string): any | null {
       base64 += '=';
     }
     
-    const payload = JSON.parse(base64UrlDecode(base64.split('.')[1]));
+    const payload = JSON.parse(base64UrlDecode(base64));
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
@@ -100,7 +100,7 @@ export function getUserRolesFromToken(token: string): string[] {
       base64 += '=';
     }
     
-    const payload = JSON.parse(base64UrlDecode(base64.split('.')[1]));
+    const payload = JSON.parse(base64UrlDecode(base64));
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
