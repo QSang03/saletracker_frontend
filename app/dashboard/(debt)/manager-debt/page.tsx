@@ -251,6 +251,7 @@ export default function ManagerDebtPage() {
     { value: "paid", label: "Đã thanh toán" },
     { value: "pay_later", label: "Đã hẹn thanh toán" },
     { value: "no_information_available", label: "Không có thông tin" },
+    { value: "overdue", label: "Quá hạn" },
   ];
 
   // Fetch customer options
