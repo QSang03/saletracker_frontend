@@ -13,6 +13,7 @@ const TOOLS = [
   { key: "system_processDebt", label: "Xử lý công nợ" },
   { key: "system_processOrder", label: "Xử lý giao dịch" },
   { key: "system_scheduleHoliday", label: "Lịch nghỉ" },
+  { key: "system_processCampaign", label: "Xử lý chiến dịch" },
   // ...thêm tool khác nếu có
 ];
 
