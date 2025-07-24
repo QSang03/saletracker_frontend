@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { navItems } from './lib/nav-items';
 import type { User } from './types';
+import { base64UrlDecode } from './lib/auth';
 
 function hasRole(userRoles: string[], requiredRoles: string[]): boolean {
   return requiredRoles.some(role => userRoles.includes(role));
@@ -39,7 +40,7 @@ export async function middleware(request: NextRequest) {
 
   if (token) {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      const payload = JSON.parse(base64UrlDecode(token.split('.')[1]));
       const exp = payload.exp;
       if (exp && typeof exp === 'number' && exp > 0) {
         isValid = Date.now() < exp * 1000;

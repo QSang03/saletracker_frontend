@@ -28,6 +28,12 @@ export function getRefreshToken(): string | null {
   return null;
 }
 
+export function base64UrlDecode(str: string): string {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  return atob(str);
+}
+
 export function getUserFromToken(token: string): any | null {
   try {
     if (!token || typeof token !== 'string') {
@@ -46,7 +52,7 @@ export function getUserFromToken(token: string): any | null {
       base64 += '=';
     }
     
-    const payload = JSON.parse(atob(base64));
+    const payload = JSON.parse(base64UrlDecode(base64.split('.')[1]));
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
@@ -94,7 +100,7 @@ export function getUserRolesFromToken(token: string): string[] {
       base64 += '=';
     }
     
-    const payload = JSON.parse(atob(base64));
+    const payload = JSON.parse(base64UrlDecode(base64.split('.')[1]));
 
     // Kiểm tra token còn hạn
     if (payload.exp && payload.exp < Date.now() / 1000) {
