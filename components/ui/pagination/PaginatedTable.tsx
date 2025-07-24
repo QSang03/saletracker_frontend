@@ -79,7 +79,7 @@ export type Filters = {
   dateRange: DateRange;
   singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
-  sort?: 'asc' | 'desc';
+  sort?: "asc" | "desc";
 };
 
 export default function PaginatedTable({
@@ -149,7 +149,8 @@ export default function PaginatedTable({
         // Map lại label cho các trạng thái đặc biệt
         if (value === "paid") label = "Đã thanh toán";
         else if (value === "pay_later") label = "Đã hẹn thanh toán";
-        else if (value === "no_information_available") label = "Không có thông tin";
+        else if (value === "no_information_available")
+          label = "Không có thông tin";
         else if (typeof s === "string") label = s;
         else label = s.label;
         return { label, value };
@@ -171,7 +172,11 @@ export default function PaginatedTable({
 
   // Thêm useMemo cho zaloLinkStatusOptions
   const zaloLinkStatusOptions = useMemo(
-    () => availableZaloLinkStatuses.map((s) => ({ label: s.label, value: s.value })),
+    () =>
+      availableZaloLinkStatuses.map((s) => ({
+        label: s.label,
+        value: s.value,
+      })),
     [availableZaloLinkStatuses]
   );
 
@@ -189,37 +194,82 @@ export default function PaginatedTable({
   }));
 
   // Sync filters when initialFilters changes - but only if preserveFiltersOnEmpty is true
-  const memoizedInitialFilters = useMemo(() => initialFilters, [
-    initialFilters?.search,
-    JSON.stringify(initialFilters?.departments),
-    JSON.stringify(initialFilters?.roles),
-    JSON.stringify(initialFilters?.statuses),
-    JSON.stringify(initialFilters?.zaloLinkStatuses),
-    JSON.stringify(initialFilters?.categories),
-    JSON.stringify(initialFilters?.brands),
-    JSON.stringify(initialFilters?.dateRange),
-    initialFilters?.singleDate,
-    JSON.stringify(initialFilters?.employees),
-  ]);
+  const memoizedInitialFilters = useMemo(
+    () => initialFilters,
+    [
+      initialFilters?.search,
+      JSON.stringify(initialFilters?.departments),
+      JSON.stringify(initialFilters?.roles),
+      JSON.stringify(initialFilters?.statuses),
+      JSON.stringify(initialFilters?.zaloLinkStatuses),
+      JSON.stringify(initialFilters?.categories),
+      JSON.stringify(initialFilters?.brands),
+      JSON.stringify(initialFilters?.dateRange),
+      initialFilters?.singleDate,
+      JSON.stringify(initialFilters?.employees),
+    ]
+  );
 
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
   useEffect(() => {
+    setHasUserInteracted(false);
+  }, [memoizedInitialFilters]);
+
+  useEffect(() => {
+    // Khi filter được sync từ initialFilters (chưa có thao tác user), gửi filter lên backend
+    if (onFilterChange && !hasUserInteracted) {
+      onFilterChange(filters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, hasUserInteracted]);
+
+  useEffect(() => {
     if (memoizedInitialFilters && !hasUserInteracted) {
-      setFilters(prev => {
+      setFilters((prev) => {
         const newFilters = {
-          search: memoizedInitialFilters.search !== undefined ? memoizedInitialFilters.search : prev.search,
-          departments: memoizedInitialFilters.departments !== undefined ? memoizedInitialFilters.departments : prev.departments,
-          roles: memoizedInitialFilters.roles !== undefined ? memoizedInitialFilters.roles : prev.roles,
-          statuses: memoizedInitialFilters.statuses !== undefined ? memoizedInitialFilters.statuses : prev.statuses,
-          zaloLinkStatuses: memoizedInitialFilters.zaloLinkStatuses !== undefined ? memoizedInitialFilters.zaloLinkStatuses : prev.zaloLinkStatuses,
-          categories: memoizedInitialFilters.categories !== undefined ? memoizedInitialFilters.categories : prev.categories,
-          brands: memoizedInitialFilters.brands !== undefined ? memoizedInitialFilters.brands : prev.brands,
-          dateRange: memoizedInitialFilters.dateRange !== undefined ? memoizedInitialFilters.dateRange : prev.dateRange,
-          singleDate: memoizedInitialFilters.singleDate !== undefined ? memoizedInitialFilters.singleDate : prev.singleDate,
-          employees: memoizedInitialFilters.employees !== undefined ? memoizedInitialFilters.employees : prev.employees,
+          search:
+            memoizedInitialFilters.search !== undefined
+              ? memoizedInitialFilters.search
+              : prev.search,
+          departments:
+            memoizedInitialFilters.departments !== undefined
+              ? memoizedInitialFilters.departments
+              : prev.departments,
+          roles:
+            memoizedInitialFilters.roles !== undefined
+              ? memoizedInitialFilters.roles
+              : prev.roles,
+          statuses:
+            memoizedInitialFilters.statuses !== undefined
+              ? memoizedInitialFilters.statuses
+              : prev.statuses,
+          zaloLinkStatuses:
+            memoizedInitialFilters.zaloLinkStatuses !== undefined
+              ? memoizedInitialFilters.zaloLinkStatuses
+              : prev.zaloLinkStatuses,
+          categories:
+            memoizedInitialFilters.categories !== undefined
+              ? memoizedInitialFilters.categories
+              : prev.categories,
+          brands:
+            memoizedInitialFilters.brands !== undefined
+              ? memoizedInitialFilters.brands
+              : prev.brands,
+          dateRange:
+            memoizedInitialFilters.dateRange !== undefined
+              ? memoizedInitialFilters.dateRange
+              : prev.dateRange,
+          singleDate:
+            memoizedInitialFilters.singleDate !== undefined
+              ? memoizedInitialFilters.singleDate
+              : prev.singleDate,
+          employees:
+            memoizedInitialFilters.employees !== undefined
+              ? memoizedInitialFilters.employees
+              : prev.employees,
         };
-        
+
         // Only update if actually different
         const isEqual = JSON.stringify(prev) === JSON.stringify(newFilters);
         return isEqual ? prev : newFilters;
@@ -228,7 +278,8 @@ export default function PaginatedTable({
   }, [memoizedInitialFilters, hasUserInteracted]);
 
   // Xác định chế độ phân trang: backend (có page, pageSize, total) hay frontend (không có)
-  const isBackendPaging = page !== undefined && pageSize !== undefined && total !== undefined;
+  const isBackendPaging =
+    page !== undefined && pageSize !== undefined && total !== undefined;
 
   // State cho frontend pagination
   const [internalPage, setInternalPage] = useState(0); // 0-based
@@ -237,11 +288,17 @@ export default function PaginatedTable({
   // Tính toán page/pageSize hiện tại
   const currentPage = isBackendPaging ? page! : internalPage + 1; // 1-based
   const currentPageSize = isBackendPaging ? pageSize! : internalPageSize;
-  const totalRows = isBackendPaging ? total! : children && Array.isArray(children) ? children.length : 0;
+  const totalRows = isBackendPaging
+    ? total!
+    : children && Array.isArray(children)
+    ? children.length
+    : 0;
   const totalPages = Math.max(1, Math.ceil(totalRows / currentPageSize));
 
   // State tạm cho input pageSize (chỉ áp dụng cho input nhập số dòng/trang)
-  const [pendingPageSize, setPendingPageSize] = useState<number | "">(currentPageSize);
+  const [pendingPageSize, setPendingPageSize] = useState<number | "">(
+    currentPageSize
+  );
   useEffect(() => {
     setPendingPageSize(currentPageSize);
   }, [currentPageSize]);
@@ -249,12 +306,15 @@ export default function PaginatedTable({
   // Debounce filter cho backend: giảm thời gian xuống 150ms để responsive hơn
   const filterTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const debouncedSetFilters = useCallback((newFilters: Filters) => {
-    if (filterTimeout.current) clearTimeout(filterTimeout.current);
-    filterTimeout.current = setTimeout(() => {
-      if (onFilterChange) onFilterChange(newFilters);
-    }, 150); // giảm từ 300ms xuống 150ms để responsive hơn
-  }, [onFilterChange]);
+  const debouncedSetFilters = useCallback(
+    (newFilters: Filters) => {
+      if (filterTimeout.current) clearTimeout(filterTimeout.current);
+      filterTimeout.current = setTimeout(() => {
+        if (onFilterChange) onFilterChange(newFilters);
+      }, 150); // giảm từ 300ms xuống 150ms để responsive hơn
+    },
+    [onFilterChange]
+  );
 
   // updateFilter chỉ cập nhật filter, không reset page
   const updateFilter = useCallback(
@@ -271,37 +331,61 @@ export default function PaginatedTable({
   );
 
   // Memoized onChange handlers to prevent re-renders
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    updateFilter("search", e.target.value);
-  }, [updateFilter]);
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      updateFilter("search", e.target.value);
+    },
+    [updateFilter]
+  );
 
-  const handleEmployeesChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("employees", vals);
-  }, [updateFilter]);
+  const handleEmployeesChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("employees", vals);
+    },
+    [updateFilter]
+  );
 
-  const handleDepartmentsChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("departments", vals);
-  }, [updateFilter]);
+  const handleDepartmentsChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("departments", vals);
+    },
+    [updateFilter]
+  );
 
-  const handleRolesChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("roles", vals);
-  }, [updateFilter]);
+  const handleRolesChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("roles", vals);
+    },
+    [updateFilter]
+  );
 
-  const handleStatusesChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("statuses", vals);
-  }, [updateFilter]);
+  const handleStatusesChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("statuses", vals);
+    },
+    [updateFilter]
+  );
 
-  const handleZaloLinkStatusesChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("zaloLinkStatuses", vals);
-  }, [updateFilter]);
+  const handleZaloLinkStatusesChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("zaloLinkStatuses", vals);
+    },
+    [updateFilter]
+  );
 
-  const handleCategoriesChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("categories", vals);
-  }, [updateFilter]);
+  const handleCategoriesChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("categories", vals);
+    },
+    [updateFilter]
+  );
 
-  const handleBrandsChange = useCallback((vals: (string | number)[]) => {
-    updateFilter("brands", vals);
-  }, [updateFilter]);
+  const handleBrandsChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("brands", vals);
+    },
+    [updateFilter]
+  );
 
   // useEffect này KHÔNG gọi onFilterChange trực tiếp nữa
   // handleResetFilter: reset filter, đồng thời reset page về 1 nếu là backend paging
@@ -320,13 +404,12 @@ export default function PaginatedTable({
       employees: [],
     };
     setFilters(reset);
-    // Gọi debouncedSetFilters để thông báo cho parent component
     debouncedSetFilters(reset);
     if (onPageChange) onPageChange(1);
     else setInternalPage(0);
     setPendingPageSize("");
     // Gọi callback reset filter ở trang cha nếu có
-    if (typeof onResetFilter === 'function') {
+    if (typeof onResetFilter === "function") {
       onResetFilter();
     }
   }, [onPageChange, onResetFilter, debouncedSetFilters]);
@@ -363,7 +446,8 @@ export default function PaginatedTable({
   // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định
   useEffect(() => {
     if (pendingPageSize === "") {
-      if (isBackendPaging && onPageSizeChange) onPageSizeChange(defaultPageSize);
+      if (isBackendPaging && onPageSizeChange)
+        onPageSizeChange(defaultPageSize);
       else setInternalPageSize(defaultPageSize);
       if (onPageChange) onPageChange(1);
       else setInternalPage(0);
@@ -377,7 +461,7 @@ export default function PaginatedTable({
         <div className="grid grid-cols-6 gap-3">
           {enableSearch && (
             <Input
-              className={`min-w-0 w-full ${filterClassNames.search ?? ''}`}
+              className={`min-w-0 w-full ${filterClassNames.search ?? ""}`}
               placeholder="Tìm kiếm..."
               value={filters.search}
               onChange={handleSearchChange}
@@ -394,7 +478,7 @@ export default function PaginatedTable({
           )}
           {enableDepartmentFilter && (
             <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.departments ?? ''}`}
+              className={`min-w-0 w-full ${filterClassNames.departments ?? ""}`}
               placeholder="Phòng ban"
               value={filters.departments}
               options={departmentOptions}
@@ -403,7 +487,7 @@ export default function PaginatedTable({
           )}
           {enableRoleFilter && (
             <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.roles ?? ''}`}
+              className={`min-w-0 w-full ${filterClassNames.roles ?? ""}`}
               placeholder="Vai trò"
               value={filters.roles}
               options={roleOptions}
@@ -412,7 +496,7 @@ export default function PaginatedTable({
           )}
           {enableStatusFilter && (
             <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.statuses ?? ''}`}
+              className={`min-w-0 w-full ${filterClassNames.statuses ?? ""}`}
               placeholder="Trạng thái"
               value={filters.statuses}
               options={statusOptions}
@@ -430,7 +514,7 @@ export default function PaginatedTable({
           )}
           {enableCategoriesFilter && availableCategories.length > 0 && (
             <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.categories ?? ''}`}
+              className={`min-w-0 w-full ${filterClassNames.categories ?? ""}`}
               placeholder="Danh mục"
               value={filters.categories}
               options={categoryOptions}
@@ -439,7 +523,7 @@ export default function PaginatedTable({
           )}
           {availableBrands.length > 0 && (
             <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.brands ?? ''}`}
+              className={`min-w-0 w-full ${filterClassNames.brands ?? ""}`}
               placeholder="Brand"
               value={filters.brands}
               options={brandOptions}
@@ -448,8 +532,15 @@ export default function PaginatedTable({
           )}
           {enableSingleDateFilter && (
             <DatePicker
-              value={filters.singleDate ? new Date(filters.singleDate) : undefined}
-              onChange={(date) => updateFilter("singleDate", date ? date.toLocaleDateString("en-CA") : undefined)} // Set undefined khi clear
+              value={
+                filters.singleDate ? new Date(filters.singleDate) : undefined
+              }
+              onChange={(date) =>
+                updateFilter(
+                  "singleDate",
+                  date ? date.toLocaleDateString("en-CA") : undefined
+                )
+              } // Set undefined khi clear
               placeholder={singleDateLabel || "Chọn ngày"}
               className="min-w-0 w-full"
             />
@@ -462,15 +553,18 @@ export default function PaginatedTable({
               className="min-w-0 w-full border rounded px-2 py-1 text-sm"
               value={pendingPageSize}
               placeholder="Số dòng/trang"
-              onChange={e => {
+              onChange={(e) => {
                 const val = Number(e.target.value);
-                setPendingPageSize(e.target.value === "" ? "" : (val > 0 ? val : ""));
+                setPendingPageSize(
+                  e.target.value === "" ? "" : val > 0 ? val : ""
+                );
               }}
-              onKeyDown={e => {
+              onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   const val = Number(pendingPageSize);
                   if (!isNaN(val) && val > 0) {
-                    if (isBackendPaging && onPageSizeChange) onPageSizeChange(val);
+                    if (isBackendPaging && onPageSizeChange)
+                      onPageSizeChange(val);
                     else {
                       setInternalPage(0);
                       setInternalPageSize(val);
@@ -485,7 +579,9 @@ export default function PaginatedTable({
             {canExport && getExportData && (
               <Button
                 variant="export"
-                className={`min-w-0 ${canExport ? 'w-1/2' : 'w-full'} ${buttonClassNames.export ?? ''}`}
+                className={`min-w-0 ${canExport ? "w-1/2" : "w-full"} ${
+                  buttonClassNames.export ?? ""
+                }`}
                 onClick={() => setOpenExport(true)}
                 disabled={!getExportData}
               >
@@ -495,7 +591,9 @@ export default function PaginatedTable({
             <Button
               type="button"
               variant="delete"
-              className={`min-w-0 ${canExport && getExportData ? 'w-1/2' : 'w-full'} ${buttonClassNames.reset ?? ''}`}
+              className={`min-w-0 ${
+                canExport && getExportData ? "w-1/2" : "w-full"
+              } ${buttonClassNames.reset ?? ""}`}
               onClick={handleResetFilter}
             >
               Xóa filter
@@ -525,7 +623,7 @@ export default function PaginatedTable({
         <Button
           variant="gradient"
           size="sm"
-          className={buttonClassNames.prev ?? ''}
+          className={buttonClassNames.prev ?? ""}
           onClick={() => {
             goToPage(Math.max(currentPage - 1, 1));
           }}
@@ -539,7 +637,7 @@ export default function PaginatedTable({
         <Button
           variant="gradient"
           size="sm"
-          className={buttonClassNames.next ?? ''}
+          className={buttonClassNames.next ?? ""}
           onClick={() => {
             goToPage(Math.min(currentPage + 1, totalPages));
           }}

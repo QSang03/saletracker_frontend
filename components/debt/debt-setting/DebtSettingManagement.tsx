@@ -487,10 +487,25 @@ export default function DebtSettingManagement({
                       <TableCell className="px-3 py-2 text-left">
                         {row.customer_name || "--"}
                       </TableCell>
-                      <TableCell className="px-3 py-2 text-center">
-                        {typeof row.total_bills !== "undefined"
-                          ? row.total_bills
-                          : 0}
+                      <TableCell
+                        className="px-3 py-2 text-center cursor-pointer text-blue-600 font-bold underline"
+                        onClick={() => {
+                          // Lưu filter vào localStorage
+                          localStorage.setItem(
+                            "managerDebtFilter",
+                            JSON.stringify({
+                              search: row.customer_code,
+                              singleDate: new Date().toLocaleDateString(
+                                "en-CA",
+                                { timeZone: "Asia/Ho_Chi_Minh" }
+                              ),
+                            })
+                          );
+                          // Chuyển hướng sang trang quản lý công nợ
+                          window.location.href = "/dashboard/manager-debt";
+                        }}
+                      >
+                        {totalBills}
                       </TableCell>
                       <TableCell className="px-3 py-2 text-center">
                         {typeof row.total_debt !== "undefined" &&
@@ -768,7 +783,23 @@ export default function DebtSettingManagement({
                 <TableCell className="px-3 py-2 text-left">
                   {row.customer_name || "--"}
                 </TableCell>
-                <TableCell className="px-3 py-2 text-center">
+                <TableCell
+                  className="px-3 py-2 text-center cursor-pointer text-blue-600 font-bold underline"
+                  onClick={() => {
+                    // Lưu filter vào localStorage
+                    localStorage.setItem(
+                      "managerDebtFilter",
+                      JSON.stringify({
+                        search: row.customer_code,
+                        singleDate: new Date().toLocaleDateString("en-CA", {
+                          timeZone: "Asia/Ho_Chi_Minh",
+                        }),
+                      })
+                    );
+                    // Chuyển hướng sang trang quản lý công nợ
+                    window.location.href = "/dashboard/manager-debt";
+                  }}
+                >
                   {totalBills}
                 </TableCell>
                 <TableCell className="px-3 py-2 text-center">

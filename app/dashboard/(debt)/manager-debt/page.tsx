@@ -65,7 +65,7 @@ export default function ManagerDebtPage() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const savedPageSize = localStorage.getItem(PAGE_SIZE_KEY);
       return savedPageSize ? parseInt(savedPageSize, 10) : 10;
     }
@@ -77,6 +77,33 @@ export default function ManagerDebtPage() {
     statuses: [] as string[],
     employees: [] as string[],
   });
+
+  const [initialFilters, setInitialFilters] = useState(filters);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const filterStr = localStorage.getItem("managerDebtFilter");
+      if (filterStr) {
+        try {
+          const filter = JSON.parse(filterStr);
+          const newFilters = {
+            search: filter.search || "",
+            singleDate:
+              filter.singleDate || new Date().toLocaleDateString("en-CA"),
+            statuses: [],
+            employees: [],
+          };
+          setFilters(newFilters);
+          setInitialFilters({ ...newFilters });
+          setPage(1);
+          setTimeout(() => {
+            localStorage.removeItem("managerDebtFilter");
+          }, 1500);
+        } catch (e) {
+          localStorage.removeItem("managerDebtFilter");
+        }
+      }
+    }
+  }, []);
 
   const [customerOptions, setCustomerOptions] = useState<
     { label: string; value: string }[]
@@ -354,21 +381,22 @@ export default function ManagerDebtPage() {
     setPageSize(newPageSize);
     setPage(1);
     // Save to localStorage for persistence
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.setItem(PAGE_SIZE_KEY, newPageSize.toString());
     }
   }, []);
 
   const handleResetFilter = useCallback(() => {
-    setFilters({
+    const defaultFilters = {
       search: "",
-      singleDate: new Date().toLocaleDateString("en-CA"), // Use toLocaleDateString to avoid timezone issues
+      singleDate: new Date().toLocaleDateString("en-CA"),
       statuses: [],
       employees: [],
-    });
+    };
+    setFilters(defaultFilters);
+    setInitialFilters(defaultFilters); // Thêm dòng này!
     setPage(1);
-    // Reset pageSize to default and clear localStorage
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.removeItem(PAGE_SIZE_KEY);
     }
     setPageSize(10);
@@ -397,32 +425,28 @@ export default function ManagerDebtPage() {
       );
 
       const result = await res.json();
-      console.log('Import result:', result); // Debug log
 
       if (res.ok) {
-        
         // Xử lý kết quả import với thông tin chi tiết - type safety
         let importedCount = 0;
         let errorCount = 0;
-        
+
         if (Array.isArray(result.imported)) {
           importedCount = result.imported.length;
-        } else if (typeof result.imported === 'number') {
+        } else if (typeof result.imported === "number") {
           importedCount = result.imported;
         } else if (result.imported) {
           importedCount = Number(result.imported) || 0;
         }
-        
+
         if (Array.isArray(result.errors)) {
           errorCount = result.errors.length;
-        } else if (typeof result.errors === 'number') {
+        } else if (typeof result.errors === "number") {
           errorCount = result.errors;
         } else if (result.errors) {
           errorCount = Number(result.errors) || 0;
         }
-        
-        console.log('Processed importedCount:', importedCount, 'errorCount:', errorCount);
-        
+
         // Đảm bảo message luôn là string hợp lệ
         let message = `Import thành công ${importedCount} bản ghi`;
         if (errorCount > 0) {
@@ -430,9 +454,7 @@ export default function ManagerDebtPage() {
         } else {
           message += "!";
         }
-        
-        console.log('Final message:', message);
-        
+
         setAlert({
           type: "success",
           message: message,
@@ -443,17 +465,17 @@ export default function ManagerDebtPage() {
         // Đảm bảo message luôn là string
         let errorMessage = "Import thất bại!";
         if (result.message) {
-          if (typeof result.message === 'string') {
+          if (typeof result.message === "string") {
             errorMessage = result.message;
           } else if (Array.isArray(result.message)) {
-            errorMessage = result.message.join(', ');
-          } else if (typeof result.message === 'object') {
+            errorMessage = result.message.join(", ");
+          } else if (typeof result.message === "object") {
             errorMessage = JSON.stringify(result.message);
           } else {
             errorMessage = String(result.message);
           }
         }
-        
+
         setAlert({
           type: "error",
           message: errorMessage,
@@ -617,12 +639,11 @@ export default function ManagerDebtPage() {
   // Update alert when there's an error
   useEffect(() => {
     if (error) {
-      console.log('Error from useApiState:', error, typeof error);
       // Đảm bảo error message luôn là string
       let errorMessage = "Lỗi khi tải dữ liệu công nợ!";
-      if (typeof error === 'string') {
+      if (typeof error === "string") {
         errorMessage = error;
-      } else if (error && typeof error === 'object') {
+      } else if (error && typeof error === "object") {
         errorMessage = (error as any).message || String(error);
       }
       setAlert({ type: "error", message: errorMessage });
@@ -668,11 +689,13 @@ export default function ManagerDebtPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 flex flex-col items-center gap-4">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent border-r-pink-500 border-b-purple-500 border-l-indigo-500"></div>
-            <span className="text-lg font-semibold">Đang import file Excel...</span>
+            <span className="text-lg font-semibold">
+              Đang import file Excel...
+            </span>
           </div>
         </div>
       )}
-      
+
       <div className="h-full overflow-y-auto overflow-x-hidden p-6">
         <DebtSocket onDebtUpdate={handleDebtUpdate} />
         <Card className="w-full max-w-full">
@@ -855,6 +878,8 @@ export default function ManagerDebtPage() {
             <div className="overflow-x-auto -mx-6">
               <div className="min-w-full px-6">
                 <PaginatedTable
+                  initialFilters={initialFilters}
+                  preserveFiltersOnEmpty={true}
                   enableSearch={true}
                   enableStatusFilter={true}
                   enableSingleDateFilter={true}
