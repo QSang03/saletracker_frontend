@@ -29,7 +29,7 @@ export const navItems = [
     title: "Kinh doanh",
     icon: "MessageCircle",
     items: [
-      { title: "Cấu hình gửi tin nhắn", url: "/dashboard/message-config", roles: ["admin", "manager-kinh-doanh", "user-kinh-doanh"] },
+      { title: "Cấu hình gửi tin nhắn", url: "/dashboard/campaigns", roles: ["admin", "manager-kinh-doanh", "user-kinh-doanh"] },
     ],
   },
   {
@@ -54,7 +54,7 @@ export const navItems = [
     title: "Thông tin",
     icon: "UserCircle",
     items: [
-      { title: "Liên kết tài khoản", url: "/dashboard/link-account", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
       { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin"] },
     ],
   },
