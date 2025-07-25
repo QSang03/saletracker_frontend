@@ -61,7 +61,7 @@ export function useDebtConfigs(
       if (!token) return;
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/debt-configs`,
+        `${process.env.NEXT_PUBLIC_API_URL}/debt-configs/employees`,
         {
           credentials: "include",
           headers: {
@@ -86,18 +86,10 @@ export function useDebtConfigs(
 
       let options: EmployeeOption[] = [];
       if (isAdminOrManager) {
-        const employeeMap = new Map();
-        result.data?.forEach((item: any) => {
-          if (item.employee && item.employee.id && item.employee.fullName) {
-            employeeMap.set(
-              item.employee.id.toString(),
-              item.employee.fullName
-            );
-          }
-        });
-        options = Array.from(employeeMap.entries()).map(([id, fullName]) => ({
-          value: id,
-          label: fullName,
+        // result là mảng user [{id, fullName}]
+        options = (result.data as any[]).map((item) => ({
+          value: item.id.toString(),
+          label: item.fullName,
         }));
       } else if (user?.id) {
         options = [
