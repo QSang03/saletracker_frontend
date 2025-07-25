@@ -8,7 +8,7 @@ class WSClient {
   private reconnectInterval = 3000;
   private token: string | null = null;
 
-  connect(token: string, url = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:3000') {
+  connect(token: string, url = process.env.NEXT_PUBLIC_WEBSOCKET_URL || '') {
     this.token = token;
     if (this.socket) {
       this.socket.disconnect();

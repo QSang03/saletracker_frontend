@@ -26,6 +26,11 @@ interface ImportSession {
   import_session_id: string;
   created_at: string;
   total_records: number;
+  user: {
+    id: number;
+    fullName: string;
+    username: string;
+  }
 }
 
 interface ImportRollbackDialogProps {
@@ -181,6 +186,7 @@ export default function ImportRollbackDialog({
                       <SelectItem key={session.import_session_id} value={session.import_session_id}>
                         <div className="flex flex-col">
                           <span className="font-medium">{session.import_session_id}</span>
+                          {/* <span className="font-medium">{session.user.fullName}</span> */}
                           <span className="text-sm text-muted-foreground">
                             {formatDateTime(session.created_at)} - {session.total_records} bản ghi
                           </span>
@@ -199,6 +205,7 @@ export default function ImportRollbackDialog({
                   <div className="space-y-1">
                     <div><strong>Session:</strong> {selectedSession.import_session_id}</div>
                     <div><strong>Thời gian:</strong> {formatDateTime(selectedSession.created_at)}</div>
+                    <div><strong>Người Import:</strong> {selectedSession.user.fullName}</div>
                     <div><strong>Số bản ghi:</strong> {selectedSession.total_records}</div>
                   </div>
                 </AlertDescription>

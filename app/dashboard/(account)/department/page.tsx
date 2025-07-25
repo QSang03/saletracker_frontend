@@ -178,14 +178,14 @@ export default function DepartmentPage() {
     }
   }, [error]);
 
-  if (isLoading && departments.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size={32} />
-        <span className="ml-2">Đang tải dữ liệu...</span>
-      </div>
-    );
-  }
+  // if (isLoading && departments.length === 0) {
+  //   return (
+  //     <div className="flex justify-center items-center h-64">
+  //       <LoadingSpinner size={32} />
+  //       <span className="ml-2">Đang tải dữ liệu...</span>
+  //     </div>
+  //   );
+  // }
 
   return (
     <PDynamic permissions={[{ departmentSlug: 'account', action: 'read' }]} fallback={

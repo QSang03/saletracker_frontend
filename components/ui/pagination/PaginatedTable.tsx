@@ -7,7 +7,6 @@ import {
   MultiSelectCombobox,
   Option,
 } from "@/components/ui/MultiSelectCombobox";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { DatePicker } from "@/components/ui/date-picker";
 import type { DateRange } from "react-day-picker";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,6 +65,7 @@ interface PaginatedTableProps {
   getExportData?: () => { headers: string[]; data: (string | number)[][] };
   canExport?: boolean;
   onResetFilter?: () => void;
+  preventEmptyFilterCall?: boolean;
 }
 
 export type Filters = {
@@ -83,7 +83,6 @@ export type Filters = {
 };
 
 export default function PaginatedTable({
-  emptyText,
   enableSearch,
   enableDepartmentFilter,
   enableRoleFilter,
@@ -98,7 +97,6 @@ export default function PaginatedTable({
     { value: 1, label: "Đã liên kết" },
     { value: 2, label: "Lỗi liên kết" },
   ],
-  enableDateRangeFilter,
   enableSingleDateFilter,
   singleDateLabel,
   enablePageSize,
@@ -111,7 +109,6 @@ export default function PaginatedTable({
   availableCategories = [],
   availableBrands = [],
   defaultPageSize = 10,
-  pageSizeOptions = [5, 10, 20, 50, 100],
   page,
   total,
   pageSize,
@@ -121,13 +118,18 @@ export default function PaginatedTable({
   onFilterChange,
   loading = false,
   initialFilters,
-  preserveFiltersOnEmpty = true,
   filterClassNames = {},
   buttonClassNames = {},
   getExportData,
   canExport = true,
   onResetFilter,
+  preventEmptyFilterCall = true,
 }: PaginatedTableProps) {
+  const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitializedRef = useRef(false);
+  const lastFiltersRef = useRef<string>("");
+  const previousTotalRef = useRef<number>(0);
+
   const departmentOptions = useMemo(
     () => availableDepartments.map((d) => ({ label: d, value: d })),
     [availableDepartments]
@@ -193,6 +195,22 @@ export default function PaginatedTable({
     employees: initialFilters?.employees || [],
   }));
 
+  const isFiltersEmpty = useCallback((filters: Filters): boolean => {
+    return (
+      !filters.search.trim() &&
+      filters.departments.length === 0 &&
+      filters.roles.length === 0 &&
+      filters.statuses.length === 0 &&
+      (filters.zaloLinkStatuses?.length || 0) === 0 &&
+      filters.categories.length === 0 &&
+      filters.brands.length === 0 &&
+      filters.employees.length === 0 &&
+      !filters.dateRange.from &&
+      !filters.dateRange.to &&
+      !filters.singleDate
+    );
+  }, []);
+
   // Sync filters when initialFilters changes - but only if preserveFiltersOnEmpty is true
   const memoizedInitialFilters = useMemo(
     () => initialFilters,
@@ -217,12 +235,25 @@ export default function PaginatedTable({
   }, [memoizedInitialFilters]);
 
   useEffect(() => {
-    // Khi filter được sync từ initialFilters (chưa có thao tác user), gửi filter lên backend
-    if (onFilterChange && !hasUserInteracted) {
-      onFilterChange(filters);
+    setHasUserInteracted(false);
+  }, [memoizedInitialFilters]);
+
+  useEffect(() => {
+    if (!isInitializedRef.current && initialFilters) {
+      isInitializedRef.current = true;
+      
+      // ✅ Set initial filters without triggering change
+      const merged = { ...filters, ...initialFilters };
+      setFilters(merged);
+      
+      // ✅ Send initial filters to parent after a brief delay
+      setTimeout(() => {
+        if (onFilterChange && (!preventEmptyFilterCall || !isFiltersEmpty(merged))) {
+          onFilterChange(merged);
+        }
+      }, 100);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, hasUserInteracted]);
+  }, []);
 
   useEffect(() => {
     if (memoizedInitialFilters && !hasUserInteracted) {
@@ -310,11 +341,52 @@ export default function PaginatedTable({
     (newFilters: Filters) => {
       if (filterTimeout.current) clearTimeout(filterTimeout.current);
       filterTimeout.current = setTimeout(() => {
-        if (onFilterChange) onFilterChange(newFilters);
-      }, 150); // giảm từ 300ms xuống 150ms để responsive hơn
+        if (preventEmptyFilterCall && isFiltersEmpty(newFilters)) {
+          // Nếu filter trống, reset filter
+          handleResetFilter();
+          return;
+        }
+        if (onFilterChange) {
+          onFilterChange(newFilters);
+        }
+      }, 150);
     },
-    [onFilterChange]
+    [onFilterChange, preventEmptyFilterCall, isFiltersEmpty]
   );
+
+  // handleResetFilter: reset filter, đồng thời reset page về 1 nếu là backend paging
+  const handleResetFilter = useCallback(() => {
+    const reset: Filters = {
+      search: "",
+      departments: [],
+      roles: [],
+      statuses: [],
+      // Thêm field mới vào reset
+      zaloLinkStatuses: [],
+      categories: [],
+      brands: [],
+      dateRange: { from: undefined, to: undefined },
+      singleDate: undefined, // Reset về undefined thay vì ngày hiện tại
+      employees: [],
+    };
+    setFilters(reset);
+    if (onFilterChange) {
+      onFilterChange(reset);
+    }
+    if (onPageChange) onPageChange(1);
+    else setInternalPage(0);
+    setPendingPageSize("");
+    // Gọi callback reset filter ở trang cha nếu có
+    if (typeof onResetFilter === "function") {
+      onResetFilter();
+    }
+  }, [onPageChange, onResetFilter]);
+
+  useEffect(() => {
+    if (totalRows !== previousTotalRef.current) {
+      previousTotalRef.current = totalRows;
+    }
+  }, [totalRows]);
 
   // updateFilter chỉ cập nhật filter, không reset page
   const updateFilter = useCallback(
@@ -387,32 +459,7 @@ export default function PaginatedTable({
     [updateFilter]
   );
 
-  // useEffect này KHÔNG gọi onFilterChange trực tiếp nữa
-  // handleResetFilter: reset filter, đồng thời reset page về 1 nếu là backend paging
-  const handleResetFilter = useCallback(() => {
-    const reset: Filters = {
-      search: "",
-      departments: [],
-      roles: [],
-      statuses: [],
-      // Thêm field mới vào reset
-      zaloLinkStatuses: [],
-      categories: [],
-      brands: [],
-      dateRange: { from: undefined, to: undefined },
-      singleDate: undefined, // Reset về undefined thay vì ngày hiện tại
-      employees: [],
-    };
-    setFilters(reset);
-    debouncedSetFilters(reset);
-    if (onPageChange) onPageChange(1);
-    else setInternalPage(0);
-    setPendingPageSize("");
-    // Gọi callback reset filter ở trang cha nếu có
-    if (typeof onResetFilter === "function") {
-      onResetFilter();
-    }
-  }, [onPageChange, onResetFilter, debouncedSetFilters]);
+  // ...existing code...
 
   // State cho panel xuất CSV
   const [openExport, setOpenExport] = useState(false);

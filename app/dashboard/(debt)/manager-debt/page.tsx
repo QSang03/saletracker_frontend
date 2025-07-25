@@ -1,5 +1,11 @@
 "use client";
-import React, { useState, useCallback, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
@@ -51,6 +57,7 @@ export default function ManagerDebtPage() {
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const isInitializedRef = useRef(false);
   const {
     canReadDepartment,
     canCreateInDepartment,
@@ -78,9 +85,15 @@ export default function ManagerDebtPage() {
     employees: [] as string[],
   });
 
-  const [initialFilters, setInitialFilters] = useState(filters);
+  const [initialFilters, setInitialFilters] = useState<DebtFilters | undefined>(
+    undefined
+  );
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    // ✅ Chỉ chạy 1 lần khi component mount
+    if (typeof window !== "undefined" && !isInitializedRef.current) {
+      isInitializedRef.current = true;
+
       const filterStr = localStorage.getItem("managerDebtFilter");
       if (filterStr) {
         try {
@@ -95,9 +108,14 @@ export default function ManagerDebtPage() {
           setFilters(newFilters);
           setInitialFilters({ ...newFilters });
           setPage(1);
-          setTimeout(() => {
-            localStorage.removeItem("managerDebtFilter");
-          }, 1500);
+
+          // ✅ Dọn dẹp localStorage ngay lập tức, không dùng setTimeout
+          localStorage.removeItem("managerDebtFilter");
+
+          // ✅ Reset initialFilters sau khi component đã render
+          requestAnimationFrame(() => {
+            setInitialFilters(undefined);
+          });
         } catch (e) {
           localStorage.removeItem("managerDebtFilter");
         }
@@ -239,11 +257,37 @@ export default function ManagerDebtPage() {
     (data: any) => {
       console.log("[ManagerDebtPage] Debt updated:", data);
       if (data.refresh_request) {
-        forceUpdate();
-        refreshStats();
+        // ✅ Batch updates để tránh cascade
+        React.startTransition(() => {
+          forceUpdate();
+          refreshStats();
+        });
       }
     },
-    [forceUpdate]
+    [] // ✅ Bỏ forceUpdate khỏi dependencies để tránh re-create
+  );
+
+  // Simple debounce implementation (if lodash/debounce is not available)
+  function debounce<T extends (...args: any[]) => void>(fn: T, wait: number) {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const debounced = (...args: Parameters<T>) => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => fn(...args), wait);
+    };
+    debounced.cancel = () => {
+      if (timeout) clearTimeout(timeout);
+    };
+    return debounced as T & { cancel: () => void };
+  }
+
+  const debouncedFilterChange = useMemo(
+    () =>
+      debounce((newFilters: any) => {
+        console.log("[ManagerDebtPage] Debounced filter change:", newFilters);
+        setFilters(newFilters);
+        setPage(1);
+      }, 300), // Debounce 300ms để tránh quá nhiều API calls
+    []
   );
 
   // Status options for filter
@@ -369,9 +413,21 @@ export default function ManagerDebtPage() {
   }, []);
 
   // Handle filter changes - following User Manager pattern
-  const handleFilterChange = useCallback((newFilters: any) => {
-    setFilters(newFilters);
-    setPage(1); // Reset to first page when filters change
+  const handleFilterChange = useCallback(
+    (newFilters: any) => {
+      console.log("[ManagerDebtPage] Filter changed:", newFilters);
+      
+      debouncedFilterChange(newFilters);
+    },
+    [debouncedFilterChange]
+  );
+  
+  const handleRefresh = useCallback(() => {
+    // ✅ Batch refresh operations
+    React.startTransition(() => {
+      forceUpdate();
+      refreshStats();
+    });
   }, []);
 
   const handlePageChange = useCallback((newPage: number) => {
@@ -395,7 +451,7 @@ export default function ManagerDebtPage() {
       employees: [],
     };
     setFilters(defaultFilters);
-    setInitialFilters(defaultFilters); // Thêm dòng này!
+    setInitialFilters(undefined); // Đảm bảo không trigger sync lại
     setPage(1);
     if (typeof window !== "undefined") {
       localStorage.removeItem(PAGE_SIZE_KEY);
@@ -406,7 +462,7 @@ export default function ManagerDebtPage() {
   // Handle Excel import
   const handleExcelImport = async (file: File) => {
     const token = getAccessToken();
-    if (!token) return;
+    if (!token || isImporting) return;
 
     setIsImporting(true); // Bắt đầu loading
 
@@ -456,12 +512,12 @@ export default function ManagerDebtPage() {
           message += "!";
         }
 
-        setAlert({
-          type: "success",
-          message: message,
+        setAlert({ type: "success", message: message });
+
+        React.startTransition(() => {
+          forceUpdate();
+          refreshStats();
         });
-        forceUpdate(); // Refresh data
-        refreshStats(); // Refresh stats
       } else {
         // Đảm bảo message luôn là string
         let errorMessage = "Import thất bại!";
@@ -639,17 +695,32 @@ export default function ManagerDebtPage() {
 
   // Update alert when there's an error
   useEffect(() => {
-    if (error) {
-      // Đảm bảo error message luôn là string
-      let errorMessage = "Lỗi khi tải dữ liệu công nợ!";
+    if (error && !isLoading) {
+      // ✅ Chỉ show error khi không loading
+      let errorMessage = "Lỗi khi tải dữ liệu công nổ!";
       if (typeof error === "string") {
         errorMessage = error;
       } else if (error && typeof error === "object") {
         errorMessage = (error as any).message || String(error);
       }
-      setAlert({ type: "error", message: errorMessage });
+
+      // ✅ Chỉ set alert nếu chưa có alert hoặc message khác
+      setAlert((prev) => {
+        if (prev?.message === errorMessage) return prev;
+        return { type: "error", message: errorMessage };
+      });
     }
-  }, [error]);
+  }, [error, isLoading]);
+
+  useEffect(() => {
+    return () => {
+      debouncedFilterChange.cancel?.(); // ✅ Cancel debounce khi unmount
+    };
+  }, [debouncedFilterChange]);
+
+  useEffect(() => {
+  console.log("Current filters:", filters);
+}, [filters]);
 
   // Loading state for permissions
   if (!user) {
@@ -674,14 +745,14 @@ export default function ManagerDebtPage() {
     );
   }
 
-  if (isLoading && debts.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size={32} />
-        <span className="ml-2">Đang tải dữ liệu...</span>
-      </div>
-    );
-  }
+  // if (isLoading && !error) {
+  //   return (
+  //     <div className="flex justify-center items-center h-64">
+  //       <LoadingSpinner size={32} />
+  //       <span className="ml-2">Đang tải dữ liệu...</span>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="h-full overflow-hidden relative">
@@ -879,7 +950,8 @@ export default function ManagerDebtPage() {
             <div className="overflow-x-auto -mx-6">
               <div className="min-w-full px-6">
                 <PaginatedTable
-                  initialFilters={initialFilters}
+                  key={`pagination-${page}-${pageSize}`}
+                  {...(initialFilters ? { initialFilters } : {})}
                   preserveFiltersOnEmpty={true}
                   enableSearch={true}
                   enableStatusFilter={true}
@@ -902,13 +974,11 @@ export default function ManagerDebtPage() {
                   getExportData={getExportData}
                 >
                   <DebtManagement
+                    key={`debt-mgmt-${debts.length}-${page}`}
                     debts={debts}
                     expectedRowCount={Math.min(pageSize, debts.length)}
                     startIndex={(page - 1) * pageSize}
-                    onReload={() => {
-                      forceUpdate();
-                      refreshStats();
-                    }}
+                    onReload={handleRefresh}
                     onEdit={handleEditDebt}
                     onDelete={handleDeleteDebt}
                   />

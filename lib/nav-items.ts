@@ -9,12 +9,13 @@ export const navItems = [
     ],
   },
   {
-    title: "Giao dịch",
-    icon: "ListOrdered",
-    items: [
-      { title: "Quản lý giao dịch", url: "/dashboard/orders", roles: ["admin"] },
-      { title: "Giao dịch đã xóa", url: "/dashboard/trashed", roles: ["admin"] },
-    ],
+  title: "Giao dịch",
+  icon: "ListOrdered",
+  items: [
+    { title: "Quản lý đơn hàng", url: "/dashboard/manager-order", roles: ["admin"] },
+    { title: "Thùng rác đơn hàng", url: "/dashboard/order-trashed", roles: ["admin"] },
+    { title: "Cấu hình đơn hàng", url: "/dashboard/order-settings", roles: ["admin"] },
+  ],
   },
   {
     title: "Công nợ",

@@ -106,13 +106,23 @@ export default function DebtDetailDialog({
 
   const handleDebtLogUpdate = useCallback(
     (data: any) => {
+      const events = Array.isArray(data?.events) ? data.events : [data];
+      interface DebtLogUpdateEvent {
+        debt_config_id?: string | number;
+        refresh_request?: boolean;
+        [key: string]: any;
+      }
 
-      // Kiểm tra xem có phải cùng debtConfigId không
+      const typedEvents: DebtLogUpdateEvent[] = events as DebtLogUpdateEvent[];
+
       if (
-        data?.debt_config_id &&
+        typedEvents.some(
+          (event: DebtLogUpdateEvent) =>
+        event?.debt_config_id &&
         debtConfigId &&
-        data.debt_config_id.toString() === debtConfigId.toString() &&
-        data.refresh_request
+        event.debt_config_id.toString() === debtConfigId.toString() &&
+        event.refresh_request
+        )
       ) {
         fetchDebtDetail();
       }
@@ -395,7 +405,12 @@ export default function DebtDetailDialog({
                                   className="absolute bg-black/60 text-white rounded-full px-3 py-1 text-sm"
                                   onClick={() => setShowImageModal(false)}
                                   type="button"
-                                  style={{ zIndex: 10, right: "-100px", top: "20px", cursor: "pointer" }}
+                                  style={{
+                                    zIndex: 10,
+                                    right: "-100px",
+                                    top: "20px",
+                                    cursor: "pointer",
+                                  }}
                                 >
                                   Đóng
                                 </button>

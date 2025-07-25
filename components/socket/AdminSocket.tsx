@@ -9,6 +9,7 @@ export const AdminSocket = memo(function AdminSocket({
   onUserBlock,
   onUserBlocked,
   onDebtLogUpdate,
+  onDebtConfigCreate,
   onDebtConfigUpdate,
   onDebtUpdate,
 }: {
@@ -17,6 +18,7 @@ export const AdminSocket = memo(function AdminSocket({
   onUserBlock?: (userId: number, isBlock: boolean) => void;
   onUserBlocked?: (userId: number, message: string) => void;
   onDebtLogUpdate?: (data: any) => void;
+  onDebtConfigCreate?: (data: any) => void;
   onDebtConfigUpdate?: (data: any) => void;
   onDebtUpdate?: (data:any) => void;
 }) {
@@ -38,6 +40,10 @@ export const AdminSocket = memo(function AdminSocket({
 
   useWSHandler('debt_log_realtime_updated', (data: any) => {
     onDebtLogUpdate?.(data);
+  });
+
+  useWSHandler('debt_config_created', (data: any) => {
+    onDebtConfigCreate?.(data);
   });
 
   useWSHandler('debt_config_realtime_updated', (data: any) => {

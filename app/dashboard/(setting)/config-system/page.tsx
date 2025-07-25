@@ -118,13 +118,13 @@ export default function ConfigSystemPage() {
 
   return (
     <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
-      {loadingAllConfigs && (
+      {/* {loadingAllConfigs && (
         <LoadingSpinner
           size={40}
           fullScreen={false}
           message="Đang tải cấu hình hệ thống..."
         />
-      )}
+      )} */}
       {alert && (
         <ServerResponseAlert
           type={alert.type}

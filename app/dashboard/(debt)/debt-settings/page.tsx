@@ -1,5 +1,11 @@
 "use client";
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import DebtSettingManagement from "@/components/debt/debt-setting/DebtSettingManagement";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -18,6 +24,12 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function DebtSettingsPage() {
   const PAGE_SIZE_KEY = "debtConfigPageSize";
+
+  const isInitializedRef = useRef(false);
+  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isRefreshingRef = useRef(false);
+  const hasDataLoadedRef = useRef(false);
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(() => {
     if (typeof window !== "undefined") {
@@ -26,7 +38,7 @@ export default function DebtSettingsPage() {
     }
     return 10;
   });
-  const [filters, setFilters] = useState<Filters>({
+  const [filters, setFilters] = useState<Filters>(() => ({
     search: "",
     departments: [],
     roles: [],
@@ -37,7 +49,12 @@ export default function DebtSettingsPage() {
     singleDate: undefined,
     employees: [],
     sort: undefined,
-  });
+  }));
+
+  // Thêm state cho initialFilters riêng biệt
+  const [initialFilters, setInitialFilters] = useState<Filters | undefined>(
+    undefined
+  );
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showAddManualModal, setShowAddManualModal] = useState(false);
   const [alert, setAlert] = useState<{ type: any; message: string } | null>(
@@ -72,40 +89,87 @@ export default function DebtSettingsPage() {
     loadingEmployees,
   } = useDebtConfigs(filters, page, pageSize, user);
 
+  useEffect(() => {
+    if (apiData && apiData.length > 0) {
+      hasDataLoadedRef.current = true;
+    }
+  }, [apiData]);
+
+  const handleRefresh = useCallback(() => {
+    if (isRefreshingRef.current) return;
+
+    isRefreshingRef.current = true;
+    React.startTransition(() => {
+      forceUpdate();
+      setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 1000);
+    });
+  }, [forceUpdate]);
+
   // Realtime event handlers - refetch with current filters
   const handleDebtLogUpdate = useCallback(
     (data: any) => {
+      console.log("Debt log updated:", data);
       if (data.refresh_request) {
-        forceUpdate();
+        handleRefresh();
       }
     },
-    [forceUpdate]
+    [handleRefresh]
+  );
+
+  const handleDebtConfigCreate = useCallback(
+    (data: any) => {
+      console.log("Debt config created:", data);
+      handleRefresh();
+    },
+    [handleRefresh]
   );
 
   const handleDebtConfigUpdate = useCallback(
     (data: any) => {
+      console.log("Debt config updated:", data);
       if (data.refresh_request) {
-        forceUpdate();
+        handleRefresh();
       }
     },
-    [forceUpdate]
+    [handleRefresh]
   );
 
   // Backend đã xử lý filter và pagination, không cần filter ở frontend nữa
-  const filteredData = apiData;
-  const paginatedData = apiData; // Backend đã trả về đúng dữ liệu cho trang hiện tại
-  const statusFilterOptions = [
-    { value: "normal", label: "Bình thường" },
-    { value: "not_matched_debt", label: "Không trùng phiếu nợ" },
-    { value: "wrong_customer_name", label: "Sai tên khách hàng" },
-  ];
+  const filteredData = useMemo(() => apiData, [apiData]);
+  const paginatedData = useMemo(() => apiData, [apiData]); // Backend đã trả về đúng dữ liệu cho trang hiện tại
+  const statusFilterOptions = useMemo(
+    () => [
+      { value: "normal", label: "Bình thường" },
+      { value: "not_matched_debt", label: "Không trùng phiếu nợ" },
+      { value: "wrong_customer_name", label: "Sai tên khách hàng" },
+    ],
+    []
+  );
+  const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Callback filter
   const handleFilterChange = useCallback((f: Filters) => {
-    setFilters(f);
+    // ✅ Clear previous timeout
+    if (filterTimeoutRef.current) {
+      clearTimeout(filterTimeoutRef.current);
+    }
+
+    // ✅ Debounce filter changes
+    filterTimeoutRef.current = setTimeout(() => {
+      setFilters(f);
+      setInitialFilters(undefined);
+      setPage(1);
+    }, 300); // ✅ 300ms debounce
   }, []);
 
   // Hàm reset filter
   const handleResetFilter = useCallback(() => {
+    // ✅ Clear timeout
+    if (filterTimeoutRef.current) {
+      clearTimeout(filterTimeoutRef.current);
+    }
+
     const resetFilters: Filters = {
       search: "",
       departments: [],
@@ -116,11 +180,21 @@ export default function DebtSettingsPage() {
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
       employees: [],
+      sort: undefined,
     };
     setFilters(resetFilters);
+    setInitialFilters(undefined);
     setPage(1);
-    forceUpdate();
-  }, [forceUpdate]);
+
+    // ✅ Only refresh if we have data
+    if (hasDataLoadedRef.current) {
+      handleRefresh();
+    }
+  }, [handleRefresh]);
+
+  useEffect(() => {
+    console.log("filters:", filters);
+  }, [filters]);
 
   // Toggle handler
   const handleToggle = useCallback(
@@ -132,7 +206,10 @@ export default function DebtSettingsPage() {
     ) => {
       try {
         const token = getAccessToken();
-        if (!token) return;
+        if (!token) {
+          setAlert({ type: "error", message: "Không có token xác thực!" });
+          return;
+        }
 
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/debt-configs/${id}`,
@@ -151,15 +228,20 @@ export default function DebtSettingsPage() {
 
         if (res.ok) {
           setAlert({ type: "success", message: "Cập nhật thành công!" });
-          forceUpdate(); // Refresh data
+          handleRefresh();
         } else {
-          setAlert({ type: "error", message: "Cập nhật thất bại!" });
+          const errorData = await res.json().catch(() => ({}));
+          setAlert({
+            type: "error",
+            message: errorData.message || "Cập nhật thất bại!",
+          });
         }
       } catch (error) {
+        console.error("Toggle error:", error);
         setAlert({ type: "error", message: "Lỗi khi cập nhật!" });
       }
     },
-    [forceUpdate]
+    [handleRefresh]
   );
 
   // Delete handler
@@ -167,7 +249,10 @@ export default function DebtSettingsPage() {
     async (id: string) => {
       try {
         const token = getAccessToken();
-        if (!token) return;
+        if (!token) {
+          setAlert({ type: "error", message: "Không có token xác thực!" });
+          return;
+        }
 
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/debt-configs/${id}`,
@@ -181,29 +266,39 @@ export default function DebtSettingsPage() {
 
         if (res.ok) {
           setAlert({ type: "success", message: "Xóa thành công!" });
-          forceUpdate(); // Refresh data
+          handleRefresh();
         } else {
-          setAlert({ type: "error", message: "Xóa thất bại!" });
+          const errorData = await res.json().catch(() => ({}));
+          setAlert({
+            type: "error",
+            message: errorData.message || "Xóa thất bại!",
+          });
         }
       } catch (error) {
+        console.error("Delete error:", error);
         setAlert({ type: "error", message: "Lỗi khi xóa!" });
       }
     },
-    [forceUpdate]
+    [handleRefresh]
   );
 
   // Edit handler - simplified to match component expectations
   const handleEditWrapper = useCallback((row: any) => {
-    // This will be handled by the component itself
+    console.log("Edit triggered for:", row?.id);
   }, []);
 
   // Import Excel handler
   const handleImportExcel = useCallback(
     async (file: File) => {
+      if (importing) return;
+
       setImporting(true);
       try {
         const token = getAccessToken();
-        if (!token) return;
+        if (!token) {
+          setAlert({ type: "error", message: "Không có token xác thực!" });
+          return;
+        }
 
         const formData = new FormData();
         formData.append("file", file);
@@ -226,7 +321,9 @@ export default function DebtSettingsPage() {
             type: "success",
             message: `Import thành công ${result.imported || 0} bản ghi!`,
           });
-          forceUpdate(); // Refresh data
+          // ✅ Set hasDataLoaded after successful import
+          hasDataLoadedRef.current = true;
+          handleRefresh();
         } else {
           setAlert({
             type: "error",
@@ -234,17 +331,17 @@ export default function DebtSettingsPage() {
           });
         }
       } catch (error) {
+        console.error("Import error:", error);
         setAlert({ type: "error", message: "Lỗi khi import file!" });
       } finally {
         setImporting(false);
       }
     },
-    [forceUpdate]
+    [importing, handleRefresh]
   );
 
   // Export Excel handler - simplified to avoid complex type matching
   const handleExportExcel = useCallback(() => {
-    // Simple export format to avoid type errors
     const data = filteredData.map((item: any, index: number) => [
       index + 1,
       item.customer_code || "",
@@ -273,10 +370,53 @@ export default function DebtSettingsPage() {
     };
   }, [filteredData]);
 
-  const handleToggleProcessDebt = async () => {
+  const handleModalConfigSaved = useCallback(
+    (result: { success: boolean; message: string }) => {
+      setAlert({
+        type: result.success ? "success" : "error",
+        message:
+          result.message ||
+          (result.success
+            ? "Lưu cấu hình thành công!"
+            : "Lưu cấu hình thất bại!"),
+      });
+      if (result.success) {
+        setShowConfigModal(false);
+        // ✅ Set hasDataLoaded after successful save
+        hasDataLoadedRef.current = true;
+        handleRefresh();
+      }
+    },
+    [handleRefresh]
+  );
+
+  const handleModalManualSave = useCallback(
+    (success: boolean) => {
+      setAlert({
+        type: success ? "success" : "error",
+        message: success ? "Thêm thành công!" : "Thêm thất bại!",
+      });
+      if (success) {
+        setShowAddManualModal(false);
+        // ✅ Set hasDataLoaded after successful save
+        hasDataLoadedRef.current = true;
+        handleRefresh();
+      }
+    },
+    [handleRefresh]
+  );
+
+  const handleToggleProcessDebt = useCallback(async () => {
+    if (toggleLoading) return; // ✅ Prevent double call
+
     setToggleLoading(true);
     try {
       const token = getAccessToken();
+      if (!token) {
+        setAlert({ type: "error", message: "Không có token xác thực!" });
+        return;
+      }
+
       const newValue = processDebtEnabled ? "0" : "1";
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/system-config/by-section/system/system_processDebt`,
@@ -289,6 +429,7 @@ export default function DebtSettingsPage() {
           body: JSON.stringify({ value: newValue }),
         }
       );
+
       if (res.ok) {
         setProcessDebtEnabled(!processDebtEnabled);
         setAlert({
@@ -298,30 +439,79 @@ export default function DebtSettingsPage() {
           } chương trình công nợ!`,
         });
       } else {
-        setAlert({ type: "error", message: "Cập nhật thất bại!" });
+        const errorData = await res.json().catch(() => ({}));
+        setAlert({
+          type: "error",
+          message: errorData.message || "Cập nhật thất bại!",
+        });
       }
     } catch (err) {
+      console.error("Toggle process debt error:", err);
       setAlert({ type: "error", message: "Lỗi khi cập nhật!" });
     } finally {
       setToggleLoading(false);
       setShowConfirmToggle(false);
     }
-  };
+  }, [processDebtEnabled, toggleLoading]);
+
+  const handlePageSizeChange = useCallback((newSize: number) => {
+    setPageSize(newSize);
+    setPage(1);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PAGE_SIZE_KEY, newSize.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
+      if (filterTimeoutRef.current) {
+        clearTimeout(filterTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (alert) {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
+      alertTimeoutRef.current = setTimeout(() => {
+        setAlert(null);
+      }, 5000);
+    }
+    return () => {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+      }
+    };
+  }, [alert]);
 
   // Update alert when there's an error
   useEffect(() => {
-    if (error) {
-      setAlert({
-        type: "error",
-        message: "Lỗi khi tải dữ liệu cấu hình công nợ!",
+    if (error && !isLoading && isInitializedRef.current) {
+      const errorMessage =
+        typeof error === "string"
+          ? error
+          : "Lỗi khi tải dữ liệu cấu hình công nợ!";
+
+      setAlert((prev) => {
+        if (prev?.message === errorMessage) return prev;
+        return { type: "error", message: errorMessage };
       });
     }
-  }, [error]);
+  }, [error, isLoading]);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function fetchProcessDebtStatus() {
       try {
         const token = getAccessToken();
+        if (!token || !isMounted) return;
+
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/system-config/by-section/system/system_processDebt`,
           {
@@ -330,18 +520,34 @@ export default function DebtSettingsPage() {
             },
           }
         );
+
+        if (!isMounted) return;
+
         const data = await res.json();
-        // Nếu value là "1" thì bật, "0" thì tắt
         setProcessDebtEnabled(data?.value === "1");
       } catch (err) {
-        setProcessDebtEnabled(null);
+        if (isMounted) {
+          console.error("Fetch process debt status error:", err);
+          setProcessDebtEnabled(null);
+        }
       }
     }
-    fetchProcessDebtStatus();
+
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      fetchProcessDebtStatus();
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Check if user has read access to debt department
-  const canAccessDebtConfig = canReadDepartment("cong-no");
+  const canAccessDebtConfig = useMemo(
+    () => canReadDepartment("cong-no"),
+    [canReadDepartment]
+  );
 
   // Loading state for permissions
   if (!user) {
@@ -368,19 +574,20 @@ export default function DebtSettingsPage() {
     );
   }
 
-  if (isLoading && apiData.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size={32} />
-        <span className="ml-2">Đang tải dữ liệu...</span>
-      </div>
-    );
-  }
+  // if (isLoading && !hasDataLoadedRef.current && filters === undefined) {
+  //   return (
+  //     <div className="flex justify-center items-center h-64">
+  //       <LoadingSpinner size={32} />
+  //       <span className="ml-2">Đang tải dữ liệu...</span>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">
       <DebtSocket
         onDebtLogUpdate={handleDebtLogUpdate}
+        onDebtConfigCreate={handleDebtConfigCreate}
         onDebtConfigUpdate={handleDebtConfigUpdate}
       />
       <Card className="w-full flex-1">
@@ -497,8 +704,8 @@ export default function DebtSettingsPage() {
               onClose={() => setAlert(null)}
             />
           )}
-
           <PaginatedTable
+            key={`debt-settings-table-${page}-${pageSize}`}
             enableSearch
             enableEmployeeFilter
             availableEmployees={employeeOptions}
@@ -510,16 +717,10 @@ export default function DebtSettingsPage() {
             enablePageSize={true}
             pageSize={pageSize}
             preserveFiltersOnEmpty={true}
-            initialFilters={filters}
-            total={total} // Sử dụng total từ backend
+            {...(initialFilters !== undefined && { initialFilters })}
+            total={total}
             onPageChange={setPage}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize);
-              setPage(1);
-              if (typeof window !== "undefined") {
-                localStorage.setItem(PAGE_SIZE_KEY, newSize.toString());
-              }
-            }}
+            onPageSizeChange={handlePageSizeChange}
             onFilterChange={handleFilterChange}
             onResetFilter={handleResetFilter}
             getExportData={handleExportExcel}
@@ -527,13 +728,14 @@ export default function DebtSettingsPage() {
             pageSizeOptions={[5, 10, 20, 50]}
           >
             <DebtSettingManagement
-              data={paginatedData} // Sử dụng data từ backend (đã phân trang)
+              key={`debt-mgmt-${paginatedData.length}-${page}`}
+              data={paginatedData}
               page={page}
               pageSize={pageSize}
               onToggle={handleToggle}
               onDelete={handleDelete}
               onEdit={handleEditWrapper}
-              onRefresh={() => forceUpdate()}
+              onRefresh={handleRefresh}
               onSortChange={(sort) => setFilters((f) => ({ ...f, sort }))}
               onShowAlert={setAlert}
             />
@@ -545,20 +747,7 @@ export default function DebtSettingsPage() {
       <DebtConfigModal
         open={showConfigModal}
         onClose={() => setShowConfigModal(false)}
-        onSaved={(result: { success: boolean; message: string }) => {
-          setAlert({
-            type: result.success ? "success" : "error",
-            message:
-              result.message ||
-              (result.success
-                ? "Lưu cấu hình thành công!"
-                : "Lưu cấu hình thất bại!"),
-          });
-          if (result.success) {
-            setShowConfigModal(false);
-            forceUpdate();
-          }
-        }}
+        onSaved={handleModalConfigSaved}
       />
 
       <ConfirmDialog
@@ -582,16 +771,7 @@ export default function DebtSettingsPage() {
       <AddManualDebtModal
         open={showAddManualModal}
         onClose={() => setShowAddManualModal(false)}
-        onSave={(success: boolean) => {
-          setAlert({
-            type: success ? "success" : "error",
-            message: success ? "Thêm thành công!" : "Thêm thất bại!",
-          });
-          if (success) {
-            setShowAddManualModal(false);
-            forceUpdate();
-          }
-        }}
+        onSave={handleModalManualSave}
       />
     </div>
   );

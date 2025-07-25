@@ -46,6 +46,12 @@ export function SocketPortal() {
     );
   }, []);
 
+  const handleDebtConfigCreate = useCallback((data: any) => {
+    window.dispatchEvent(
+      new CustomEvent("ws_debt_config_realtime_created", { detail: data })
+    );
+  }, []);
+
   const handleDebtConfigUpdate = useCallback((data: any) => {
     window.dispatchEvent(
       new CustomEvent("ws_debt_config_realtime_updated", { detail: data })
@@ -65,6 +71,7 @@ export function SocketPortal() {
       onUserBlock={handleUserBlock}
       onUserBlocked={handleUserBlocked}
       onDebtLogUpdate={handleDebtLogUpdate}
+      onDebtConfigCreate={handleDebtConfigCreate}
       onDebtConfigUpdate={handleDebtConfigUpdate}
       onDebtUpdate={handleDebtRealtimeUpdate}
     />
