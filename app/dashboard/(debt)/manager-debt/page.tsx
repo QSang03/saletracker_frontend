@@ -57,6 +57,7 @@ export default function ManagerDebtPage() {
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isRollingBack, setIsRollingBack] = useState(false);
   const isInitializedRef = useRef(false);
   const {
     canReadDepartment,
@@ -416,12 +417,12 @@ export default function ManagerDebtPage() {
   const handleFilterChange = useCallback(
     (newFilters: any) => {
       console.log("[ManagerDebtPage] Filter changed:", newFilters);
-      
+
       debouncedFilterChange(newFilters);
     },
     [debouncedFilterChange]
   );
-  
+
   const handleRefresh = useCallback(() => {
     // ✅ Batch refresh operations
     React.startTransition(() => {
@@ -719,8 +720,8 @@ export default function ManagerDebtPage() {
   }, [debouncedFilterChange]);
 
   useEffect(() => {
-  console.log("Current filters:", filters);
-}, [filters]);
+    console.log("Current filters:", filters);
+  }, [filters]);
 
   // Loading state for permissions
   if (!user) {
@@ -757,12 +758,12 @@ export default function ManagerDebtPage() {
   return (
     <div className="h-full overflow-hidden relative">
       {/* Loading overlay cho import */}
-      {isImporting && (
+      {(isImporting || isRollingBack) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 flex flex-col items-center gap-4">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent border-r-pink-500 border-b-purple-500 border-l-indigo-500"></div>
             <span className="text-lg font-semibold">
-              Đang import file Excel...
+              {isImporting ? "Đang import file Excel..." : "Đang khôi phục dữ liệu..."}
             </span>
           </div>
         </div>
@@ -1056,6 +1057,8 @@ export default function ManagerDebtPage() {
           onError={(message) => {
             setAlert({ type: "error", message });
           }}
+          isRollingBack={isRollingBack}
+          setIsRollingBack={setIsRollingBack}
         />
 
         {/* Confirm dialog cho xóa tất cả */}

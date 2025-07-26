@@ -224,6 +224,10 @@ export default function DebtDetailDialog({
         label: "Gửi Không Thành Công",
         color: "text-red-600 font-semibold",
       },
+      "Sent But Not Verified": {
+      label: "Đã Gửi, Cần Xác Thực",
+      color: "text-pink-600 font-semibold",
+    },
     };
     return (
       statusMap[status] || { label: status || "--", color: "text-gray-500" }

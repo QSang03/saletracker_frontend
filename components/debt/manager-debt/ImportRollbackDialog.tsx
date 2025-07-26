@@ -38,6 +38,8 @@ interface ImportRollbackDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: (message: string) => void;
   onError?: (message: string) => void;
+  isRollingBack?: boolean;
+  setIsRollingBack?: (v: boolean) => void;
 }
 
 export default function ImportRollbackDialog({
@@ -45,6 +47,8 @@ export default function ImportRollbackDialog({
   onOpenChange,
   onSuccess,
   onError,
+  isRollingBack = false,
+  setIsRollingBack,
 }: ImportRollbackDialogProps) {
   const [sessions, setSessions] = useState<ImportSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
@@ -52,7 +56,6 @@ export default function ImportRollbackDialog({
     new Date().toISOString().slice(0, 10)
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [isRollingBack, setIsRollingBack] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   // Lấy danh sách sessions khi mở dialog hoặc thay đổi ngày
@@ -96,8 +99,10 @@ export default function ImportRollbackDialog({
       return;
     }
 
+    setShowConfirm(false);
+
     try {
-      setIsRollingBack(true);
+      setIsRollingBack && setIsRollingBack(true);
       const token = await getAccessToken();
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/debts/import-rollback`,
@@ -129,7 +134,7 @@ export default function ImportRollbackDialog({
       console.error("Error during rollback:", error);
       onError?.(error.message || "Có lỗi xảy ra khi rollback");
     } finally {
-      setIsRollingBack(false);
+      setIsRollingBack && setIsRollingBack(false);
       setShowConfirm(false);
     }
   };

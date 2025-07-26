@@ -36,8 +36,11 @@ export default function LinkAccountContent({
   const [showConfirm, setShowConfirm] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const pingInterval = useRef<NodeJS.Timeout | null>(null);
-
   const qrTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Thêm ref để theo dõi việc refresh token
+  const isRefreshingRef = useRef(false);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const zaloAvatar = useMemo(
     () => currentUser?.avatarZalo || null,
@@ -48,10 +51,70 @@ export default function LinkAccountContent({
     [currentUser?.zaloName]
   );
 
+  const waitForWebSocketClose = (ws: WebSocket | null): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      if (!ws || ws.readyState === WebSocket.CLOSED) {
+        resolve();
+        return;
+      }
+
+      // Nếu WebSocket đang CLOSING, chỉ cần đợi nó đóng
+      if (ws.readyState === WebSocket.CLOSING) {
+        const checkClosed = () => {
+          if (ws.readyState === WebSocket.CLOSED) {
+            resolve();
+          } else {
+            setTimeout(checkClosed, 100);
+          }
+        };
+        checkClosed();
+        return;
+      }
+
+      // Nếu WebSocket đang OPEN hoặc CONNECTING, đóng nó gracefully
+      let isResolved = false;
+      const originalOnClose = ws.onclose;
+
+      ws.onclose = function (event: Event) {
+        if (!isResolved) {
+          isResolved = true;
+          if (originalOnClose) originalOnClose.call(this, event as CloseEvent);
+          resolve();
+        }
+      };
+
+      // Đóng WebSocket nếu cần
+      if (
+        ws.readyState === WebSocket.OPEN ||
+        ws.readyState === WebSocket.CONNECTING
+      ) {
+        ws.close();
+      }
+
+      // Timeout fallback
+      setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          resolve();
+        }
+      }, 2000); // Tăng timeout lên 2 giây
+    });
+  };
+
   const refreshUserToken = useCallback(async () => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || isRefreshingRef.current) {
+      console.log(
+        "🔄 [LinkAccount] Skip refresh token - already refreshing or no user"
+      );
+      return;
+    }
+
+    isRefreshingRef.current = true;
+    console.log("🔄 [LinkAccount] Starting token refresh...");
+
     const token = getAccessToken();
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+
     try {
       const res = await fetch(`${apiUrl}/auth/refresh-after-update`, {
         method: "POST",
@@ -60,6 +123,7 @@ export default function LinkAccountContent({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
+
       if (res.ok) {
         const data = await res.json();
         if (data.access_token) {
@@ -69,17 +133,42 @@ export default function LinkAccountContent({
           // Chỉ cập nhật access token, giữ nguyên refresh token
           setAccessToken(data.access_token);
 
-          // Cập nhật current user từ JWT token mới
-          const updatedUser = getUserFromToken(data.access_token);
-          if (updatedUser) {
-            setCurrentUser(updatedUser);
-          } else {
-            console.error("❌ [LinkAccount] Failed to parse user from token");
+          // Fetch thông tin user mới nhất từ API để cập nhật context
+          try {
+            const profileRes = await fetch(`${apiUrl}/auth/profile`, {
+              headers: {
+                Authorization: `Bearer ${data.access_token}`,
+                Accept: "application/json; charset=utf-8",
+              },
+            });
+
+            if (profileRes.ok) {
+              const userData = await profileRes.json();
+              setCurrentUser(userData);
+              console.log("✅ [LinkAccount] User context updated successfully");
+            }
+          } catch (profileError) {
+            console.error(
+              "❌ [LinkAccount] Failed to fetch updated profile:",
+              profileError
+            );
+            // Fallback: cập nhật từ JWT token
+            const updatedUser = getUserFromToken(data.access_token);
+            if (updatedUser) {
+              setCurrentUser(updatedUser);
+            }
           }
+
+          console.log("✅ [LinkAccount] Token refreshed successfully");
         }
       }
     } catch (error) {
       console.error("❌ [LinkAccount] Failed to refresh token:", error);
+    } finally {
+      // Reset flag sau 1 giây để tránh race condition
+      refreshTimeoutRef.current = setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 1000);
     }
   }, [currentUser?.id, setCurrentUser]);
 
@@ -87,6 +176,7 @@ export default function LinkAccountContent({
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (pingInterval.current) clearInterval(pingInterval.current);
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
       clearQrTimeout();
     };
   }, []);
@@ -96,8 +186,16 @@ export default function LinkAccountContent({
     if (!subscribe || !unsubscribe) return;
 
     const handleForceTokenRefresh = (data: any) => {
-      console.log("🔄 [LinkAccount] Received force_token_refresh event from WebSocket context, refreshing token...");
-      refreshUserToken();
+      console.log(
+        "🔄 [LinkAccount] Received force_token_refresh event from WebSocket context"
+      );
+      // Debounce để tránh multiple calls
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshUserToken();
+      }, 500);
     };
 
     // Subscribe to force_token_refresh event
@@ -156,7 +254,7 @@ export default function LinkAccountContent({
       const response = await fetch(`${apiUrl}/users/${currentUser.id}`, {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json; charset=utf-8", // Thêm charset
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
@@ -168,17 +266,23 @@ export default function LinkAccountContent({
       });
 
       if (response.ok) {
-        // Gọi refresh token để cập nhật thông tin Zalo trong JWT
-        await refreshUserToken();
+        console.log("✅ [LinkAccount] Updated Zalo link status successfully");
+        // Chỉ gọi refresh token sau khi update thành công
+        setTimeout(() => {
+          if (!isRefreshingRef.current) {
+            refreshUserToken();
+          }
+        }, 500);
       }
     } catch (e) {
-      // ignore
+      console.error("❌ [LinkAccount] Failed to update Zalo link status:", e);
     }
   };
 
-  const stopAllConnections = () => {
+  const stopAllConnections = async () => {
+    // Đợi WebSocket đóng gracefully trước
     if (wsRef.current) {
-      wsRef.current.close();
+      await waitForWebSocketClose(wsRef.current);
       wsRef.current = null;
     }
     stopPing();
@@ -268,6 +372,17 @@ export default function LinkAccountContent({
                     "Quy trình liên kết Zalo đã bắt đầu. Vui lòng mở ứng dụng Zalo và quét mã QR bên dưới để tiếp tục.",
                 },
               ]);
+              setLoading(false);
+              break;
+            case "ALREADY_LINKED":
+              setAlerts([
+                {
+                  type: "info",
+                  message:
+                    "Quy trình liên kết Zalo đã bắt đầu. Vui lòng mở ứng dụng Zalo và quét mã QR bên dưới để tiếp tục.",
+                },
+              ]);
+              updateZaloLinkStatus(1);
               setLoading(false);
               break;
             case "LOGIN_STOPPED":
@@ -379,6 +494,7 @@ export default function LinkAccountContent({
           ]);
           setLoading(true);
         } else if (msg.type === "login_complete") {
+          console.log("✅ [LinkAccount] Received login_complete event");
           setAlerts([
             {
               type: "success",
@@ -393,33 +509,157 @@ export default function LinkAccountContent({
           if (msg.data && msg.data.avatar) {
             setUserAvatar(msg.data.avatar);
           }
+
+          // Chỉ gọi updateZaloLinkStatus, không gọi refreshUserToken ở đây
           updateZaloLinkStatus(
             1,
             msg.data?.zaloUsername,
             msg.data?.avatar,
             msg.data?.gender
           );
-          // Refresh token để cập nhật thông tin Zalo trong JWT
-          refreshUserToken();
+
           ws.close();
         } else if (msg.type === "error") {
-          setAlerts([
-            {
-              type: "error",
-              message:
-                msg.message ||
-                "Đã xảy ra lỗi trong quá trình liên kết. Vui lòng thử lại hoặc liên hệ bộ phận hỗ trợ để được trợ giúp.",
-            },
-          ]);
-          setLoading(false);
-          setIsLinked(false);
-          setQrData(null);
-          updateZaloLinkStatus(0);
-          stopAllConnections();
+          if (msg.message === "SAVE_USER_ERROR") {
+            setAlerts([
+              {
+                type: "error",
+                message: "Bạn đã liên kết tài khoản Zalo với hệ thống này.",
+              },
+            ]);
+            setLoading(false);
+            setQrData(null);
+
+            let conflictUserId = null;
+            let conflictUsername = null;
+
+            if (msg.data && msg.data.error_message) {
+              const match = msg.data.error_message.match(
+                /another user (\d+), username: (.+)$/
+              );
+
+              if (match) {
+                conflictUserId = parseInt(match[1], 10);
+                conflictUsername = match[2];
+              }
+            }
+
+            // Đợi WebSocket đóng hoàn toàn trước khi thực hiện cleanup
+            const handleCleanup = async () => {
+              console.log(
+                "🔄 [LinkAccount] Starting cleanup for SAVE_USER_ERROR"
+              );
+
+              // Đóng WebSocket gracefully và đợi
+              await stopAllConnections();
+
+              console.log(
+                "🔄 [LinkAccount] WebSocket closed, starting unlink process"
+              );
+
+              // Sau khi WebSocket đã đóng hoàn toàn, thực hiện unlink và update
+              try {
+                if (conflictUserId) {
+                  console.log(
+                    `🔄 [LinkAccount] Unlinking conflict user ${conflictUserId}`
+                  );
+                  await doUnlinkWebhookAndUpdate(
+                    conflictUserId,
+                    conflictUsername
+                  );
+                  console.log("🔄 [LinkAccount] Unlinking current user");
+                  await doUnlinkWebhookAndUpdate();
+                } else {
+                  console.log("🔄 [LinkAccount] Unlinking current user only");
+                  await doUnlinkWebhookAndUpdate();
+                }
+
+                console.log("🔄 [LinkAccount] Updating Zalo link status to 0");
+                updateZaloLinkStatus(0);
+              } catch (error) {
+                console.error("❌ [LinkAccount] Error during cleanup:", error);
+              }
+            };
+
+            handleCleanup();
+          }
+
+          // Cập nhật phần xử lý error START_LOGIN_ERROR tương tự
+          else if (msg.message === "START_LOGIN_ERROR") {
+            setAlerts([
+              {
+                type: "error",
+                message: "Bạn đã liên kết tài khoản Zalo với hệ thống này.",
+              },
+            ]);
+
+            let needUnlinkCurrentUser = false;
+
+            if (msg.data && msg.data.error_message) {
+              if (
+                msg.data.error_message.includes("zpw_enk") ||
+                msg.data.error_message.includes(
+                  "Cannot read properties of null"
+                )
+              ) {
+                needUnlinkCurrentUser = true;
+              } else {
+                needUnlinkCurrentUser = true;
+              }
+            } else {
+              needUnlinkCurrentUser = true;
+            }
+
+            setLoading(false);
+            setQrData(null);
+
+            // Đợi WebSocket đóng hoàn toàn trước khi thực hiện cleanup
+            const handleCleanup = async () => {
+              console.log(
+                "🔄 [LinkAccount] Starting cleanup for START_LOGIN_ERROR"
+              );
+
+              // Đóng WebSocket gracefully và đợi
+              await stopAllConnections();
+
+              console.log(
+                "🔄 [LinkAccount] WebSocket closed, starting unlink process"
+              );
+
+              try {
+                if (needUnlinkCurrentUser) {
+                  console.log("🔄 [LinkAccount] Unlinking current user");
+                  await doUnlinkWebhookAndUpdate();
+                }
+
+                console.log("🔄 [LinkAccount] Updating Zalo link status to 0");
+                updateZaloLinkStatus(0);
+              } catch (error) {
+                console.error("❌ [LinkAccount] Error during cleanup:", error);
+              }
+            };
+
+            handleCleanup();
+          } else {
+            setAlerts([
+              {
+                type: "error",
+                message:
+                  msg.message ||
+                  "Đã xảy ra lỗi trong quá trình liên kết. Vui lòng thử lại hoặc liên hệ bộ phận hỗ trợ để được trợ giúp.",
+              },
+            ]);
+            setLoading(false);
+            setIsLinked(false);
+            setQrData(null);
+            updateZaloLinkStatus(0);
+            stopAllConnections();
+          }
         } else if (msg.type === "force_token_refresh") {
-          // Tự động refresh token khi user bị đá liên kết (status = 2)
-          console.log("🔄 [LinkAccount] Received force_token_refresh event, refreshing token...");
-          refreshUserToken();
+          // Chỉ log, không gọi refresh ở đây vì đã có WebSocket context handler
+          console.log(
+            "🔄 [LinkAccount] Received force_token_refresh event from WebSocket message"
+          );
         }
       } catch (e) {
         setAlerts([
@@ -508,15 +748,22 @@ export default function LinkAccountContent({
     setIsLinked(false);
   };
 
-  const doUnlinkWebhookAndUpdate = async () => {
+  const doUnlinkWebhookAndUpdate = async (
+    targetUserId: number | null = null,
+    targetUsername: string | null = null
+  ) => {
     let webhookError = false;
     let webhookSuccess = false;
+
+    const userId = targetUserId || currentUser?.id;
+    const username = targetUsername || currentUser?.username;
+
     // Lấy serverIP mới nhất từ currentUser mỗi lần gọi
     const serverIP = currentUser?.server_ip;
-    if (currentUser?.id && currentUser?.username && serverIP) {
+    if (userId && username && serverIP) {
       try {
         const res = await fetch(
-          `http://${serverIP}:3000/api/unlink/${currentUser.id}/${currentUser.username}`,
+          `http://${serverIP}:3000/api/unlink/${userId}/${username}`,
           {
             method: "DELETE",
           }
@@ -559,16 +806,18 @@ export default function LinkAccountContent({
       });
     }
     if (webhookSuccess) {
-      updateZaloLinkStatus(0, null, null);
-      refreshUserToken(); // Chỉ cần gọi hàm này, không cần fetch lại profile nữa
+      if (!targetUserId || targetUserId === currentUser?.id) {
+        updateZaloLinkStatus(0, null, null);
+      }
     }
   };
 
-  useEffect(() => {
-    if (isLinked) {
-      refreshUserToken();
-    }
-  }, [isLinked, refreshUserToken]);
+  // Bỏ useEffect này vì đã không cần thiết
+  // useEffect(() => {
+  //   if (isLinked) {
+  //     refreshUserToken();
+  //   }
+  // }, [isLinked, refreshUserToken]);
 
   // Đảm bảo hiển thị loading khi đang chờ currentUser
   if (!currentUser) {
@@ -747,11 +996,13 @@ export default function LinkAccountContent({
           </div>
           <div className="flex flex-col items-center mt-2">
             <span className="font-semibold text-lg text-zinc-800 dark:text-zinc-100">
-              {zaloLinkStatus === 1 && zaloName
-                ? zaloName
+              {zaloLinkStatus === 0
+                ? "Chưa liên kết"
+                : zaloLinkStatus === 1
+                ? zaloName || "Đã liên kết"
                 : zaloLinkStatus === 2
                 ? "Lỗi liên kết"
-                : "Chưa liên kết"}
+                : "Không xác định"}
             </span>
             <span className="text-sm text-zinc-500 dark:text-zinc-400">
               {zaloLinkStatus === 1 && currentUser.email

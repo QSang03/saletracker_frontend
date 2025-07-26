@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, User as UserIcon, Mail, KeyRound, Badge } from "lucide-react";
 import { toast } from "sonner";
 import { getAccessToken } from "@/lib/auth";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import type { User } from "@/types";
 
 export function ProfileModal({
@@ -46,6 +47,7 @@ export function ProfileModal({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "password">(initialTab);
+  const { setCurrentUser } = useCurrentUser();
 
   useEffect(() => {
     if (userData && open) {
@@ -172,6 +174,8 @@ export function ProfileModal({
 
       if (activeTab === "profile") {
         onUserUpdate?.(updated);
+        // Cập nhật currentUser context
+        setCurrentUser(updated);
       } else {
         setPasswordData({
           currentPassword: "",

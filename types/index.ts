@@ -158,6 +158,53 @@ export interface Product {
   brand?: Brand;
 }
 
+// Order Entity
+export interface Order {
+  id: number;
+  order_code?: string;
+  code?: string;
+  order_id?: number;
+  customer_name?: string;
+  customerName?: string;
+  customer_phone?: string;
+  customer_address?: string;
+  total_amount?: number;
+  total?: number;
+  status?: string;
+  note?: string;
+  sale_by_id?: number;
+  sale_by?: User;
+  customer?: {
+    name?: string;
+    fullName?: string;
+  };
+  details?: OrderDetail[];
+  created_at?: string | Date;
+  updated_at?: string | Date;
+  deleted_at?: string | Date;
+}
+
+// OrderDetail Entity
+export interface OrderDetail {
+  id: number;
+  order_id: number;
+  product_id?: number;
+  product_name?: string;
+  quantity: number;
+  unit_price: number | string;
+  raw_item?: string;
+  customer_request_summary?: string;
+  extended?: number;
+  customer_name?: string;
+  total_price?: number;
+  status?: string;
+  note?: string;
+  product?: Product;
+  created_at?: string | Date;
+  updated_at?: string | Date;
+  deleted_at?: string | Date;
+}
+
 // DebtConfig Entity
 export interface DebtConfig {
   id: number;
@@ -203,36 +250,36 @@ export interface Debt {
 export interface DebtLog {
   id: number;
   debt_config_id?: number;
-  
+
   // Customer information
   customer_code?: string;
   customer_name?: string;
   customer_type?: string;
   customer_gender?: string;
-  
+
   // Debt messages and image
   image_url?: string;
   debt_message?: string;
   remind_message_1?: string;
   remind_message_2?: string;
   business_remind_message?: string;
-  
+
   // Timing information
   send_time?: string | Date;
   remind_time_1?: string | Date;
   remind_time_2?: string | Date;
-  
+
   // Configuration
   is_send?: boolean;
   is_repeat?: boolean;
   day_of_week?: number;
   gap_day?: number;
-  
+
   // Status and tracking
   remind_status?: string;
   send_last_at?: string | Date;
   last_update_at?: string | Date;
-  
+
   // Related entities
   actor?: {
     id?: number;
@@ -244,13 +291,13 @@ export interface DebtLog {
     fullName: string;
     username: string;
   };
-  
+
   // Additional fields
   conv_id?: string;
   render?: string;
   created_at?: string | Date;
   updated_at?: string | Date;
-  
+
   // Legacy fields (for backward compatibility)
   debt_msg?: string;
   send_at?: string | Date;
@@ -284,9 +331,12 @@ export interface UpdateUserRolesPermissionsDto {
   departmentIds: number[];
   roleIds: number[];
   permissionIds: number[];
-  rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
+  rolePermissions: {
+    roleId: number;
+    permissionId: number;
+    isActive: boolean;
+  }[];
 }
-
 
 export interface PermissionCheckParams {
   departmentSlug: string;
@@ -295,34 +345,34 @@ export interface PermissionCheckParams {
 
 // Campaign Types
 export enum CampaignType {
-  HOURLY_KM = 'hourly_km',
-  DAILY_KM = 'daily_km',
-  THREE_DAY_KM = '3_day_km',
-  WEEKLY_SP = 'weekly_sp',
-  WEEKLY_BBG = 'weekly_bbg',
+  HOURLY_KM = "hourly_km",
+  DAILY_KM = "daily_km",
+  THREE_DAY_KM = "3_day_km",
+  WEEKLY_SP = "weekly_sp",
+  WEEKLY_BBG = "weekly_bbg",
 }
 
 export enum CampaignStatus {
-  DRAFT = 'draft',
-  SCHEDULED = 'scheduled',
-  RUNNING = 'running',
-  PAUSED = 'paused',
-  COMPLETED = 'completed',
-  ARCHIVED = 'archived',
+  DRAFT = "draft",
+  SCHEDULED = "scheduled",
+  RUNNING = "running",
+  PAUSED = "paused",
+  COMPLETED = "completed",
+  ARCHIVED = "archived",
 }
 
 export enum SendMethod {
-  API = 'api',
-  BOT = 'bot',
+  API = "api",
+  BOT = "bot",
 }
 
 export enum LogStatus {
-  PENDING = 'pending',
-  SENT = 'sent',
-  FAILED = 'failed',
-  CUSTOMER_REPLIED = 'customer_replied',
-  STAFF_HANDLED = 'staff_handled',
-  REMINDER_SENT = 'reminder_sent',
+  PENDING = "pending",
+  SENT = "sent",
+  FAILED = "failed",
+  CUSTOMER_REPLIED = "customer_replied",
+  STAFF_HANDLED = "staff_handled",
+  REMINDER_SENT = "reminder_sent",
 }
 
 // Campaign Interfaces
@@ -390,7 +440,9 @@ export type ReminderMessage = {
 };
 
 export type PromoMessageStep = InitialMessage | ReminderMessage;
-export type PromoMessageFlow = [InitialMessage, ...ReminderMessage[]] | [InitialMessage];
+export type PromoMessageFlow =
+  | [InitialMessage, ...ReminderMessage[]]
+  | [InitialMessage];
 
 export type DailyPromotion = {
   type: "hourly";
@@ -450,7 +502,7 @@ export interface CampaignContent {
   id: string;
   campaign_id: string;
   message_content: string;
-  attachment_type?: 'image' | 'file' | 'link';
+  attachment_type?: "image" | "file" | "link";
   attachment_url?: string;
   attachment_filename?: string;
   created_at: string | Date;

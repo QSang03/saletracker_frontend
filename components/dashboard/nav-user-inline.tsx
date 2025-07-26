@@ -23,6 +23,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import type { User } from "@/types";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 import { clearAllTokens } from "@/lib/auth";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
@@ -42,7 +43,7 @@ function getCookie(name: string): string | null {
 }
 
 export function NavUserInline({
-  user,
+  user: fallbackUser,
 }: {
   user: {
     name: string;
@@ -53,6 +54,15 @@ export function NavUserInline({
   const [showProfile, setShowProfile] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const { disconnect } = useWebSocketContext();
+  const { currentUser } = useCurrentUser();
+
+  // Sử dụng currentUser từ context nếu có, fallback về props
+  const user = currentUser
+    ? {
+        name: currentUser.fullName || currentUser.username,
+        email: currentUser.email || "Chưa có email",
+      }
+    : fallbackUser;
 
   const handleLogout = async () => {
     try {
@@ -115,19 +125,24 @@ export function NavUserInline({
       >
         <DropdownMenuLabel className="p-0 font-normal cursor-pointer" onClick={async () => {
           setShowProfile(true);
-          // Lấy lại thông tin user chi tiết từ API để truyền vào modal
-          try {
-            const token = getCookie('access_token');
-            if (token) {
-              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/profile`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (res.ok) {
-                const data = await res.json();
-                setProfileUser(data);
+          // Sử dụng currentUser từ context nếu có
+          if (currentUser) {
+            setProfileUser(currentUser);
+          } else {
+            // Lấy lại thông tin user chi tiết từ API để truyền vào modal
+            try {
+              const token = getCookie('access_token');
+              if (token) {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/profile`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setProfileUser(data);
+                }
               }
-            }
-          } catch {}
+            } catch {}
+          }
         }}>
           <div className="flex items-center gap-2 px-3 py-3">
             <Avatar className="h-9 w-9 border border-white dark:border-gray-700 cursor-pointer">
@@ -148,9 +163,10 @@ export function NavUserInline({
           open={showProfile}
           onOpenChange={setShowProfile}
           userData={profileUser}
-          onUserUpdate={(u) => {
-            setProfileUser(u);
-            // Nếu muốn cập nhật lại user info ở NavUserInline, cần truyền prop hoặc reload lại
+          onUserUpdate={(updatedUser) => {
+            setProfileUser(updatedUser);
+            // Cập nhật currentUser context nếu có setCurrentUser
+            // ProfileModal sẽ được truyền setCurrentUser qua context
           }}
         />
 

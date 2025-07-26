@@ -96,6 +96,10 @@ export default function DebtSettingManagement({
       label: "Gửi Không Thành Công",
       color: "text-red-600 font-semibold",
     },
+    "Sent But Not Verified": {
+      label: "Đã Gửi, Cần Xác Thực",
+      color: "text-pink-600 font-semibold",
+    },
   };
 
   // State để lưu data local để cập nhật ngay lập tức

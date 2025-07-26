@@ -411,21 +411,6 @@ export default function MessageConfig() {
                 expectedRowCount={pageSize}
                 startIndex={(page - 1) * pageSize}
                 onReload={fetchCampaigns}
-                onStatusChange={
-                  canUpdateInDepartment(saleDepartmentSlug)
-                    ? handleStatusChange
-                    : undefined
-                }
-                onArchive={
-                  canUpdateInDepartment(saleDepartmentSlug)
-                    ? handleArchiveCampaign
-                    : undefined
-                }
-                onDelete={
-                  canDeleteInDepartment(saleDepartmentSlug)
-                    ? handleDeleteCampaign
-                    : undefined
-                }
               />
             </PaginatedTable>
           </CardContent>

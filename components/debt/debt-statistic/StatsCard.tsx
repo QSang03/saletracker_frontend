@@ -27,7 +27,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
     </CardHeader>
     <CardContent className="px-3 pb-3">
       <div className="text-3xl font-bold mb-0.5">{value}</div>
-      {trend !== undefined && (
+      {/* {trend !== undefined && (
         <p
           className={`text-xs font-medium leading-tight ${
             trend > 0
@@ -40,7 +40,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
           {trend > 0 ? '+' : ''}
           {trend}%
         </p>
-      )}
+      )} */}
       {description && (
         <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{description}</p>
       )}
