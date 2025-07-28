@@ -38,8 +38,6 @@ export default function ManagerOrderPage() {
     user,
   } = useDynamicPermission();
 
-  const canAccessOrderManagement = canReadDepartment("smc");
-
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(() => {
     if (typeof window !== "undefined") {
@@ -199,17 +197,6 @@ export default function ManagerOrderPage() {
     );
   }
 
-  // Nếu không có quyền truy cập
-  if (!canAccessOrderManagement) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <div className="text-6xl">🚫</div>
-        <div className="text-xl font-semibold text-red-600">Không có quyền truy cập</div>
-        <div className="text-gray-600">Bạn không có quyền quản lý đơn hàng</div>
-      </div>
-    );
-  }
-
   if (isLoading && orders.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -284,7 +271,7 @@ export default function ManagerOrderPage() {
                         <th className="px-2 py-2">Số lượng</th>
                         <th className="px-2 py-2">Đơn giá</th>
                         <th className="px-2 py-2">Status</th>
-                        <th className="px-2 py-2">Customer Request</th>
+                        <th className="px-2 py-2">Tóm tắt</th>
                         
                       </tr>
                     </thead>

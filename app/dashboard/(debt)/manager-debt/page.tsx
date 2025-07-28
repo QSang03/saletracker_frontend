@@ -27,18 +27,10 @@ import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { DebtSocket } from "@/components/socket/DebtSocket";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import StatBox from "@/components/common/StatBox";
 
 // Unique page size key for debt management
 const PAGE_SIZE_KEY = "debtPageSize";
-
-function StatBox({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-2xl border p-4 shadow-sm bg-white dark:bg-muted min-w-[120px] text-center">
-      <div className="text-2xl font-bold text-primary">{value}</div>
-      <div className="text-sm text-muted-foreground">{label}</div>
-    </div>
-  );
-}
 
 interface DebtFilters {
   search: string;

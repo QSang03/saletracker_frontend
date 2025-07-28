@@ -14,7 +14,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { WrenchIcon, EyeIcon } from "@heroicons/react/24/outline";
+import { WrenchIcon, EyeIcon, ClockIcon } from "@heroicons/react/24/outline";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import axios from "axios";
 import { getAccessToken } from "@/lib/auth";
@@ -23,6 +23,7 @@ import EditDebtConfigModal from "./EditDebtConfigModal";
 import DebtDetailDialog from "./DebtDetailDialog";
 import { P } from "@/components/common/P";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import DebtHistoryDialog from "./DebtHistoryDialog";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -139,6 +140,11 @@ export default function DebtSettingManagement({
   }>({ open: false, id: null });
   // State cho dialog xem chi tiết công nợ
   const [detailDialog, setDetailDialog] = useState<{
+    open: boolean;
+    debtConfigId: string | null;
+  }>({ open: false, debtConfigId: null });
+
+  const [historyDialog, setHistoryDialog] = useState<{
     open: boolean;
     debtConfigId: string | null;
   }>({ open: false, debtConfigId: null });
@@ -345,6 +351,10 @@ export default function DebtSettingManagement({
     setDetailDialog({ open: true, debtConfigId: row.id });
   };
 
+  const handleViewHistory = (row: any) => {
+    setHistoryDialog({ open: true, debtConfigId: row.id });
+  };
+
   const [sortState, setSortState] = useState<{
     field: string;
     direction: "none" | "asc" | "desc";
@@ -478,7 +488,7 @@ export default function DebtSettingManagement({
             }
 
             // Trạng thái nhắc nợ: lấy trực tiếp từ debt_log (object)
-            let remindStatus = "--";
+            let remindStatus = "Chưa Gửi";
             let remindStatusColor = "";
             if (row.debt_log?.remind_status) {
               const statusObj = remindStatusMap[row.debt_log.remind_status];
@@ -665,6 +675,23 @@ export default function DebtSettingManagement({
                                 Xem Chi Tiết Công Nợ
                               </TooltipContent>
                             </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded cursor-not-allowed"
+                                  aria-label="Xem Lịch Sử Công Nợ"
+                                  disabled={true}
+                                >
+                                  <ClockIcon className="w-5 h-5 text-green-500" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Xem Lịch Sử Công Nợ
+                              </TooltipContent>
+                            </Tooltip>
+
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span>
@@ -725,6 +752,32 @@ export default function DebtSettingManagement({
                               </TooltipContent>
                             </Tooltip>
                           </P>
+
+                          {/* Nút xem lịch sử */}
+                          <P
+                            permission={{
+                              departmentSlug: "cong-no",
+                              action: "read",
+                            }}
+                            fallback={null}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
+                                  aria-label="Xem Lịch Sử Công Nợ"
+                                  onClick={() => handleViewHistory(row)}
+                                >
+                                  <ClockIcon className="w-5 h-5 text-green-500" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Xem Lịch Sử Công Nợ
+                              </TooltipContent>
+                            </Tooltip>
+                          </P>
+
                           {/* Switch gửi tự động */}
                           <P
                             permission={{
@@ -952,6 +1005,21 @@ export default function DebtSettingManagement({
                         </TooltipTrigger>
                         <TooltipContent>Xem Chi Tiết Công Nợ</TooltipContent>
                       </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1 rounded cursor-not-allowed"
+                            aria-label="Xem Lịch Sử Công Nợ"
+                            disabled={true}
+                          >
+                            <ClockIcon className="w-5 h-5 text-green-500" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Xem Lịch Sử Công Nợ</TooltipContent>
+                      </Tooltip>
+
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span>
@@ -997,6 +1065,30 @@ export default function DebtSettingManagement({
                         <TooltipContent>Xem Chi Tiết Công Nợ</TooltipContent>
                       </Tooltip>
                     </P>
+
+                    {/* Nút xem lịch sử */}
+                    <P
+                      permission={{
+                        departmentSlug: "cong-no",
+                        action: "read",
+                      }}
+                      fallback={null}
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1 rounded hover:bg-gray-100 focus:outline-none cursor-pointer"
+                            aria-label="Xem Lịch Sử Công Nợ"
+                            onClick={() => handleViewHistory(row)}
+                          >
+                            <ClockIcon className="w-5 h-5 text-green-500" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Xem Lịch Sử Công Nợ</TooltipContent>
+                      </Tooltip>
+                    </P>
+
                     {/* Switch gửi tự động */}
                     <P
                       permission={{
@@ -1157,6 +1249,14 @@ export default function DebtSettingManagement({
         open={detailDialog.open}
         onClose={() => setDetailDialog({ open: false, debtConfigId: null })}
         debtConfigId={detailDialog.debtConfigId}
+        onShowAlert={onShowAlert}
+      />
+
+      {/* Dialog xem lịch sử công nợ */}
+      <DebtHistoryDialog
+        open={historyDialog.open}
+        onClose={() => setHistoryDialog({ open: false, debtConfigId: null })}
+        debtConfigId={historyDialog.debtConfigId}
         onShowAlert={onShowAlert}
       />
     </div>
