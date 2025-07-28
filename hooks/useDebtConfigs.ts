@@ -174,8 +174,9 @@ export function useDebtConfigs(
           params.append("singleDate", dateStr);
         }
       }
-      if (filters?.sort) {
-        params.append("sort", filters.sort);
+      if (filters?.sort && filters.sort.field && filters.sort.direction) {
+        params.append("sort_field", filters.sort.field);
+        params.append("sort", filters.sort.direction);
       }
 
       const res = await fetch(

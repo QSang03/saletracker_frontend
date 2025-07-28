@@ -39,7 +39,9 @@ interface DebtSettingManagementProps {
   onDelete?: (id: string) => void;
   onEdit?: (row: any) => void;
   onRefresh?: () => void;
-  onSortChange?: (sort: "asc" | "desc" | undefined) => void;
+  onSortChange?: (
+    sort: { field: string; direction: "asc" | "desc" } | undefined
+  ) => void; // Sửa lại kiểu này
   onShowAlert?: (alert: { type: "success" | "error"; message: string }) => void;
   onUpdateRow?: (id: string, updatedData: any) => void; // Thêm prop mới để cập nhật row
 }
@@ -343,7 +345,10 @@ export default function DebtSettingManagement({
     setDetailDialog({ open: true, debtConfigId: row.id });
   };
 
-  const [sortState, setSortState] = useState<"none" | "asc" | "desc">("none");
+  const [sortState, setSortState] = useState<{
+    field: string;
+    direction: "none" | "asc" | "desc";
+  }>({ field: "send_last_at", direction: "none" });
 
   return (
     <div className="border rounded-xl shadow-inner overflow-x-auto always-show-scrollbar">
@@ -355,8 +360,56 @@ export default function DebtSettingManagement({
             <TableHead className="px-3 py-2 text-left">
               Tên Zalo Khách
             </TableHead>
-            <TableHead className="px-3 py-2 text-center">Tổng Phiếu</TableHead>
-            <TableHead className="px-3 py-2 text-center">Tổng Số Nợ</TableHead>
+            <TableHead
+              className="px-3 py-2 text-center select-none cursor-pointer"
+              onDoubleClick={() => {
+                const next =
+                  sortState.direction === "none"
+                    ? "asc"
+                    : sortState.direction === "asc"
+                    ? "desc"
+                    : "none";
+                setSortState({ field: "total_bills", direction: next });
+                if (onSortChange) {
+                  onSortChange(
+                    next === "none"
+                      ? undefined
+                      : { field: "total_bills", direction: next }
+                  );
+                }
+              }}
+            >
+              Tổng Phiếu
+              {sortState.field === "total_bills" &&
+                sortState.direction === "asc" && <span> ▲</span>}
+              {sortState.field === "total_bills" &&
+                sortState.direction === "desc" && <span> ▼</span>}
+            </TableHead>
+            <TableHead
+              className="px-3 py-2 text-center select-none cursor-pointer"
+              onDoubleClick={() => {
+                const next =
+                  sortState.direction === "none"
+                    ? "asc"
+                    : sortState.direction === "asc"
+                    ? "desc"
+                    : "none";
+                setSortState({ field: "total_debt", direction: next });
+                if (onSortChange) {
+                  onSortChange(
+                    next === "none"
+                      ? undefined
+                      : { field: "total_debt", direction: next }
+                  );
+                }
+              }}
+            >
+              Tổng Số Nợ
+              {sortState.field === "total_debt" &&
+                sortState.direction === "asc" && <span> ▲</span>}
+              {sortState.field === "total_debt" &&
+                sortState.direction === "desc" && <span> ▼</span>}
+            </TableHead>
             <TableHead className="px-3 py-2 text-center">Loại KH</TableHead>
             <TableHead className="px-3 py-2 text-center">
               Lịch Nhắc Nợ
@@ -365,20 +418,26 @@ export default function DebtSettingManagement({
               className="px-3 py-2 text-center select-none cursor-pointer"
               onDoubleClick={() => {
                 const next =
-                  sortState === "none"
+                  sortState.direction === "none"
                     ? "asc"
-                    : sortState === "asc"
+                    : sortState.direction === "asc"
                     ? "desc"
                     : "none";
-                setSortState(next);
+                setSortState({ field: "send_last_at", direction: next });
                 if (onSortChange) {
-                  onSortChange(next === "none" ? undefined : next);
+                  onSortChange(
+                    next === "none"
+                      ? undefined
+                      : { field: "send_last_at", direction: next }
+                  );
                 }
               }}
             >
               Ngày Đã Nhắc
-              {sortState === "asc" && <span> ▲</span>}
-              {sortState === "desc" && <span> ▼</span>}
+              {sortState.field === "send_last_at" &&
+                sortState.direction === "asc" && <span> ▲</span>}
+              {sortState.field === "send_last_at" &&
+                sortState.direction === "desc" && <span> ▼</span>}
             </TableHead>
             <TableHead className="px-3 py-2 text-center">
               Trạng Thái Nhắc Nợ
