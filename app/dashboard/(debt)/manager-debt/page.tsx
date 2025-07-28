@@ -557,7 +557,7 @@ export default function ManagerDebtPage() {
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/debts/${debt.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/debts/${debt.id}/note-status`,
         {
           method: "PATCH",
           headers: {

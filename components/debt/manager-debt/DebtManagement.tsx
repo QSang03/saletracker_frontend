@@ -56,6 +56,7 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
   // Hàm xử lý khi bấm Lưu trong EditDebtModal
   const handleModalSave = (data: { note: string; status: string }) => {
     setPendingEditData(data);
+    setIsProcessing(true); // Set processing state khi bắt đầu quá trình
     setShowConfirm(true);
   };
 
@@ -84,6 +85,7 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
   const handleCancelEdit = () => {
     setShowConfirm(false);
     setPendingEditData(null);
+    setIsProcessing(false); // Reset trạng thái processing khi hủy
     // Không đóng edit modal, để user có thể chỉnh sửa lại
   };
 
@@ -92,6 +94,8 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
     setEditModalOpen(false);
     setEditingDebt(null);
     setPendingEditData(null);
+    setIsProcessing(false); // Reset trạng thái processing khi đóng modal
+    setShowConfirm(false); // Đảm bảo confirm dialog cũng được đóng
   };
 
   return (
@@ -228,6 +232,7 @@ export default function DebtManagement({ debts, expectedRowCount, startIndex, on
         initialStatus={editingDebt?.status || ""}
         statusOptions={statusOptions}
         onSave={handleModalSave}
+        isProcessing={isProcessing}
       />
 
       {/* Confirm dialog cho edit */}

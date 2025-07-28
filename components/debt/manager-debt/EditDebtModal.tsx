@@ -17,6 +17,7 @@ interface EditDebtModalProps {
   initialNote?: string;
   initialStatus?: string;
   statusOptions: { label: string; value: string }[];
+  isProcessing?: boolean; // Thêm prop để nhận trạng thái processing từ parent
 }
 
 export default function EditDebtModal({
@@ -26,6 +27,7 @@ export default function EditDebtModal({
   initialNote = "",
   initialStatus = "",
   statusOptions,
+  isProcessing = false, // Nhận prop isProcessing từ parent
 }: EditDebtModalProps) {
   const [note, setNote] = useState(initialNote);
   const [status, setStatus] = useState(initialStatus);
@@ -50,6 +52,13 @@ export default function EditDebtModal({
     }
   }, [open, initialNote, initialStatus]);
 
+  // Reset saving state khi isProcessing thay đổi từ true về false
+  useEffect(() => {
+    if (!isProcessing) {
+      setSaving(false);
+    }
+  }, [isProcessing]);
+
   // Khi bấm Lưu, chỉ truyền dữ liệu lên parent, KHÔNG tự đóng modal
   const handleSave = () => {
     setSaving(true);
@@ -58,10 +67,13 @@ export default function EditDebtModal({
     // Không setSaving(false) ở đây, để parent quyết định khi nào reset
   };
 
+  // Sử dụng isProcessing hoặc saving để disable các nút
+  const isDisabled = saving || isProcessing;
+
   return (
     <Dialog open={open} onOpenChange={v => {
       // Chỉ gọi onClose khi người dùng thực sự muốn đóng (bấm ra ngoài hoặc nút Đóng), không gọi khi đang lưu
-      if (!v && !saving) onClose();
+      if (!v && !isDisabled) onClose();
     }}>
       <DialogContent className="max-w-md w-full">
         <DialogTitle className="mb-2">Chỉnh sửa công nợ</DialogTitle>
@@ -72,11 +84,12 @@ export default function EditDebtModal({
             onChange={e => setNote(e.target.value)}
             rows={4}
             placeholder="Nhập ghi chú..."
+            disabled={isDisabled}
           />
         </div>
         <div className="mb-4">
           <label className="block font-medium mb-1">Trạng thái</label>
-          <Select value={status} onValueChange={setStatus}>
+          <Select value={status} onValueChange={setStatus} disabled={isDisabled}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="-- Chọn trạng thái --" />
             </SelectTrigger>
@@ -90,10 +103,10 @@ export default function EditDebtModal({
           </Select>
         </div>
         <DialogFooter>
-          <Button variant="gradient" onClick={handleSave} disabled={saving}>
-            {saving ? "Đang lưu..." : "Lưu"}
+          <Button variant="gradient" onClick={handleSave} disabled={isDisabled}>
+            {isDisabled ? "Đang lưu..." : "Lưu"}
           </Button>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+          <Button variant="outline" onClick={onClose} disabled={isDisabled}>
             Đóng
           </Button>
         </DialogFooter>
