@@ -13,8 +13,8 @@ export const navItems = [
   icon: "ListOrdered",
   items: [
     { title: "Quản lý đơn hàng", url: "/dashboard/manager-order", roles: ["admin", "analysis"] },
-    { title: "Thùng rác đơn hàng", url: "/dashboard/order-trashed", roles: ["admin", "analysis"] },
-    { title: "Cấu hình đơn hàng", url: "/dashboard/order-settings", roles: ["admin", "analysis"] },
+    // { title: "Thùng rác đơn hàng", url: "/dashboard/order-trashed", roles: ["admin", "analysis"] },
+    // { title: "Cấu hình đơn hàng", url: "/dashboard/order-settings", roles: ["admin", "analysis"] },
   ],
   },
   {

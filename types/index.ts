@@ -256,6 +256,7 @@ export interface DebtLog {
   customer_name?: string;
   customer_type?: string;
   customer_gender?: string;
+  error_msg: string;
 
   // Debt messages and image
   image_url?: string;

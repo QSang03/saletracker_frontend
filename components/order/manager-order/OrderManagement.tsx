@@ -18,18 +18,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onEdit,
   onDelete,
 }) => {
-  // Debug: Log dữ liệu orders để kiểm tra
-  React.useEffect(() => {
-    console.log("=== OrderManagement DEBUG ===");
-    console.log("OrderManagement - orders received:", orders);
-    console.log("OrderManagement - orders type:", typeof orders);
-    console.log("OrderManagement - orders is array:", Array.isArray(orders));
-    console.log("OrderManagement - orders length:", orders?.length);
-    console.log("OrderManagement - safeOrders:", Array.isArray(orders) ? orders : []);
-    console.log("===============================");
-  }, [orders]);
-
-  // Ensure orders is always an array
   const safeOrders = Array.isArray(orders) ? orders : [];
 
   // Custom hook lấy tên khách hàng từ zalo_message_id (gọi đúng API backend)

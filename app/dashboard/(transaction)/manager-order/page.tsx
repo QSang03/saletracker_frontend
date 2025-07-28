@@ -1,26 +1,5 @@
 "use client";
 import React, { useState, useCallback, useEffect } from "react";
-// Component con hiển thị tên khách hàng động từ zalo_message_id
-function CustomerNameCell({ zalo_message_id }: { zalo_message_id?: string }) {
-  const [customer, setCustomer] = useState<string>("");
-  useEffect(() => {
-    if (!zalo_message_id) {
-      setCustomer("");
-      return;
-    }
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/customer-from-zalo-message/${zalo_message_id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.zalo_contact_id && data.zalo_contact_id !== 0) {
-          setCustomer(data.name || data.full_name || data.sender_id || "Không xác định");
-        } else {
-          setCustomer("Không xác định");
-        }
-      })
-      .catch(() => setCustomer("Không xác định"));
-  }, [zalo_message_id]);
-  return <>{customer}</>;
-}
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
@@ -29,7 +8,6 @@ import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import { getAccessToken } from "@/lib/auth";
 import { useApiState } from "@/hooks/useApiState";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
-import OrderManagement from "@/components/order/manager-order/OrderManagement";
 import { Order } from "@/types";
 const PAGE_SIZE_KEY = "orderPageSize";
 
@@ -60,7 +38,7 @@ export default function ManagerOrderPage() {
     user,
   } = useDynamicPermission();
 
-  const canAccessOrderManagement = canReadDepartment("giao-dich");
+  const canAccessOrderManagement = canReadDepartment("smc");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(() => {
@@ -127,39 +105,15 @@ export default function ManagerOrderPage() {
       },
     });
     
-    console.log("=== FETCH DEBUG ===");
-    console.log("Request URL:", `${process.env.NEXT_PUBLIC_API_URL}/orders?${queryStr}`);
-    console.log("Response status:", res.status);
-    console.log("Response ok:", res.ok);
-    
     if (!res.ok) throw new Error(`Failed to fetch orders: ${res.status}`);
     const result = await res.json();
     
-    // Debug API response
-    console.log("=== API RESPONSE DEBUG ===");
-    console.log("Raw result:", result);
-    console.log("Type of result:", typeof result);
-    console.log("Is result an array?", Array.isArray(result));
-    console.log("result length if array:", Array.isArray(result) ? result.length : 'N/A');
-    console.log("result.data exists?", 'data' in result);
-    console.log("result.data:", result.data);
-    console.log("result.data is array?", Array.isArray(result.data));
-    console.log("result.total:", result.total);
-    console.log("All result keys:", Object.keys(result));
-    console.log("=========================");
-    
     // Handle different response formats
     if (Array.isArray(result)) {
-      // API trả về trực tiếp array orders
-      console.log("API returned direct array, length:", result.length);
       return { data: result, total: result.length };
     } else if (result.data && Array.isArray(result.data)) {
-      // API trả về object với data property
-      console.log("API returned object with data array, length:", result.data.length);
       return { data: result.data, total: result.total || result.data.length };
     } else {
-      // Fallback
-      console.log("API returned unexpected format, falling back to empty");
       return { data: [], total: 0 };
     }
   }, [page, pageSize, filters]);
@@ -174,27 +128,6 @@ export default function ManagerOrderPage() {
   const orders: Order[] = ordersData.data;
   const total = ordersData.total;
 
-  // Debug: log ordersData và orders với nhiều thông tin hơn
-  if (typeof window !== "undefined") {
-    // eslint-disable-next-line no-console
-    console.log("=== PAGE DEBUG ===");
-    // eslint-disable-next-line no-console
-    console.log("ordersData:", ordersData);
-    // eslint-disable-next-line no-console
-    console.log("ordersData.data:", ordersData.data);
-    // eslint-disable-next-line no-console
-    console.log("orders:", orders);
-    // eslint-disable-next-line no-console
-    console.log("orders type:", typeof orders);
-    // eslint-disable-next-line no-console
-    console.log("orders is array:", Array.isArray(orders));
-    // eslint-disable-next-line no-console
-    console.log("orders length:", orders?.length);
-    // eslint-disable-next-line no-console
-    console.log("=================");
-  }
-
-  // Status options for filter (tùy chỉnh theo order)
   const statusOptions = [
     { value: "completed", label: "Đã hoàn thành" },
     { value: "pending", label: "Chờ xử lý" },
@@ -324,7 +257,7 @@ export default function ManagerOrderPage() {
                   availableStatuses={statusOptions}
                   enableEmployeeFilter={true}
                   availableEmployees={allEmployeeOptions}
-                  canExport={canExportInDepartment("giao-dich")}
+                  canExport={canExportInDepartment("smc")}
                   page={page}
                   pageSize={pageSize}
                   total={total}

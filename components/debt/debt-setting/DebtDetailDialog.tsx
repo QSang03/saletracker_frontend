@@ -625,6 +625,16 @@ export default function DebtDetailDialog({
                       {debtDetail?.business_remind_message || "--"}
                     </div>
                   </div>
+
+                  <div className="bg-red-50 rounded-lg p-3 border-l-4 border-red-400">
+                    <h4 className="font-semibold text-gray-800 mb-2 flex items-center text-sm">
+                      <span className="inline-block w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                      Thông báo lỗi (nếu có)
+                    </h4>
+                    <div className="bg-white rounded p-3 text-red-700 whitespace-pre-line text-sm leading-relaxed shadow-sm">
+                      {debtDetail?.error_msg || "--"}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
