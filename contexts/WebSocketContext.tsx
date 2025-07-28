@@ -10,6 +10,7 @@ import React, {
 import { wsClient, WSClientEvents } from "@/lib/wsClient";
 import { getUserFromToken } from "@/lib/auth";
 import { AuthContext } from "@/contexts/AuthContext";
+import { refreshAccessToken } from "@/lib/refreshToken";
 
 // Kiểu cho handler
 export type WSHandler = (data: any) => void;
@@ -28,7 +29,7 @@ const WebSocketContext = createContext<IWebSocketContext | undefined>(
 );
 
 export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
-  const { token, user } = useContext(AuthContext);
+  const { token, user, login } = useContext(AuthContext);
   const handlersRef = useRef<WSHandlersMap>({});
   const eventHandlersRef = useRef<Map<WSClientEvents, (data: any) => void>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
@@ -167,6 +168,24 @@ export const WebSocketProvider = ({ children }: { children: ReactNode }) => {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     wsClient.disconnect();
   };
+
+  useEffect(() => {
+  if (!isConnected || !user) return;
+  const handler = async (data: any) => {
+    if (data.userId === user.id && data.reason === 'permission_changed') {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        const newUser = getUserFromToken(newToken);
+        if (newUser) login(newUser);
+        // Không cần reload!
+      } else {
+        // Xử lý lỗi, chuyển về login nếu cần
+      }
+    }
+  };
+  subscribe('force_token_refresh', handler);
+  return () => unsubscribe('force_token_refresh', handler);
+}, [isConnected, user, login]);
 
   return (
     <WebSocketContext.Provider value={{ subscribe, unsubscribe, emit, isConnected, disconnect }}>
