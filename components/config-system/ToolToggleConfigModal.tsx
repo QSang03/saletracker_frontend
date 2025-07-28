@@ -76,8 +76,7 @@ export default function ToolToggleConfigModal({
             Authorization: `Bearer ${token || ""}`,
           },
           body: JSON.stringify({
-            value: newState ? "1" : "0",
-            status: newState ? 1 : 0,
+            value: newState ? "1" : "0"
           }),
         }
       );
