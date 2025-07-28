@@ -100,7 +100,7 @@ export default function ImportRollbackDialog({
     }
 
     setShowConfirm(false);
-
+    onOpenChange(false);
     try {
       setIsRollingBack && setIsRollingBack(true);
       const token = await getAccessToken();
@@ -125,7 +125,6 @@ export default function ImportRollbackDialog({
 
       const result = await response.json();
       onSuccess?.(result.message || "Khôi phục thành công");
-      onOpenChange(false);
       
       // Reset state
       setSelectedSessionId("");
