@@ -27,10 +27,10 @@ export const navItems = [
     ],
   },
   {
-    title: "Kinh doanh",
+    title: "Chiến dịch",
     icon: "MessageCircle",
     items: [
-      { title: "Cấu hình gửi tin nhắn", url: "/dashboard/campaigns", roles: ["admin", "manager-kinh-doanh", "user-kinh-doanh"] },
+      { title: "Cấu hình gửi tin nhắn", url: "/dashboard/campaigns", roles: ["admin", "manager-chien-dich", "user-chien-dich"] },
     ],
   },
   {

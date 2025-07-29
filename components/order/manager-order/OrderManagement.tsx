@@ -1,14 +1,79 @@
 import React, { useState, useEffect } from "react";
-import { Order } from "@/types";
+import { OrderDetail } from "@/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { 
+  MoreVertical, 
+  Edit, 
+  Trash2, 
+  Shield, 
+  AlertTriangle, 
+  Clock, 
+  CheckCircle,
+  Zap,
+  Star,
+  TrendingUp
+} from "lucide-react";
+import EditOrderDetailModal from "./EditOrderDetailModal";
+import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
+
 
 interface OrderManagementProps {
-  orders: Order[];
+  orders: OrderDetail[];
   expectedRowCount: number;
   startIndex: number;
   onReload: () => void;
-  onEdit?: (order: Order, data: any) => void;
-  onDelete?: (order: Order) => void;
+  onEdit?: (orderDetail: OrderDetail, data: any) => void;
+  onDelete?: (orderDetail: OrderDetail, reason: string) => void;
+  loading?: boolean;
 }
+
+
+// ✅ Component để hiển thị text với tooltip khi cần thiết
+const TruncatedText: React.FC<{
+  text: string;
+  maxLength?: number;
+  className?: string;
+}> = ({ text, maxLength = 50, className = "" }) => {
+  if (!text || text.length <= maxLength) {
+    return <span className={className}>{text || "N/A"}</span>;
+  }
+
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`cursor-help ${className}`}>
+          {text.substring(0, maxLength)}...
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-md p-3 bg-slate-800 text-white text-sm rounded-lg shadow-xl">
+        <div className="whitespace-pre-wrap break-words">{text}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 
 const OrderManagement: React.FC<OrderManagementProps> = ({
   orders,
@@ -17,106 +82,436 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onReload,
   onEdit,
   onDelete,
+  loading = false,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
+  
+  // ✅ Tính toán số dòng hiển thị thực tế
+  const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
+  
+  const [editingDetail, setEditingDetail] = useState<OrderDetail | null>(null);
+  const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  // Custom hook lấy tên khách hàng từ zalo_message_id (gọi đúng API backend)
-  const useCustomerName = (zalo_message_id?: string) => {
-    const [customer, setCustomer] = useState<string>("");
-    useEffect(() => {
-      if (!zalo_message_id) {
-        setCustomer("");
-        return;
-      }
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/customer-from-zalo-message/${zalo_message_id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.zalo_contact_id && data.zalo_contact_id !== 0) {
-            setCustomer(data.name || data.full_name || data.sender_id || "Không xác định");
-          } else {
-            setCustomer("Không xác định");
-          }
-        })
-        .catch(() => setCustomer("Không xác định"));
-    }, [zalo_message_id]);
-    return customer;
+
+  const handleEditClick = (orderDetail: OrderDetail) => {
+    setEditingDetail(orderDetail);
+    setIsEditModalOpen(true);
   };
 
+
+  const handleDeleteClick = (orderDetail: OrderDetail) => {
+    setDeletingDetail(orderDetail);
+    setIsDeleteModalOpen(true);
+  };
+
+
+  const handleEditSave = (data: Partial<OrderDetail>) => {
+    if (editingDetail && onEdit) {
+      onEdit(editingDetail, data);
+      setIsEditModalOpen(false);
+      setEditingDetail(null);
+    }
+  };
+
+
+  const handleDeleteConfirm = (reason: string) => {
+    if (deletingDetail && onDelete) {
+      onDelete(deletingDetail, reason);
+      setIsDeleteModalOpen(false);
+      setDeletingDetail(null);
+    }
+  };
+
+
+  const handleEditCancel = () => {
+    setIsEditModalOpen(false);
+    setEditingDetail(null);
+  };
+
+
+  const handleDeleteCancel = () => {
+    setIsDeleteModalOpen(false);
+    setDeletingDetail(null);
+  };
+
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "Chờ xử lý";
+      case "quoted":
+        return "Đã báo giá";
+      case "completed":
+        return "Đã hoàn thành";
+      case "demand":
+        return "Nhu cầu";
+      default:
+        return status || "N/A";
+    }
+  };
+
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border border-yellow-300 shadow-sm";
+      case "quoted":
+        return "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border border-blue-300 shadow-sm";
+      case "completed":
+        return "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300 shadow-sm";
+      case "demand":
+        return "bg-gradient-to-r from-red-100 to-red-200 text-red-800 border border-red-300 shadow-sm";
+      default:
+        return "bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border border-gray-300 shadow-sm";
+    }
+  };
+
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "pending":
+        return <Clock className="w-3 h-3 mr-1" />;
+      case "quoted":
+        return <TrendingUp className="w-3 h-3 mr-1" />;
+      case "completed":
+        return <CheckCircle className="w-3 h-3 mr-1" />;
+      case "demand":
+        return <AlertTriangle className="w-3 h-3 mr-1" />;
+      default:
+        return null;
+    }
+  };
+
+
+  const getRowClassName = (orderDetail: OrderDetail, index: number) => {
+    const extended = orderDetail.extended || 0;
+    
+    switch (extended) {
+      case 1:
+        return "bg-gradient-to-r from-red-50 via-red-25 to-red-50 hover:from-red-100 hover:to-red-75 border-l-4 border-red-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
+      case 2:
+        return "bg-gradient-to-r from-amber-50 via-amber-25 to-amber-50 hover:from-amber-100 hover:to-amber-75 border-l-4 border-amber-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
+      case 3:
+        return "bg-gradient-to-r from-emerald-50 via-emerald-25 to-emerald-50 hover:from-emerald-100 hover:to-emerald-75 border-l-4 border-emerald-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
+      default:
+        if (extended >= 4) {
+          return index % 2 === 0 
+            ? "bg-gradient-to-r from-slate-50 via-slate-25 to-slate-50 hover:from-slate-100 hover:to-slate-75 border-l-4 border-slate-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1"
+            : "bg-gradient-to-r from-gray-50 via-gray-25 to-gray-50 hover:from-gray-100 hover:to-gray-75 border-l-4 border-gray-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
+        }
+        return "bg-gradient-to-r from-white via-gray-25 to-white hover:from-gray-50 hover:to-gray-50 border-l-4 border-gray-300 shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
+    }
+  };
+
+
+  const getExtendedBadgeStyle = (extended: number) => {
+    switch (extended) {
+      case 1:
+        return "px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full text-xs font-bold shadow-lg hover:shadow-red-300 border-2 border-red-400 glow-red transform hover:scale-105 transition-all duration-200";
+      case 2:
+        return "px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full text-xs font-bold shadow-lg hover:shadow-amber-300 border-2 border-amber-400 glow-amber transform hover:scale-105 transition-all duration-200";
+      case 3:
+        return "px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-full text-xs font-bold shadow-lg hover:shadow-emerald-300 border-2 border-emerald-400 glow-emerald transform hover:scale-105 transition-all duration-200";
+      default:
+        if (extended >= 4) {
+          return "px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full text-xs font-bold shadow-lg hover:shadow-blue-300 border-2 border-blue-400 glow-blue transform hover:scale-105 transition-all duration-200";
+        }
+        return "px-2 py-1 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700 rounded-full text-xs font-medium shadow-sm border border-gray-300 transform hover:scale-105 transition-all duration-200";
+    }
+  };
+
+
+  const getExtendedIcon = (extended: number) => {
+    switch (extended) {
+      case 1:
+        return <AlertTriangle className="w-3 h-3 mr-1" />;
+      case 2:
+        return <Clock className="w-3 h-3 mr-1" />;
+      case 3:
+        return <Zap className="w-3 h-3 mr-1" />;
+      default:
+        if (extended >= 4) {
+          return <Star className="w-3 h-3 mr-1" />;
+        }
+        return null;
+    }
+  };
+
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <div className="overflow-x-auto scrollbar-hide">
+          <Table className="min-w-[1600px] table-fixed">
+            <TableHeader>
+              <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+                <TableHead className="font-bold text-gray-700 w-[50px] text-center">#</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[100px] text-center">Mã đơn</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[80px] text-center">Gia hạn</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Thời gian</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Nhân viên</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Khách hàng</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[430px] text-center">Mặt hàng</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[60px] text-center">SL</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[100px] text-right">Đơn giá</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Trạng thái</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-left">Ghi chú</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[80px] text-center">Thao tác</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* ✅ CHỈ tạo skeleton theo actualRowCount, không phải expectedRowCount */}
+              {Array.from({ length: actualRowCount }).map((_, index) => (
+                <TableRow 
+                  key={`skeleton-${index}`} 
+                  className="border-l-4 border-gray-300 bg-gradient-to-r from-gray-50 to-white rounded-lg shadow-sm my-1 animate-pulse"
+                >
+                  <TableCell className="text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-16 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-12 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-24 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-20 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-20 rounded mx-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-full rounded" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-4 w-16 rounded ml-auto" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-20 rounded mx-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24 rounded" /></TableCell>
+                  <TableCell className="text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    );
+  }
+
+
   return (
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead>
-        <tr>
-          <th className="px-4 py-2">Mã đơn</th>
-          <th className="px-4 py-2">Gia Hạn</th>
-          <th className="px-4 py-2">Khách hàng</th>
-          <th className="px-4 py-2">Ngày tạo</th>
-          <th className="px-4 py-2">Tổng tiền</th>
-          <th className="px-4 py-2">Trạng thái</th>
-          <th className="px-4 py-2">Customer Request</th>
-          <th className="px-4 py-2">Thao tác</th>
-        </tr>
-      </thead>
-      <tbody>
-        {safeOrders.length === 0 && (
-          <tr>
-            <td colSpan={8} className="text-center py-2 text-xs text-gray-400">
-              <div>Không có dữ liệu đơn hàng</div>
-              <details className="mt-2">
-                <summary className="cursor-pointer text-blue-500">Chi tiết debug</summary>
-                <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '10px'}}>
-                  Original orders: {JSON.stringify(orders, null, 2)}
-                  {'\n'}Safe orders: {JSON.stringify(safeOrders, null, 2)}
-                  {'\n'}Safe orders length: {safeOrders.length}
-                </pre>
-              </details>
-            </td>
-          </tr>
-        )}
-        {safeOrders.length > 0 && safeOrders.map((order, idx) => (
-          Array.isArray(order.details) && order.details.length > 0 ? order.details.map((detail, detailIdx) => (
-            <tr key={`${order.id || order.order_id || order.code || idx}-detail-${detailIdx}`} className="border-b">
-              <td className="px-4 py-2">{order.id || order.order_id || order.code || 'N/A'}</td>
-              <td className="px-4 py-2">{detail.extended || ''}</td>
-              <td className="px-4 py-2">{detail.customer_name || ''}</td>
-              <td className="px-4 py-2">{detail.created_at ? new Date(detail.created_at).toLocaleDateString("vi-VN") : 'N/A'}</td>
-              <td className="px-4 py-2">{detail.unit_price ? Number(detail.unit_price).toLocaleString() : '0'}</td>
-              <td className="px-4 py-2">{detail.status || ''}</td>
-              <td className="px-4 py-2">{detail.customer_request_summary || ''}</td>
-              <td className="px-4 py-2">
-                {onEdit && (
-                  <button
-                    className="text-blue-600 hover:underline mr-2"
-                    onClick={() => onEdit(order, detail)}
-                  >
-                    Sửa
-                  </button>
+    <TooltipProvider>
+      <style jsx>{`
+        .glow-red { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
+        .glow-amber { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); }
+        .glow-emerald { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
+        .glow-blue { box-shadow: 0 0 10px rgba(59, 130, 246, 0.3); }
+        
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        
+        .text-truncate {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        
+        .text-wrap {
+          word-wrap: break-word;
+          word-break: break-word;
+          hyphens: auto;
+        }
+      `}</style>
+      
+      <div className="space-y-2">
+        <div className="relative">
+          <div className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200">
+            <Table className="min-w-[1600px] table-fixed bg-white">
+              <TableHeader>
+                <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-0 bg-slate-100 z-10">#</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-center">🏷️ Mã đơn</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center">⏰ Gia hạn</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">📅 Thời gian</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">👤 Nhân viên</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">🏪 Khách hàng</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[430px] text-center">🛍️ Mặt hàng</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[60px] text-center">🔢 SL</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-right">💰 Đơn giá</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">📊 Trạng thái</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">📝 Ghi chú</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center sticky right-0 bg-slate-100 z-10">⚙️ Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {safeOrders.length === 0 && (
+                  <TableRow className="border-l-4 border-gray-300 bg-gradient-to-r from-gray-50 to-white rounded-lg shadow-sm my-1">
+                    <TableCell
+                      colSpan={12}
+                      className="text-center py-8 text-gray-500"
+                    >
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="text-6xl">📋</div>
+                        <div className="text-lg font-medium">Không có dữ liệu đơn hàng</div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 )}
-                {onDelete && (
-                  <button
-                    className="text-red-600 hover:underline"
-                    onClick={() => onDelete(order)}
-                  >
-                    Xóa
-                  </button>
-                )}
-              </td>
-            </tr>
-          )) : (
-            <tr key={order.id || order.order_id || order.code || idx} className="border-b">
-              <td className="px-4 py-2">{order.id || order.order_id || order.code || 'N/A'}</td>
-              <td colSpan={7} className="text-center py-2 text-xs text-gray-400">Không có chi tiết sản phẩm</td>
-            </tr>
-          )
-        ))}
-        {safeOrders.length < expectedRowCount &&
-          Array.from({ length: expectedRowCount - safeOrders.length }).map((_, i) => (
-            <tr key={"empty-" + i} className="border-b">
-              <td colSpan={8} className="py-2">&nbsp;</td>
-            </tr>
-          ))}
-      </tbody>
-    </table>
+                
+                {/* ✅ CHỈ hiển thị data thật có, KHÔNG tạo empty rows */}
+                {safeOrders.length > 0 &&
+                  safeOrders.map((orderDetail, index) => (
+                    <TableRow 
+                      key={orderDetail.id || index}
+                      className={getRowClassName(orderDetail, index)}
+                    >
+                      <TableCell className="text-center sticky left-0 bg-inherit z-10">
+                        <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
+                          {startIndex + index + 1}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-blue-700">
+                        <div className="text-truncate">
+                          #{orderDetail.order_id || "N/A"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`inline-flex items-center ${getExtendedBadgeStyle(orderDetail.extended || 0)}`}>
+                          {getExtendedIcon(orderDetail.extended || 0)}
+                          {orderDetail.extended || 0}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-slate-600 text-sm">
+                        <div className="text-truncate">
+                          {orderDetail.created_at
+                            ? typeof orderDetail.created_at === "string"
+                              ? orderDetail.created_at.split(' ')[0]
+                              : orderDetail.created_at instanceof Date
+                              ? orderDetail.created_at.toLocaleDateString("vi-VN")
+                              : ""
+                            : ""}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-purple-700 text-sm">
+                        <TruncatedText
+                          text={orderDetail.order?.sale_by?.fullName ||
+                                orderDetail.order?.sale_by?.username ||
+                                "N/A"}
+                          maxLength={15}
+                          className="text-truncate"
+                        />
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-green-700 text-sm">
+                        <TruncatedText
+                          text={orderDetail.customer_name || "N/A"}
+                          maxLength={15}
+                          className="text-truncate"
+                        />
+                      </TableCell>
+                      <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
+                        <TruncatedText
+                          text={orderDetail.raw_item || "N/A"}
+                          maxLength={55}
+                          className="text-wrap leading-relaxed"
+                        />
+                      </TableCell>
+                      <TableCell className="text-center font-semibold text-indigo-600">
+                        <div className="text-truncate">
+                          {orderDetail.quantity || 0}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-green-600 text-sm">
+                        <div className="text-truncate">
+                          {orderDetail.unit_price
+                            ? Number(orderDetail.unit_price).toLocaleString() + "₫"
+                            : "0₫"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(orderDetail.status || "")}`}>
+                          {getStatusIcon(orderDetail.status || "")}
+                          <span className="text-truncate max-w-[80px]">{getStatusLabel(orderDetail.status || "")}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm">
+                        <TruncatedText
+                          text={orderDetail.notes || "—"}
+                          maxLength={15}
+                          className="text-wrap leading-relaxed"
+                        />
+                      </TableCell>
+                      <TableCell className="text-center sticky right-0 bg-inherit z-10">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-slate-200 hover:shadow-md transition-all duration-200 rounded-full mx-auto"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 shadow-xl border-slate-200">
+                            <DropdownMenuItem
+                              onClick={() => handleEditClick(orderDetail)}
+                              className="hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Sửa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteClick(orderDetail)}
+                              className="text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Xóa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="hover:bg-purple-50 hover:text-purple-700 transition-colors">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center">
+                                    <Shield className="mr-2 h-4 w-4" />
+                                    Blacklist
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Chặn khách hàng này (Tính năng sẽ có trong tương lai)</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                
+                {/* ✅ LOẠI BỎ: Không tạo empty rows nữa */}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+
+
+      {editingDetail && (
+        <EditOrderDetailModal
+          orderDetail={editingDetail}
+          isOpen={isEditModalOpen}
+          onClose={handleEditCancel}
+          onSave={handleEditSave}
+          loading={loading}
+        />
+      )}
+
+
+      {deletingDetail && (
+        <DeleteOrderDetailModal
+          orderDetail={deletingDetail}
+          isOpen={isDeleteModalOpen}
+          onClose={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          loading={loading}
+        />
+      )}
+    </TooltipProvider>
   );
 };
+
 
 export default OrderManagement;

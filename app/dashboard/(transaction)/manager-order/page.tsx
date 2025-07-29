@@ -1,334 +1,239 @@
 "use client";
-import React, { useState, useCallback, useEffect } from "react";
+
+import React, { useState, useEffect, useCallback } from "react";
+import { OrderDetail } from "@/types"; // ✅ Thay đổi từ Order thành OrderDetail
+import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { useOrders } from "@/hooks/useOrders";
+import PaginatedTable, { Filters } from "@/components/ui/pagination/PaginatedTable";
+import OrderManagement from "@/components/order/manager-order/OrderManagement";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
-import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
-import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
-import { getAccessToken } from "@/lib/auth";
-import { useApiState } from "@/hooks/useApiState";
-import { useDynamicPermission } from "@/hooks/useDynamicPermission";
-import { Order } from "@/types";
-const PAGE_SIZE_KEY = "orderPageSize";
-
-function StatBox({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-2xl border p-4 shadow-sm bg-white dark:bg-muted min-w-[120px] text-center">
-      <div className="text-2xl font-bold text-primary">{value}</div>
-      <div className="text-sm text-muted-foreground">{label}</div>
-    </div>
-  );
-}
-
-interface OrderFilters {
-  search: string;
-  singleDate: string;
-  statuses: string[];
-  employees: string[];
-}
 
 export default function ManagerOrderPage() {
   const [alert, setAlert] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
-  const {
-    canReadDepartment,
-    canExportInDepartment,
-    user,
-  } = useDynamicPermission();
+  
+  const { canExportInDepartment, user } = useDynamicPermission();
+  const { 
+    orders, 
+    total, 
+    filters, 
+    setFilters,
+    setPage, 
+    setPageSize, 
+    setSearch, 
+    setStatus, 
+    setDate, 
+    setEmployee, 
+    refetch,
+    resetFilters,
+    updateOrderDetail, 
+    deleteOrderDetail, // ✅ Thay đổi từ deleteOrder thành deleteOrderDetail
+    isLoading, 
+    error 
+  } = useOrders();
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(() => {
-    if (typeof window !== "undefined") {
-      const savedPageSize = localStorage.getItem(PAGE_SIZE_KEY);
-      return savedPageSize ? parseInt(savedPageSize, 10) : 10;
-    }
-    return 10;
-  });
-  const [filters, setFilters] = useState<OrderFilters>({
-    search: "",
-    singleDate: new Date().toLocaleDateString("en-CA"),
-    statuses: [],
-    employees: [],
-  });
-
-  const [initialFilters, setInitialFilters] = useState<OrderFilters | undefined>(undefined);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const filterStr = localStorage.getItem("managerOrderFilter");
-      if (filterStr) {
-        try {
-          const filter = JSON.parse(filterStr);
-          const newFilters = {
-            search: filter.search || "",
-            singleDate: filter.singleDate || new Date().toLocaleDateString("en-CA"),
-            statuses: [],
-            employees: [],
-          };
-          setFilters(newFilters);
-          setInitialFilters({ ...newFilters });
-          setPage(1);
-          setTimeout(() => {
-            setInitialFilters(undefined);
-            localStorage.removeItem("managerOrderFilter");
-          }, 500);
-        } catch (e) {
-          localStorage.removeItem("managerOrderFilter");
-        }
-      }
-    }
-  }, []);
-
-  // TODO: Thay fetchOrders bằng API thực tế cho orders
-  const fetchOrders = useCallback(async (): Promise<{ data: Order[]; total: number }> => {
-    const token = getAccessToken();
-    if (!token) throw new Error("No token available");
-    const params: Record<string, any> = {
-      page,
-      pageSize,
-      search: filters.search,
-      status: filters.statuses && filters.statuses.length > 0 ? filters.statuses[0] : undefined,
-      date: filters.singleDate,
-    };
-    const queryStr = Object.entries(params)
-      .filter(([, v]) => v !== undefined && v !== null && v !== "")
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join("&");
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders?${queryStr}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    
-    if (!res.ok) throw new Error(`Failed to fetch orders: ${res.status}`);
-    const result = await res.json();
-    
-    // Handle different response formats
-    if (Array.isArray(result)) {
-      return { data: result, total: result.length };
-    } else if (result.data && Array.isArray(result.data)) {
-      return { data: result.data, total: result.total || result.data.length };
-    } else {
-      return { data: [], total: 0 };
-    }
-  }, [page, pageSize, filters]);
-
-  const {
-    data: ordersData,
-    isLoading,
-    error,
-    forceUpdate,
-  } = useApiState(fetchOrders, { data: [], total: 0 });
-
-  const orders: Order[] = ordersData.data;
-  const total = ordersData.total;
-
+  // Available options for filters
   const statusOptions = [
     { value: "completed", label: "Đã hoàn thành" },
     { value: "pending", label: "Chờ xử lý" },
-    { value: "cancelled", label: "Đã hủy" },
+    { value: "demand", label: "Nhu cầu" },
+    { value: "quoted", label: "Đã báo giá" },
   ];
 
-  // TODO: Lấy danh sách nhân viên thực tế nếu cần
+  // TODO: Lấy danh sách nhân viên thực tế từ API
   const allEmployeeOptions: { label: string; value: string }[] = [];
 
-  // Handle filter changes
-  const handleFilterChange = useCallback((newFilters: any) => {
-    setFilters(newFilters);
+  // Convert PaginatedTable filters to useOrders filters
+  const handleFilterChange = useCallback((paginatedFilters: Filters) => {
+    // Update search
+    setSearch(paginatedFilters.search || '');
+    
+    // Update status (take first status from array)
+    setStatus(paginatedFilters.statuses.length > 0 ? paginatedFilters.statuses[0].toString() : '');
+    
+    // Update date
+    if (paginatedFilters.singleDate) {
+      const dateStr = paginatedFilters.singleDate instanceof Date ? 
+        paginatedFilters.singleDate.toLocaleDateString("en-CA") : 
+        paginatedFilters.singleDate.toString();
+      setDate(dateStr);
+    } else {
+      setDate('');
+    }
+    
+    // Update employee
+    setEmployee(paginatedFilters.employees.length > 0 ? paginatedFilters.employees[0].toString() : '');
+    
+    // Reset to page 1 when filter changes
     setPage(1);
-  }, []);
+  }, [setSearch, setStatus, setDate, setEmployee, setPage]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-  }, []);
+  }, [setPage]);
 
   const handlePageSizeChange = useCallback((newPageSize: number) => {
     setPageSize(newPageSize);
-    setPage(1);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(PAGE_SIZE_KEY, newPageSize.toString());
-    }
-  }, []);
+  }, [setPageSize]);
 
   const handleResetFilter = useCallback(() => {
-    const defaultFilters = {
-      search: "",
-      singleDate: new Date().toLocaleDateString("en-CA"),
-      statuses: [],
-      employees: [],
-    };
-    setFilters(defaultFilters);
-    setPage(1);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(PAGE_SIZE_KEY);
-    }
-    setPageSize(10);
-  }, []);
+    resetFilters();
+  }, [resetFilters]);
 
+  // ✅ Cập nhật handleEdit - nhận OrderDetail và data
+  const handleEdit = useCallback(async (orderDetail: OrderDetail, data: any) => {
+    try {
+      await updateOrderDetail(Number(orderDetail.id), {
+        status: data.status,
+        unit_price: data.unit_price,
+        customer_request_summary: data.customer_request_summary,
+        extended: data.extended,
+        notes: data.notes,
+      });
+      
+      setAlert({ type: "success", message: "Cập nhật order detail thành công!" });
+      refetch();
+    } catch (err) {
+      console.error("Error updating order detail:", err);
+      setAlert({ type: "error", message: "Lỗi khi cập nhật order detail!" });
+    }
+  }, [updateOrderDetail, refetch]);
+
+  // ✅ Cập nhật handleDelete - chỉ nhận OrderDetail và reason
+  const handleDelete = useCallback(async (orderDetail: OrderDetail, reason: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa order detail này?")) return;
+    
+    try {
+      await deleteOrderDetail(Number(orderDetail.id));
+      setAlert({ type: "success", message: "Xóa order detail thành công!" });
+      refetch();
+    } catch (err) {
+      console.error("Error deleting order detail:", err);
+      setAlert({ type: "error", message: "Lỗi khi xóa order detail!" });
+    }
+  }, [deleteOrderDetail, refetch]); // ✅ Thay đổi dependency
+
+  const handleReload = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  // Effects
   useEffect(() => {
     if (error) {
-      let errorMessage = "Lỗi khi tải dữ liệu đơn hàng!";
-      if (typeof error === "string") errorMessage = error;
-      else if (error && typeof error === "object") errorMessage = (error as any).message || String(error);
-      setAlert({ type: "error", message: errorMessage });
+      setAlert({ type: "error", message: error });
     }
   }, [error]);
 
+  // Auto hide alert after 5 seconds
+  useEffect(() => {
+    if (alert) {
+      const timer = setTimeout(() => {
+        setAlert(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [alert]);
+
   if (!user) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size={32} />
-        <span className="ml-2">Đang kiểm tra quyền truy cập...</span>
-      </div>
-    );
-  }
-
-
-  // Nếu user chưa sẵn sàng, show loading kiểm tra quyền
-  if (typeof user === "undefined" || user === null) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size={32} />
-        <span className="ml-2">Đang kiểm tra quyền truy cập...</span>
-      </div>
-    );
-  }
-
-  if (isLoading && orders.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size={32} />
-        <span className="ml-2">Đang tải dữ liệu...</span>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-lg">Loading...</div>
       </div>
     );
   }
 
   return (
     <div className="h-full overflow-hidden relative">
-      <div className="h-full overflow-y-auto overflow-x-hidden p-6">
-        <Card className="w-full max-w-full">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-xl font-bold">📦 Quản lý đơn hàng</CardTitle>
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={() => {
-                  forceUpdate();
-                }}
-                variant="outline"
-                className="text-sm"
-              >
-                🔄 Làm mới
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6 space-y-4">
-            {alert && (
-              <ServerResponseAlert
-                type={alert.type}
-                message={alert.message}
-                onClose={() => setAlert(null)}
-              />
-            )}
-            <div className="overflow-x-auto -mx-6">
-              <div className="min-w-full px-6">
-                <PaginatedTable
-                  {...(initialFilters ? { initialFilters } : {})}
-                  preserveFiltersOnEmpty={true}
-                  enableSearch={true}
-                  enableStatusFilter={true}
-                  enableSingleDateFilter={true}
-                  singleDateLabel="Ngày tạo đơn"
-                  availableStatuses={statusOptions}
-                  enableEmployeeFilter={true}
-                  availableEmployees={allEmployeeOptions}
-                  canExport={canExportInDepartment("smc")}
-                  page={page}
-                  pageSize={pageSize}
-                  total={total}
-                  enablePageSize={true}
-                  pageSizeOptions={[5, 10, 20, 50, 100]}
-                  onPageChange={handlePageChange}
-                  onPageSizeChange={handlePageSizeChange}
-                  onFilterChange={handleFilterChange}
-                  onResetFilter={handleResetFilter}
-                  buttonClassNames={{ export: "", reset: "" }}
-                  getExportData={() => ({ headers: [], data: [] })}
-                >
-                  {/* Hiển thị chi tiết từng sản phẩm trong đơn hàng */}
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead>
-                      <tr>
-                        <th className="px-2 py-2">ID</th>
-                        <th className="px-2 py-2">Gia hạn</th>
-                        <th className="px-2 py-2">T/g bắt đầu</th>
-                        <th className="px-2 py-2">T/g kết thúc</th>
-                        <th className="px-2 py-2">Nhân viên bán hàng</th>
-                        <th className="px-2 py-2">Khách hàng</th>
-                        <th className="px-2 py-2">Sản phẩm</th>
-                        <th className="px-2 py-2">Số lượng</th>
-                        <th className="px-2 py-2">Đơn giá</th>
-                        <th className="px-2 py-2">Status</th>
-                        <th className="px-2 py-2">Tóm tắt</th>
-                        
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.isArray(orders) && orders.length > 0 ? (
-                        orders.flatMap((order, orderIdx) => {
-                          if (!Array.isArray(order.details) || order.details.length === 0) return null;
-                          return order.details
-                            .filter((detail) => {
-                              // Ẩn nếu extended = 0 hoặc có deleted_at
-                              if (detail.extended === 0) return false;
-                              if (detail.deleted_at) return false;
-                              return true;
-                            })
-                            .map((detail, detailIdx) => (
-                              <tr key={`${detail.id || order.id || orderIdx}-detail-${detailIdx}`} className="border-b">
-                                <td className="px-2 py-2">{detail.id}</td>
-                                <td className="px-2 py-2">{detail.extended} ngày</td>
-                                <td className="px-2 py-2">{detail.created_at ? new Date(detail.created_at).toLocaleString("vi-VN") : ''}</td>
-                                {detail.created_at && detail.extended ? (
-                                    <td className="px-2 py-2">
-                                      {
-                                        new Date(
-                                          new Date(detail.created_at).getTime() + Number(detail.extended) * 24 * 60 * 60 * 1000
-                                        ).toLocaleString("vi-VN")
-                                      }
-                                    </td>
-                                  ) : (
-                                    <td className="px-2 py-2"></td>
-                                  )}
-                                <td className="px-2 py-2">{order.sale_by?.fullName || order.sale_by?.username || ''}</td>
-                                <td className="px-2 py-2">
-                                  {/* Ưu tiên in customer_name từ detail nếu có, nếu không thì gọi CustomerNameCell */}
-                                  {detail.customer_name || ''}
-                                </td>
-                                <td className="px-2 py-2">{detail.raw_item || ''}</td>
-                                <td className="px-2 py-2">{detail.quantity}</td>
-                                <td className="px-2 py-2">{detail.unit_price ? Number(detail.unit_price).toLocaleString() : '0'}</td>
-                                <td className="px-2 py-2">{detail.status}</td>
-                                <td className="px-2 py-2">{detail.customer_request_summary || ''}</td>
-                                
-                              </tr>
-                            ));
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan={14} className="text-center py-4 text-gray-400">Không có dữ liệu chi tiết đơn hàng</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </PaginatedTable>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {alert && (
+        <div className={`mb-4 p-4 rounded-lg border ${
+          alert.type === "error" 
+            ? "bg-red-50 text-red-700 border-red-200" 
+            : "bg-green-50 text-green-700 border-green-200"
+        }`}>
+          <div className="flex justify-between items-center">
+            <span>{alert.message}</span>
+            <button 
+              onClick={() => setAlert(null)}
+              className="ml-2 text-xl font-bold hover:opacity-70"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Card className="w-full max-w-full">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-xl font-bold">📦 Quản lý đơn hàng</CardTitle>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={handleReload}
+              className="text-sm"
+            >
+              🔄 Làm mới
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 space-y-4">
+          <PaginatedTable
+            enableSearch={true}
+            enableStatusFilter={true}
+            enableSingleDateFilter={true}
+            enableEmployeeFilter={true}
+            enablePageSize={true}
+            availableStatuses={statusOptions}
+            availableEmployees={allEmployeeOptions}
+            singleDateLabel="Ngày tạo đơn"
+            page={filters.page}
+            total={total}
+            pageSize={filters.pageSize}
+            onFilterChange={handleFilterChange}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            onResetFilter={handleResetFilter}
+            loading={isLoading}
+            canExport={canExportInDepartment && canExportInDepartment(user?.departments?.[0]?.slug || "")}
+            getExportData={() => ({
+              headers: ["Mã đơn", "Gia hạn", "Khách hàng", "Ngày tạo", "Tổng tiền", "Trạng thái", "Customer Request"],
+              // ✅ Sửa export data logic - orders giờ là OrderDetail[]
+              data: orders.map(orderDetail => [
+                orderDetail.order_id || '',
+                orderDetail.extended || '',
+                orderDetail.customer_name || '',
+                orderDetail.created_at ? new Date(orderDetail.created_at).toLocaleDateString("vi-VN") : '',
+                orderDetail.unit_price ? Number(orderDetail.unit_price).toLocaleString() : '0',
+                orderDetail.status || '',
+                orderDetail.customer_request_summary || '',
+              ])
+            })}
+            initialFilters={{
+              search: filters.search || "",
+              departments: [],
+              roles: [],
+              statuses: filters.status ? [filters.status] : [],
+              categories: [],
+              brands: [],
+              dateRange: { from: undefined, to: undefined },
+              singleDate: filters.date,
+              employees: filters.employee ? [filters.employee] : [],
+            }}
+          >
+            <OrderManagement
+              orders={orders}
+              expectedRowCount={filters.pageSize}
+              startIndex={(filters.page - 1) * filters.pageSize}
+              onReload={handleReload}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              loading={isLoading}
+            />
+          </PaginatedTable>
+        </CardContent>
+      </Card>
     </div>
   );
 }

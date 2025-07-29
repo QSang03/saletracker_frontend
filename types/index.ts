@@ -160,7 +160,10 @@ export interface Product {
 
 // Order Entity
 export interface Order {
-  id: number;
+  id: number | string;
+  conversation_id?: number | string;
+  order_history?: Record<string, any>;
+  associated_message_ids?: string[];
   order_code?: string;
   code?: string;
   order_id?: number;
@@ -186,9 +189,10 @@ export interface Order {
 
 // OrderDetail Entity
 export interface OrderDetail {
-  id: number;
-  order_id: number;
-  product_id?: number;
+  id: number | string;
+  order_id: number | string;
+  order?: Order; // ✅ Nested Order với sale_by info
+  product_id?: number | string;
   product_name?: string;
   quantity: number;
   unit_price: number | string;
@@ -199,6 +203,10 @@ export interface OrderDetail {
   total_price?: number;
   status?: string;
   note?: string;
+  notes?: string;
+  reason?: string;
+  zaloMessageId?: string;
+  metadata?: Record<string, any>;
   product?: Product;
   created_at?: string | Date;
   updated_at?: string | Date;
@@ -474,29 +482,29 @@ export type ReminderMetadataItem = {
 export type ReminderMetadata = ReminderMetadataItem[];
 
 // Campaign Form Data
-export interface CampaignFormData {
-  name: string;
-  campaign_type: CampaignType;
-  schedule_config?: DailyPromotion | WeeklyPromotion | ThreeDayPromotion;
-  messages?: PromoMessageFlow;
-  reminders?: Array<{
-    content: string;
-    minutes: number;
-  }>;
-  email_reports?: {
-    recipients_to: string;
-    recipients_cc?: string[];
-    report_interval_minutes?: number;
-    stop_sending_at_time?: string;
-    is_active: boolean;
-    send_when_campaign_completed: boolean;
-  };
-  customers?: Array<{
-    phone_number: string;
-    full_name: string;
-    salutation?: string;
-  }>;
-}
+// export interface CampaignFormData {
+//   name: string;
+//   campaign_type: CampaignType;
+//   schedule_config?: DailyPromotion | WeeklyPromotion | ThreeDayPromotion;
+//   messages?: PromoMessageFlow;
+//   reminders?: Array<{
+//     content: string;
+//     minutes: number;
+//   }>;
+//   email_reports?: {
+//     recipients_to: string;
+//     recipients_cc?: string[];
+//     report_interval_minutes?: number;
+//     stop_sending_at_time?: string;
+//     is_active: boolean;
+//     send_when_campaign_completed: boolean;
+//   };
+//   customers?: Array<{
+//     phone_number: string;
+//     full_name: string;
+//     salutation?: string;
+//   }>;
+// }
 
 // Campaign Content Types
 export interface CampaignContent {
@@ -558,4 +566,92 @@ export interface CampaignInteractionLog {
   error_message?: string;
   created_at: Date;
   updated_at: Date;
+}
+
+
+export interface CampaignFormData {
+  id?: string; // Optional id for edit mode
+  name: string;
+  campaign_type: CampaignType;
+  messages: {
+    type: "initial";
+    text: string;
+    attachment?: {
+      type: "image" | "link" | "file";
+      url?: string;
+      base64?: string;
+      filename?: string;
+    } | null;
+  };
+  schedule_config?: {
+    type: "hourly" | "3_day" | "weekly";
+    start_time?: string;
+    end_time?: string;
+    remind_after_minutes?: number;
+    days_of_week?: number[];
+    day_of_week?: number;
+    time_of_day?: string;
+  };
+  reminders?: Array<{
+    content: string;
+    minutes: number;
+  }>;
+  email_reports?: {
+    recipients_to: string;
+    recipients_cc?: string[];
+    report_interval_minutes?: number;
+    stop_sending_at_time?: string;
+    is_active: boolean;
+    send_when_campaign_completed: boolean;
+  };
+  customers?: Array<{
+    phone_number: string;
+    full_name: string;
+    salutation?: string;
+  }>;
+}
+
+export interface CampaignWithDetails extends Campaign {
+  customer_count?: number;
+  
+  messages: {
+    type: "initial";
+    text: string;
+    attachment?: {
+      type: "image" | "link" | "file";
+      url?: string;
+      base64?: string;
+      filename?: string;
+    } | null;
+  };
+  
+  schedule_config: {
+    type: "hourly" | "3_day" | "weekly";
+    start_time?: string;
+    end_time?: string;
+    remind_after_minutes?: number;
+    days_of_week?: number[];
+    day_of_week?: number;
+    time_of_day?: string;
+  };
+  
+  reminders: Array<{
+    content: string;
+    minutes: number;
+  }>;
+  
+  email_reports?: {
+    recipients_to: string;
+    recipients_cc?: string[];
+    report_interval_minutes?: number;
+    stop_sending_at_time?: string;
+    is_active: boolean;
+    send_when_campaign_completed: boolean;
+  };
+  
+  customers: Array<{
+    phone_number: string;
+    full_name: string;
+    salutation?: string;
+  }>;
 }

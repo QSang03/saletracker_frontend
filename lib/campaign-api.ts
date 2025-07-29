@@ -1,5 +1,5 @@
 import { api } from './api';
-import { Campaign, CampaignFormData, CampaignType, CampaignStatus } from '../types';
+import { Campaign, CampaignFormData, CampaignType, CampaignStatus, CampaignWithDetails } from '../types';
 
 export interface CampaignFilters {
   search?: string;
@@ -11,7 +11,7 @@ export interface CampaignFilters {
 }
 
 export interface CampaignResponse {
-  data: Campaign[];
+  data: CampaignWithDetails[];
   total: number;
   stats: {
     totalCampaigns: number;
@@ -23,9 +23,35 @@ export interface CampaignResponse {
 
 // Campaign API functions
 export const campaignAPI = {
+  // Get logs of a customer in a campaign
+  getCustomerLogs: async (campaignId: string, customerId: string) => {
+    const response = await api.get(`/campaigns/${campaignId}/customers/${customerId}/logs`);
+    return response.data;
+  },
   // Get all campaigns with filters
   getAll: async (filters: CampaignFilters = {}): Promise<CampaignResponse> => {
     const response = await api.get('/campaigns', { params: filters });
+    return response.data;
+  },
+
+  // Get customers of a campaign with filters
+  getCampaignCustomers: async (
+    campaignId: string,
+    params: { search?: string; status?: string; page?: number; limit?: number } = {}
+  ) => {
+    const response = await api.get(`/campaigns/${campaignId}/customers`, { params });
+    return response.data;
+  },
+
+  // Export customers of a campaign
+  exportCampaignCustomers: async (
+    campaignId: string,
+    params: { search?: string; status?: string } = {}
+  ) => {
+    const response = await api.get(`/campaigns/${campaignId}/customers/export`, {
+      params,
+      responseType: 'blob',
+    });
     return response.data;
   },
 

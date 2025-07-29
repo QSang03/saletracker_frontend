@@ -671,7 +671,8 @@ const DebtStatisticsDashboard: React.FC = () => {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="overview">Tổng quan</TabsTrigger>
               <TabsTrigger value="aging">Phân tích nợ quá hạn</TabsTrigger>
-              <TabsTrigger value="performance">Hiệu suất nhân viên</TabsTrigger>
+              <TabsTrigger value="promise_not_met">Phân tích trễ hẹn</TabsTrigger>
+              <TabsTrigger value="customer_responded">Phân tích khách hàng đã trả lời</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
@@ -707,14 +708,14 @@ const DebtStatisticsDashboard: React.FC = () => {
               />
             </TabsContent>
 
-            <TabsContent value="performance">
-              <EmployeePerformanceChart
-                data={employeeData}
-                loading={loading}
-                onEmployeeClick={(employee) => {
-                  // You can implement drill-down here
-                }}
-              />
+            {/* TabsContent cho các mục mới, cần cập nhật logic hiển thị phù hợp nếu có */}
+            <TabsContent value="promise_not_met">
+              {/* TODO: Thêm component hoặc nội dung cho "Khách đã hẹn nhưng không đúng hẹn" */}
+              <div className="p-4">Nội dung cho khách đã hẹn nhưng không đúng hẹn.</div>
+            </TabsContent>
+            <TabsContent value="customer_responded">
+              {/* TODO: Thêm component hoặc nội dung cho "Khách hàng đã trả lời" */}
+              <div className="p-4">Nội dung cho khách hàng đã trả lời.</div>
             </TabsContent>
           </Tabs>
 
