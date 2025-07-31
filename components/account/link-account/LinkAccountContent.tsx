@@ -513,7 +513,7 @@ export default function LinkAccountContent({
           // Chỉ gọi updateZaloLinkStatus, không gọi refreshUserToken ở đây
           updateZaloLinkStatus(
             1,
-            msg.data?.zaloUsername,
+            msg.data?.zalo_username,
             msg.data?.avatar,
             msg.data?.gender
           );

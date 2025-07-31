@@ -668,7 +668,7 @@ const DebtStatisticsDashboard: React.FC = () => {
 
           {/* Advanced Analytics Tabs */}
           <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Tổng quan</TabsTrigger>
               <TabsTrigger value="aging">Phân tích nợ quá hạn</TabsTrigger>
               <TabsTrigger value="promise_not_met">Phân tích trễ hẹn</TabsTrigger>

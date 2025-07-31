@@ -25,11 +25,20 @@ interface PaginatedTableProps {
   enableDateRangeFilter?: boolean;
   enableSingleDateFilter?: boolean;
   enablePageSize?: boolean;
-  availableDepartments?: string[];
+  availableDepartments?:
+    | string[]
+    | { value: number | string; label: string }[] // ✅ Support cả number và string
+    | readonly { readonly value: number | string; readonly label: string }[];
   availableRoles?: string[];
-  availableStatuses?: { value: string; label: string }[] | string[];
+  availableStatuses?:
+    | string[]
+    | { value: string; label: string }[]
+    | readonly { readonly value: string; readonly label: string }[];
   availableZaloLinkStatuses?: { value: string | number; label: string }[];
-  availableCategories?: string[];
+  availableCategories?:
+    | string[]
+    | { value: string; label: string }[]
+    | readonly { readonly value: string; readonly label: string }[];
   availableBrands?: string[];
   dateRangeLabel?: string;
   singleDateLabel?: string;
@@ -66,6 +75,7 @@ interface PaginatedTableProps {
   canExport?: boolean;
   onResetFilter?: () => void;
   preventEmptyFilterCall?: boolean;
+  onDepartmentChange?: (departments: (string | number)[]) => void;
 }
 
 export type Filters = {
@@ -124,45 +134,115 @@ export default function PaginatedTable({
   canExport = true,
   onResetFilter,
   preventEmptyFilterCall = true,
+  onDepartmentChange,
 }: PaginatedTableProps) {
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
   const lastFiltersRef = useRef<string>("");
   const previousTotalRef = useRef<number>(0);
 
-  const departmentOptions = useMemo(
-    () => availableDepartments.map((d) => ({ label: d, value: d })),
-    [availableDepartments]
-  );
+  const departmentOptions = useMemo(() => {
+    if (!availableDepartments || availableDepartments.length === 0) {
+      return [];
+    }
+
+    const firstItem = availableDepartments[0];
+
+    // ✅ SỬA: Kiểm tra type trước khi truy cập property
+    if (
+      typeof firstItem === "object" &&
+      firstItem !== null &&
+      "value" in firstItem &&
+      "label" in firstItem
+    ) {
+      // Nếu là array of objects {value, label}
+      return (
+        availableDepartments as Array<{ value: number; label: string }>
+      ).map((d) => ({
+        label: d.label,
+        value: d.value.toString(),
+      }));
+    } else {
+      // Nếu là array of strings
+      return (availableDepartments as string[]).map((d) => ({
+        label: d,
+        value: d,
+      }));
+    }
+  }, [availableDepartments]);
+
   const roleOptions = useMemo(
     () => availableRoles.map((r) => ({ label: r, value: r })),
     [availableRoles]
   );
-  const statusOptions = useMemo(
-    () =>
-      availableStatuses.map((s) => {
-        let label: string;
-        let value: string;
-        if (typeof s === "string") {
-          value = s;
-        } else {
-          value = s.value;
-        }
-        // Map lại label cho các trạng thái đặc biệt
-        if (value === "paid") label = "Đã thanh toán";
-        else if (value === "pay_later") label = "Đã hẹn thanh toán";
-        else if (value === "no_information_available")
-          label = "Không có thông tin";
-        else if (typeof s === "string") label = s;
-        else label = s.label;
-        return { label, value };
-      }),
-    [availableStatuses]
-  );
-  const categoryOptions = useMemo(
-    () => availableCategories.map((c) => ({ label: c, value: c })),
-    [availableCategories]
-  );
+  const statusOptions = useMemo(() => {
+    if (!availableStatuses || availableStatuses.length === 0) {
+      return [];
+    }
+
+    return availableStatuses.map((s) => {
+      let label: string;
+      let value: string;
+
+      if (typeof s === "string") {
+        value = s;
+        // Map đúng label cho string values
+        if (s === "draft") label = "Bản nháp";
+        else if (s === "scheduled") label = "Đã lên lịch";
+        else if (s === "running") label = "Đang chạy";
+        else if (s === "paused") label = "Tạm dừng";
+        else if (s === "completed") label = "Hoàn thành";
+        else if (s === "archived") label = "Đã lưu trữ";
+        else if (s === "paid") label = "Đã thanh toán";
+        else if (s === "pay_later") label = "Đã hẹn thanh toán";
+        else if (s === "no_information_available") label = "Không có thông tin";
+        else if (s === "active") label = "Đang hoạt động";
+        else if (s === "inactive") label = "Ngưng hoạt động";
+        else label = s; // Fallback
+      } else if (
+        typeof s === "object" &&
+        s !== null &&
+        "value" in s &&
+        "label" in s
+      ) {
+        // ✅ SỬA: Type assertion cho object case
+        const statusObj = s as { value: string; label: string };
+        value = statusObj.value;
+        label = statusObj.label;
+      } else {
+        // Fallback case
+        value = String(s);
+        label = String(s);
+      }
+
+      return { label, value };
+    });
+  }, [availableStatuses]);
+
+  const categoryOptions = useMemo(() => {
+    if (!availableCategories || availableCategories.length === 0) {
+      return [];
+    }
+
+    return availableCategories.map((c) => {
+      if (typeof c === "string") {
+        return { label: c, value: c };
+      } else if (
+        typeof c === "object" &&
+        c !== null &&
+        "value" in c &&
+        "label" in c
+      ) {
+        // ✅ SỬA: Type assertion để tránh lỗi TypeScript
+        const categoryObj = c as { value: string; label: string };
+        return { label: categoryObj.label, value: categoryObj.value };
+      } else {
+        // Fallback case
+        return { label: String(c), value: String(c) };
+      }
+    });
+  }, [availableCategories]);
+
   const brandOptions = useMemo(
     () => availableBrands.map((b) => ({ label: b, value: b })),
     [availableBrands]
@@ -241,14 +321,17 @@ export default function PaginatedTable({
   useEffect(() => {
     if (!isInitializedRef.current && initialFilters) {
       isInitializedRef.current = true;
-      
+
       // ✅ Set initial filters without triggering change
       const merged = { ...filters, ...initialFilters };
       setFilters(merged);
-      
+
       // ✅ Send initial filters to parent after a brief delay
       setTimeout(() => {
-        if (onFilterChange && (!preventEmptyFilterCall || !isFiltersEmpty(merged))) {
+        if (
+          onFilterChange &&
+          (!preventEmptyFilterCall || !isFiltersEmpty(merged))
+        ) {
           onFilterChange(merged);
         }
       }, 100);
@@ -354,33 +437,42 @@ export default function PaginatedTable({
     [onFilterChange, preventEmptyFilterCall, isFiltersEmpty]
   );
 
-  // handleResetFilter: reset filter, đồng thời reset page về 1 nếu là backend paging
   const handleResetFilter = useCallback(() => {
     const reset: Filters = {
       search: "",
       departments: [],
       roles: [],
       statuses: [],
-      // Thêm field mới vào reset
       zaloLinkStatuses: [],
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
-      singleDate: undefined, // Reset về undefined thay vì ngày hiện tại
+      singleDate: undefined,
       employees: [],
     };
+
     setFilters(reset);
+    setHasUserInteracted(false); // ✅ THÊM: Reset user interaction flag
+
+    // ✅ THÊM: Reset department selection trong parent component
+    if (onDepartmentChange) {
+      onDepartmentChange([]);
+    }
+
     if (onFilterChange) {
       onFilterChange(reset);
     }
+
     if (onPageChange) onPageChange(1);
     else setInternalPage(0);
+
     setPendingPageSize("");
+
     // Gọi callback reset filter ở trang cha nếu có
     if (typeof onResetFilter === "function") {
       onResetFilter();
     }
-  }, [onPageChange, onResetFilter]);
+  }, [onPageChange, onResetFilter, onFilterChange, onDepartmentChange]);
 
   useEffect(() => {
     if (totalRows !== previousTotalRef.current) {
@@ -419,9 +511,46 @@ export default function PaginatedTable({
 
   const handleDepartmentsChange = useCallback(
     (vals: (string | number)[]) => {
-      updateFilter("departments", vals);
+      let departments: (string | number)[];
+
+      if (availableDepartments && availableDepartments.length > 0) {
+        const firstItem = availableDepartments[0];
+
+        // ✅ SỬA: Kiểm tra type đúng cách
+        if (
+          typeof firstItem === "object" &&
+          firstItem !== null &&
+          "value" in firstItem
+        ) {
+          // Nếu availableDepartments là array of objects
+          const deptArray = availableDepartments as Array<{
+            value: number;
+            label: string;
+          }>;
+          departments = vals
+            .map((v) => {
+              const dept = deptArray.find(
+                (d) => d.value.toString() === v.toString()
+              );
+              return dept ? dept.value : parseInt(v.toString(), 10);
+            })
+            .filter((v) => !isNaN(Number(v)));
+        } else {
+          // Nếu availableDepartments là array of strings
+          departments = vals;
+        }
+      } else {
+        departments = vals;
+      }
+
+      updateFilter("departments", departments);
+
+      // Trigger department change callback
+      if (onDepartmentChange) {
+        onDepartmentChange(departments);
+      }
     },
-    [updateFilter]
+    [updateFilter, onDepartmentChange, availableDepartments]
   );
 
   const handleRolesChange = useCallback(
@@ -527,7 +656,7 @@ export default function PaginatedTable({
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.departments ?? ""}`}
               placeholder="Phòng ban"
-              value={filters.departments}
+              value={filters.departments.map(d => d.toString())}
               options={departmentOptions}
               onChange={handleDepartmentsChange}
             />
@@ -587,9 +716,7 @@ export default function PaginatedTable({
                   "singleDate",
                   date ? date.toLocaleDateString("en-CA") : undefined
                 )
-              } // Set undefined khi clear
-              placeholder={singleDateLabel || "Chọn ngày"}
-              className="min-w-0 w-full"
+              }
             />
           )}
           {/* Số dòng/trang nằm ngang hàng filter */}

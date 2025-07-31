@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useState, useCallback, useMemo } from "react";
-import { Campaign, CampaignFormData, CampaignStatus, CampaignWithDetails } from "@/types";
+import {
+  Campaign,
+  CampaignFormData,
+  CampaignStatus,
+  CampaignWithDetails,
+} from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,7 +50,7 @@ interface CampaignManagementProps {
   onReload: () => void;
 }
 
-// Status configuration with consistent styling
+// Status config
 const STATUS_CONFIG = {
   [CampaignStatus.DRAFT]: {
     label: "Bản nháp",
@@ -85,28 +90,91 @@ const STATUS_CONFIG = {
   },
 } as const;
 
-// Memoized status badge component
-const StatusBadge = React.memo(({ status }: { status: CampaignStatus }) => {
-  const config = STATUS_CONFIG[status] || STATUS_CONFIG[CampaignStatus.DRAFT];
+const getValidStatusTransitions = (
+  currentStatus: CampaignStatus
+): CampaignStatus[] => {
+  const validTransitions: Record<CampaignStatus, CampaignStatus[]> = {
+    [CampaignStatus.DRAFT]: [CampaignStatus.SCHEDULED],
+    [CampaignStatus.SCHEDULED]: [CampaignStatus.DRAFT],
+    [CampaignStatus.RUNNING]: [CampaignStatus.PAUSED],
+    [CampaignStatus.PAUSED]: [CampaignStatus.RUNNING],
+    [CampaignStatus.COMPLETED]: [CampaignStatus.ARCHIVED],
+    [CampaignStatus.ARCHIVED]: [],
+  };
 
-  return (
-    <Badge
-      variant={config.variant}
-      className={cn(
-        "inline-flex items-center gap-1.5 font-medium transition-all duration-200",
-        "hover:scale-105 hover:shadow-sm",
-        config.color
-      )}
-    >
-      <span className="text-xs">{config.icon}</span>
-      {config.label}
-    </Badge>
-  );
-});
+  return validTransitions[currentStatus] || [];
+};
 
-StatusBadge.displayName = "StatusBadge";
+const StatusDropdown = React.memo(
+  ({
+    status,
+    onChange,
+    loading,
+  }: {
+    status: CampaignStatus;
+    onChange: (newStatus: CampaignStatus) => void;
+    loading: boolean;
+  }) => {
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG[CampaignStatus.DRAFT];
+    const validStatuses = getValidStatusTransitions(status);
 
-// Optimized date formatter
+    // ✅ THÊM TOOLTIP GIẢI THÍCH CHO CÁC TRẠNG THÁI
+    const getStatusTooltip = (currentStatus: CampaignStatus) => {
+      switch (currentStatus) {
+        case CampaignStatus.SCHEDULED:
+          return "Bot Python sẽ tự động chuyển thành 'Đang chạy' khi đến thời gian";
+        case CampaignStatus.RUNNING:
+          return "Bot Python sẽ tự động chuyển thành 'Hoàn thành' khi kết thúc";
+        default:
+          return "";
+      }
+    };
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("h-6 gap-1 px-2 text-xs", config.color)}
+            disabled={loading}
+            title={getStatusTooltip(status)} // ✅ Thêm tooltip
+          >
+            {config.icon}
+            {config.label}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuLabel>Chuyển trạng thái</DropdownMenuLabel>
+          {validStatuses.length === 0 && (
+            <DropdownMenuItem disabled>
+              {status === CampaignStatus.ARCHIVED
+                ? "Không thể chuyển trạng thái"
+                : "Bot Python sẽ tự động xử lý"}
+            </DropdownMenuItem>
+          )}
+          {validStatuses.map((s) => {
+            const sConfig = STATUS_CONFIG[s];
+            return (
+              <DropdownMenuItem
+                key={s}
+                onClick={() => onChange(s)}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                {sConfig.icon}
+                {sConfig.label}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+);
+
+StatusDropdown.displayName = "StatusDropdown";
+
+// Date formatter
 const formatDate = (date: string | Date): string => {
   try {
     return new Intl.DateTimeFormat("vi-VN", {
@@ -121,7 +189,7 @@ const formatDate = (date: string | Date): string => {
   }
 };
 
-// Loading skeleton component
+// Loading skeleton
 const LoadingSkeleton = ({
   expectedRowCount,
 }: {
@@ -162,7 +230,7 @@ const LoadingSkeleton = ({
   </>
 );
 
-// Campaign row component
+// Campaign row
 const CampaignRow = React.memo(
   ({
     campaign,
@@ -185,9 +253,39 @@ const CampaignRow = React.memo(
 
     const canToggleStatus = useMemo(
       () =>
-        campaign.status === CampaignStatus.RUNNING ||
-        campaign.status === CampaignStatus.PAUSED,
-      [campaign.status]
+        canUpdate &&
+        (campaign.status === CampaignStatus.RUNNING ||
+          campaign.status === CampaignStatus.PAUSED),
+      [canUpdate, campaign.status]
+    );
+
+    // Thêm logic cho các trạng thái khác
+    const canSchedule = useMemo(
+      () => canUpdate && campaign.status === CampaignStatus.DRAFT,
+      [canUpdate, campaign.status]
+    );
+
+    const canBackToDraft = useMemo(
+      () => canUpdate && campaign.status === CampaignStatus.SCHEDULED,
+      [canUpdate, campaign.status]
+    );
+
+    const canEdit = useMemo(
+      () =>
+        canUpdate &&
+        (campaign.status === CampaignStatus.DRAFT ||
+          campaign.status === CampaignStatus.PAUSED),
+      [canUpdate, campaign.status]
+    );
+
+    const canDeleteCampaign = useMemo(
+      () => canDelete && campaign.status === CampaignStatus.DRAFT,
+      [canDelete, campaign.status]
+    );
+
+    const canArchiveCampaign = useMemo(
+      () => canUpdate && campaign.status === CampaignStatus.COMPLETED,
+      [canUpdate, campaign.status]
     );
 
     const canArchive = useMemo(
@@ -195,12 +293,11 @@ const CampaignRow = React.memo(
       [campaign.status]
     );
 
-    // Handle double click to show customers
+    // Show customers
     const handleDoubleClick = useCallback(() => {
       onShowCustomers(campaign);
     }, [campaign, onShowCustomers]);
 
-    // Handle campaign name click
     const handleNameClick = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -259,7 +356,18 @@ const CampaignRow = React.memo(
         </TableCell>
 
         <TableCell className="text-center">
-          <StatusBadge status={campaign.status} />
+          <StatusDropdown
+            status={campaign.status}
+            loading={isLoading}
+            onChange={(newStatus) =>
+              onAction("change-status", {
+                id: campaign.id,
+                name: campaign.name,
+                status: campaign.status,
+                newStatus,
+              } as any)
+            }
+          />
         </TableCell>
 
         <TableCell className="text-center text-sm text-gray-600">
@@ -270,7 +378,69 @@ const CampaignRow = React.memo(
         </TableCell>
 
         <TableCell className="text-center text-sm text-gray-500">
-          Chưa đặt
+          {(() => {
+            if (!campaign.start_date) return "Chưa đặt";
+            const date = new Date(campaign.start_date);
+            // Check if time is 00:00:00 (show only date)
+            if (
+              date.getHours() === 0 &&
+              date.getMinutes() === 0 &&
+              date.getSeconds() === 0
+            ) {
+              return date.toLocaleDateString("vi-VN");
+            }
+            // If only time (date part is 1970-01-01 or 0000-00-00)
+            if (
+              (date.getFullYear() === 1970 || date.getFullYear() === 0) &&
+              (date.getMonth() === 0 || date.getMonth() === -1)
+            ) {
+              return date.toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+              });
+            }
+            // Otherwise, show full date & time
+            return date.toLocaleString("vi-VN", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          })()}
+        </TableCell>
+
+        <TableCell className="text-center text-sm text-gray-500">
+          {(() => {
+            if (!campaign.end_date) return "Chưa đặt";
+            const date = new Date(campaign.end_date);
+            // Check if time is 00:00:00 (show only date)
+            if (
+              date.getHours() === 0 &&
+              date.getMinutes() === 0 &&
+              date.getSeconds() === 0
+            ) {
+              return date.toLocaleDateString("vi-VN");
+            }
+            // If only time (date part is 1970-01-01 or 0000-00-00)
+            if (
+              (date.getFullYear() === 1970 || date.getFullYear() === 0) &&
+              (date.getMonth() === 0 || date.getMonth() === -1)
+            ) {
+              return date.toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+              });
+            }
+            // Otherwise, show full date & time
+            return date.toLocaleString("vi-VN", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          })()}
         </TableCell>
 
         <TableCell className="text-center">
@@ -299,11 +469,10 @@ const CampaignRow = React.memo(
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="text-xs text-gray-500 uppercase tracking-wide">
-                Thao tác
-              </DropdownMenuLabel>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Thao tác</DropdownMenuLabel>
 
+              {/* Xem khách hàng - luôn có thể */}
               <DropdownMenuItem
                 onClick={() => onShowCustomers(campaign)}
                 className="flex items-center gap-2 cursor-pointer"
@@ -312,20 +481,19 @@ const CampaignRow = React.memo(
                 Xem khách hàng
               </DropdownMenuItem>
 
-              <DropdownMenuSeparator />
+              {/* ✅ Chỉnh sửa - CHỈ KHI DRAFT HOẶC PAUSED */}
+              {canEdit && (
+                <DropdownMenuItem
+                  onClick={() => onAction("edit", campaign)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Edit className="h-4 w-4" />
+                  Chỉnh sửa
+                </DropdownMenuItem>
+              )}
 
-              <DropdownMenuItem
-                onClick={() => onAction("edit", campaign)}
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <Edit className="h-4 w-4" />
-                Chỉnh sửa
-              </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-
-              {/* Status Toggle */}
-              {canToggleStatus && canUpdate && (
+              {/* Status Toggle cho RUNNING và PAUSED thôi */}
+              {canToggleStatus && (
                 <DropdownMenuItem
                   onClick={() => onAction("toggle", campaign)}
                   className="flex items-center gap-2 cursor-pointer"
@@ -344,8 +512,8 @@ const CampaignRow = React.memo(
                 </DropdownMenuItem>
               )}
 
-              {/* Archive */}
-              {canArchive && canUpdate && (
+              {/* ✅ Archive - CHỈ KHI COMPLETED */}
+              {canArchiveCampaign && (
                 <DropdownMenuItem
                   onClick={() => onAction("archive", campaign)}
                   className="flex items-center gap-2 cursor-pointer"
@@ -355,8 +523,8 @@ const CampaignRow = React.memo(
                 </DropdownMenuItem>
               )}
 
-              {/* Delete */}
-              {canDelete && (
+              {/* ✅ Delete - CHỈ KHI DRAFT */}
+              {canDeleteCampaign && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -391,7 +559,8 @@ export default function CampaignManagement({
   const [isCustomersModalOpen, setIsCustomersModalOpen] = useState(false);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingCampaign, setEditingCampaign] = useState<CampaignWithDetails | null>(null);
+  const [editingCampaign, setEditingCampaign] =
+    useState<CampaignWithDetails | null>(null);
   const { canAccess } = usePermission();
 
   // Handle edit action
@@ -410,7 +579,6 @@ export default function CampaignManagement({
   const handleEditSubmit = useCallback(
     async (data: CampaignFormData) => {
       try {
-        // Call API to update campaign
         await campaignAPI.update(data.id!, data);
         toast.success("Cập nhật chiến dịch thành công");
         onReload();
@@ -418,10 +586,10 @@ export default function CampaignManagement({
       } catch (error: any) {
         console.error("Error updating campaign:", error);
         const errorMessage =
-          error.response?.data?.message ||
+          error?.response?.data?.message ||
           "Có lỗi xảy ra khi cập nhật chiến dịch";
         toast.error(errorMessage);
-        throw error; // Re-throw to let modal handle loading state
+        throw error;
       }
     },
     [onReload, handleEditModalClose]
@@ -439,73 +607,118 @@ export default function CampaignManagement({
     });
   }, []);
 
-  // Handle showing customers modal
   const handleShowCustomers = useCallback((campaign: Campaign) => {
     setSelectedCampaign(campaign);
     setIsCustomersModalOpen(true);
   }, []);
 
-  // Handle closing customers modal
   const handleCloseCustomersModal = useCallback(() => {
     setIsCustomersModalOpen(false);
     setSelectedCampaign(null);
   }, []);
 
   const handleAction = useCallback(
-    async (action: string, campaign: CampaignWithDetails) => {
+    async (action: string, payload: any) => {
       const canUpdate = canAccess("chien-dich", "update");
       const canDelete = canAccess("chien-dich", "delete");
 
-      if ((action === "toggle" || action === "archive") && !canUpdate) {
+      // ✅ KIỂM TRA QUYỀN VÀ TRẠNG THÁI CHO TỪNG ACTION
+      if (action === "edit") {
+        if (!canUpdate) {
+          toast.error("Bạn không có quyền chỉnh sửa chiến dịch");
+          return;
+        }
+        if (
+          ![CampaignStatus.DRAFT, CampaignStatus.PAUSED].includes(
+            payload.status
+          )
+        ) {
+          toast.error(
+            "Chỉ có thể chỉnh sửa chiến dịch ở trạng thái bản nháp hoặc tạm dừng"
+          );
+          return;
+        }
+      }
+
+      if (action === "delete") {
+        if (!canDelete) {
+          toast.error("Bạn không có quyền xóa chiến dịch");
+          return;
+        }
+        if (payload.status !== CampaignStatus.DRAFT) {
+          toast.error("Chỉ có thể xóa chiến dịch ở trạng thái bản nháp");
+          return;
+        }
+      }
+
+      if (action === "archive") {
+        if (!canUpdate) {
+          toast.error("Bạn không có quyền lưu trữ chiến dịch");
+          return;
+        }
+        if (payload.status !== CampaignStatus.COMPLETED) {
+          toast.error("Chỉ có thể lưu trữ chiến dịch đã hoàn thành");
+          return;
+        }
+      }
+
+      if ((action === "toggle" || action === "change-status") && !canUpdate) {
         toast.error("Bạn không có quyền thực hiện thao tác này");
         return;
       }
 
-      if (action === "delete" && !canDelete) {
-        toast.error("Bạn không có quyền xóa chiến dịch");
-        return;
-      }
-
+      // Confirm delete
       if (action === "delete") {
         const confirmed = window.confirm(
-          `Bạn có chắc chắn muốn xóa chiến dịch "${campaign.name}"?`
+          `Bạn có chắc chắn muốn xóa chiến dịch "${payload.name}"?`
         );
         if (!confirmed) return;
       }
 
       try {
-        setItemLoading(campaign.id, true);
+        setItemLoading(payload.id, true);
 
         switch (action) {
-          case "toggle":
+          case "toggle": {
+            // Chỉ RUNNING <-> PAUSED (FE đã kiểm soát)
             const newStatus =
-              campaign.status === CampaignStatus.RUNNING
+              payload.status === CampaignStatus.RUNNING
                 ? CampaignStatus.PAUSED
                 : CampaignStatus.RUNNING;
-            await campaignAPI.updateStatus(campaign.id, newStatus);
+            await campaignAPI.updateStatus(payload.id, newStatus);
             toast.success(
               `Đã ${
                 newStatus === CampaignStatus.RUNNING ? "chạy" : "tạm dừng"
               } chiến dịch`
             );
             break;
+          }
 
-          case "archive":
-            await campaignAPI.updateStatus(
-              campaign.id,
-              CampaignStatus.ARCHIVED
-            );
+          case "archive": {
+            await campaignAPI.updateStatus(payload.id, CampaignStatus.ARCHIVED);
             toast.success("Đã lưu trữ chiến dịch");
             break;
+          }
 
-          case "delete":
-            await campaignAPI.delete(campaign.id);
+          case "change-status": {
+            if (!payload.newStatus || payload.newStatus === payload.status)
+              return;
+            // Fe đã validate chuyển trạng thái hợp lệ
+            await campaignAPI.updateStatus(payload.id, payload.newStatus);
+            toast.success("Đã chuyển trạng thái chiến dịch");
+            break;
+          }
+
+          case "delete": {
+            await campaignAPI.delete(payload.id);
             toast.success("Đã xóa chiến dịch");
             break;
+          }
 
-          case "edit":
-            handleEdit(campaign);
+          case "edit": {
+            handleEdit(payload);
             return;
+          }
 
           default:
             return;
@@ -515,7 +728,7 @@ export default function CampaignManagement({
       } catch (error: any) {
         console.error(`Error performing ${action}:`, error);
         const errorMessage =
-          error.response?.data?.message ||
+          error?.response?.data?.message ||
           `Có lỗi xảy ra khi ${
             action === "toggle"
               ? "thay đổi trạng thái"
@@ -523,16 +736,21 @@ export default function CampaignManagement({
               ? "lưu trữ"
               : action === "delete"
               ? "xóa"
+              : action === "change-status"
+              ? "chuyển trạng thái"
+              : action === "edit"
+              ? "chỉnh sửa"
               : "thực hiện thao tác"
           }`;
         toast.error(errorMessage);
       } finally {
-        setItemLoading(campaign.id, false);
+        setItemLoading(payload.id, false);
       }
     },
-    [onReload, setItemLoading]
+    [onReload, setItemLoading, handleEdit, canAccess]
   );
 
+  // Khoảng trống cho UI
   const emptyRows = useMemo(
     () => Math.max(0, expectedRowCount - campaigns.length),
     [expectedRowCount, campaigns.length]
@@ -550,7 +768,7 @@ export default function CampaignManagement({
               <TableHead className="font-semibold min-w-[260px] max-w-[340px] h-14 align-middle">
                 Tên Chiến Dịch
                 <div className="text-xs font-normal text-gray-500 mt-1">
-                  Click vào tên hoặc double-click để xem khách hàng
+                  Click vào Tên hoặc double-click để xem khách hàng
                 </div>
               </TableHead>
               <TableHead className="font-semibold min-w-[160px] max-w-[200px]">
@@ -558,12 +776,18 @@ export default function CampaignManagement({
               </TableHead>
               <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
                 Trạng Thái
+                <div className="text-xs font-normal text-gray-500 mt-1">
+                  Click vào để chuyển đổi trạng thái
+                </div>
               </TableHead>
               <TableHead className="text-center font-semibold min-w-[160px] max-w-[200px] h-14 align-middle">
                 Ngày Tạo
               </TableHead>
               <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
-                Ngày Bắt Đầu
+                Lịch Bắt Đầu
+              </TableHead>
+              <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
+                Lịch Kết Thúc
               </TableHead>
               <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
                 Khách Hàng
@@ -603,9 +827,7 @@ export default function CampaignManagement({
                     key={`empty-${index}`}
                     className="hover:bg-transparent"
                   >
-                    <TableCell colSpan={8} className="h-[57px] border-0">
-                      {/* Empty row to maintain table height */}
-                    </TableCell>
+                    <TableCell colSpan={8} className="h-[57px] border-0" />
                   </TableRow>
                 ))}
               </>

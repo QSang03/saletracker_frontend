@@ -403,11 +403,26 @@ export interface Campaign {
 export interface CampaignCustomer {
   id: string;
   phone_number: string;
-  full_name: string;
-  salutation?: string;
-  metadata?: Record<string, any>;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface CampaignCustomerMap {
+  campaign_id: number;
+  customer_id: number;
+  full_name: string;
+  salutation?: string;
+  added_at: Date;
+  campaign_customer: CampaignCustomer;
+}
+
+export interface CustomerWithStatus extends CampaignCustomer {
+  full_name: string;
+  salutation?: string;
+  added_at: string;
+  latest_log?: CampaignInteractionLog;
+  total_interactions: number;
+  last_interaction_at?: string;
 }
 
 export interface CampaignInteractionLog {
@@ -568,7 +583,6 @@ export interface CampaignInteractionLog {
   updated_at: Date;
 }
 
-
 export interface CampaignFormData {
   id?: string; // Optional id for edit mode
   name: string;
@@ -613,7 +627,7 @@ export interface CampaignFormData {
 
 export interface CampaignWithDetails extends Campaign {
   customer_count?: number;
-  
+
   messages: {
     type: "initial";
     text: string;
@@ -624,7 +638,7 @@ export interface CampaignWithDetails extends Campaign {
       filename?: string;
     } | null;
   };
-  
+
   schedule_config: {
     type: "hourly" | "3_day" | "weekly";
     start_time?: string;
@@ -634,12 +648,12 @@ export interface CampaignWithDetails extends Campaign {
     day_of_week?: number;
     time_of_day?: string;
   };
-  
+
   reminders: Array<{
     content: string;
     minutes: number;
   }>;
-  
+
   email_reports?: {
     recipients_to: string;
     recipients_cc?: string[];
@@ -648,10 +662,13 @@ export interface CampaignWithDetails extends Campaign {
     is_active: boolean;
     send_when_campaign_completed: boolean;
   };
-  
+
   customers: Array<{
     phone_number: string;
     full_name: string;
     salutation?: string;
   }>;
+
+  start_date?: string;
+  end_date?: string;
 }

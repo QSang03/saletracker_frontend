@@ -22,21 +22,21 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
-  Shield, 
-  AlertTriangle, 
-  Clock, 
+import {
+  MoreVertical,
+  Edit,
+  Trash2,
+  Shield,
+  AlertTriangle,
+  Clock,
   CheckCircle,
   Zap,
   Star,
-  TrendingUp
+  TrendingUp,
 } from "lucide-react";
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
-
+import { POrderDynamic } from "../POrderDynamic";
 
 interface OrderManagementProps {
   orders: OrderDetail[];
@@ -48,7 +48,6 @@ interface OrderManagementProps {
   loading?: boolean;
 }
 
-
 // ✅ Component để hiển thị text với tooltip khi cần thiết
 const TruncatedText: React.FC<{
   text: string;
@@ -58,7 +57,6 @@ const TruncatedText: React.FC<{
   if (!text || text.length <= maxLength) {
     return <span className={className}>{text || "N/A"}</span>;
   }
-
 
   return (
     <Tooltip>
@@ -74,7 +72,6 @@ const TruncatedText: React.FC<{
   );
 };
 
-
 const OrderManagement: React.FC<OrderManagementProps> = ({
   orders,
   expectedRowCount,
@@ -85,27 +82,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   loading = false,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
-  
+
   // ✅ Tính toán số dòng hiển thị thực tế
   const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
-  
+
   const [editingDetail, setEditingDetail] = useState<OrderDetail | null>(null);
-  const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(null);
+  const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(
+    null
+  );
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-
 
   const handleEditClick = (orderDetail: OrderDetail) => {
     setEditingDetail(orderDetail);
     setIsEditModalOpen(true);
   };
 
-
   const handleDeleteClick = (orderDetail: OrderDetail) => {
     setDeletingDetail(orderDetail);
     setIsDeleteModalOpen(true);
   };
-
 
   const handleEditSave = (data: Partial<OrderDetail>) => {
     if (editingDetail && onEdit) {
@@ -115,7 +111,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-
   const handleDeleteConfirm = (reason: string) => {
     if (deletingDetail && onDelete) {
       onDelete(deletingDetail, reason);
@@ -124,18 +119,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-
   const handleEditCancel = () => {
     setIsEditModalOpen(false);
     setEditingDetail(null);
   };
 
-
   const handleDeleteCancel = () => {
     setIsDeleteModalOpen(false);
     setDeletingDetail(null);
   };
-
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -147,11 +139,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         return "Đã hoàn thành";
       case "demand":
         return "Nhu cầu";
+      case "confirmed":
+        return "Đã phản hồi";
       default:
         return status || "N/A";
     }
   };
-
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -163,11 +156,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         return "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300 shadow-sm";
       case "demand":
         return "bg-gradient-to-r from-red-100 to-red-200 text-red-800 border border-red-300 shadow-sm";
+      case "confirmed":
+        return "bg-gradient-to-r from-purple-100 to-purple-200 text-purple-800 border border-purple-300 shadow-sm";
       default:
         return "bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border border-gray-300 shadow-sm";
     }
   };
-
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -179,15 +173,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         return <CheckCircle className="w-3 h-3 mr-1" />;
       case "demand":
         return <AlertTriangle className="w-3 h-3 mr-1" />;
+      case "confirmed":
+        return <Shield className="w-3 h-3 mr-1" />;
       default:
         return null;
     }
   };
 
-
   const getRowClassName = (orderDetail: OrderDetail, index: number) => {
     const extended = orderDetail.extended || 0;
-    
+
     switch (extended) {
       case 1:
         return "bg-gradient-to-r from-red-50 via-red-25 to-red-50 hover:from-red-100 hover:to-red-75 border-l-4 border-red-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
@@ -197,14 +192,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         return "bg-gradient-to-r from-emerald-50 via-emerald-25 to-emerald-50 hover:from-emerald-100 hover:to-emerald-75 border-l-4 border-emerald-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
       default:
         if (extended >= 4) {
-          return index % 2 === 0 
+          return index % 2 === 0
             ? "bg-gradient-to-r from-slate-50 via-slate-25 to-slate-50 hover:from-slate-100 hover:to-slate-75 border-l-4 border-slate-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1"
             : "bg-gradient-to-r from-gray-50 via-gray-25 to-gray-50 hover:from-gray-100 hover:to-gray-75 border-l-4 border-gray-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
         }
         return "bg-gradient-to-r from-white via-gray-25 to-white hover:from-gray-50 hover:to-gray-50 border-l-4 border-gray-300 shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
     }
   };
-
 
   const getExtendedBadgeStyle = (extended: number) => {
     switch (extended) {
@@ -222,7 +216,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-
   const getExtendedIcon = (extended: number) => {
     switch (extended) {
       case 1:
@@ -239,7 +232,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-
   if (loading) {
     return (
       <div className="space-y-2">
@@ -247,39 +239,87 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           <Table className="min-w-[1600px] table-fixed">
             <TableHeader>
               <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
-                <TableHead className="font-bold text-gray-700 w-[50px] text-center">#</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[100px] text-center">Mã đơn</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[80px] text-center">Gia hạn</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Thời gian</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Nhân viên</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Khách hàng</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[430px] text-center">Mặt hàng</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[60px] text-center">SL</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[100px] text-right">Đơn giá</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">Trạng thái</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-left">Ghi chú</TableHead>
-                <TableHead className="font-bold text-gray-700 w-[80px] text-center">Thao tác</TableHead>
+                <TableHead className="font-bold text-gray-700 w-[50px] text-center">
+                  #
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[100px] text-center">
+                  Mã đơn
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[80px] text-center">
+                  Gia hạn
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                  Thời gian
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                  Nhân viên
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                  Khách hàng
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[430px] text-center">
+                  Mặt hàng
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[60px] text-center">
+                  SL
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[100px] text-right">
+                  Đơn giá
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                  Trạng thái
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-left">
+                  Ghi chú
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[80px] text-center">
+                  Thao tác
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {/* ✅ CHỈ tạo skeleton theo actualRowCount, không phải expectedRowCount */}
               {Array.from({ length: actualRowCount }).map((_, index) => (
-                <TableRow 
-                  key={`skeleton-${index}`} 
+                <TableRow
+                  key={`skeleton-${index}`}
                   className="border-l-4 border-gray-300 bg-gradient-to-r from-gray-50 to-white rounded-lg shadow-sm my-1 animate-pulse"
                 >
-                  <TableCell className="text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-16 rounded mx-auto" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-12 rounded mx-auto" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-24 rounded mx-auto" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-20 rounded mx-auto" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-20 rounded mx-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-full rounded" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-4 w-16 rounded ml-auto" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-20 rounded mx-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24 rounded" /></TableCell>
-                  <TableCell className="text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-8 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-16 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-12 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-24 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-20 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-20 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-full rounded" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-8 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Skeleton className="h-4 w-16 rounded ml-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-20 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24 rounded" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-8 rounded mx-auto" />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -289,15 +329,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     );
   }
 
-
   return (
     <TooltipProvider>
       <style jsx>{`
-        .glow-red { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
-        .glow-amber { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); }
-        .glow-emerald { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
-        .glow-blue { box-shadow: 0 0 10px rgba(59, 130, 246, 0.3); }
-        
+        .glow-red {
+          box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        }
+        .glow-amber {
+          box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+        }
+        .glow-emerald {
+          box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+        .glow-blue {
+          box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        }
+
         .scrollbar-hide {
           -ms-overflow-style: none;
           scrollbar-width: none;
@@ -305,38 +352,62 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         .scrollbar-hide::-webkit-scrollbar {
           display: none;
         }
-        
+
         .text-truncate {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        
+
         .text-wrap {
           word-wrap: break-word;
           word-break: break-word;
           hyphens: auto;
         }
       `}</style>
-      
+
       <div className="space-y-2">
         <div className="relative">
           <div className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200">
             <Table className="min-w-[1600px] table-fixed bg-white">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
-                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-0 bg-slate-100 z-10">#</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-center">🏷️ Mã đơn</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center">⏰ Gia hạn</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">📅 Thời gian</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">👤 Nhân viên</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">🏪 Khách hàng</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[430px] text-center">🛍️ Mặt hàng</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[60px] text-center">🔢 SL</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-right">💰 Đơn giá</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">📊 Trạng thái</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">📝 Ghi chú</TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center sticky right-0 bg-slate-100 z-10">⚙️ Thao tác</TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-0 bg-slate-100 z-10">
+                    #
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-center">
+                    🏷️ Mã đơn
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center">
+                    ⏰ Gia hạn
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                    📅 Thời gian
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                    👤 Nhân viên
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                    🏪 Khách hàng
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[430px] text-center">
+                    🛍️ Mặt hàng
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[60px] text-center">
+                    🔢 SL
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-right">
+                    💰 Đơn giá
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                    📊 Trạng thái
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                    📝 Ghi chú
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center sticky right-0 bg-slate-100 z-10">
+                    ⚙️ Thao tác
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -348,16 +419,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                     >
                       <div className="flex flex-col items-center space-y-3">
                         <div className="text-6xl">📋</div>
-                        <div className="text-lg font-medium">Không có dữ liệu đơn hàng</div>
+                        <div className="text-lg font-medium">
+                          Không có dữ liệu đơn hàng
+                        </div>
                       </div>
                     </TableCell>
                   </TableRow>
                 )}
-                
+
                 {/* ✅ CHỈ hiển thị data thật có, KHÔNG tạo empty rows */}
                 {safeOrders.length > 0 &&
                   safeOrders.map((orderDetail, index) => (
-                    <TableRow 
+                    <TableRow
                       key={orderDetail.id || index}
                       className={getRowClassName(orderDetail, index)}
                     >
@@ -368,11 +441,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       </TableCell>
                       <TableCell className="text-center font-medium text-blue-700">
                         <div className="text-truncate">
-                          #{orderDetail.order_id || "N/A"}
+                          #{orderDetail.id || "N/A"}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`inline-flex items-center ${getExtendedBadgeStyle(orderDetail.extended || 0)}`}>
+                        <span
+                          className={`inline-flex items-center ${getExtendedBadgeStyle(
+                            orderDetail.extended || 0
+                          )}`}
+                        >
                           {getExtendedIcon(orderDetail.extended || 0)}
                           {orderDetail.extended || 0}
                         </span>
@@ -381,18 +458,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         <div className="text-truncate">
                           {orderDetail.created_at
                             ? typeof orderDetail.created_at === "string"
-                              ? orderDetail.created_at.split(' ')[0]
+                              ? orderDetail.created_at.split(" ")[0]
                               : orderDetail.created_at instanceof Date
-                              ? orderDetail.created_at.toLocaleDateString("vi-VN")
+                              ? orderDetail.created_at.toLocaleDateString(
+                                  "vi-VN"
+                                )
                               : ""
                             : ""}
                         </div>
                       </TableCell>
                       <TableCell className="text-center font-medium text-purple-700 text-sm">
                         <TruncatedText
-                          text={orderDetail.order?.sale_by?.fullName ||
-                                orderDetail.order?.sale_by?.username ||
-                                "N/A"}
+                          text={
+                            orderDetail.order?.sale_by?.fullName ||
+                            orderDetail.order?.sale_by?.username ||
+                            "N/A"
+                          }
                           maxLength={15}
                           className="text-truncate"
                         />
@@ -419,14 +500,21 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       <TableCell className="text-right font-bold text-green-600 text-sm">
                         <div className="text-truncate">
                           {orderDetail.unit_price
-                            ? Number(orderDetail.unit_price).toLocaleString() + "₫"
+                            ? Number(orderDetail.unit_price).toLocaleString() +
+                              "₫"
                             : "0₫"}
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(orderDetail.status || "")}`}>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                            orderDetail.status || ""
+                          )}`}
+                        >
                           {getStatusIcon(orderDetail.status || "")}
-                          <span className="text-truncate max-w-[80px]">{getStatusLabel(orderDetail.status || "")}</span>
+                          <span className="text-truncate max-w-[80px]">
+                            {getStatusLabel(orderDetail.status || "")}
+                          </span>
                         </span>
                       </TableCell>
                       <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm">
@@ -447,47 +535,58 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               <MoreVertical className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48 shadow-xl border-slate-200">
-                            <DropdownMenuItem
-                              onClick={() => handleEditClick(orderDetail)}
-                              className="hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Sửa
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteClick(orderDetail)}
-                              className="text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Xóa
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="hover:bg-purple-50 hover:text-purple-700 transition-colors">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center">
-                                    <Shield className="mr-2 h-4 w-4" />
-                                    Blacklist
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Chặn khách hàng này (Tính năng sẽ có trong tương lai)</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </DropdownMenuItem>
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-48 shadow-xl border-slate-200"
+                          >
+                            <POrderDynamic action="update">
+                              <DropdownMenuItem
+                                onClick={() => handleEditClick(orderDetail)}
+                                className="hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                Sửa
+                              </DropdownMenuItem>
+                            </POrderDynamic>
+                            <POrderDynamic action="delete">
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteClick(orderDetail)}
+                                className="text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Xóa
+                              </DropdownMenuItem>
+                            </POrderDynamic>
+                            <POrderDynamic action="update">
+                              <DropdownMenuItem className="hover:bg-purple-50 hover:text-purple-700 transition-colors">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center">
+                                      <Shield className="mr-2 h-4 w-4" />
+                                      Blacklist
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>
+                                      Chặn khách hàng này (Tính năng sẽ có trong
+                                      tương lai)
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </DropdownMenuItem>
+                            </POrderDynamic>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
-                
+
                 {/* ✅ LOẠI BỎ: Không tạo empty rows nữa */}
               </TableBody>
             </Table>
           </div>
         </div>
       </div>
-
 
       {editingDetail && (
         <EditOrderDetailModal
@@ -498,7 +597,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           loading={loading}
         />
       )}
-
 
       {deletingDetail && (
         <DeleteOrderDetailModal
@@ -512,6 +610,5 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     </TooltipProvider>
   );
 };
-
 
 export default OrderManagement;

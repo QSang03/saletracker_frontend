@@ -8,6 +8,7 @@ import PaginatedTable, { Filters } from "@/components/ui/pagination/PaginatedTab
 import OrderManagement from "@/components/order/manager-order/OrderManagement";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useOrderPermissions } from "@/hooks/useOrderPermissions";
 
 export default function ManagerOrderPage() {
   const [alert, setAlert] = useState<{
@@ -35,6 +36,13 @@ export default function ManagerOrderPage() {
     error 
   } = useOrders();
 
+  const {
+    canAccessOrderManagement,
+    canCreateOrder,
+    canImportOrder,
+    canExportOrder,
+    user: orderPermissionsUser
+  } = useOrderPermissions();
   // Available options for filters
   const statusOptions = [
     { value: "completed", label: "Đã hoàn thành" },
@@ -201,7 +209,7 @@ export default function ManagerOrderPage() {
               headers: ["Mã đơn", "Gia hạn", "Khách hàng", "Ngày tạo", "Tổng tiền", "Trạng thái", "Customer Request"],
               // ✅ Sửa export data logic - orders giờ là OrderDetail[]
               data: orders.map(orderDetail => [
-                orderDetail.order_id || '',
+                orderDetail.id || '',
                 orderDetail.extended || '',
                 orderDetail.customer_name || '',
                 orderDetail.created_at ? new Date(orderDetail.created_at).toLocaleDateString("vi-VN") : '',

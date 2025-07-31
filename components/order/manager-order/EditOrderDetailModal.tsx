@@ -33,7 +33,7 @@ const statusOptions = [
   { value: "cancelled", label: "Đã hủy" },
   { value: "demand", label: "Yêu cầu" },
   { value: "quoted", label: "Đã báo giá" },
-  { value: "confirmed", label: "Đã xác nhận" },
+  { value: "confirmed", label: "Đã phản hồi" },
 ];
 
 const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({

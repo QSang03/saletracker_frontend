@@ -17,3 +17,13 @@ export const COMPONENT_PERMISSIONS = {
     { departmentSlug: "cong-no", actions: ["read", "update", "delete"] },
   ],
 } as const;
+
+export const ORDER_PERMISSIONS = {
+  "order-table": "dynamic",
+  "order-create": "dynamic",
+  "order-edit": "dynamic", 
+  "order-delete": "dynamic",
+  "order-import": "dynamic",
+  "order-export": "dynamic",
+  "order-actions": "dynamic",
+} as const;

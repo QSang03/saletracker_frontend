@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ExcelJS from "exceljs";
 import {
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import { MultiSelectCombobox } from "@/components/ui/MultiSelectCombobox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,11 +62,17 @@ import {
   AtSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CampaignType, CampaignFormData, Campaign, CampaignWithDetails } from "@/types";
+import {
+  CampaignType,
+  CampaignFormData,
+  Campaign,
+  CampaignWithDetails,
+} from "@/types";
 import ModernTimePicker from "../common/ModernTimePicker";
 import ModernAttachmentSelector from "../common/ModernAttachmentSelector";
 import ModernDaySelector from "../common/ModernDaySelector"; // Import component mới
 import { useDebounce, useDebouncedCallback } from "@/hooks/useDebounce";
+import { campaignAPI } from "@/lib/campaign-api";
 
 type SelectionMode = "single" | "adjacent" | "multiple";
 
@@ -306,18 +313,220 @@ export default function CampaignModal({
 
   const debouncedCampaignName = useDebounce(campaignName, 300);
   const debouncedMessageContent = useDebounce(messageContent, 400);
+  const [usersWithEmail, setUsersWithEmail] = useState<
+    Array<{
+      id: number;
+      fullName: string;
+      email: string;
+      employeeCode?: string;
+    }>
+  >([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [alert, setAlert] = useState<{
+    type: "success" | "error" | "warning" | "info";
+    message: string;
+  } | null>(null);
+
+  const [alertControl, setAlertControl] = useState({
+    preventAutoClose: false,
+    forceVisible: false,
+    userCanClose: true,
+  });
+
+  const [alertDelayed, setAlertDelayed] = useState<typeof alert>(null);
+
+  // ✅ THÊM USEEFFECT ĐỂ TRACK ALERT STATE CHANGES
+  useEffect(() => {
+    console.log("🚨 [ALERT STATE] Alert state changed:", {
+      hasAlert: !!alert,
+      type: alert?.type,
+      messageLength: alert?.message?.length,
+      messagePreview: alert?.message?.substring(0, 3000),
+      timestamp: new Date().toISOString(),
+    });
+  }, [alert]);
+
+  const setAlertSafe = useCallback((alertData: typeof alert) => {
+    console.log("🔧 [SET ALERT] Setting alert with delay control:", {
+      type: alertData?.type,
+      hasMessage: !!alertData?.message,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (alertData === null) {
+      // Reset both alert and control immediately
+      setAlert(null);
+      setAlertDelayed(null);
+      setAlertControl({
+        preventAutoClose: false,
+        forceVisible: false,
+        userCanClose: true,
+      });
+      console.log("🔧 [SET ALERT] Alert and control reset");
+      return;
+    }
+
+    // ✅ SET IMMEDIATE ALERT FOR STATE TRACKING
+    setAlert(alertData);
+
+    // ✅ SET CONTROL FLAGS FIRST
+    const shouldPreventAutoClose =
+      alertData.type === "error" || alertData.type === "warning";
+    setAlertControl({
+      preventAutoClose: shouldPreventAutoClose,
+      forceVisible: true,
+      userCanClose: true,
+    });
+
+    console.log("🔧 [SET ALERT] Control set, delaying alert render:", {
+      preventAutoClose: shouldPreventAutoClose,
+      delayMs: shouldPreventAutoClose ? 3000 : 0,
+    });
+
+    // ✅ DELAY ALERT RENDERING FOR ERROR/WARNING
+    if (shouldPreventAutoClose) {
+      // Delay render để control state apply trước
+      setTimeout(() => {
+        setAlertDelayed(alertData);
+        console.log(
+          "🔧 [SET ALERT] Delayed alert rendered after control setup"
+        );
+      }, 100); // Delay 100ms để đảm bảo control state ready
+    } else {
+      // Success/info render ngay
+      setAlertDelayed(alertData);
+      console.log("🔧 [SET ALERT] Immediate alert rendered (success/info)");
+    }
+  }, []);
 
   useEffect(() => {
-    
-    if (mode === "edit" && initialData && open) {
-      loadCampaignData(initialData);
-    } else if (mode === "create" && open) {
-      resetForm();
+    console.log("🔄 [MODAL EFFECT] Modal state changed:", {
+      open,
+      hasAlert: !!alert,
+      alertType: alert?.type,
+      mode,
+    });
+
+    if (open) {
+      // Load users first, then load campaign data
+      loadUsersWithEmail().then(() => {
+        if (mode === "edit" && initialData) {
+          loadCampaignData(initialData);
+        } else if (mode === "create") {
+          // ✅ CHỈ RESET FORM KHI KHÔNG CÓ ALERT ERROR
+          if (!alert || alert.type !== "error") {
+            console.log("🔄 [MODAL EFFECT] Resetting form (no error alert)");
+            resetForm();
+          } else {
+            console.log(
+              "🔄 [MODAL EFFECT] Keeping error alert, not resetting form"
+            );
+          }
+        }
+      });
     }
-  }, [mode, initialData, open]);
+  }, [open, mode, initialData]); // ✅ Loại bỏ `alert` khỏi dependencies để tránh loop
+
+  useEffect(() => {
+    if (!open) {
+      // Cleanup khi modal đóng - KHÔNG reset alert error
+      const timer = setTimeout(() => {
+        if (mode === "create" && (!alert || alert.type !== "error")) {
+          console.log("🔄 [CLEANUP] Resetting form after modal close");
+          resetForm();
+        } else {
+          console.log("🔄 [CLEANUP] Keeping alert, not resetting form");
+        }
+      }, 200); // Đợi animation đóng modal hoàn tất
+      return () => clearTimeout(timer);
+    }
+  }, [open, mode, alert]); // ✅ Thêm alert vào dependency để check type
+
+  // ✅ SỬA LOGIC - TÁCH RIÊNG RECIPIENTS_TO RA KHỎI PHÂN LOẠI
+  useEffect(() => {
+    if (
+      mode === "edit" &&
+      initialData?.email_reports &&
+      usersWithEmail.length > 0
+    ) {
+      const { recipients_to, recipients_cc } = initialData.email_reports;
+      let primaryRecipient = "";
+
+      if (typeof recipients_to === "string" && recipients_to.trim()) {
+        const firstEmail = recipients_to.split(",")[0]?.trim();
+        primaryRecipient = firstEmail || "";
+      }
+
+      setRecipientsTo(primaryRecipient);
+
+      const remainingEmails: string[] = [];
+
+      if (typeof recipients_to === "string" && recipients_to.trim()) {
+        const allToEmails = recipients_to
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean);
+
+        if (allToEmails.length > 1) {
+          remainingEmails.push(...allToEmails.slice(1));
+        }
+      }
+
+      if (Array.isArray(recipients_cc)) {
+        const ccEmails = recipients_cc.map((e) => e.trim()).filter(Boolean);
+        remainingEmails.push(...ccEmails);
+      }
+
+      const normalizedSystem = usersWithEmail.map((u) =>
+        u.email.trim().toLowerCase()
+      );
+
+      const systemEmails: string[] = [];
+      const externalEmails: string[] = [];
+
+      remainingEmails.forEach((email, index) => {
+        const normalizedEmail = email.trim().toLowerCase();
+        const isSystem = normalizedSystem.includes(normalizedEmail);
+
+        if (isSystem) {
+          systemEmails.push(email);
+        } else {
+          externalEmails.push(email);
+        }
+      });
+
+      /*-----------------------------------------------------------
+      4. SET VÀO UI
+    -----------------------------------------------------------*/
+      // System emails → MultiSelectCombobox
+      setRecipientsCc(systemEmails);
+
+      setCustomEmails(
+        externalEmails.length > 0 ? [...externalEmails, ""] : [""]
+      );
+    }
+  }, [usersWithEmail, mode, initialData]);
+
+  useEffect(() => {
+    if (open) {
+      loadUsersWithEmail();
+    }
+  }, [open]);
+
+  const loadUsersWithEmail = async () => {
+    try {
+      setLoadingUsers(true);
+      const users = await campaignAPI.getUsersWithEmail();
+      setUsersWithEmail(users);
+    } catch (error) {
+      console.error("Error loading users with email:", error);
+      setUsersWithEmail([]);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   const loadCampaignData = (campaign: CampaignWithDetails) => {
-    
     setCampaignName(campaign.name);
     setSelectedType(campaign.campaign_type);
 
@@ -331,7 +540,10 @@ export default function CampaignModal({
       setAttachmentType(campaign.messages.attachment.type);
       if (campaign.messages.attachment.type === "link") {
         setAttachmentData(campaign.messages.attachment.url || "");
-      } else if (campaign.messages.attachment.type === "image" || campaign.messages.attachment.type === "file") {
+      } else if (
+        campaign.messages.attachment.type === "image" ||
+        campaign.messages.attachment.type === "file"
+      ) {
         setAttachmentData(campaign.messages.attachment.base64 || "");
       }
     }
@@ -351,9 +563,12 @@ export default function CampaignModal({
         setTimeOfDay(config.time_of_day || "");
       }
     } else {
-      console.warn('No schedule_config found'); // Debug log
+      console.warn("No schedule_config found"); // Debug log
       // Set default values based on campaign type
-      if (campaign.campaign_type === CampaignType.HOURLY_KM || campaign.campaign_type === CampaignType.DAILY_KM) {
+      if (
+        campaign.campaign_type === CampaignType.HOURLY_KM ||
+        campaign.campaign_type === CampaignType.DAILY_KM
+      ) {
         setStartTime("");
         setEndTime("");
       } else {
@@ -374,29 +589,12 @@ export default function CampaignModal({
     if (campaign.email_reports) {
       const reports = campaign.email_reports;
 
-      // Split recipients
-      const allRecipients = reports.recipients_to?.split(", ") || [];
-      if (allRecipients.length > 0) {
-        setRecipientsTo(allRecipients[0] || "");
-        if (allRecipients.length > 1) {
-          setCustomEmails(allRecipients.slice(1));
-        } else {
-          setCustomEmails([""]);
-        }
-      } else {
-        setRecipientsTo("");
-        setCustomEmails([""]);
-      }
-
-      setRecipientsCc(reports.recipients_cc || []);
       setReportInterval((reports.report_interval_minutes || 60).toString());
-      setStopSendingTime(reports.stop_sending_at_time || "");
+      setStopSendingTime(
+        reports.stop_sending_at_time?.replace(":00", "") || ""
+      );
     } else {
-      console.warn('No email_reports found'); // Debug log
-      // Reset email settings to default
-      setRecipientsTo("");
-      setCustomEmails([""]);
-      setRecipientsCc([]);
+      console.warn("No email_reports found");
       setReportInterval("60");
       setStopSendingTime("");
     }
@@ -426,28 +624,28 @@ export default function CampaignModal({
 
   // Tab navigation logic
   const canProceedFromTab1 = Boolean(campaignName?.trim() && selectedType);
-  
+
   // For edit mode, allow proceeding to tab 2 even if some data is missing
   const canProceedFromTab2 = Boolean(
     mode === "edit" || // Allow proceeding in edit mode
-    (messageContent?.trim() &&
-      (selectedType === CampaignType.HOURLY_KM ||
-      selectedType === CampaignType.DAILY_KM
-        ? startTime && endTime
-        : selectedType === CampaignType.THREE_DAY_KM
-        ? Array.isArray(selectedDays)
-          ? selectedDays.length > 0 && timeOfDay
-          : selectedDays && timeOfDay
-        : selectedType === CampaignType.WEEKLY_SP ||
-          selectedType === CampaignType.WEEKLY_BBG
-        ? selectedDays && timeOfDay
-        : false))
+      (messageContent?.trim() &&
+        (selectedType === CampaignType.HOURLY_KM ||
+        selectedType === CampaignType.DAILY_KM
+          ? startTime && endTime
+          : selectedType === CampaignType.THREE_DAY_KM
+          ? Array.isArray(selectedDays)
+            ? selectedDays.length > 0 && timeOfDay
+            : selectedDays && timeOfDay
+          : selectedType === CampaignType.WEEKLY_SP ||
+            selectedType === CampaignType.WEEKLY_BBG
+          ? selectedDays && timeOfDay
+          : false))
   );
-  
+
   const needsReminderTab =
     selectedType === CampaignType.HOURLY_KM ||
     selectedType === CampaignType.DAILY_KM;
-    
+
   // For edit mode, allow proceeding to tab 3 even if some data is missing
   const canProceedFromTab3 =
     mode === "edit" || // Allow proceeding in edit mode
@@ -467,28 +665,47 @@ export default function CampaignModal({
     return steps.indexOf(currentTab) + 1;
   };
 
-  // Reset form
   const resetForm = () => {
+    console.log("🔄 [RESET FORM] Called - Current alert:", alert?.type);
+
+    // Reset theo thứ tự để tránh conflict
     setCurrentTab("basic");
     setCampaignName("");
     setSelectedType("");
     setStartTime("");
     setEndTime("");
+    setSelectedDays([]);
+    setDaySelectionMode("single");
+    setIncludeSaturday(true);
+    setTimeOfDay("");
     setMessageContent("");
     setAttachmentType(null);
     setAttachmentData("");
-    setSelectedDays([]);
-    setDaySelectionMode("single");
-    setIncludeSaturday(false);
-    setTimeOfDay("");
     setReminders([{ content: "", minutes: 30 }]);
-    setRecipientsTo("");
-    setRecipientsCc([]);
+
+    // ✅ QUAN TRỌNG: Reset email states theo thứ tự đúng
+    setRecipientsTo(""); // Reset TO trước
+    setRecipientsCc([]); // Sau đó reset CC
+    setCustomEmails([""]); // Cuối cùng reset custom emails
     setReportInterval("60");
     setStopSendingTime("");
-    setCustomEmails([""]);
     setCustomerFile(null);
     setUploadedCustomers([]);
+    setIsSubmitting(false);
+    setShowSuccess(false);
+
+    // ✅ CHỈ RESET ALERT KHI KHÔNG PHẢI ERROR VÀ WARNING
+    if (!alert || (alert.type !== "error" && alert.type !== "warning")) {
+      console.log("🔄 [RESET FORM] Resetting alert safely");
+      setAlert(null);
+      setAlertControl({
+        preventAutoClose: false,
+        forceVisible: false,
+        userCanClose: true,
+      });
+    } else {
+      console.log("🔄 [RESET FORM] Keeping alert (error/warning)");
+    }
   };
 
   // Handle tab change with animation
@@ -498,7 +715,7 @@ export default function CampaignModal({
       setCurrentTab(tab);
       return;
     }
-    
+
     // Create mode validation
     if (tab === "schedule" && !canProceedFromTab1) return;
     if (tab === "reminders" && !canProceedFromTab2) return;
@@ -541,10 +758,12 @@ export default function CampaignModal({
   // Helper functions (same as before)
   const addReminder = () =>
     setReminders((prev) => [...prev, { content: "", minutes: 30 }]);
+
   const removeReminder = (index: number) => {
     if (reminders.length > 1)
       setReminders(reminders.filter((_, i) => i !== index));
   };
+
   const updateReminder = (
     index: number,
     field: keyof ReminderItem,
@@ -558,136 +777,661 @@ export default function CampaignModal({
   };
 
   const addCustomEmail = () => setCustomEmails((prev) => [...prev, ""]);
+
   const removeCustomEmail = (index: number) => {
     if (customEmails.length > 1)
       setCustomEmails(customEmails.filter((_, i) => i !== index));
   };
+
   const updateCustomEmail = (index: number, value: string) => {
     setCustomEmails(
       customEmails.map((email, i) => (i === index ? value : email))
     );
   };
 
-  const handleCustomerFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    setCustomerFile(file);
-    
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const arrayBuffer = await file.arrayBuffer();
-      await workbook.xlsx.load(arrayBuffer);
-      
-      const worksheet = workbook.getWorksheet(1); // Lấy sheet đầu tiên
-      if (!worksheet) {
-        console.error('Không tìm thấy worksheet');
-        return;
-      }
-      
-      const customers: Array<{ phone_number: string; full_name: string; salutation?: string }> = [];
-      
-      // Bỏ qua dòng đầu tiên (header) và đọc từ dòng 2
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header row
-        
-        const phoneNumber = row.getCell(1).value?.toString().trim() || "";
-        const fullName = row.getCell(2).value?.toString().trim() || "";
-        const salutation = row.getCell(3).value?.toString().trim() || "";
-        
-        if (phoneNumber && fullName) {
-          customers.push({
-            phone_number: phoneNumber,
-            full_name: fullName,
-            salutation: salutation,
-          });
-        }
+  const handleCloseAlert = useCallback(() => {
+    console.log("🔔 [ALERT] Close attempt (delayed version):", {
+      preventAutoClose: alertControl.preventAutoClose,
+      alertType: alert?.type,
+      userCanClose: alertControl.userCanClose,
+      hasDelayedAlert: !!alertDelayed,
+      timestamp: new Date().toISOString(),
+    });
+
+    // ✅ CHỈ ĐÓNG KHI KHÔNG PREVENT AUTO-CLOSE
+    if (!alertControl.preventAutoClose) {
+      console.log("🔔 [ALERT] Allowing close (success/info type)");
+      setAlert(null);
+      setAlertDelayed(null);
+      setAlertControl({
+        preventAutoClose: false,
+        forceVisible: false,
+        userCanClose: true,
       });
-      
-      setUploadedCustomers(customers);
-    } catch (error) {
-      console.error('Error reading Excel file:', error);
-      // Fallback to CSV reading for backward compatibility
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        const lines = text.split("\n");
-        const customers = lines
+    } else {
+      console.log("🔔 [ALERT] BLOCKED auto-close for error/warning");
+      // ✅ QUAN TRỌNG: Không làm gì, giữ cả alert và alertDelayed
+    }
+  }, [alertControl, alert?.type, alertDelayed]);
+
+  const handleManualCloseAlert = useCallback(() => {
+    console.log("🔔 [ALERT] Manual close by user button");
+    setAlert(null);
+    setAlertDelayed(null);
+    setAlertControl({
+      preventAutoClose: false,
+      forceVisible: false,
+      userCanClose: true,
+    });
+  }, []);
+
+  useEffect(() => {
+    console.log("🎛️ [ALERT DELAYED] Delayed alert state changed:", {
+      hasAlert: !!alert,
+      hasDelayedAlert: !!alertDelayed,
+      alertType: alert?.type,
+      delayedType: alertDelayed?.type,
+      preventAutoClose: alertControl.preventAutoClose,
+      timestamp: new Date().toISOString(),
+    });
+  }, [alert, alertDelayed, alertControl]);
+
+  const handleCSVFallback = useCallback(
+    async (file: File, originalExcelError: any): Promise<boolean> => {
+      console.log("🔄 [CSV FALLBACK] Starting CSV fallback", {
+        fileName: file.name,
+        fileSize: file.size,
+        originalError: originalExcelError?.message || "Unknown",
+      });
+
+      try {
+        const text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || "");
+          reader.onerror = () => reject(new Error("FileReader failed"));
+          reader.readAsText(file);
+        });
+
+        console.log("📝 [CSV FALLBACK] File content loaded", {
+          hasText: !!text,
+          textLength: text?.length || 0,
+        });
+
+        // Check empty file
+        if (!text || text.trim() === "") {
+          setAlertSafe({
+            type: "error",
+            message: `❌ Lỗi đọc file!
+
+📋 Excel: ${
+              originalExcelError instanceof Error
+                ? originalExcelError.message
+                : "Không đọc được"
+            }
+📋 CSV: File trống hoặc không hợp lệ
+
+💡 Vui lòng:
+• Kiểm tra file có đúng định dạng không
+• Thử tải file mẫu và làm lại
+• Đảm bảo file không bị hỏng`,
+          });
+          return false;
+        }
+
+        const lines = text.split("\n").filter((line) => line.trim());
+        if (lines.length === 0) {
+          setAlertSafe({
+            type: "error",
+            message: `❌ File không có dữ liệu!
+
+📋 Excel: ${
+              originalExcelError instanceof Error
+                ? originalExcelError.message
+                : "Không đọc được"
+            }
+📋 CSV: Không có dòng dữ liệu hợp lệ
+
+💡 Vui lòng kiểm tra lại file và thử lại!`,
+          });
+          return false;
+        }
+
+        // Parse CSV headers
+        const header = lines[0].split(",").map((h) => h.trim().toUpperCase());
+        const csvFoundHeaders = header.map((h, idx) => h || `CỘT ${idx + 1}`);
+
+        let fullNameIdx = -1,
+          phoneNumberIdx = -1,
+          salutationIdx = -1;
+        header.forEach((h, idx) => {
+          if (h === "TÊN KHÁCH HÀNG") fullNameIdx = idx;
+          if (h === "SỐ ĐIỆN THOẠI") phoneNumberIdx = idx;
+          if (h === "NGƯỜI LIÊN HỆ") salutationIdx = idx;
+        });
+
+        // Check required headers
+        const csvMissingHeaders: string[] = [];
+        if (fullNameIdx === -1) csvMissingHeaders.push("TÊN KHÁCH HÀNG");
+        if (phoneNumberIdx === -1) csvMissingHeaders.push("SỐ ĐIỆN THOẠI");
+
+        if (csvMissingHeaders.length > 0) {
+          setAlertSafe({
+            type: "error",
+            message: `❌ Cả Excel và CSV đều sai định dạng header!
+
+📋 Excel: ${
+              originalExcelError instanceof Error
+                ? originalExcelError.message
+                : "Không đọc được"
+            }
+📋 CSV thiếu cột: ${csvMissingHeaders.join(", ")}
+
+🔍 Header CSV hiện tại: ${csvFoundHeaders.join(", ")}
+
+✅ Header cần có:
+• TÊN KHÁCH HÀNG (bắt buộc)
+• SỐ ĐIỆN THOẠI (bắt buộc)
+• NGƯỜI LIÊN HỆ (tùy chọn)
+
+💡 Vui lòng tải file mẫu và làm theo đúng định dạng!`,
+          });
+          return false;
+        }
+
+        // Parse customer data
+        const csvCustomers = lines
           .slice(1)
           .map((line) => {
             const columns = line.split(",");
+            const fullName =
+              fullNameIdx >= 0 ? columns[fullNameIdx]?.trim() || "" : "";
+            const phoneNumber =
+              phoneNumberIdx >= 0 ? columns[phoneNumberIdx]?.trim() || "" : "";
+            const salutation =
+              salutationIdx >= 0 ? columns[salutationIdx]?.trim() || "" : "";
+
             return {
-              phone_number: columns[0]?.trim() || "",
-              full_name: columns[1]?.trim() || "",
-              salutation: columns[2]?.trim() || "",
+              phone_number: phoneNumber,
+              full_name: fullName,
+              salutation,
             };
           })
           .filter((customer) => customer.phone_number && customer.full_name);
-        setUploadedCustomers(customers);
-      };
-      reader.readAsText(file);
-    }
-  };
 
-  const downloadSampleFile = async () => {
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Danh sách khách hàng');
-      
-      // Thiết lập header
-      worksheet.columns = [
-        { header: 'phone_number', key: 'phone_number', width: 15 },
-        { header: 'full_name', key: 'full_name', width: 25 },
-        { header: 'salutation', key: 'salutation', width: 10 }
+        if (csvCustomers.length === 0) {
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không có dữ liệu hợp lệ!
+
+📋 Excel: ${
+              originalExcelError instanceof Error
+                ? originalExcelError.message
+                : "Không đọc được"
+            }
+📋 CSV: Có dữ liệu nhưng không hợp lệ
+
+💡 Vui lòng kiểm tra:
+• Các dòng dữ liệu có đầy đủ thông tin không?
+• Định dạng số điện thoại và tên có chính xác không?`,
+          });
+          return false;
+        }
+
+        // Success - Import CSV
+        setUploadedCustomers(csvCustomers);
+        setAlertSafe({
+          type: "warning",
+          message: `⚠️ Excel lỗi nhưng đã import CSV thành công!
+
+✅ Import thành công ${csvCustomers.length} khách hàng từ CSV
+
+ℹ️ Lỗi Excel: ${
+            originalExcelError instanceof Error
+              ? originalExcelError.message
+              : "Không đọc được"
+          }
+
+💡 Khuyến nghị: Sử dụng file Excel (.xlsx) để có hiệu suất tốt hơn!`,
+        });
+
+        console.log("✅ [CSV FALLBACK] CSV import successful", {
+          customerCount: csvCustomers.length,
+        });
+        return true;
+      } catch (error) {
+        console.error("💥 [CSV FALLBACK] Failed:", error);
+        setAlertSafe({
+          type: "error",
+          message: `❌ Lỗi nghiêm trọng khi xử lý file!
+
+📋 Excel: ${
+            originalExcelError instanceof Error
+              ? originalExcelError.message
+              : "Không đọc được"
+          }
+📋 CSV: ${error instanceof Error ? error.message : "Không xử lý được"}
+
+💡 Vui lòng:
+• Kiểm tra file có bị hỏng không
+• Thử tải file mẫu và làm lại
+• Liên hệ hỗ trợ nếu vẫn lỗi`,
+        });
+        return false;
+      }
+    },
+    [setAlertSafe]
+  );
+
+  const handleCustomerFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      console.log("📁 [FILE UPLOAD] Upload started");
+
+      const file = event.target.files?.[0];
+      if (!file) {
+        console.log("❌ [FILE UPLOAD] No file selected");
+        return;
+      }
+
+      console.log("📋 [FILE UPLOAD] File info", {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: new Date(file.lastModified).toISOString(),
+      });
+
+      // ✅ VALIDATION FILE TRƯỚC KHI XỬ LÝ
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const allowedTypes = [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+        "application/vnd.ms-excel", // .xls
+        "text/csv",
+        "application/csv",
       ];
-      
-      // Thêm dữ liệu mẫu
-      worksheet.addRow({
-        phone_number: '0123456789',
-        full_name: 'Nguyễn Văn A',
-        salutation: 'Anh'
-      });
-      
-      worksheet.addRow({
-        phone_number: '0987654321',
-        full_name: 'Trần Thị B',
-        salutation: 'Chị'
-      });
-      
-      // Style header row
-      const headerRow = worksheet.getRow(1);
-      headerRow.font = { bold: true };
-      headerRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE0E0E0' }
-      };
-      
-      // Generate buffer và download
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "mau_danh_sach_khach_hang.xlsx";
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error creating Excel file:', error);
-    }
+
+      if (file.size > maxSize) {
+        console.log("❌ [FILE UPLOAD] File too large");
+        setAlertSafe({
+          type: "error",
+          message: `❌ File quá lớn!
+
+📊 Kích thước file: ${(file.size / 1024 / 1024).toFixed(2)}MB
+📊 Giới hạn cho phép: 10MB
+
+💡 Vui lòng:
+• Giảm số lượng khách hàng trong file
+• Nén file trước khi upload
+• Chia nhỏ file thành nhiều phần`,
+        });
+        event.target.value = "";
+        return;
+      }
+
+      if (
+        !allowedTypes.includes(file.type) &&
+        !file.name.toLowerCase().match(/\.(xlsx|xls|csv)$/)
+      ) {
+        console.log("❌ [FILE UPLOAD] Invalid file type");
+        setAlertSafe({
+          type: "error",
+          message: `❌ Định dạng file không được hỗ trợ!
+
+📋 File hiện tại: ${file.type || "Không xác định"}
+📋 Tên file: ${file.name}
+
+✅ Định dạng được hỗ trợ:
+• Excel (.xlsx, .xls)
+• CSV (.csv)
+
+💡 Vui lòng chọn file đúng định dạng!`,
+        });
+        event.target.value = "";
+        return;
+      }
+
+      setCustomerFile(file);
+      console.log("🔄 [FILE UPLOAD] Resetting alert");
+      setAlertSafe(null); // Reset alert
+
+      try {
+        console.log("📊 [FILE UPLOAD] Starting Excel processing");
+        const workbook = new ExcelJS.Workbook();
+        const arrayBuffer = await file.arrayBuffer();
+        console.log(
+          "📊 [FILE UPLOAD] ArrayBuffer loaded, size:",
+          arrayBuffer.byteLength
+        );
+
+        await workbook.xlsx.load(arrayBuffer);
+        console.log("📊 [FILE UPLOAD] Excel workbook loaded successfully");
+
+        const worksheet = workbook.getWorksheet(1);
+        if (!worksheet) {
+          console.log("❌ [FILE UPLOAD] No worksheet found - Setting alert");
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không tìm thấy worksheet trong file Excel!
+
+📋 File: ${file.name}
+📋 Loại: ${file.type}
+
+💡 Vui lòng:
+• Đảm bảo file Excel có ít nhất 1 sheet
+• Thử mở file bằng Excel để kiểm tra
+• Tải file mẫu và làm theo đúng định dạng`,
+          });
+          setCustomerFile(null);
+          setUploadedCustomers([]);
+          event.target.value = "";
+          console.log("✅ [FILE UPLOAD] No worksheet alert set, returning");
+          return;
+        }
+
+        console.log("📊 [FILE UPLOAD] Worksheet found, processing data");
+
+        const customers: Array<{
+          phone_number: string;
+          full_name: string;
+          salutation?: string;
+        }> = [];
+
+        // ✅ KIỂM TRA WORKSHEET CÓ DỮ LIỆU KHÔNG
+        if (worksheet.rowCount <= 1) {
+          console.log("❌ [FILE UPLOAD] Empty worksheet");
+          setAlertSafe({
+            type: "error",
+            message: `❌ Worksheet trống!
+
+📋 File: ${file.name}
+📋 Số dòng: ${worksheet.rowCount}
+
+💡 Vui lòng:
+• Đảm bảo file có dữ liệu (ít nhất 2 dòng)
+• Dòng 1: Tiêu đề cột
+• Dòng 2+: Dữ liệu khách hàng`,
+          });
+          setCustomerFile(null);
+          setUploadedCustomers([]);
+          event.target.value = "";
+          return;
+        }
+
+        // Read headers
+        const headerRow = worksheet.getRow(1);
+        let fullNameCol = 0,
+          phoneNumberCol = 0,
+          salutationCol = 0;
+        const foundHeaders: string[] = [];
+
+        headerRow.eachCell((cell, colNumber) => {
+          const value = cell.value?.toString().trim().toUpperCase();
+          foundHeaders.push(value || `CỘT ${colNumber}`);
+
+          if (value === "TÊN KHÁCH HÀNG") fullNameCol = colNumber;
+          if (value === "SỐ ĐIỆN THOẠI") phoneNumberCol = colNumber;
+          if (value === "NGƯỜI LIÊN HỆ") salutationCol = colNumber;
+        });
+
+        console.log("🔍 [FILE UPLOAD] Header analysis", {
+          foundHeaders,
+          fullNameCol,
+          phoneNumberCol,
+          salutationCol,
+          totalColumns: foundHeaders.length,
+        });
+
+        // Check required headers
+        const missingHeaders: string[] = [];
+        if (!fullNameCol) missingHeaders.push("TÊN KHÁCH HÀNG");
+        if (!phoneNumberCol) missingHeaders.push("SỐ ĐIỆN THOẠI");
+
+        if (missingHeaders.length > 0) {
+          console.log(
+            "❌ [FILE UPLOAD] Missing headers detected - Setting alert",
+            {
+              missingHeaders,
+              foundHeaders,
+            }
+          );
+
+          setAlertSafe({
+            type: "error",
+            message: `❌ Sai định dạng header! Thiếu cột: ${missingHeaders.join(
+              ", "
+            )}
+
+📋 File: ${file.name}
+🔍 Header hiện tại: ${foundHeaders.join(", ")}
+
+✅ Header cần có:
+• TÊN KHÁCH HÀNG (bắt buộc)
+• SỐ ĐIỆN THOẠI (bắt buộc) 
+• NGƯỜI LIÊN HỆ (tùy chọn)
+
+💡 Vui lòng:
+• Tải file mẫu để xem định dạng chuẩn
+• Đảm bảo dòng đầu tiên là tiêu đề cột
+• Sử dụng chính xác tên cột như trên`,
+          });
+
+          setCustomerFile(null);
+          setUploadedCustomers([]);
+          event.target.value = "";
+          console.log("✅ [FILE UPLOAD] Missing headers alert set, returning");
+          return;
+        }
+
+        // Read data with progress tracking
+        let validCustomers = 0;
+        let invalidRows: string[] = [];
+        let processedRows = 0;
+        const totalDataRows = worksheet.rowCount - 1; // Excluding header
+
+        console.log("📊 [FILE UPLOAD] Starting data processing", {
+          totalRows: worksheet.rowCount,
+          totalDataRows,
+          headerRow: 1,
+        });
+
+        worksheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return; // Skip header row
+
+          processedRows++;
+          const fullName =
+            row.getCell(fullNameCol).value?.toString().trim() || "";
+          const phoneNumber =
+            row.getCell(phoneNumberCol).value?.toString().trim() || "";
+          const salutation = salutationCol
+            ? row.getCell(salutationCol).value?.toString().trim() || ""
+            : "";
+
+          // ✅ VALIDATION DỮ LIỆU CHI TIẾT HỚN
+          const validationErrors = [];
+
+          if (!fullName) validationErrors.push("Tên");
+          if (!phoneNumber) validationErrors.push("SĐT");
+
+          // Validate phone number format (basic)
+          if (
+            phoneNumber &&
+            !/^[0-9+\-\s()]{8,15}$/.test(phoneNumber.replace(/\s/g, ""))
+          ) {
+            validationErrors.push("SĐT không hợp lệ");
+          }
+
+          if (validationErrors.length === 0) {
+            customers.push({
+              phone_number: phoneNumber,
+              full_name: fullName,
+              salutation,
+            });
+            validCustomers++;
+          } else {
+            invalidRows.push(
+              `Dòng ${rowNumber}: ${validationErrors.join(", ")}`
+            );
+          }
+
+          // Log progress every 100 rows
+          if (processedRows % 100 === 0) {
+            console.log(
+              `📊 [FILE UPLOAD] Processing progress: ${processedRows}/${totalDataRows} rows`
+            );
+          }
+        });
+
+        console.log("👥 [FILE UPLOAD] Data processing complete", {
+          validCustomers,
+          invalidRowsCount: invalidRows.length,
+          totalCustomers: customers.length,
+          processedRows,
+          totalDataRows,
+        });
+
+        if (customers.length === 0) {
+          console.log("❌ [FILE UPLOAD] No valid data - Setting alert");
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không có dữ liệu hợp lệ!
+
+📊 Tổng số dòng xử lý: ${processedRows}
+📊 Dòng hợp lệ: 0
+📊 Dòng lỗi: ${invalidRows.length}
+
+🔍 Chi tiết lỗi:
+${invalidRows.slice(0, 5).join("\n")}
+${invalidRows.length > 5 ? `\n... và ${invalidRows.length - 5} dòng khác` : ""}
+
+💡 Vui lòng:
+• Kiểm tra dữ liệu trong file
+• Đảm bảo có đủ thông tin Tên và SĐT
+• Kiểm tra định dạng số điện thoại`,
+          });
+          setCustomerFile(null);
+          setUploadedCustomers([]);
+          event.target.value = "";
+          console.log("✅ [FILE UPLOAD] No valid data alert set, returning");
+          return;
+        }
+
+        // ✅ SUCCESS - THÔNG BÁO CHI TIẾT HƠN
+        console.log("✅ [FILE UPLOAD] Excel processing successful");
+        setUploadedCustomers(customers);
+
+        if (invalidRows.length > 0) {
+          console.log("⚠️ [FILE UPLOAD] Success with warnings - Setting alert");
+          setAlertSafe({
+            type: "warning",
+            message: `⚠️ Import thành công với cảnh báo!
+
+✅ Import thành công: ${validCustomers} khách hàng
+⚠️ Bỏ qua: ${invalidRows.length} dòng lỗi
+📊 Tỷ lệ thành công: ${Math.round(
+              (validCustomers / (validCustomers + invalidRows.length)) * 100
+            )}%
+
+🔍 Chi tiết dòng lỗi:
+${invalidRows.slice(0, 3).join("\n")}
+${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : ""}
+
+💡 Bạn có thể tiếp tục hoặc sửa lỗi và import lại.`,
+          });
+        } else {
+          console.log("✅ [FILE UPLOAD] Complete success - Setting alert");
+          setAlertSafe({
+            type: "success",
+            message: `🎉 Import Excel thành công!
+
+✅ Đã import: ${validCustomers} khách hàng
+📊 Tỷ lệ thành công: 100%
+📋 File: ${file.name}
+
+🚀 Sẵn sàng để tạo chiến dịch!`,
+          });
+        }
+      } catch (error) {
+        console.error("💥 [FILE UPLOAD] Excel processing failed:", error);
+
+        // Reset file state
+        setCustomerFile(null);
+        setUploadedCustomers([]);
+        event.target.value = "";
+
+        // ✅ GHI LOG CHI TIẾT LỖI
+        const excelErrorMessage =
+          error instanceof Error ? error.message : "Không xác định";
+        console.log("💥 [FILE UPLOAD] Excel error details", {
+          errorMessage: excelErrorMessage,
+          errorType:
+            error instanceof Error ? error.constructor.name : typeof error,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+        });
+
+        // ✅ CHỈ CHẠY CSV FALLBACK - KHÔNG SET ALERT TRUNG GIAN
+        console.log("🔄 [FILE UPLOAD] Starting CSV fallback directly");
+        try {
+          await handleCSVFallback(file, error);
+          console.log("✅ [FILE UPLOAD] CSV fallback completed successfully");
+        } catch (fallbackError) {
+          console.error(
+            "💥 [FILE UPLOAD] CSV fallback also failed:",
+            fallbackError
+          );
+
+          // ✅ FALLBACK CUỐI CÙNG - HIỂN THỊ THÔNG BÁO LỖI TỔNG HỢP
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không thể xử lý file!
+
+📋 File: ${file.name}
+📊 Kích thước: ${(file.size / 1024).toFixed(1)}KB
+🔧 Đã thử: Excel + CSV
+
+💥 Lỗi Excel: ${excelErrorMessage}
+💥 Lỗi CSV: ${
+              fallbackError instanceof Error
+                ? fallbackError.message
+                : "Không xác định"
+            }
+
+💡 Hướng dẫn khắc phục:
+• Tải file mẫu và làm theo đúng định dạng
+• Kiểm tra file có bị hỏng không
+• Thử lưu lại file ở định dạng khác
+• Liên hệ hỗ trợ nếu vẫn gặp vấn đề
+
+🔗 Hoặc copy dữ liệu sang file mẫu mới`,
+          });
+        }
+      }
+    },
+    [handleCSVFallback, setAlertSafe]
+  );
+
+  const downloadSampleFile = () => {
+    // Đường dẫn file mẫu trong thư mục public
+    const fileUrl = "/file_mau_cau_hinh_gui_tin_nhan.xlsx";
+    const a = document.createElement("a");
+    a.href = fileUrl;
+    a.download = "file_mau_cau_hinh_gui_tin_nhan.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleSubmit = async () => {
     // Basic validation that always applies
+    const hasEmails =
+      recipientsTo.trim() ||
+      customEmails.some((e) => e.trim()) ||
+      recipientsCc.length > 0;
+
     if (!campaignName?.trim() || !selectedType) {
-      console.warn('Missing basic campaign data');
+      console.warn("Missing basic campaign data");
       return;
     }
-    
+
     // For create mode, enforce stricter validation
     if (mode === "create") {
       if (
@@ -695,11 +1439,11 @@ export default function CampaignModal({
         !canProceedFromTab2 ||
         (needsReminderTab && !canProceedFromTab3)
       ) {
-        console.warn('Validation failed for create mode');
+        console.warn("Validation failed for create mode");
         return;
       }
     }
-    
+
     setIsSubmitting(true);
     try {
       const campaignData: CampaignFormData = {
@@ -740,9 +1484,12 @@ export default function CampaignModal({
       } else if (selectedType === CampaignType.THREE_DAY_KM) {
         campaignData.schedule_config = {
           type: "3_day",
-          days_of_week: Array.isArray(selectedDays) && selectedDays.length > 0
-            ? selectedDays
-            : Array.isArray(selectedDays) ? [] : [selectedDays as number].filter(d => d !== 0),
+          days_of_week:
+            Array.isArray(selectedDays) && selectedDays.length > 0
+              ? selectedDays
+              : Array.isArray(selectedDays)
+              ? []
+              : [selectedDays as number].filter((d) => d !== 0),
           time_of_day: timeOfDay || undefined,
         };
       } else if (
@@ -765,19 +1512,43 @@ export default function CampaignModal({
         );
       }
 
-      // Email reports
-      if (recipientsTo?.trim() || customEmails.some((email) => email?.trim())) {
-        const allRecipients = [
-          recipientsTo,
-          ...customEmails.filter((email) => email?.trim()),
-        ]
-          .filter(Boolean)
-          .join(", ");
+      // ✅ SỬA LOGIC SUBMIT - Không merge customEmails vào recipients_to
+      if (hasEmails && !recipientsTo.trim()) {
+        // Có emails nhưng không có Recipients TO
+        console.warn("❌ Submit blocked: Missing Recipients TO");
+
+        // Focus vào Recipients TO input để user chú ý
+        const recipientsToInput = document.querySelector(
+          'input[placeholder="example@email.com"]'
+        ) as HTMLInputElement;
+        if (recipientsToInput) {
+          recipientsToInput.focus();
+          recipientsToInput.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+
+        return; // Không submit
+      }
+
+      if (
+        recipientsTo.trim() ||
+        customEmails.some((e) => e.trim()) ||
+        recipientsCc.length > 0
+      ) {
+        const recipientsToString = recipientsTo.trim();
+
+        const allCcEmails = [
+          ...recipientsCc, // System emails
+          ...customEmails.filter((e) => e.trim()), // External emails từ custom inputs
+        ];
+
         campaignData.email_reports = {
-          recipients_to: allRecipients,
-          recipients_cc: recipientsCc,
+          recipients_to: recipientsToString, // ✅ Chỉ 1 mail
+          recipients_cc: allCcEmails, // ✅ Array chứa tất cả mail còn lại
           report_interval_minutes: reportInterval
-            ? parseInt(reportInterval)
+            ? parseInt(reportInterval, 10)
             : undefined,
           stop_sending_at_time: stopSendingTime || undefined,
           is_active: true,
@@ -829,6 +1600,48 @@ export default function CampaignModal({
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
             >
+              {alertDelayed && (
+                <motion.div
+                  key={`alert-${alertDelayed.type}-${Date.now()}`}
+                  className="absolute top-4 left-4 right-4 z-[200]"
+                  initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -50, scale: 0.9 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 30,
+                  }}
+                >
+                  <div className="relative">
+                    <ServerResponseAlert
+                      type={alertDelayed.type as any}
+                      message={alertDelayed.message}
+                      onClose={handleCloseAlert} // ✅ Controlled close với delay
+                      duration={
+                        alertControl.preventAutoClose
+                          ? 0 // Error/Warning: không tự đóng
+                          : alertDelayed.type === "success"
+                          ? 4000 // Success: 4s
+                          : 3000 // Default: 3s
+                      }
+                    />
+
+                    {/* ✅ MANUAL CLOSE BUTTON CHO ERROR/WARNING */}
+                    {alertControl.preventAutoClose &&
+                      alertControl.userCanClose && (
+                        <button
+                          onClick={handleManualCloseAlert}
+                          className="absolute top-2 right-2 p-1 rounded-md hover:bg-red-100 transition-colors z-10 bg-white/90 backdrop-blur-sm border border-red-200"
+                          aria-label="Đóng thông báo"
+                          title="Đóng thông báo"
+                        >
+                          <X className="h-4 w-4 text-red-600" />
+                        </button>
+                      )}
+                  </div>
+                </motion.div>
+              )}
               {/* Animated background */}
               <motion.div
                 className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-2xl opacity-50 pointer-events-none"
@@ -1437,24 +2250,294 @@ export default function CampaignModal({
                                 </motion.div>
                                 Email từ hệ thống
                               </Label>
+
+                              {/* ✅ SỬA MultiSelectCombobox - Loại bỏ Recipients TO khỏi options */}
+                              {loadingUsers ? (
+                                <motion.div
+                                  className="flex items-center justify-center p-4 text-sm text-gray-500"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                >
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                                  Đang tải danh sách email...
+                                </motion.div>
+                              ) : (
+                                <motion.div
+                                  whileHover={{ scale: 1.01 }}
+                                  transition={{ duration: 0.1 }}
+                                >
+                                  <MultiSelectCombobox
+                                    key={`multiselect-${recipientsTo}-${mode}`}
+                                    options={usersWithEmail
+                                      .filter((user) => {
+                                        // ✅ LOẠI BỎ email đã là Recipients TO khỏi options
+                                        const isRecipientsTo =
+                                          user.email.trim().toLowerCase() ===
+                                          recipientsTo.trim().toLowerCase();
+                                        return !isRecipientsTo;
+                                      })
+                                      .map((user) => ({
+                                        value: user.email,
+                                        label: `${user.fullName}${
+                                          user.employeeCode
+                                            ? ` (${user.employeeCode})`
+                                            : ""
+                                        } - ${user.email}`,
+                                      }))}
+                                    value={recipientsCc}
+                                    onChange={(values) =>
+                                      setRecipientsCc(
+                                        values.map((v) => v.toString())
+                                      )
+                                    }
+                                    placeholder={
+                                      usersWithEmail.length === 0
+                                        ? "Không có email nào trong hệ thống"
+                                        : usersWithEmail.filter(
+                                            (user) =>
+                                              user.email
+                                                .trim()
+                                                .toLowerCase() !==
+                                              recipientsTo.trim().toLowerCase()
+                                          ).length === 0
+                                        ? "Tất cả email hệ thống đã được sử dụng"
+                                        : "Chọn người nhận từ hệ thống..."
+                                    }
+                                  />
+                                </motion.div>
+                              )}
+
+                              {/* ✅ THÊM MESSAGE KHI KHÔNG CÓ USER NÀO CÓ EMAIL */}
+                              {usersWithEmail.length === 0 && !loadingUsers && (
+                                <motion.p
+                                  className="text-sm text-gray-500 mt-1"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: 0.2 }}
+                                >
+                                  Không có user nào có email trong hệ thống
+                                </motion.p>
+                              )}
+                            </motion.div>
+
+                            <motion.div
+                              className="space-y-2"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.05 }}
+                            >
+                              <Label className="text-sm font-medium flex items-center gap-2">
+                                <motion.div
+                                  animate={{ rotate: 360 }}
+                                  transition={{
+                                    duration: 15,
+                                    repeat: Infinity,
+                                    ease: "linear",
+                                  }}
+                                >
+                                  <AtSign className="h-3 w-3 text-blue-500" />
+                                </motion.div>
+                                Người nhận chính{" "}
+                                <span className="text-red-500">*</span>
+                              </Label>
+
                               <motion.div
                                 whileHover={{ scale: 1.01 }}
                                 transition={{ duration: 0.1 }}
                               >
-                                <MultiSelectCombobox
-                                  options={availableUsers.map((user) => ({
-                                    value: user.email,
-                                    label: `${user.fullName} (${user.email})`,
-                                  }))}
-                                  value={recipientsCc}
-                                  onChange={(values) =>
-                                    setRecipientsCc(
-                                      values.map((v) => v.toString())
-                                    )
-                                  }
-                                  placeholder="Chọn người nhận từ hệ thống..."
+                                <Input
+                                  value={recipientsTo}
+                                  onChange={(e) => {
+                                    setRecipientsTo(e.target.value);
+                                  }}
+                                  placeholder="example@email.com"
+                                  type="email"
+                                  className={cn(
+                                    "transition-all duration-200 focus:ring-2 focus:ring-blue-500",
+                                    !recipientsTo.trim() &&
+                                      (recipientsCc.length > 0 ||
+                                        customEmails.some((e) => e.trim()))
+                                      ? "border-orange-300 bg-orange-50"
+                                      : ""
+                                  )}
                                 />
                               </motion.div>
+
+                              {/* ✅ THÊM MESSAGE KHI RECIPIENTS TO LÀ SYSTEM EMAIL */}
+                              {recipientsTo &&
+                                usersWithEmail.some(
+                                  (user) =>
+                                    user.email.trim().toLowerCase() ===
+                                    recipientsTo.trim().toLowerCase()
+                                ) && (
+                                  <motion.div
+                                    className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                  >
+                                    <div className="flex items-center gap-2 text-blue-700">
+                                      <CheckCircle2 className="h-4 w-4" />
+                                      <span>
+                                        Email <strong>"{recipientsTo}"</strong>{" "}
+                                        đã được chọn làm người nhận chính nên
+                                        không hiện trong danh sách CC
+                                      </span>
+                                    </div>
+                                  </motion.div>
+                                )}
+
+                              {/* ✅ MESSAGE KHI KHÔNG CÓ EMAIL NÀO KHÁC */}
+                              {usersWithEmail.length > 0 &&
+                                usersWithEmail.filter(
+                                  (user) =>
+                                    user.email.trim().toLowerCase() !==
+                                    recipientsTo.trim().toLowerCase()
+                                ).length === 0 && (
+                                  <motion.p
+                                    className="text-sm text-orange-600 mt-1"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                  >
+                                    ⚠️ Tất cả email hệ thống đã được sử dụng làm
+                                    người nhận chính
+                                  </motion.p>
+                                )}
+
+                              {/* Original message khi không có user */}
+                              {usersWithEmail.length === 0 && !loadingUsers && (
+                                <motion.p
+                                  className="text-sm text-gray-500 mt-1"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: 0.2 }}
+                                >
+                                  Không có user nào có email trong hệ thống
+                                </motion.p>
+                              )}
+
+                              {/* ✅ WARNING STATE - Khi TO trống nhưng có emails trong CC */}
+                              {!recipientsTo.trim() &&
+                                (recipientsCc.length > 0 ||
+                                  customEmails.some((e) => e.trim())) && (
+                                  <motion.div
+                                    className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg"
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                  >
+                                    <div className="flex items-start gap-2 text-orange-700">
+                                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <div className="font-medium text-sm">
+                                          Người nhận chính trống!
+                                        </div>
+                                        <div className="text-xs mt-1 text-orange-600">
+                                          Email cần có ít nhất 1 người nhận
+                                          chính để gửi báo cáo.
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* ✅ SUGGESTION BUTTONS */}
+                                    <div className="mt-3 space-y-2">
+                                      <div className="text-xs text-orange-600 font-medium">
+                                        💡 Gợi ý: Chọn một email từ danh sách CC
+                                        để làm người nhận chính:
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        {/* System emails suggestions */}
+                                        {recipientsCc
+                                          .slice(0, 2)
+                                          .map((email, index) => (
+                                            <motion.button
+                                              key={`system-${index}`}
+                                              className="w-full text-left text-xs p-2 bg-white border border-orange-200 rounded hover:bg-orange-25 hover:border-orange-300 transition-all duration-200 flex items-center justify-between group"
+                                              onClick={() => {
+                                                setRecipientsTo(email);
+                                                setRecipientsCc(
+                                                  recipientsCc.filter(
+                                                    (e) => e !== email
+                                                  )
+                                                );
+                                              }}
+                                              whileHover={{ scale: 1.02 }}
+                                              whileTap={{ scale: 0.98 }}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                                <span className="text-blue-700">
+                                                  {email}
+                                                </span>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="text-xs px-1 py-0"
+                                                >
+                                                  Hệ thống
+                                                </Badge>
+                                              </div>
+                                              <ArrowRight className="h-3 w-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </motion.button>
+                                          ))}
+
+                                        {/* Custom emails suggestions */}
+                                        {customEmails
+                                          .filter((e) => e.trim())
+                                          .slice(0, 2)
+                                          .map((email, index) => (
+                                            <motion.button
+                                              key={`custom-${index}`}
+                                              className="w-full text-left text-xs p-2 bg-white border border-orange-200 rounded hover:bg-orange-25 hover:border-orange-300 transition-all duration-200 flex items-center justify-between group"
+                                              onClick={() => {
+                                                setRecipientsTo(email);
+                                                const updatedCustomEmails =
+                                                  customEmails.filter(
+                                                    (e) => e !== email
+                                                  );
+                                                setCustomEmails(
+                                                  updatedCustomEmails.length > 0
+                                                    ? updatedCustomEmails
+                                                    : [""]
+                                                );
+                                              }}
+                                              whileHover={{ scale: 1.02 }}
+                                              whileTap={{ scale: 0.98 }}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                                <span className="text-green-700">
+                                                  {email}
+                                                </span>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="text-xs px-1 py-0"
+                                                >
+                                                  Tùy chỉnh
+                                                </Badge>
+                                              </div>
+                                              <ArrowRight className="h-3 w-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            </motion.button>
+                                          ))}
+
+                                        {/* Show more button if there are more emails */}
+                                        {recipientsCc.length +
+                                          customEmails.filter((e) => e.trim())
+                                            .length >
+                                          4 && (
+                                          <div className="text-xs text-orange-500 text-center mt-1">
+                                            ... và{" "}
+                                            {recipientsCc.length +
+                                              customEmails.filter((e) =>
+                                                e.trim()
+                                              ).length -
+                                              4}{" "}
+                                            email khác
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                )}
                             </motion.div>
 
                             {/* Custom emails */}
@@ -1478,67 +2561,42 @@ export default function CampaignModal({
                                 >
                                   <AtSign className="h-3 w-3 text-gray-500" />
                                 </motion.div>
-                                Email tùy chỉnh
+                                Email tùy chỉnh (CC)
                               </Label>
 
                               <AnimatePresence>
                                 {customEmails.map((email, index) => (
                                   <motion.div
                                     key={index}
-                                    initial={{
-                                      opacity: 0,
-                                      x: -20,
-                                      scale: 0.95,
-                                    }}
-                                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                                    exit={{ opacity: 0, x: 20, scale: 0.95 }}
-                                    transition={{
-                                      duration: 0.3,
-                                      delay: index * 0.05,
-                                    }}
-                                    layout
-                                    className="flex gap-2"
+                                    className="flex items-center gap-2"
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: index * 0.1 }}
                                   >
-                                    <motion.div
-                                      className="flex-1"
-                                      whileFocus={{ scale: 1.01 }}
-                                      transition={{ duration: 0.1 }}
-                                    >
-                                      <Input
-                                        value={email}
-                                        onChange={(e) =>
-                                          updateCustomEmail(
-                                            index,
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder="example@email.com"
-                                        type="email"
-                                        className="transition-all duration-200 focus:ring-2 focus:ring-green-500"
-                                      />
-                                    </motion.div>
+                                    <Input
+                                      value={email}
+                                      onChange={(e) => {
+                                        updateCustomEmail(
+                                          index,
+                                          e.target.value
+                                        );
+                                      }}
+                                      placeholder="example@email.com"
+                                      type="email"
+                                      className="transition-all duration-200 focus:ring-2 focus:ring-green-500"
+                                    />
                                     {customEmails.length > 1 && (
-                                      <motion.div
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          removeCustomEmail(index);
+                                        }}
+                                        className="text-red-600 hover:bg-red-50"
                                       >
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() =>
-                                            removeCustomEmail(index)
-                                          }
-                                          className="text-red-600 hover:bg-red-50"
-                                        >
-                                          <motion.div
-                                            whileHover={{ rotate: 90 }}
-                                            transition={{ duration: 0.2 }}
-                                          >
-                                            <X className="h-4 w-4" />
-                                          </motion.div>
-                                        </Button>
-                                      </motion.div>
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
                                     )}
                                   </motion.div>
                                 ))}
@@ -2173,8 +3231,23 @@ export default function CampaignModal({
 
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Button
-                      variant="outline"
-                      onClick={() => onOpenChange(false)}
+                      onClick={async () => {
+                        if (mode === "create") {
+                          resetForm();
+                          // Đợi một chút để state được reset hoàn toàn
+                          await new Promise((resolve) =>
+                            setTimeout(resolve, 50)
+                          );
+                        } else {
+                          if (initialData) {
+                            loadCampaignData(initialData);
+                            await new Promise((resolve) =>
+                              setTimeout(resolve, 50)
+                            );
+                          }
+                        }
+                        onOpenChange(false);
+                      }}
                       disabled={isSubmitting}
                       size="sm"
                       className="hover:bg-gray-100 transition-colors"
@@ -2241,7 +3314,9 @@ export default function CampaignModal({
                                   ease: "linear",
                                 }}
                               />
-                              {mode === "edit" ? "Đang cập nhật..." : "Đang tạo..."}
+                              {mode === "edit"
+                                ? "Đang cập nhật..."
+                                : "Đang tạo..."}
                             </>
                           ) : (
                             <>

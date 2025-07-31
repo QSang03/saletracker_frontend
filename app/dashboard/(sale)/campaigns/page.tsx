@@ -10,15 +10,23 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
+import PaginatedTable, {
+  Filters,
+} from "@/components/ui/pagination/PaginatedTable";
 import CampaignManagement from "@/components/sale/CampaignManagement";
 import { campaignAPI, type CampaignFilters } from "@/lib/campaign-api";
-import { type Campaign, CampaignType, CampaignStatus, CampaignWithDetails } from "@/types";
+import {
+  type Campaign,
+  CampaignType,
+  CampaignStatus,
+  CampaignWithDetails,
+} from "@/types";
 import { usePermission } from "@/hooks/usePermission";
 import { PDynamic } from "@/components/common/PDynamic";
 import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
 import StatBox from "@/components/common/StatBox";
 import CampaignModal from "@/components/sale/CampaignModal";
+import { useCampaignFilters } from "@/hooks/useCampaignFilters";
 
 // Types
 interface CampaignStats {
@@ -26,6 +34,8 @@ interface CampaignStats {
   draftCampaigns: number;
   runningCampaigns: number;
   completedCampaigns: number;
+  scheduledCampaigns?: number;
+  archivedCampaigns?: number;
 }
 
 interface Alert {
@@ -41,38 +51,35 @@ const STATUS_OPTIONS = [
   { value: CampaignStatus.PAUSED, label: "Tạm dừng" },
   { value: CampaignStatus.COMPLETED, label: "Hoàn thành" },
   { value: CampaignStatus.ARCHIVED, label: "Đã lưu trữ" },
-] as const;
+];
 
-const FILTER_CONFIG = [
+const CAMPAIGN_TYPE_OPTIONS = [
+  { value: CampaignType.HOURLY_KM, label: "Chương trình KM 1 giờ" },
+  { value: CampaignType.DAILY_KM, label: "Chương trình KM 1 ngày" },
+  { value: CampaignType.THREE_DAY_KM, label: "Chương trình KM trong 3 ngày" },
+  { value: CampaignType.WEEKLY_SP, label: "Chương trình gửi SP 1 tuần / lần" },
   {
-    key: "campaignTypes",
-    label: "Loại Chiến Dịch",
-    type: "multiSelect" as const,
-    options: [
-      { value: CampaignType.HOURLY_KM, label: "Chương trình KM 1 giờ" },
-      { value: CampaignType.DAILY_KM, label: "Chương trình KM 1 ngày" },
-      { value: CampaignType.THREE_DAY_KM, label: "Chương trình KM trong 3 ngày" },
-      { value: CampaignType.WEEKLY_SP, label: "Chương trình gửi SP 1 tuần / lần" },
-      { value: CampaignType.WEEKLY_BBG, label: "Chương trình gửi BBG 1 tuần / lần" },
-    ],
+    value: CampaignType.WEEKLY_BBG,
+    label: "Chương trình gửi BBG 1 tuần / lần",
   },
-  {
-    key: "statuses",
-    label: "Trạng Thái",
-    type: "multiSelect" as const,
-    options: STATUS_OPTIONS,
-  },
-] as const;
+];
 
 const DEFAULT_STATS: CampaignStats = {
   totalCampaigns: 0,
   draftCampaigns: 0,
   runningCampaigns: 0,
   completedCampaigns: 0,
+  scheduledCampaigns: 0,
+  archivedCampaigns: 0,
 };
 
 // Custom hook for campaign data
-const useCampaignData = (canRead: boolean, currentPage: number, filters: CampaignFilters, pageSize: number) => {
+const useCampaignData = (
+  canRead: boolean,
+  currentPage: number,
+  filters: CampaignFilters,
+  pageSize: number
+) => {
   const [campaigns, setCampaigns] = useState<CampaignWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
@@ -97,7 +104,10 @@ const useCampaignData = (canRead: boolean, currentPage: number, filters: Campaig
       setStats(response.stats || DEFAULT_STATS);
     } catch (error: any) {
       console.error("Error loading campaigns:", error);
-      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi tải dữ liệu";
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Có lỗi xảy ra khi tải dữ liệu";
       setError(errorMessage);
       setCampaigns([]);
       setTotalCount(0);
@@ -127,86 +137,190 @@ export default function CampaignPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [filters, setFilters] = useState<CampaignFilters>({});
+  const [currentFilters, setCurrentFilters] = useState<CampaignFilters>({});
 
   // Permissions
   const { canAccess } = usePermission();
   const canRead = canAccess("chien-dich", "read");
   const canCreate = canAccess("chien-dich", "create");
+  const isAdmin = canAccess("admin", "read");
+  const isManager = canAccess("manager-chien-dich", "read");
 
+  const {
+    options,
+    loading: optionsLoading,
+    handleDepartmentChange,
+  } = useCampaignFilters();
   // Data fetching
   const {
     campaigns,
-    loading,
+    loading: campaignsLoading,
     totalCount,
     stats,
     error,
     loadCampaigns,
-  } = useCampaignData(canRead, currentPage, filters, pageSize);
+  } = useCampaignData(canRead, currentPage, currentFilters, pageSize);
 
   // Memoized calculations
-  const statsData = useMemo(() => [
-    {
-      label: "Tổng Chiến Dịch",
-      value: stats.totalCampaigns.toLocaleString(),
-      icon: "📊",
-    },
-    {
-      label: "Bản Nháp",
-      value: stats.draftCampaigns.toLocaleString(),
-      icon: "📝",
-    },
-    {
-      label: "Đang Chạy",
-      value: stats.runningCampaigns.toLocaleString(),
-      icon: "🚀",
-    },
-    {
-      label: "Hoàn Thành",
-      value: stats.completedCampaigns.toLocaleString(),
-      icon: "✅",
-    },
-  ], [stats]);
+  const statsData = useMemo(
+    () => [
+      {
+        label: "Tổng Chiến Dịch",
+        value: stats.totalCampaigns.toLocaleString(),
+        icon: "📊",
+      },
+      {
+        label: "Bản Nháp",
+        value: stats.draftCampaigns.toLocaleString(),
+        icon: "📝",
+      },
+      {
+        label: "Đã Lên Lịch",
+        value: (stats.scheduledCampaigns ?? 0).toLocaleString(),
+        icon: "⏰",
+      },
+      {
+        label: "Đang Chạy",
+        value: stats.runningCampaigns.toLocaleString(),
+        icon: "🚀",
+      },
+      {
+        label: "Hoàn Thành",
+        value: stats.completedCampaigns.toLocaleString(),
+        icon: "✅",
+      },
+      {
+        label: "Đã Lưu Trữ",
+        value: (stats.archivedCampaigns ?? 0).toLocaleString(),
+        icon: "📦",
+      },
+    ],
+    [stats]
+  );
 
   // Event handlers
-  const handleFilterChange = useCallback((filters: any) => {
-    // Convert statuses to CampaignStatus[]
-    const convertedFilters: CampaignFilters = {
-      ...filters,
-      statuses: Array.isArray(filters.statuses)
-        ? filters.statuses.filter(Boolean).map((s: string | number) => s as CampaignStatus)
-        : undefined,
-    };
-    setFilters(convertedFilters);
-    setCurrentPage(1);
-  }, []);
+  const handleFilterChange = useCallback(
+    (filters: Filters) => {
+      console.log("Filter change received:", filters);
 
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page);
-  }, []);
+      // Transform filters từ PaginatedTable format sang CampaignFilters format
+      const campaignFilters: CampaignFilters = {
+        search: filters.search?.trim() || undefined,
+        campaign_types:
+          filters.categories.length > 0
+            ? filters.categories.map((c) => c as CampaignType)
+            : undefined,
+        statuses:
+          filters.statuses.length > 0
+            ? filters.statuses.map((s) => s as CampaignStatus)
+            : undefined,
+        employees:
+          filters.employees.length > 0
+            ? filters.employees.map((e) => String(e))
+            : undefined,
+        departments:
+          filters.departments.length > 0
+            ? filters.departments.map((d) => String(d))
+            : undefined,
+        singleDate: filters.singleDate
+          ? typeof filters.singleDate === "string"
+            ? filters.singleDate
+            : filters.singleDate.toISOString().split("T")[0]
+          : undefined,
+        page: currentPage,
+        pageSize: pageSize,
+      };
+
+      console.log("Transformed to campaign filters:", campaignFilters);
+      setCurrentFilters(campaignFilters);
+      setCurrentPage(1); // Reset về trang 1 khi filter thay đổi
+    },
+    [currentPage, pageSize]
+  );
+
+  const handleResetFilter = useCallback(() => {
+    setCurrentFilters({});
+    setCurrentPage(1);
+    handleDepartmentChange([]);
+  }, [handleDepartmentChange]);
+
+  const handleDepartmentFilterChange = useCallback(
+    (departments: (string | number)[]) => {
+      handleDepartmentChange(departments);
+
+      const updatedFilters: Filters = {
+        search: currentFilters.search || "",
+        departments: departments,
+        roles: [],
+        statuses:
+          currentFilters.statuses?.map((s) => s as string | number) || [],
+        categories:
+          currentFilters.campaign_types?.map((c) => c as string | number) || [],
+        brands: [],
+        employees:
+          currentFilters.employees?.map((e) => e as string | number) || [],
+        dateRange: { from: undefined, to: undefined },
+        singleDate: currentFilters.singleDate || undefined,
+      };
+
+      handleFilterChange(updatedFilters);
+
+      setCurrentPage(1);
+    },
+    [handleDepartmentChange, handleFilterChange, currentFilters, setCurrentPage]
+  );
+
+  const handlePageChange = useCallback(
+    (page: number) => {
+      console.log("Page change:", page);
+      setCurrentPage(page);
+
+      // Update filters với page mới
+      const newFilters = { ...currentFilters, page };
+      setCurrentFilters(newFilters);
+    },
+    [currentFilters]
+  );
+
+  const handlePageSizeChange = useCallback(
+    (newPageSize: number) => {
+      console.log("Page size change:", newPageSize);
+      setPageSize(newPageSize);
+      setCurrentPage(1);
+
+      // Update filters với pageSize mới
+      const newFilters = { ...currentFilters, pageSize: newPageSize, page: 1 };
+      setCurrentFilters(newFilters);
+    },
+    [currentFilters]
+  );
 
   const handleCreateCampaign = useCallback(() => {
     setCreateModalOpen(true);
   }, []);
 
-  const handleCampaignCreated = useCallback(async (data: any) => {
-    try {
-      await campaignAPI.create(data);
-      setCreateModalOpen(false);
-      setAlert({
-        type: "success",
-        message: "Chiến dịch đã được tạo thành công!"
-      });
-      await loadCampaigns();
-    } catch (error: any) {
-      console.error("Error creating campaign:", error);
-      setAlert({
-        type: "error",
-        message: error.response?.data?.message || "Có lỗi xảy ra khi tạo chiến dịch"
-      });
-      throw error;
-    }
-  }, [loadCampaigns]);
+  const handleCampaignCreated = useCallback(
+    async (data: any) => {
+      try {
+        await campaignAPI.create(data);
+        setCreateModalOpen(false);
+        setAlert({
+          type: "success",
+          message: "Chiến dịch đã được tạo thành công!",
+        });
+        await loadCampaigns();
+      } catch (error: any) {
+        console.error("Error creating campaign:", error);
+        setAlert({
+          type: "error",
+          message:
+            error.response?.data?.message || "Có lỗi xảy ra khi tạo chiến dịch",
+        });
+        throw error;
+      }
+    },
+    [loadCampaigns]
+  );
 
   const handleRefresh = useCallback(() => {
     loadCampaigns();
@@ -217,20 +331,15 @@ export default function CampaignPage() {
   }, []);
 
   // Show error state
-  if (error && !loading) {
+  if (error && !campaignsLoading) {
     return (
-      <div className="h-full flex items-center justify-center w-full">
-        <Card className="max-w-md mx-auto">
-          <CardContent className="p-6 text-center">
-            <div className="text-red-500 text-6xl mb-4">⚠️</div>
-            <h3 className="text-lg font-semibold mb-2">Có lỗi xảy ra</h3>
-            <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={handleRefresh} variant="outline">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Thử lại
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h2 className="text-xl font-semibold mb-2">Có lỗi xảy ra</h2>
+        <p className="text-gray-600 mb-4">{error}</p>
+        <Button onClick={handleRefresh} variant="outline">
+          Thử lại
+        </Button>
       </div>
     );
   }
@@ -238,14 +347,10 @@ export default function CampaignPage() {
   // Show unauthorized state
   if (!canRead) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Card className="max-w-md mx-auto">
-          <CardContent className="p-6 text-center">
-            <div className="text-gray-400 text-6xl mb-4">🔒</div>
-            <h3 className="text-lg font-semibold mb-2">Không có quyền truy cập</h3>
-            <p className="text-gray-600">Bạn không có quyền truy cập trang này.</p>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <div className="text-6xl mb-4">🔒</div>
+        <h2 className="text-xl font-semibold mb-2">Không có quyền truy cập</h2>
+        <p className="text-gray-600">Bạn không có quyền truy cập trang này.</p>
       </div>
     );
   }
@@ -265,9 +370,14 @@ export default function CampaignPage() {
                   Quản lý và theo dõi các chiến dịch marketing
                 </p>
               </div>
-              
+
               <div className="flex gap-2">
-                <PDynamic permission={{ departmentSlug: "marketing", action: "create" }}>
+                <PDynamic
+                  permission={{
+                    departmentSlug: "chien-dich",
+                    action: "create",
+                  }}
+                >
                   <Button
                     onClick={handleCreateCampaign}
                     className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg transition-all duration-200 hover:shadow-xl"
@@ -280,10 +390,14 @@ export default function CampaignPage() {
                 <Button
                   onClick={handleRefresh}
                   variant="outline"
-                  disabled={loading}
+                  disabled={campaignsLoading}
                   className="transition-all duration-200 hover:bg-gray-50"
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''} inline-block`} />
+                  <RefreshCw
+                    className={`h-4 w-4 mr-2 ${
+                      campaignsLoading ? "animate-spin" : ""
+                    } inline-block`}
+                  />
                   <span className="inline-block">Làm mới</span>
                 </Button>
               </div>
@@ -303,18 +417,28 @@ export default function CampaignPage() {
         )}
 
         {/* Stats Accordion */}
-        <Accordion type="single" collapsible defaultValue="stats" className="w-full">
-          <AccordionItem value="stats" className="border rounded-lg bg-white shadow-sm">
+        <Accordion
+          type="single"
+          collapsible
+          defaultValue="stats"
+          className="w-full"
+        >
+          <AccordionItem
+            value="stats"
+            className="border rounded-lg bg-white shadow-sm"
+          >
             <AccordionTrigger className="px-6 py-4 hover:no-underline">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg">
                   <span className="text-xl">📈</span>
                 </div>
-                <span className="text-lg font-semibold">Thống Kê Chiến Dịch</span>
+                <span className="text-lg font-semibold">
+                  Thống Kê Chiến Dịch
+                </span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                 {statsData.map((stat, index) => (
                   <div
                     key={stat.label}
@@ -338,18 +462,52 @@ export default function CampaignPage() {
           <CardContent className="p-0">
             <PaginatedTable
               key={`pagination-${currentPage}-${pageSize}`}
-              enableSearch
-              enableStatusFilter
-              enableDateRangeFilter
+              enableSearch={true}
+              enableCategoriesFilter={true} // Cho campaign types
+              enableStatusFilter={true}
+              enableEmployeeFilter={isAdmin || isManager} // Chỉ admin và manager
+              enableDepartmentFilter={isAdmin} // Chỉ admin
+              enableSingleDateFilter={true}
+              singleDateLabel="Lọc theo ngày tạo"
+              // **Options data từ hook**
+              availableCategories={CAMPAIGN_TYPE_OPTIONS}
+              availableStatuses={[...STATUS_OPTIONS]}
+              availableEmployees={options.employees}
+              availableDepartments={options.departments}
+              // **Pagination**
               page={currentPage}
               pageSize={pageSize}
               total={totalCount}
-              loading={loading}
-              availableStatuses={[...STATUS_OPTIONS]}
+              onResetFilter={handleResetFilter}
               onPageChange={handlePageChange}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={handlePageSizeChange}
+              // **Callbacks**
               onFilterChange={handleFilterChange}
-              emptyText="Chưa có chiến dịch nào"
+              onDepartmentChange={handleDepartmentFilterChange} // Callback đặc biệt cho department
+              loading={campaignsLoading || optionsLoading}
+              // **Export functionality**
+              canExport={true}
+              getExportData={() => ({
+                headers: [
+                  "Tên chiến dịch",
+                  "Loại",
+                  "Trạng thái",
+                  "Ngày tạo",
+                  "Người tạo",
+                  "Phòng ban",
+                ],
+                data: campaigns.map((c) => [
+                  c.name,
+                  CAMPAIGN_TYPE_OPTIONS.find(
+                    (opt) => opt.value === c.campaign_type
+                  )?.label || c.campaign_type,
+                  STATUS_OPTIONS.find((opt) => opt.value === c.status)?.label ||
+                    c.status,
+                  new Date(c.created_at).toLocaleDateString("vi-VN"),
+                  c.created_by?.fullName || "",
+                  c.department?.name || "",
+                ]),
+              })}
             >
               <CampaignManagement
                 key={`campaign-mgmt-${totalCount}-${currentPage}`}
