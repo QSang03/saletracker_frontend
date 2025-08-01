@@ -201,9 +201,6 @@ export default function CampaignPage() {
   // Event handlers
   const handleFilterChange = useCallback(
     (filters: Filters) => {
-      console.log("Filter change received:", filters);
-
-      // Transform filters từ PaginatedTable format sang CampaignFilters format
       const campaignFilters: CampaignFilters = {
         search: filters.search?.trim() || undefined,
         campaign_types:
@@ -230,8 +227,6 @@ export default function CampaignPage() {
         page: currentPage,
         pageSize: pageSize,
       };
-
-      console.log("Transformed to campaign filters:", campaignFilters);
       setCurrentFilters(campaignFilters);
       setCurrentPage(1); // Reset về trang 1 khi filter thay đổi
     },
@@ -272,7 +267,6 @@ export default function CampaignPage() {
 
   const handlePageChange = useCallback(
     (page: number) => {
-      console.log("Page change:", page);
       setCurrentPage(page);
 
       // Update filters với page mới
@@ -284,7 +278,6 @@ export default function CampaignPage() {
 
   const handlePageSizeChange = useCallback(
     (newPageSize: number) => {
-      console.log("Page size change:", newPageSize);
       setPageSize(newPageSize);
       setCurrentPage(1);
 

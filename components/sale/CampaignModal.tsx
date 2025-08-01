@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import * as ExcelJS from "exceljs";
 import {
@@ -73,6 +73,7 @@ import ModernAttachmentSelector from "../common/ModernAttachmentSelector";
 import ModernDaySelector from "../common/ModernDaySelector"; // Import component mới
 import { useDebounce, useDebouncedCallback } from "@/hooks/useDebounce";
 import { campaignAPI } from "@/lib/campaign-api";
+import EnhancedTextarea from "../common/EnhancedTextarea";
 
 type SelectionMode = "single" | "adjacent" | "multiple";
 
@@ -277,6 +278,45 @@ export default function CampaignModal({
   mode = "create",
   initialData = null,
 }: CampaignModalProps) {
+  // Memoized insertButtons để tránh re-creation mỗi render
+  const messageInsertButtons = useMemo(() => [
+    {
+      text: "{you}",
+      icon: Users,
+      color: "#3b82f6", // Ocean Blue
+      hoverColor: "#2563eb",
+      label: "Tên người nhận",
+      id: "insert-you",
+    },
+    {
+      text: "{me}",
+      icon: AtSign,
+      color: "#ec4899", // Hot Pink
+      hoverColor: "#db2777",
+      label: "Tên người gửi",
+      id: "insert-me",
+    },
+  ], []);
+
+  const reminderInsertButtons = useMemo(() => [
+    {
+      text: "{you}",
+      icon: Users,
+      color: "#3b82f6",
+      hoverColor: "#2563eb",
+      label: "Tên người nhận",
+      id: "reminder-insert-you",
+    },
+    {
+      text: "{me}",
+      icon: AtSign,
+      color: "#ec4899",
+      hoverColor: "#db2777",
+      label: "Tên người gửi",
+      id: "reminder-insert-me",
+    },
+  ], []);
+
   // State management
   const [currentTab, setCurrentTab] = useState("basic");
   const [campaignName, setCampaignName] = useState("");
@@ -322,19 +362,34 @@ export default function CampaignModal({
     }>
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  // ✅ SIMPLIFIED ALERT SYSTEM - Chỉ cần 2 states thay vì 3
+  // ✅ SIMPLIFIED ALERT SYSTEM
   const [alert, setAlert] = useState<{
     type: "success" | "error" | "warning" | "info";
     message: string;
     id: string;
   } | null>(null);
 
-  const alertRef = useRef<{
-    id: string;
-    type: string;
-    isPersistent: boolean;
-    timestamp: number;
-  } | null>(null);
+  const [messageValidationError, setMessageValidationError] = useState<
+    string | null
+  >(null);
+  const [reminderValidationErrors, setReminderValidationErrors] = useState<
+    (string | null)[]
+  >([null]);
+
+  const handleMessageValidationChange = useCallback((error: string | null) => {
+    setMessageValidationError(error);
+  }, []);
+
+  const handleReminderValidationChange = useCallback(
+    (index: number, error: string | null) => {
+      setReminderValidationErrors((prev) => {
+        const newErrors = [...prev];
+        newErrors[index] = error;
+        return newErrors;
+      });
+    },
+    []
+  );
 
   const setAlertSafe = useCallback(
     (
@@ -343,199 +398,28 @@ export default function CampaignModal({
         message: string;
       } | null
     ) => {
-      const timestamp = Date.now();
-      const alertId = `alert_${timestamp}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-
       if (alertData === null) {
         setAlert(null);
-        alertRef.current = null;
         return;
       }
 
-      const isPersistent =
-        alertData.type === "error" || alertData.type === "warning";
-
-      alertRef.current = {
-        id: alertId,
-        type: alertData.type,
-        isPersistent,
-        timestamp,
-      };
-
-      const alertWithId = {
+      const alertId = `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setAlert({
         ...alertData,
         id: alertId,
-      };
+      });
 
-      setTimeout(() => {
-        setAlert(alertWithId);
-
-        if (!isPersistent) {
-          setTimeout(() => {
-            if (alertRef.current?.id === alertId) {
-              setAlert(null);
-              alertRef.current = null;
-            }
-          }, 5000);
-        }
-      }, 10); // 10ms delay để đảm bảo ref sync
+      // Auto-hide success/info alerts after 5 seconds
+      if (alertData.type === "success" || alertData.type === "info") {
+        setTimeout(() => {
+          setAlert((current) => current?.id === alertId ? null : current);
+        }, 5000);
+      }
     },
     []
   );
 
-  useEffect(() => {
-    if (open) {
-      loadUsersWithEmail().then(() => {
-        if (mode === "edit" && initialData) {
-          loadCampaignData(initialData);
-        } else if (mode === "create") {
-        }
-      });
-    }
-  }, [open, mode, initialData]);
-
-  // Move resetForm definition above this useEffect
-  const resetForm = useCallback(() => {
-    if (
-      alert &&
-      (alert.type === "error" || alert.type === "warning") &&
-      alertRef.current?.isPersistent
-    ) {
-      return; // Không reset để giữ alert hiện tại
-    }
-
-    // Reset theo thứ tự để tránh conflict
-    setCurrentTab("basic");
-    setCampaignName("");
-    setSelectedType("");
-    setStartTime("");
-    setEndTime("");
-    setSelectedDays([]);
-    setDaySelectionMode("single");
-    setIncludeSaturday(true);
-    setTimeOfDay("");
-    setMessageContent("");
-    setAttachmentType(null);
-    setAttachmentData("");
-    setReminders([{ content: "", minutes: 30 }]);
-
-    // ✅ Reset email states theo thứ tự đúng
-    setRecipientsTo("");
-    setRecipientsCc([]);
-    setCustomEmails([""]);
-    setReportInterval("60");
-    setStopSendingTime("");
-
-    // ✅ Reset customer states
-    setCustomerFile(null);
-    setUploadedCustomers([]);
-
-    // Reset UI states
-    setIsSubmitting(false);
-    setShowSuccess(false);
-
-    // ✅ CHỈ RESET ALERT KHI KHÔNG PHẢI ERROR/WARNING
-    if (
-      !alert ||
-      (alert.type !== "error" && alert.type !== "warning") ||
-      !alertRef.current?.isPersistent
-    ) {
-      setAlertSafe(null);
-    } else {
-    }
-  }, [alert, setAlertSafe]);
-
-  useEffect(() => {
-    if (!open) {
-      const timer = setTimeout(() => {
-        // ✅ IMPROVED LOGIC: Chỉ reset khi không có persistent alert
-        const shouldReset =
-          mode === "create" && (!alert || !alertRef.current?.isPersistent);
-
-        if (shouldReset) {
-          resetForm();
-        } else {
-        }
-      }, 500);
-
-      return () => clearTimeout(timer);
-    }
-  }, [open, mode, alert, resetForm]);
-
-  // ✅ SỬA LOGIC - TÁCH RIÊNG RECIPIENTS_TO RA KHỎI PHÂN LOẠI
-  useEffect(() => {
-    if (
-      mode === "edit" &&
-      initialData?.email_reports &&
-      usersWithEmail.length > 0
-    ) {
-      const { recipients_to, recipients_cc } = initialData.email_reports;
-      let primaryRecipient = "";
-
-      if (typeof recipients_to === "string" && recipients_to.trim()) {
-        const firstEmail = recipients_to.split(",")[0]?.trim();
-        primaryRecipient = firstEmail || "";
-      }
-
-      setRecipientsTo(primaryRecipient);
-
-      const remainingEmails: string[] = [];
-
-      if (typeof recipients_to === "string" && recipients_to.trim()) {
-        const allToEmails = recipients_to
-          .split(",")
-          .map((e) => e.trim())
-          .filter(Boolean);
-
-        if (allToEmails.length > 1) {
-          remainingEmails.push(...allToEmails.slice(1));
-        }
-      }
-
-      if (Array.isArray(recipients_cc)) {
-        const ccEmails = recipients_cc.map((e) => e.trim()).filter(Boolean);
-        remainingEmails.push(...ccEmails);
-      }
-
-      const normalizedSystem = usersWithEmail.map((u) =>
-        u.email.trim().toLowerCase()
-      );
-
-      const systemEmails: string[] = [];
-      const externalEmails: string[] = [];
-
-      remainingEmails.forEach((email, index) => {
-        const normalizedEmail = email.trim().toLowerCase();
-        const isSystem = normalizedSystem.includes(normalizedEmail);
-
-        if (isSystem) {
-          systemEmails.push(email);
-        } else {
-          externalEmails.push(email);
-        }
-      });
-
-      /*-----------------------------------------------------------
-      4. SET VÀO UI
-    -----------------------------------------------------------*/
-      // System emails → MultiSelectCombobox
-      setRecipientsCc(systemEmails);
-
-      setCustomEmails(
-        externalEmails.length > 0 ? [...externalEmails, ""] : [""]
-      );
-    }
-  }, [usersWithEmail, mode, initialData]);
-
-  useEffect(() => {
-    if (open) {
-      loadUsersWithEmail();
-    }
-  }, [open]);
-
-  const loadUsersWithEmail = async () => {
+  const loadUsersWithEmail = useCallback(async () => {
     try {
       setLoadingUsers(true);
       const users = await campaignAPI.getUsersWithEmail();
@@ -546,9 +430,9 @@ export default function CampaignModal({
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, []);
 
-  const loadCampaignData = (campaign: CampaignWithDetails) => {
+  const loadCampaignData = useCallback((campaign: CampaignWithDetails) => {
     setCampaignName(campaign.name);
     setSelectedType(campaign.campaign_type);
 
@@ -627,41 +511,163 @@ export default function CampaignModal({
     } else {
       setUploadedCustomers([]);
     }
-  };
+  }, []);
 
-  // Progress calculation
-  const calculateProgress = () => {
-    let progress = 0;
-    const totalSteps = needsReminderTab ? 5 : 4;
+  // Single useEffect to handle modal opening and data loading
+  useEffect(() => {
+    if (open) {
+      const loadData = async () => {
+        await loadUsersWithEmail();
+        if (mode === "edit" && initialData) {
+          loadCampaignData(initialData);
+        }
+      };
+      loadData();
+    }
+  }, [open, mode, initialData]); // Removed loadUsersWithEmail and loadCampaignData dependencies
 
-    if (campaignName && selectedType) progress += 100 / totalSteps;
-    if (canProceedFromTab2) progress += 100 / totalSteps;
-    if (needsReminderTab && canProceedFromTab3) progress += 100 / totalSteps;
-    if (recipientsTo || customEmails.some((e) => e))
-      progress += (100 / totalSteps) * 0.5;
-    if (uploadedCustomers.length > 0) progress += (100 / totalSteps) * 0.5;
+  // Reset form function - simplified without alertRef dependency
+  const resetForm = useCallback(() => {
+    // Reset all form states
+    setCurrentTab("basic");
+    setCampaignName("");
+    setSelectedType("");
+    setStartTime("");
+    setEndTime("");
+    setSelectedDays([]);
+    setDaySelectionMode("single");
+    setIncludeSaturday(true);
+    setTimeOfDay("");
+    setMessageContent("");
+    setAttachmentType(null);
+    setAttachmentData("");
+    setReminders([{ content: "", minutes: 30 }]);
 
-    return Math.min(progress, 100);
-  };
+    // Reset email states
+    setRecipientsTo("");
+    setRecipientsCc([]);
+    setCustomEmails([""]);
+    setReportInterval("60");
+    setStopSendingTime("");
+
+    // Reset customer states
+    setCustomerFile(null);
+    setUploadedCustomers([]);
+
+    // Reset UI states
+    setIsSubmitting(false);
+    setShowSuccess(false);
+
+    // Reset alert (only if not error/warning)
+    setAlert((current) => {
+      if (current?.type === "error" || current?.type === "warning") {
+        return current; // Keep error/warning alerts
+      }
+      return null;
+    });
+  }, []); // No dependencies
+
+  useEffect(() => {
+    if (!open) {
+      const timer = setTimeout(() => {
+        // Only reset in create mode and when no error/warning alerts
+        if (mode === "create") {
+          const hasErrorAlert = alert?.type === "error" || alert?.type === "warning";
+          if (!hasErrorAlert) {
+            resetForm();
+          }
+        }
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [open, mode, resetForm, alert?.type]);
+
+  // ✅ SỬA LOGIC - TÁCH RIÊNG RECIPIENTS_TO RA KHỎI PHÂN LOẠI
+  useEffect(() => {
+    if (
+      mode === "edit" &&
+      initialData?.email_reports &&
+      usersWithEmail.length > 0
+    ) {
+      const { recipients_to, recipients_cc } = initialData.email_reports;
+      let primaryRecipient = "";
+
+      if (typeof recipients_to === "string" && recipients_to.trim()) {
+        const firstEmail = recipients_to.split(",")[0]?.trim();
+        primaryRecipient = firstEmail || "";
+      }
+
+      setRecipientsTo(primaryRecipient);
+
+      const remainingEmails: string[] = [];
+
+      if (typeof recipients_to === "string" && recipients_to.trim()) {
+        const allToEmails = recipients_to
+          .split(",")
+          .map((e) => e.trim())
+          .filter(Boolean);
+
+        if (allToEmails.length > 1) {
+          remainingEmails.push(...allToEmails.slice(1));
+        }
+      }
+
+      if (Array.isArray(recipients_cc)) {
+        const ccEmails = recipients_cc.map((e) => e.trim()).filter(Boolean);
+        remainingEmails.push(...ccEmails);
+      }
+
+      const normalizedSystem = usersWithEmail.map((u) =>
+        u.email.trim().toLowerCase()
+      );
+
+      const systemEmails: string[] = [];
+      const externalEmails: string[] = [];
+
+      remainingEmails.forEach((email, index) => {
+        const normalizedEmail = email.trim().toLowerCase();
+        const isSystem = normalizedSystem.includes(normalizedEmail);
+
+        if (isSystem) {
+          systemEmails.push(email);
+        } else {
+          externalEmails.push(email);
+        }
+      });
+
+      /*-----------------------------------------------------------
+      4. SET VÀO UI
+    -----------------------------------------------------------*/
+      // System emails → MultiSelectCombobox
+      setRecipientsCc(systemEmails);
+
+      setCustomEmails(
+        externalEmails.length > 0 ? [...externalEmails, ""] : [""]
+      );
+    }
+  }, [usersWithEmail, mode, initialData]);
 
   // Tab navigation logic
   const canProceedFromTab1 = Boolean(campaignName?.trim() && selectedType);
 
   // For edit mode, allow proceeding to tab 2 even if some data is missing
   const canProceedFromTab2 = Boolean(
-    mode === "edit" || // Allow proceeding in edit mode
-      (messageContent?.trim() &&
-        (selectedType === CampaignType.HOURLY_KM ||
-        selectedType === CampaignType.DAILY_KM
-          ? startTime && endTime
-          : selectedType === CampaignType.THREE_DAY_KM
-          ? Array.isArray(selectedDays)
-            ? selectedDays.length > 0 && timeOfDay
-            : selectedDays && timeOfDay
-          : selectedType === CampaignType.WEEKLY_SP ||
-            selectedType === CampaignType.WEEKLY_BBG
-          ? selectedDays && timeOfDay
-          : false))
+    // Validation error luôn được check trước
+    messageValidationError === null &&
+      (mode === "edit" || // Edit mode chỉ skip required field validation
+        (messageContent?.trim() &&
+          (selectedType === CampaignType.HOURLY_KM ||
+          selectedType === CampaignType.DAILY_KM
+            ? startTime && endTime
+            : selectedType === CampaignType.THREE_DAY_KM
+            ? Array.isArray(selectedDays)
+              ? selectedDays.length > 0 && timeOfDay
+              : selectedDays && timeOfDay
+            : selectedType === CampaignType.WEEKLY_SP ||
+              selectedType === CampaignType.WEEKLY_BBG
+            ? selectedDays && timeOfDay
+            : false)))
   );
 
   const needsReminderTab =
@@ -669,26 +675,53 @@ export default function CampaignModal({
     selectedType === CampaignType.DAILY_KM;
 
   // For edit mode, allow proceeding to tab 3 even if some data is missing
-  const canProceedFromTab3 =
-    mode === "edit" || // Allow proceeding in edit mode
-    !needsReminderTab ||
-    reminders.every((r) => r.content?.trim() && r.minutes > 0);
+  const canProceedFromTab3 = Boolean(
+    // Validation error luôn được check trước
+    reminderValidationErrors.every((error) => error === null) &&
+      (mode === "edit" || // Edit mode chỉ skip required field validation
+        !needsReminderTab ||
+        reminders.every((r) => r.content?.trim() && r.minutes > 0))
+  );
 
-  const getTabLabels = () => {
+  // Memoize complex computed values to prevent unnecessary re-renders
+  const tabLabels = useMemo(() => {
     const labels = ["Thông tin", "Lịch trình"];
     if (needsReminderTab) labels.push("Nhắc lại");
     labels.push("Email", "Khách hàng");
     return labels;
-  };
+  }, [needsReminderTab]);
 
-  const getCurrentStepNumber = () => {
+  const currentStepNumber = useMemo(() => {
     const steps = ["basic", "schedule", "reminders", "email", "customers"];
     if (!needsReminderTab) steps.splice(2, 1);
     return steps.indexOf(currentTab) + 1;
-  };
+  }, [currentTab, needsReminderTab]);
 
-  // Handle tab change with animation
-  const handleTabChange = (tab: string) => {
+  const totalSteps = useMemo(() => needsReminderTab ? 5 : 4, [needsReminderTab]);
+
+  const progress = useMemo(() => {
+    let calculatedProgress = 0;
+    if (campaignName && selectedType) calculatedProgress += 100 / totalSteps;
+    if (canProceedFromTab2) calculatedProgress += 100 / totalSteps;
+    if (needsReminderTab && canProceedFromTab3) calculatedProgress += 100 / totalSteps;
+    if (recipientsTo || customEmails.some((e) => e))
+      calculatedProgress += (100 / totalSteps) * 0.5;
+    if (uploadedCustomers.length > 0) calculatedProgress += (100 / totalSteps) * 0.5;
+    return Math.min(calculatedProgress, 100);
+  }, [
+    campaignName,
+    selectedType,
+    canProceedFromTab2,
+    needsReminderTab,
+    canProceedFromTab3,
+    recipientsTo,
+    customEmails,
+    uploadedCustomers.length,
+    totalSteps,
+  ]);
+
+  // Handle tab change with animation - memoized
+  const handleTabChange = useCallback((tab: string) => {
     // In edit mode, allow navigation to any tab
     if (mode === "edit") {
       setCurrentTab(tab);
@@ -710,10 +743,10 @@ export default function CampaignModal({
       return;
 
     setCurrentTab(tab);
-  };
+  }, [mode, canProceedFromTab1, canProceedFromTab2, canProceedFromTab3, needsReminderTab]);
 
-  // Enhanced day selection logic
-  const handleDaySelectionChange = (days: number | number[]) => {
+  // Enhanced day selection logic - memoized
+  const handleDaySelectionChange = useCallback((days: number | number[]) => {
     if (selectedType === CampaignType.THREE_DAY_KM) {
       // For 3-day campaigns, use adjacent mode
       setDaySelectionMode("adjacent");
@@ -726,60 +759,65 @@ export default function CampaignModal({
       setDaySelectionMode("single");
       setSelectedDays(days);
     }
-  };
+  }, [selectedType]);
 
-  const handleDaySelectionModeChange = (mode: SelectionMode) => {
+  const handleDaySelectionModeChange = useCallback((mode: SelectionMode) => {
     setDaySelectionMode(mode);
     // Reset selection when changing mode
     setSelectedDays(mode === "single" ? 0 : []);
-  };
+  }, []);
 
-  // Helper functions (same as before)
-  const addReminder = () =>
+  // Helper functions - memoized to prevent unnecessary re-renders
+  const addReminder = useCallback(() => {
     setReminders((prev) => [...prev, { content: "", minutes: 30 }]);
+    setReminderValidationErrors((prev) => [...prev, null]);
+  }, []);
 
-  const removeReminder = (index: number) => {
-    if (reminders.length > 1)
-      setReminders(reminders.filter((_, i) => i !== index));
-  };
+  const removeReminder = useCallback((index: number) => {
+    setReminders((prev) => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
+    setReminderValidationErrors((prev) => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
+  }, []);
 
-  const updateReminder = (
+  const updateReminder = useCallback((
     index: number,
     field: keyof ReminderItem,
     value: string | number
   ) => {
-    setReminders(
-      reminders.map((reminder, i) =>
+    setReminders((prev) =>
+      prev.map((reminder, i) =>
         i === index ? { ...reminder, [field]: value } : reminder
       )
     );
-  };
+  }, []);
 
-  const addCustomEmail = () => setCustomEmails((prev) => [...prev, ""]);
+  const addCustomEmail = useCallback(() => {
+    setCustomEmails((prev) => [...prev, ""]);
+  }, []);
 
-  const removeCustomEmail = (index: number) => {
-    if (customEmails.length > 1)
-      setCustomEmails(customEmails.filter((_, i) => i !== index));
-  };
+  const removeCustomEmail = useCallback((index: number) => {
+    setCustomEmails((prev) => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
+  }, []);
 
-  const updateCustomEmail = (index: number, value: string) => {
-    setCustomEmails(
-      customEmails.map((email, i) => (i === index ? value : email))
+  const updateCustomEmail = useCallback((index: number, value: string) => {
+    setCustomEmails((prev) =>
+      prev.map((email, i) => (i === index ? value : email))
     );
-  };
+  }, []);
 
-  // ✅ SIMPLIFIED ALERT HANDLERS WITH ENHANCED PROTECTION
+  // Simplified alert handlers
   const handleCloseAlert = useCallback(() => {
-    if (!alert || !alertRef.current?.isPersistent) {
-      setAlertSafe(null);
-    } else {
-      console.warn("⚠️ [ALERT] Persistent alert close attempted but blocked!");
-    }
-  }, [alert, setAlertSafe]);
+    setAlert((current) => {
+      // Don't close error/warning alerts automatically
+      if (current?.type === "error" || current?.type === "warning") {
+        return current;
+      }
+      return null;
+    });
+  }, []);
 
   const handleManualCloseAlert = useCallback(() => {
-    setAlertSafe(null);
-  }, [setAlertSafe]);
+    setAlert(null);
+  }, []);
 
   const handleCSVFallback = useCallback(
     async (file: File, originalExcelError: any): Promise<boolean> => {
@@ -1179,28 +1217,32 @@ ${invalidRows.length > 5 ? `\n... và ${invalidRows.length - 5} dòng khác` : "
             type: "warning",
             message: `⚠️ Import thành công với cảnh báo!
 
-✅ Import thành công: ${validCustomers} khách hàng
-⚠️ Bỏ qua: ${invalidRows.length} dòng lỗi
-📊 Tỷ lệ thành công: ${Math.round(
+            ✅ Import thành công: ${validCustomers} khách hàng
+            ⚠️ Bỏ qua: ${invalidRows.length} dòng lỗi
+            📊 Tỷ lệ thành công: ${Math.round(
               (validCustomers / (validCustomers + invalidRows.length)) * 100
             )}%
 
-🔍 Chi tiết dòng lỗi:
-${invalidRows.slice(0, 3).join("\n")}
-${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : ""}
+            🔍 Chi tiết dòng lỗi:
+            ${invalidRows.slice(0, 3).join("\n")}
+            ${
+              invalidRows.length > 3
+                ? `\n... và ${invalidRows.length - 3} dòng khác`
+                : ""
+            }
 
-💡 Bạn có thể tiếp tục hoặc sửa lỗi và import lại.`,
+            💡 Bạn có thể tiếp tục hoặc sửa lỗi và import lại.`,
           });
         } else {
           setAlertSafe({
             type: "success",
             message: `🎉 Import Excel thành công!
 
-✅ Đã import: ${validCustomers} khách hàng
-📊 Tỷ lệ thành công: 100%
-📋 File: ${file.name}
+            ✅ Đã import: ${validCustomers} khách hàng
+            📊 Tỷ lệ thành công: 100%
+            📋 File: ${file.name}
 
-🚀 Sẵn sàng để tạo chiến dịch!`,
+            🚀 Sẵn sàng để tạo chiến dịch!`,
           });
         }
       } catch (error) {
@@ -1242,7 +1284,7 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
     [handleCSVFallback, setAlertSafe]
   );
 
-  const downloadSampleFile = () => {
+  const downloadSampleFile = useCallback(() => {
     // Đường dẫn file mẫu trong thư mục public
     const fileUrl = "/file_mau_cau_hinh_gui_tin_nhan.xlsx";
     const a = document.createElement("a");
@@ -1251,7 +1293,7 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  };
+  }, []);
 
   const handleSubmit = async () => {
     // Basic validation that always applies
@@ -1411,87 +1453,107 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
     }
   };
 
-  const modalTitle =
-    mode === "edit" ? "Chỉnh Sửa Chiến Dịch" : "Tạo Chiến Dịch Mới";
-  const submitButtonText = mode === "edit" ? "Cập nhật" : "Tạo chiến dịch";
-  const successMessage =
-    mode === "edit" ? "Cập nhật thành công!" : "Tạo thành công!";
-  const successDescription =
+  const roundedProgress = useMemo(() => Math.round(progress), [progress]);
+
+  const modalTitle = useMemo(() =>
+    mode === "edit" ? "Chỉnh Sửa Chiến Dịch" : "Tạo Chiến Dịch Mới"
+  , [mode]);
+  
+  const submitButtonText = useMemo(() => 
+    mode === "edit" ? "Cập nhật" : "Tạo chiến dịch"
+  , [mode]);
+  
+  const successMessage = useMemo(() =>
+    mode === "edit" ? "Cập nhật thành công!" : "Tạo thành công!"
+  , [mode]);
+  
+  const successDescription = useMemo(() =>
     mode === "edit"
       ? "Chiến dịch của bạn đã được cập nhật"
-      : "Chiến dịch của bạn đã được tạo";
+      : "Chiến dịch của bạn đã được tạo"
+  , [mode]);
 
   return (
-    <AnimatePresence>
-      {open && (
-        <Dialog open={open} onOpenChange={onOpenChange} modal={true}>
-          <DialogContent className="!max-w-[85vw] !max-h-[85vh] p-0 bg-white flex flex-col">
-            {alert && (
-              <motion.div
-                key={`alert-${alert.id}`}
-                className="absolute top-4 left-4 right-4 z-[10000]"
-                initial={{ opacity: 0, y: -50, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -50, scale: 0.9 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 30,
-                }}
-              >
-                <div className="relative">
-                  {alertRef.current?.isPersistent ? (
-                    // ✅ CUSTOM PERSISTENT ALERT - Không có auto-close logic
-                    <div
-                      className={`
-                      p-4 rounded-lg border-l-4 shadow-lg
-                      ${
-                        alert.type === "error"
-                          ? "bg-red-50 border-red-500 text-red-800"
-                          : "bg-yellow-50 border-yellow-500 text-yellow-800"
-                      }
-                    `}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            {alert.type === "error" ? (
-                              <AlertCircle className="h-5 w-5 text-red-500" />
-                            ) : (
-                              <AlertCircle className="h-5 w-5 text-yellow-500" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium mb-1">
-                              {alert.type === "error" ? "Lỗi" : "Cảnh báo"}
-                            </div>
-                            <div className="text-sm whitespace-pre-line">
-                              {alert.message}
-                            </div>
-                          </div>
+    <>
+      {/* Alert Portal - Outside Dialog to prevent conflicts */}
+      <AnimatePresence>
+        {alert && open && (
+          <motion.div
+            key={`alert-${alert.id}`}
+            className="fixed top-4 left-4 right-4 z-[10001] pointer-events-none"
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 30,
+            }}
+          >
+            <div className="relative pointer-events-auto max-w-md mx-auto">
+              {alert?.type === "error" || alert?.type === "warning" ? (
+                // Persistent alert for errors and warnings
+                <div
+                  className={`
+                  p-4 rounded-lg border-l-4 shadow-lg
+                  ${
+                    alert.type === "error"
+                      ? "bg-red-50 border-red-500 text-red-800"
+                      : "bg-yellow-50 border-yellow-500 text-yellow-800"
+                  }
+                `}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0">
+                        {alert.type === "error" ? (
+                          <AlertCircle className="h-5 w-5 text-red-500" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-yellow-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium mb-1">
+                          {alert.type === "error" ? "Lỗi" : "Cảnh báo"}
                         </div>
-                        <button
-                          onClick={handleManualCloseAlert}
-                          className="flex-shrink-0 ml-4 p-1 rounded-md hover:bg-red-100 transition-colors"
-                          aria-label="Đóng thông báo"
-                          title="Đóng thông báo"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <div className="text-sm whitespace-pre-line">
+                          {alert.message}
+                        </div>
                       </div>
                     </div>
-                  ) : (
-                    // ✅ STANDARD ALERT CHO SUCCESS/INFO - Có auto-close
-                    <ServerResponseAlert
-                      type={alert.type as any}
-                      message={alert.message}
-                      onClose={handleCloseAlert}
-                      duration={alert.type === "success" ? 4000 : 3000}
-                    />
-                  )}
+                    <button
+                      onClick={handleManualCloseAlert}
+                      className="flex-shrink-0 ml-4 p-1 rounded-md hover:bg-red-100 transition-colors"
+                      aria-label="Đóng thông báo"
+                      title="Đóng thông báo"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-              </motion.div>
-            )}
+              ) : (
+                // ✅ STANDARD ALERT CHO SUCCESS/INFO - Có auto-close
+                <ServerResponseAlert
+                  type={alert.type as any}
+                  message={alert.message}
+                  onClose={handleCloseAlert}
+                  duration={alert.type === "success" ? 4000 : 3000}
+                />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+        {open && (
+        <Dialog 
+          key={`campaign-modal-${mode}-${initialData?.id || 'new'}`}
+          open={open} 
+          onOpenChange={onOpenChange} 
+          modal={true}
+        >
+          <DialogContent className="!max-w-[85vw] !max-h-[85vh] p-0 bg-white flex flex-col">
             {/* Animated background */}
             <motion.div
               className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-2xl opacity-50 pointer-events-none"
@@ -1537,18 +1599,18 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                   <span className="text-xs text-white/80">Tiến độ</span>
                   <motion.span
                     className="text-sm font-medium"
-                    key={Math.round(calculateProgress())}
+                    key={roundedProgress}
                     initial={{ scale: 1.2 }}
                     animate={{ scale: 1 }}
                   >
-                    {Math.round(calculateProgress())}%
+                    {roundedProgress}%
                   </motion.span>
                 </div>
                 <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
                   <motion.div
                     className="h-full bg-white/90 rounded-full"
                     initial={{ width: 0 }}
-                    animate={{ width: `${calculateProgress()}%` }}
+                    animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.5, ease: "easeOut" }}
                   />
                 </div>
@@ -1563,9 +1625,9 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
               transition={{ delay: 0.3 }}
             >
               <StepIndicator
-                currentStep={getCurrentStepNumber()}
-                totalSteps={needsReminderTab ? 5 : 4}
-                labels={getTabLabels()}
+                currentStep={currentStepNumber}
+                totalSteps={totalSteps}
+                labels={tabLabels}
               />
             </motion.div>
 
@@ -1822,15 +1884,19 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                                 max={500}
                               />
                             </Label>
-                            <Textarea
+                            <EnhancedTextarea
                               value={messageContent}
                               onChange={(e) =>
                                 setMessageContent(e.target.value)
                               }
+                              enableValidation={true}
+                              onValidationChange={handleMessageValidationChange}
                               placeholder="Nhập nội dung tin nhắn hấp dẫn của bạn..."
-                              rows={4}
-                              className="resize-none transition-all duration-200 focus:ring-2 focus:ring-purple-500"
-                              maxLength={500}
+                              rows={8}
+                              className="resize-none transition-all duration-200"
+                              maxLength={10000}
+                              insertButtons={messageInsertButtons}
+                              showInsertButtons={true}
                             />
                           </motion.div>
 
@@ -1940,7 +2006,7 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                                         whileFocus={{ scale: 1.01 }}
                                         transition={{ duration: 0.1 }}
                                       >
-                                        <Textarea
+                                        <EnhancedTextarea
                                           value={reminder.content}
                                           onChange={(e) =>
                                             updateReminder(
@@ -1949,9 +2015,13 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                                               e.target.value
                                             )
                                           }
+                                          enableValidation={true}
+                                          onValidationChange={(error) => handleReminderValidationChange(index, error)}
+                                          insertButtons={reminderInsertButtons}
                                           placeholder="VD: Ưu đãi sắp hết hạn! Nhanh tay nhận ngay..."
                                           rows={2}
-                                          className="resize-none mt-1 transition-all duration-200 focus:ring-2 focus:ring-orange-500"
+                                          className="resize-none mt-1 transition-all duration-200"
+                                          maxLength={10000}
                                         />
                                       </motion.div>
                                     </motion.div>
@@ -1986,16 +2056,27 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                                       >
                                         <Slider
                                           value={[reminder.minutes]}
-                                          onValueChange={(value) =>
+                                          onValueChange={(value) => {
+                                            let newValue = value[0];
+                                            if (newValue < 20) {
+                                              newValue = Math.round(newValue);
+                                            } else {
+                                              newValue =
+                                                Math.round(newValue / 5) * 5;
+                                            }
+                                            newValue = Math.max(
+                                              5,
+                                              Math.min(180, newValue)
+                                            );
                                             updateReminder(
                                               index,
                                               "minutes",
-                                              value[0]
-                                            )
-                                          }
+                                              newValue
+                                            );
+                                          }}
                                           min={5}
-                                          max={120}
-                                          step={5}
+                                          max={180}
+                                          step={1}
                                           className="transition-all duration-200"
                                         />
                                       </motion.div>
@@ -2006,7 +2087,7 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                                         transition={{ delay: 0.4 }}
                                       >
                                         <span>5 phút</span>
-                                        <span>2 giờ</span>
+                                        <span>3 giờ</span>
                                       </motion.div>
                                     </motion.div>
                                   </div>
@@ -3036,39 +3117,6 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
             >
               <div className="flex justify-between items-center">
                 <div className="flex-shrink-0">
-                  <AnimatePresence>
-                    {currentTab !== "basic" && (
-                      <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                      >
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            if (currentTab === "schedule")
-                              setCurrentTab("basic");
-                            else if (currentTab === "reminders")
-                              setCurrentTab("schedule");
-                            else if (currentTab === "email")
-                              setCurrentTab(
-                                needsReminderTab ? "reminders" : "schedule"
-                              );
-                            else if (currentTab === "customers")
-                              setCurrentTab("email");
-                          }}
-                          size="sm"
-                          className="flex items-center gap-1 hover:bg-gray-100 transition-colors"
-                        >
-                          <ChevronRight className="h-4 w-4 rotate-180 inline-block" />
-                          <span className="inline-block">Quay lại</span>
-                        </Button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <div className="flex items-center gap-2 flex-shrink-0">
                   <Button
                     onClick={async () => {
                       // ✅ KHÔNG GỌI resetForm() KHI CÓ ERROR ALERT
@@ -3100,6 +3148,36 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                   >
                     Hủy
                   </Button>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {currentTab !== "basic" && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                    >
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (currentTab === "schedule") setCurrentTab("basic");
+                          else if (currentTab === "reminders")
+                            setCurrentTab("schedule");
+                          else if (currentTab === "email")
+                            setCurrentTab(
+                              needsReminderTab ? "reminders" : "schedule"
+                            );
+                          else if (currentTab === "customers")
+                            setCurrentTab("email");
+                        }}
+                        size="sm"
+                        className="flex items-center gap-1 hover:bg-gray-100 transition-colors"
+                      >
+                        <ChevronRight className="h-4 w-4 rotate-180 inline-block" />
+                        <span className="inline-block">Quay lại</span>
+                      </Button>
+                    </motion.div>
+                  )}
 
                   {currentTab !== "customers" ? (
                     <motion.div
@@ -3131,7 +3209,16 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                           (currentTab === "reminders" && !canProceedFromTab3)
                         }
                         size="sm"
-                        className="flex items-center gap-1 hover:bg-blue-700 transition-colors"
+                        className={cn(
+                          "flex items-center gap-1 transition-colors",
+                          // ✅ Visual feedback khi có validation error
+                          (currentTab === "schedule" &&
+                            messageValidationError) ||
+                            (currentTab === "reminders" &&
+                              reminderValidationErrors.some((e) => e !== null))
+                            ? "opacity-50 cursor-not-allowed bg-red-100 hover:bg-red-100 text-red-600"
+                            : "hover:bg-blue-700"
+                        )}
                       >
                         <span className="inline-block">Tiếp tục</span>
                         <ArrowRight className="h-4 w-4 inline-block" />
@@ -3151,7 +3238,7 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                         {isSubmitting ? (
                           <>
                             <motion.div
-                              className="h-4 w-4 border-2 border-white border-t-transparent rounded-full"
+                              className="h-4 w-4 border-2 border-white border-t-transparent rounded-full inline-block"
                               animate={{ rotate: 360 }}
                               transition={{
                                 duration: 1,
@@ -3159,9 +3246,11 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                                 ease: "linear",
                               }}
                             />
-                            {mode === "edit"
-                              ? "Đang cập nhật..."
-                              : "Đang tạo..."}
+                            <span className="ml-2 inline-block">
+                              {mode === "edit"
+                                ? "Đang cập nhật..."
+                                : "Đang tạo..."}
+                            </span>
                           </>
                         ) : (
                           <>
@@ -3239,7 +3328,8 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
             </AnimatePresence>
           </DialogContent>
         </Dialog>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
