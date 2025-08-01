@@ -26,6 +26,7 @@ import {
   CheckCheck,
   Download,
   ExternalLink,
+  Bot,
 } from "lucide-react";
 import { campaignAPI } from "@/lib/campaign-api";
 import { toast } from "sonner";
@@ -35,7 +36,7 @@ import { AnimatePresence, motion } from "framer-motion";
 // Types (giữ nguyên)
 export enum LogStatus {
   PENDING = "pending",
-  SENT = "sent", 
+  SENT = "sent",
   FAILED = "failed",
   CUSTOMER_REPLIED = "customer_replied",
   STAFF_HANDLED = "staff_handled",
@@ -53,7 +54,7 @@ interface CampaignCustomer {
 }
 
 interface ConversationMessage {
-  sender: "staff" | "customer";
+  sender: "staff" | "customer" | "bot";
   content: string;
   timestamp: string;
   contentType: string;
@@ -73,6 +74,7 @@ interface CampaignInteractionLog {
   staff_handler?: {
     id: string;
     name: string;
+    avatarZalo?: string;
   };
   error_details?: Record<string, any>;
   conversation_metadata?: {
@@ -85,6 +87,7 @@ interface CampaignInteractionLog {
     attachment_sent?: Record<string, any>;
     error?: string;
   }>;
+  staff_handler_avatar_zalo?: string;
 }
 
 interface CustomerWithStatus extends CampaignCustomer {
@@ -96,6 +99,7 @@ interface CustomerWithStatus extends CampaignCustomer {
   last_interaction_at?: string;
   status?: LogStatus | null;
   conversation_metadata?: any;
+  sent_date?: string;
 }
 
 interface CustomerLogModalProps {
@@ -145,103 +149,151 @@ const LOG_STATUS_CONFIG = {
   },
 };
 
-// ✨ ENHANCED: Full date/time formatting for debug
+// Enhanced date formatting
 const formatFullDateTime = (date: string | Date): string => {
   try {
     return new Intl.DateTimeFormat("vi-VN", {
       weekday: "short",
       day: "2-digit",
-      month: "2-digit", 
+      month: "2-digit",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit"
+      second: "2-digit",
     }).format(new Date(date));
   } catch {
     return "N/A";
   }
 };
 
-// Compact time for bubble display
-const formatChatTime = (date: string | Date): string => {
+// ✅ ENHANCED: Parse message content with image URL and sticker handling
+const parseMessageContent = (content: string, contentType?: string) => {
   try {
-    return new Intl.DateTimeFormat("vi-VN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(date));
-  } catch {
-    return "N/A";
-  }
-};
-
-const parseMessageContent = (content: string) => {
-  try {
+    // Try to parse as JSON first
     const parsed = JSON.parse(content);
-    return parsed.text || content;
+
+    // ✅ Handle IMAGE contentType with imageUrl
+    if (contentType === "IMAGE" && parsed.imageUrl) {
+      return {
+        type: "image",
+        imageUrl: parsed.imageUrl,
+        thumbnailUrl: parsed.thumbnailUrl || parsed.imageUrl,
+        caption: parsed.caption || "",
+        title: parsed.title || ""
+      };
+    }
+
+    // ✅ Handle STICKER contentType with stickerId
+    if (contentType === "STICKER" && parsed.stickerId) {
+      const stickerUrl = `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${parsed.stickerId}&size=130&version=2`;
+      return {
+        type: "sticker",
+        stickerId: parsed.stickerId,
+        stickerUrl: stickerUrl,
+        categoryId: parsed.categoryId || "",
+        description: parsed.description || ""
+      };
+    }
+
+    // Handle regular text messages
+    const text = parsed.text || content;
+    // Replace \n with actual line breaks
+    return {
+      type: "text",
+      text: text.replace(/\\n/g, "\n")
+    };
   } catch {
-    return content;
+    // If not JSON, just handle \n replacement
+    return {
+      type: "text", 
+      text: content.replace(/\\n/g, "\n")
+    };
   }
 };
 
-// ✨ NEW: File download utility
+// ✅ ENHANCED: File download utility with proper base64 handling
 const downloadFile = (fileData: any, filename: string = "downloaded-file") => {
   try {
     let blob: Blob;
     let downloadFilename = filename;
 
-    if (fileData.base64 || fileData.data) {
-      // Handle base64 encoded files
-      const base64Data = fileData.base64 || fileData.data;
-      const byteCharacters = atob(base64Data.split(',')[1] || base64Data);
+    if (fileData.base64) {
+      // ✅ Handle base64 files that are already prepared
+      const base64Data = fileData.base64;
+
+      // Extract MIME type and data
+      const [mimeInfo, base64Content] = base64Data.split(",");
+      const mimeType =
+        mimeInfo.match(/:(.*?);/)?.[1] || "application/octet-stream";
+
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Content);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
       const byteArray = new Uint8Array(byteNumbers);
-      blob = new Blob([byteArray]);
-      
-      if (fileData.fileName) {
-        downloadFilename = fileData.fileName;
-      } else if (fileData.type) {
-        const ext = fileData.type.includes('image') ? '.jpg' : '.file';
-        downloadFilename = `${filename}${ext}`;
+      blob = new Blob([byteArray], { type: mimeType });
+
+      // Use filename from data if available
+      if (fileData.filename) {
+        downloadFilename = fileData.filename;
+        // Add appropriate extension if missing
+        if (!downloadFilename.includes(".")) {
+          const ext = mimeType.includes("spreadsheet")
+            ? ".xlsx"
+            : mimeType.includes("document")
+            ? ".docx"
+            : mimeType.includes("pdf")
+            ? ".pdf"
+            : ".file";
+          downloadFilename += ext;
+        }
       }
     } else {
-      // Handle text or other data
-      blob = new Blob([JSON.stringify(fileData, null, 2)], { type: 'application/json' });
+      // Fallback for other data types
+      blob = new Blob([JSON.stringify(fileData, null, 2)], {
+        type: "application/json",
+      });
       downloadFilename = `${filename}.json`;
     }
 
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = downloadFilename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
+
     toast.success(`Đã tải xuống: ${downloadFilename}`);
   } catch (error) {
-    console.error('Error downloading file:', error);
-    toast.error('Lỗi khi tải file');
+    console.error("Error downloading file:", error);
+    toast.error("Lỗi khi tải file");
   }
 };
 
-// ✨ NEW: Enhanced attachment renderer with download/link functionality
-const ZaloAttachmentRenderer = ({ 
-  attachment, 
+// ✅ ENHANCED: Attachment renderer with proper file handling
+const ZaloAttachmentRenderer = ({
+  attachment,
   onImageClick,
-  isStaff = false 
-}: { 
-  attachment: any; 
+  senderType = "customer",
+}: {
+  attachment: any;
   onImageClick?: (src: string) => void;
-  isStaff?: boolean;
+  senderType?: "staff" | "customer" | "bot";
 }) => {
   if (!attachment) return null;
 
+  const isStaff = senderType === "staff";
+  const isBot = senderType === "bot";
+
   // Image attachment
-  if (attachment.type === "image" && (attachment.base64 || typeof attachment === "string")) {
+  if (
+    attachment.type === "image" &&
+    (attachment.base64 || typeof attachment === "string")
+  ) {
     const imageSrc = attachment.base64 || attachment;
     return (
       <motion.div
@@ -258,7 +310,7 @@ const ZaloAttachmentRenderer = ({
           style={{ maxHeight: 200 }}
           loading="lazy"
         />
-        
+
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
           <motion.div
             initial={{ scale: 0 }}
@@ -268,7 +320,7 @@ const ZaloAttachmentRenderer = ({
             <ImageIcon className="h-5 w-5 text-gray-700" />
           </motion.div>
         </div>
-        
+
         <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           Click để phóng to
         </div>
@@ -276,11 +328,14 @@ const ZaloAttachmentRenderer = ({
     );
   }
 
-  // ✨ NEW: Link attachment - Click to open in new tab
-  if ((attachment.type === "link" && attachment.url) || 
-      (typeof attachment === "string" && (attachment.startsWith("http://") || attachment.startsWith("https://")))) {
+  // Link attachment
+  if (
+    (attachment.type === "link" && attachment.url) ||
+    (typeof attachment === "string" &&
+      (attachment.startsWith("http://") || attachment.startsWith("https://")))
+  ) {
     const linkUrl = attachment.url || attachment;
-    
+
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -288,37 +343,72 @@ const ZaloAttachmentRenderer = ({
         transition={{ duration: 0.3 }}
         className={cn(
           "p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-md",
-          isStaff 
-            ? "bg-white/20 border-white/30 hover:bg-white/30" 
+          isStaff
+            ? "bg-white/20 border-white/30 hover:bg-white/30"
+            : isBot
+            ? "bg-white/20 border-white/30 hover:bg-white/30"
             : "bg-blue-50 border-blue-200 hover:bg-blue-100"
         )}
-        onClick={() => window.open(linkUrl, '_blank')}
+        onClick={() => window.open(linkUrl, "_blank")}
       >
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center",
-            isStaff ? "bg-white/30" : "bg-blue-100"
-          )}>
-            <ExternalLink className={cn("h-5 w-5", isStaff ? "text-white" : "text-blue-600")} />
+          <div
+            className={cn(
+              "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center",
+              isStaff
+                ? "bg-white/30"
+                : isBot
+                ? "bg-white/30"
+                : "bg-blue-100"
+            )}
+          >
+            <ExternalLink
+              className={cn(
+                "h-5 w-5",
+                isStaff
+                  ? "text-white"
+                  : isBot
+                  ? "text-white"
+                  : "text-blue-600"
+              )}
+            />
           </div>
           <div className="flex-1 min-w-0">
-            <div className={cn(
-              "font-semibold text-sm mb-1",
-              isStaff ? "text-white" : "text-blue-700"
-            )}>
+            <div
+              className={cn(
+                "font-semibold text-sm mb-1",
+                isStaff
+                  ? "text-white"
+                  : isBot
+                  ? "text-white"
+                  : "text-blue-700"
+              )}
+            >
               Liên kết đính kèm
             </div>
-            <div className={cn(
-              "text-xs break-all font-mono opacity-90",
-              isStaff ? "text-blue-100" : "text-blue-600"
-            )}>
+            <div
+              className={cn(
+                "text-xs break-all font-mono opacity-90",
+                isStaff
+                  ? "text-blue-100"
+                  : isBot
+                  ? "text-yellow-100"
+                  : "text-blue-600"
+              )}
+            >
               {linkUrl.length > 50 ? `${linkUrl.substring(0, 50)}...` : linkUrl}
             </div>
           </div>
-          <div className={cn(
-            "flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium",
-            isStaff ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700"
-          )}>
+          <div
+            className={cn(
+              "flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium",
+              isStaff
+                ? "bg-white/20 text-white"
+                : isBot
+                ? "bg-white/20 text-white"
+                : "bg-blue-100 text-blue-700"
+            )}
+          >
             Click để mở
           </div>
         </div>
@@ -326,10 +416,36 @@ const ZaloAttachmentRenderer = ({
     );
   }
 
-  // ✨ NEW: File attachment - Click to download
-  if (attachment.type === "file" || (typeof attachment === "object" && attachment.fileName)) {
-    const fileName = attachment.fileName || attachment.name || "file-dinh-kem";
-    
+  // File attachment
+  if (attachment.type === "file") {
+    const fileName =
+      attachment.filename || attachment.fileName || "file-dinh-kem";
+    const fileSize = attachment.base64
+      ? `${Math.round((attachment.base64.length * 0.75) / 1024)} KB`
+      : "";
+
+    // Determine file type icon based on MIME type or filename
+    const getFileIcon = () => {
+      if (
+        attachment.base64?.includes("spreadsheet") ||
+        fileName.includes(".xlsx") ||
+        fileName.includes(".xls")
+      ) {
+        return "📊";
+      }
+      if (
+        attachment.base64?.includes("document") ||
+        fileName.includes(".docx") ||
+        fileName.includes(".doc")
+      ) {
+        return "📄";
+      }
+      if (attachment.base64?.includes("pdf") || fileName.includes(".pdf")) {
+        return "📋";
+      }
+      return "📁";
+    };
+
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -337,38 +453,67 @@ const ZaloAttachmentRenderer = ({
         transition={{ duration: 0.3 }}
         className={cn(
           "p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-md",
-          isStaff 
-            ? "bg-white/20 border-white/30 hover:bg-white/30" 
+          isStaff
+            ? "bg-white/20 border-white/30 hover:bg-white/30"
+            : isBot
+            ? "bg-white/20 border-white/30 hover:bg-white/30"
             : "bg-gray-50 border-gray-200 hover:bg-gray-100"
         )}
         onClick={() => downloadFile(attachment, fileName)}
       >
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center",
-            isStaff ? "bg-white/30" : "bg-gray-100"
-          )}>
-            <Download className={cn("h-5 w-5", isStaff ? "text-white" : "text-gray-600")} />
+          <div
+            className={cn(
+              "flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl",
+              isStaff
+                ? "bg-white/30"
+                : isBot
+                ? "bg-white/30"
+                : "bg-gray-100"
+            )}
+          >
+            {getFileIcon()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className={cn(
-              "font-semibold text-sm mb-1",
-              isStaff ? "text-white" : "text-gray-700"
-            )}>
-              File đính kèm
+            <div
+              className={cn(
+                "font-semibold text-sm mb-1",
+                isStaff
+                  ? "text-white"
+                  : isBot
+                  ? "text-white"
+                  : "text-gray-700"
+              )}
+            >
+              {fileName}
             </div>
-            <div className={cn(
-              "text-xs font-mono opacity-90 truncate",
-              isStaff ? "text-blue-100" : "text-gray-600"
-            )}>
-              📄 {fileName}
+            <div
+              className={cn(
+                "text-xs opacity-90 flex items-center gap-2",
+                isStaff
+                  ? "text-blue-100"
+                  : isBot
+                  ? "text-yellow-100"
+                  : "text-gray-600"
+              )}
+            >
+              <FileText className="h-3 w-3" />
+              <span>File đính kèm</span>
+              {fileSize && <span>• {fileSize}</span>}
             </div>
           </div>
-          <div className={cn(
-            "flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium",
-            isStaff ? "bg-white/20 text-white" : "bg-gray-100 text-gray-700"
-          )}>
-            Tải xuống
+          <div
+            className={cn(
+              "flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-full font-medium",
+              isStaff
+                ? "bg-white/20 text-white"
+                : isBot
+                ? "bg-white/20 text-white"
+                : "bg-gray-200 text-gray-700"
+            )}
+          >
+            <Download className="h-3 w-3" />
+            <span>Tải xuống</span>
           </div>
         </div>
       </motion.div>
@@ -382,15 +527,46 @@ const ZaloAttachmentRenderer = ({
       animate={{ opacity: 1 }}
       className={cn(
         "p-3 rounded-lg border-2",
-        isStaff ? "bg-white/20 border-white/30" : "bg-gray-50 border-gray-200"
+        isStaff
+          ? "bg-white/20 border-white/30"
+          : isBot
+          ? "bg-white/20 border-white/30"
+          : "bg-gray-50 border-gray-200"
       )}
     >
       <div className="flex items-center gap-2">
-        <AlertCircle className={cn("h-4 w-4", isStaff ? "text-white" : "text-gray-500")} />
-        <span className={cn("font-semibold text-sm", isStaff ? "text-white" : "text-gray-700")}>
+        <AlertCircle
+          className={cn(
+            "h-4 w-4",
+            isStaff
+              ? "text-white"
+              : isBot
+              ? "text-white"
+              : "text-gray-500"
+          )}
+        />
+        <span
+          className={cn(
+            "font-semibold text-sm",
+            isStaff
+              ? "text-white"
+              : isBot
+              ? "text-white"
+              : "text-gray-700"
+          )}
+        >
           Đính kèm:
         </span>
-        <span className={cn("text-sm", isStaff ? "text-blue-100" : "text-gray-500")}>
+        <span
+          className={cn(
+            "text-sm",
+            isStaff
+              ? "text-blue-100"
+              : isBot
+              ? "text-yellow-100"
+              : "text-gray-500"
+          )}
+        >
           [Loại không xác định]
         </span>
       </div>
@@ -398,42 +574,49 @@ const ZaloAttachmentRenderer = ({
   );
 };
 
-// ✨ ENHANCED: Zalo-style Chat Message Component with full datetime
-const ZaloChatMessage = ({ 
-  message, 
+// ✅ ENHANCED: Chat Message Component với xử lý ảnh và sticker (sticker không thể phóng to)
+const ZaloChatMessage = ({
+  message,
   index,
-  onImageClick
-}: { 
+  onImageClick,
+  staffAvatarUrl,
+}: {
   message: ConversationMessage;
   index: number;
   onImageClick: (src: string) => void;
+  staffAvatarUrl?: string;
 }) => {
   const isStaff = message.sender === "staff";
+  const isBot = message.sender === "bot";
+  const isCustomer = message.sender === "customer";
+
+  // ✅ Parse message content với xử lý ảnh và sticker
+  const parsedMessage = parseMessageContent(message.content, message.contentType);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ 
-        delay: index * 0.1, 
+      transition={{
+        delay: index * 0.1,
         duration: 0.4,
         type: "spring",
         stiffness: 300,
-        damping: 25
+        damping: 25,
       }}
       className={cn(
         "flex w-full mb-4",
-        isStaff ? "justify-end" : "justify-start"
+        isCustomer ? "justify-start" : "justify-end"
       )}
     >
       <div className="flex items-start gap-2 max-w-[80%]">
         {/* Avatar cho customer (bên trái) */}
-        {!isStaff && (
+        {isCustomer && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: index * 0.1 + 0.2 }}
-            className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg"
+            className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-lg bg-gradient-to-br from-green-400 to-green-600"
           >
             <User className="h-5 w-5 text-white" />
           </motion.div>
@@ -446,74 +629,194 @@ const ZaloChatMessage = ({
             transition={{ duration: 0.2 }}
             className={cn(
               "relative px-4 py-3 shadow-lg max-w-full",
-              isStaff 
-                ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-md" 
+              isStaff
+                ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-br-md"
+                : isBot
+                ? "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-2xl rounded-br-md"
                 : "bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-md"
             )}
           >
-            {/* ✨ Attachment nếu có */}
+            {/* ✅ ENHANCED: Handle attachment, inline image và sticker */}
             {message.attachment && (
               <div className="mb-3">
-                <ZaloAttachmentRenderer 
+                <ZaloAttachmentRenderer
                   attachment={message.attachment}
                   onImageClick={onImageClick}
-                  isStaff={isStaff}
+                  senderType={message.sender}
                 />
               </div>
             )}
 
-            {/* Message content */}
-            {message.content && (
+            {/* ✅ Handle parsed message content */}
+            {parsedMessage.type === "image" ? (
+              // ✅ Display inline image from imageUrl (có thể phóng to)
               <div className="mb-3">
-                <p className="text-sm leading-relaxed break-words select-text">
-                  {message.content}
-                </p>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="relative group cursor-pointer mb-2"
+                  onClick={() => onImageClick?.(parsedMessage.imageUrl)}
+                >
+                  <img
+                    src={parsedMessage.imageUrl}
+                    alt={parsedMessage.caption || "Ảnh chat"}
+                    className="w-full max-w-xs rounded-lg shadow-md object-cover group-hover:shadow-lg transition-all duration-300"
+                    style={{ maxHeight: 200 }}
+                    loading="lazy"
+                  />
+
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      whileHover={{ scale: 1 }}
+                      className="bg-white/90 rounded-full p-2.5 shadow-xl backdrop-blur-sm"
+                    >
+                      <ImageIcon className="h-5 w-5 text-gray-700" />
+                    </motion.div>
+                  </div>
+
+                  <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    Click để phóng to
+                  </div>
+                </motion.div>
+
+                {/* Caption if exists */}
+                {parsedMessage.caption && (
+                  <p className="text-sm leading-relaxed break-words select-text whitespace-pre-wrap mt-2">
+                    {parsedMessage.caption}
+                  </p>
+                )}
               </div>
+            ) : parsedMessage.type === "sticker" ? (
+              // ✅ Display sticker from stickerId (KHÔNG thể phóng to)
+              <div className="mb-3">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="relative mb-2" // ✅ Loại bỏ cursor-pointer và onClick
+                >
+                  <img
+                    src={parsedMessage.stickerUrl}
+                    alt={`Sticker ${parsedMessage.stickerId}`}
+                    className="w-auto h-auto max-w-[150px] max-h-[150px] rounded-lg shadow-md object-contain transition-all duration-300" // ✅ Loại bỏ hover effects
+                    loading="lazy"
+                    onError={(e) => {
+                      // ✅ Fallback nếu không load được sticker
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.parentElement!.innerHTML = `
+                        <div class="w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center">
+                          <span class="text-gray-500 text-xs">Sticker</span>
+                        </div>
+                      `;
+                    }}
+                  />
+                  {/* ✅ Loại bỏ hover overlay và click hint cho sticker */}
+                </motion.div>
+
+                {/* Sticker description if exists */}
+                {parsedMessage.description && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {parsedMessage.description}
+                  </p>
+                )}
+              </div>
+            ) : (
+              // ✅ Display regular text message
+              parsedMessage.text && (
+                <div className="mb-3">
+                  <p className="text-sm leading-relaxed break-words select-text whitespace-pre-wrap">
+                    {parsedMessage.text}
+                  </p>
+                </div>
+              )
             )}
 
-            {/* ✨ ENHANCED: Full timestamp always visible for debug */}
-            <div className={cn(
-              "flex items-center justify-between gap-2 text-xs border-t pt-2 mt-2",
-              isStaff ? "text-blue-100 border-white/20" : "text-gray-500 border-gray-200"
-            )}>
+            {/* Full timestamp always visible for debug */}
+            <div
+              className={cn(
+                "flex items-center justify-between gap-2 text-xs border-t pt-2 mt-2",
+                isStaff
+                  ? "text-blue-100 border-white/20"
+                  : isBot
+                  ? "text-yellow-100 border-white/20"
+                  : "text-gray-500 border-gray-200"
+              )}
+            >
               <div className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                <span className="font-mono">{formatFullDateTime(message.timestamp)}</span>
+                <span className="font-mono">
+                  {formatFullDateTime(message.timestamp)}
+                </span>
               </div>
-              {isStaff && (
+              {(isStaff || isBot) && (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.5 }}
                   className="flex items-center gap-1"
                 >
-                  <CheckCheck className="h-3 w-3 text-blue-200" />
+                  <CheckCheck
+                    className={cn(
+                      "h-3 w-3",
+                      isBot ? "text-yellow-200" : "text-blue-200"
+                    )}
+                  />
                   <span className="text-xs">Đã gửi</span>
                 </motion.div>
               )}
             </div>
 
-            {/* Zalo-style message tail */}
+            {/* Message tail */}
             <div
               className={cn(
                 "absolute top-4 w-0 h-0",
-                isStaff 
+                isStaff
                   ? "-right-2 border-l-8 border-l-blue-500 border-t-8 border-t-transparent border-b-8 border-b-transparent"
+                  : isBot
+                  ? "-right-2 border-l-8 border-l-yellow-500 border-t-8 border-t-transparent border-b-8 border-b-transparent"
                   : "-left-2 border-r-8 border-r-white border-t-8 border-t-transparent border-b-8 border-b-transparent"
               )}
             />
           </motion.div>
         </div>
 
-        {/* Avatar cho staff (bên phải) */}
-        {isStaff && (
+        {/* Avatar cho staff và bot (bên phải) */}
+        {(isStaff || isBot) && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: index * 0.1 + 0.2 }}
-            className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center shadow-lg"
+            className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden shadow-lg border-2 border-white"
           >
-            <UserCheck className="h-5 w-5 text-white" />
+            {isStaff ? (
+              staffAvatarUrl ? (
+                <img
+                  src={staffAvatarUrl}
+                  alt="Staff Avatar"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    e.currentTarget.parentElement!.innerHTML = `
+                      <div class="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+                        <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                        </svg>
+                      </div>
+                    `;
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+                  <UserCheck className="h-5 w-5 text-white" />
+                </div>
+              )
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center">
+                <Bot className="h-5 w-5 text-white" />
+              </div>
+            )}
           </motion.div>
         )}
       </div>
@@ -521,43 +824,47 @@ const ZaloChatMessage = ({
   );
 };
 
-// ✨ ENHANCED: Chat Conversation View with proper message parsing
-const ZaloChatConversationView = ({ 
-  log, 
-  onImageClick 
-}: { 
-  log: CampaignInteractionLog; 
+// ✅ ENHANCED: Chat Conversation View với xử lý staff avatar
+const ZaloChatConversationView = ({
+  log,
+  onImageClick,
+}: {
+  log: CampaignInteractionLog;
   onImageClick: (src: string) => void;
 }) => {
-  // Build conversation timeline
+  // ✅ Build conversation timeline with proper JSON parsing và tránh trùng lặp staff
   const buildConversationTimeline = (): ConversationMessage[] => {
     const messages: ConversationMessage[] = [];
 
-    // 1. Add initial staff message with attachment
+    // 1. Add initial bot message với attachment (tin nhắn đầu tiên luôn là bot)
     if (log.message_content_sent && log.sent_at) {
       messages.push({
-        sender: "staff",
+        sender: "bot",
         content: log.message_content_sent,
         timestamp: log.sent_at,
         contentType: "TEXT",
-        attachment: log.attachment_sent || undefined
+        attachment: log.attachment_sent || undefined,
       });
     }
 
     // 2. Add conversation history (avoid duplicates)
     if (log.conversation_metadata?.history) {
-      log.conversation_metadata.history.forEach(historyMsg => {
-        const isDuplicate = messages.some(existing => 
-          existing.content === historyMsg.content && 
-          Math.abs(new Date(existing.timestamp).getTime() - new Date(historyMsg.timestamp).getTime()) < 5000
+      log.conversation_metadata.history.forEach((historyMsg) => {
+        const isDuplicate = messages.some(
+          (existing) =>
+            existing.content === historyMsg.content &&
+            Math.abs(
+              new Date(existing.timestamp).getTime() -
+                new Date(historyMsg.timestamp).getTime()
+            ) < 5000
         );
-        
+
         if (!isDuplicate) {
           messages.push({
             sender: historyMsg.sender,
-            content: historyMsg.content,
+            content: historyMsg.content, // ✅ Giữ nguyên raw content, sẽ parse trong ZaloChatMessage
             timestamp: historyMsg.timestamp,
-            contentType: historyMsg.contentType || "TEXT"
+            contentType: historyMsg.contentType || "TEXT",
           });
         }
       });
@@ -565,38 +872,52 @@ const ZaloChatConversationView = ({
 
     // 3. Add customer reply if exists and not duplicate
     if (log.customer_reply_content && log.customer_replied_at) {
-      const customerReplyExists = messages.some(msg => 
-        msg.sender === "customer" && 
-        msg.content === parseMessageContent(log.customer_reply_content!)
+      const customerReplyExists = messages.some(
+        (msg) =>
+          msg.sender === "customer" && msg.content === log.customer_reply_content
       );
-      
+
       if (!customerReplyExists) {
         messages.push({
           sender: "customer",
-          content: parseMessageContent(log.customer_reply_content),
+          content: log.customer_reply_content, // ✅ Giữ nguyên raw content
           timestamp: log.customer_replied_at,
-          contentType: "TEXT"
+          contentType: "TEXT",
         });
       }
     }
 
-    // 4. Add staff reply if exists
+    // 4. Add staff reply if exists and not duplicate
     if (log.staff_reply_content && log.staff_handled_at) {
-      messages.push({
-        sender: "staff",
-        content: parseMessageContent(log.staff_reply_content),
-        timestamp: log.staff_handled_at,
-        contentType: "TEXT"
-      });
+      const staffReplyExists = messages.some(
+        (msg) =>
+          msg.sender === "staff" && msg.content === log.staff_reply_content
+      );
+
+      if (!staffReplyExists) {
+        messages.push({
+          sender: "staff",
+          content: log.staff_reply_content, // ✅ Giữ nguyên raw content
+          timestamp: log.staff_handled_at,
+          contentType: "TEXT",
+        });
+      }
     }
 
     // Sort by timestamp
-    return messages.sort((a, b) => 
-      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    return messages.sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
   };
 
   const conversationMessages = buildConversationTimeline();
+
+  // Lấy staff avatar URL
+  const staffAvatarUrl = 
+    log.staff_handler_avatar_zalo || 
+    log.staff_handler?.avatarZalo || 
+    undefined;
 
   return (
     <div className="space-y-1">
@@ -613,7 +934,9 @@ const ZaloChatConversationView = ({
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
             <div>
-              <span className="font-bold text-gray-800 text-sm">Cuộc hội thoại</span>
+              <span className="font-bold text-gray-800 text-sm">
+                Cuộc hội thoại
+              </span>
               {log.conversation_metadata?.conv_id && (
                 <div className="text-xs text-gray-500 font-mono">
                   ID: {log.conversation_metadata.conv_id.slice(-12)}
@@ -622,7 +945,7 @@ const ZaloChatConversationView = ({
             </div>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <LogStatusBadge status={log.status} />
           <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full font-mono">
@@ -640,6 +963,7 @@ const ZaloChatConversationView = ({
               message={message}
               index={index}
               onImageClick={onImageClick}
+              staffAvatarUrl={staffAvatarUrl}
             />
           ))}
         </AnimatePresence>
@@ -666,9 +990,10 @@ const ZaloChatConversationView = ({
   );
 };
 
-// Enhanced LogStatusBadge (giữ nguyên)
+// LogStatusBadge Component (giữ nguyên)
 const LogStatusBadge = ({ status }: { status: LogStatus }) => {
-  const config = LOG_STATUS_CONFIG[status] || LOG_STATUS_CONFIG[LogStatus.PENDING];
+  const config =
+    LOG_STATUS_CONFIG[status] || LOG_STATUS_CONFIG[LogStatus.PENDING];
   const IconComponent = config.icon;
 
   return (
@@ -677,11 +1002,11 @@ const LogStatusBadge = ({ status }: { status: LogStatus }) => {
       animate={{ opacity: 1, scale: 1, y: 0 }}
       whileHover={{ scale: 1.08, y: -2 }}
       whileTap={{ scale: 0.95 }}
-      transition={{ 
-        duration: 0.3, 
-        type: "spring", 
+      transition={{
+        duration: 0.3,
+        type: "spring",
         stiffness: 300,
-        damping: 20 
+        damping: 20,
       }}
     >
       <Badge
@@ -693,9 +1018,9 @@ const LogStatusBadge = ({ status }: { status: LogStatus }) => {
         )}
       >
         <motion.div
-          animate={{ 
+          animate={{
             rotate: status === LogStatus.PENDING ? [0, 360] : 0,
-            scale: status === LogStatus.SENT ? [1, 1.2, 1] : 1 
+            scale: status === LogStatus.SENT ? [1, 1.2, 1] : 1,
           }}
           transition={{
             duration: status === LogStatus.PENDING ? 2 : 0.5,
@@ -706,7 +1031,7 @@ const LogStatusBadge = ({ status }: { status: LogStatus }) => {
           <IconComponent className="h-3.5 w-3.5" />
         </motion.div>
         {config.label}
-        
+
         {status === LogStatus.SENT && (
           <motion.div
             initial={{ opacity: 0, scale: 0 }}
@@ -721,7 +1046,7 @@ const LogStatusBadge = ({ status }: { status: LogStatus }) => {
   );
 };
 
-// Enhanced ImageModal (giữ nguyên)
+// ImageModal (giữ nguyên)
 const ImageModal = ({
   isOpen,
   imageSrc,
@@ -733,23 +1058,21 @@ const ImageModal = ({
 }) => {
   useEffect(() => {
     if (!isOpen) {
-      document.body.style.overflow = "";
       return;
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && isOpen) {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     };
 
-    const originalOverflow = document.body.style.overflow;
-    document.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
 
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = originalOverflow || "";
+      document.removeEventListener("keydown", handleKeyDown, { capture: true });
     };
   }, [isOpen, onClose]);
 
@@ -763,40 +1086,36 @@ const ImageModal = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4 z-[9999999]"
+      className="fixed inset-0 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4"
+      style={{
+        zIndex: 999999,
+      }}
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <motion.button
-        initial={{ opacity: 0, scale: 0.8, rotate: 180 }}
-        animate={{ opacity: 1, scale: 1, rotate: 0 }}
-        whileHover={{ scale: 1.1, rotate: 90 }}
-        whileTap={{ scale: 0.9 }}
-        className="fixed top-6 right-6 w-14 h-14 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 cursor-pointer border-2 border-white/20 z-[10000000] backdrop-blur-sm"
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-      >
-        <span className="text-2xl font-bold text-gray-700 select-none">✕</span>
-      </motion.button>
-
+      {/* Image container */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8, y: 50 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.8, y: 50 }}
-        transition={{ 
-          duration: 0.4, 
-          type: "spring", 
+        transition={{
+          duration: 0.4,
+          type: "spring",
           stiffness: 200,
-          damping: 20 
+          damping: 20,
         }}
         className="relative max-w-[90vw] max-h-[90vh]"
+        style={{
+          zIndex: 1000000,
+        }}
         onClick={(e) => {
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
           e.stopPropagation();
         }}
       >
@@ -804,7 +1123,11 @@ const ImageModal = ({
           src={imageSrc}
           alt="Ảnh phóng to"
           className="w-full h-full object-contain rounded-2xl shadow-2xl border-4 border-white/20"
-          style={{ maxWidth: "100%", maxHeight: "100%" }}
+          style={{
+            maxWidth: "100%",
+            maxHeight: "100%",
+            pointerEvents: "none",
+          }}
           draggable={false}
         />
 
@@ -814,9 +1137,9 @@ const ImageModal = ({
           transition={{ delay: 0.3 }}
           className="absolute -bottom-16 left-1/2 transform -translate-x-1/2 text-white/90 text-sm bg-black/60 px-4 py-2 rounded-full pointer-events-none select-none backdrop-blur-sm border border-white/20"
         >
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 text-xl">
             <ImageIcon className="h-4 w-4" />
-            Nhấn Esc hoặc click ngoài để đóng
+            Nhấn Esc để đóng
           </span>
         </motion.div>
       </motion.div>
@@ -825,7 +1148,7 @@ const ImageModal = ({
   );
 };
 
-// Main Component (giữ nguyên phần còn lại)
+// Main Component (giữ phần code còn lại như cũ)
 export const CustomerLogModal = ({
   isOpen,
   onClose,
@@ -837,13 +1160,20 @@ export const CustomerLogModal = ({
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  // Effects
+  // Quản lý body overflow và state cleanup
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+      document.body.style.overflowY = "hidden";
+    } else {
       setShowImageModal(false);
       setSelectedImage(null);
-      document.body.style.overflow = "";
-      document.body.style.overflowY = "";
+      setLogs([]);
+
+      setTimeout(() => {
+        document.body.style.overflow = "";
+        document.body.style.overflowY = "";
+      }, 100);
     }
   }, [isOpen]);
 
@@ -863,7 +1193,11 @@ export const CustomerLogModal = ({
     if (!customer || !campaignId) return;
     try {
       setLoading(true);
-      const response = await campaignAPI.getCustomerLogs(campaignId, customer.id);
+      const response = await campaignAPI.getCustomerLogs(
+        campaignId,
+        customer.id,
+        customer.sent_date
+      );
       setLogs(response || []);
     } catch (error) {
       console.error("Error fetching customer logs:", error);
@@ -883,69 +1217,115 @@ export const CustomerLogModal = ({
   const handleCloseImageModal = () => {
     setShowImageModal(false);
     setSelectedImage(null);
-    document.body.style.overflow = "";
   };
 
   const handleMainModalClose = (open: boolean) => {
     if (!open) {
-      document.body.style.overflow = "";
-      setShowImageModal(false);
-      setSelectedImage(null);
-      onClose();
+      if (showImageModal) {
+        setShowImageModal(false);
+        setSelectedImage(null);
+
+        setTimeout(() => {
+          document.body.style.overflow = "";
+          document.body.style.overflowY = "";
+          onClose();
+        }, 150);
+      } else {
+        document.body.style.overflow = "";
+        document.body.style.overflowY = "";
+        onClose();
+      }
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleMainModalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !showImageModal) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleMainModalClose(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleMainModalKeyDown, {
+      capture: false,
+    });
+
+    return () => {
+      document.removeEventListener("keydown", handleMainModalKeyDown, {
+        capture: false,
+      });
+    };
+  }, [isOpen, showImageModal]);
 
   if (!customer) return null;
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <Dialog open={isOpen} onOpenChange={handleMainModalClose}>
+        <Dialog
+          open={isOpen}
+          onOpenChange={handleMainModalClose}
+          modal={true}
+        >
           <DialogContent
             className="p-0 gap-0 flex flex-col overflow-hidden"
             style={{
               maxWidth: "85vw",
-              width: "85vw", 
+              width: "85vw",
               height: "92vh",
               maxHeight: "92vh",
               background: "transparent",
               border: "none",
-              boxShadow: "none"
+              boxShadow: "none",
+            }}
+            onPointerDownOutside={(e) => {
+              if (showImageModal) {
+                e.preventDefault();
+              }
+            }}
+            onEscapeKeyDown={(e) => {
+              if (showImageModal) {
+                e.preventDefault();
+              }
             }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ 
-                duration: 0.4, 
+              transition={{
+                duration: 0.4,
                 type: "spring",
                 stiffness: 300,
-                damping: 30
+                damping: 30,
               }}
               className="flex flex-col h-full relative overflow-hidden"
               style={{
-                background: "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, #f8fafc 30%, #e2e8f0 100%)",
+                background:
+                  "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, #f8fafc 30%, #e2e8f0 100%)",
                 borderRadius: "1.5rem",
-                boxShadow: "0 32px 64px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(148,163,184,0.1)",
+                boxShadow:
+                  "0 32px 64px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(148,163,184,0.1)",
                 border: "1px solid rgba(148,163,184,0.2)",
-                backdropFilter: "blur(20px)"
+                backdropFilter: "blur(20px)",
               }}
             >
               {/* Decorative header bar */}
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
-              
-              {/* Floating decoration */}
+
               <div className="absolute top-4 right-4 opacity-5">
                 <motion.div
-                  animate={{ 
+                  animate={{
                     rotate: [0, 360],
-                    scale: [1, 1.1, 1]
+                    scale: [1, 1.1, 1],
                   }}
                   transition={{
                     duration: 20,
                     repeat: Infinity,
-                    ease: "linear"
+                    ease: "linear",
                   }}
                 >
                   <Sparkles className="h-12 w-12 text-blue-500" />
@@ -978,20 +1358,20 @@ export const CustomerLogModal = ({
                           <MessageCircle className="h-6 w-6 text-white" />
                         </div>
                       </motion.div>
-                      
+
                       <span className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 bg-clip-text text-transparent">
                         Lịch sử tương tác
                       </span>
-                      
+
                       <motion.div
-                        animate={{ 
+                        animate={{
                           opacity: [0.5, 1, 0.5],
-                          scale: [0.8, 1, 0.8]
+                          scale: [0.8, 1, 0.8],
                         }}
                         transition={{
                           duration: 2,
                           repeat: Infinity,
-                          ease: "easeInOut"
+                          ease: "easeInOut",
                         }}
                       >
                         <div className="bg-gradient-to-r from-amber-400 to-orange-400 rounded-full p-2 shadow-lg">
@@ -1021,7 +1401,7 @@ export const CustomerLogModal = ({
                           </div>
                         </div>
                       </div>
-                      
+
                       {logs.length > 0 && (
                         <motion.div
                           initial={{ opacity: 0, scale: 0.8 }}
@@ -1041,12 +1421,12 @@ export const CustomerLogModal = ({
               </div>
 
               {/* Chat Content */}
-              <div 
+              <div
                 className="flex-1 px-6 py-4 overflow-y-auto bg-gradient-to-b from-gray-50/50 to-white/50"
                 style={{
                   minHeight: 0,
                   scrollbarWidth: "thin",
-                  scrollbarColor: "#cbd5e1 #f8fafc"
+                  scrollbarColor: "#cbd5e1 #f8fafc",
                 }}
               >
                 <AnimatePresence mode="wait">
@@ -1073,23 +1453,23 @@ export const CustomerLogModal = ({
                         <motion.div
                           animate={{
                             scale: [1, 1.3, 1],
-                            opacity: [0.3, 0.6, 0.3]
+                            opacity: [0.3, 0.6, 0.3],
                           }}
                           transition={{
                             duration: 2,
                             repeat: Infinity,
-                            ease: "easeInOut"
+                            ease: "easeInOut",
                           }}
                           className="absolute -inset-4 bg-blue-400 rounded-full opacity-20 blur-xl"
                         ></motion.div>
                       </motion.div>
-                      
+
                       <motion.div
                         animate={{ opacity: [0.7, 1, 0.7] }}
                         transition={{
                           duration: 1.5,
                           repeat: Infinity,
-                          ease: "easeInOut"
+                          ease: "easeInOut",
                         }}
                         className="text-center"
                       >
@@ -1109,41 +1489,41 @@ export const CustomerLogModal = ({
                       exit={{ opacity: 0 }}
                       className="pb-6"
                     >
-                      {/* Conversation container */}
                       <div className="max-w-5xl mx-auto space-y-6">
                         <AnimatePresence>
                           {logs.map((log, idx) => (
                             <motion.div
                               key={log.id}
-                              initial={{ 
-                                opacity: 0, 
-                                y: 40, 
-                                scale: 0.95
+                              initial={{
+                                opacity: 0,
+                                y: 40,
+                                scale: 0.95,
                               }}
-                              animate={{ 
-                                opacity: 1, 
-                                y: 0, 
-                                scale: 1
+                              animate={{
+                                opacity: 1,
+                                y: 0,
+                                scale: 1,
                               }}
-                              exit={{ 
-                                opacity: 0, 
-                                y: -40, 
-                                scale: 0.95
+                              exit={{
+                                opacity: 0,
+                                y: -40,
+                                scale: 0.95,
                               }}
-                              transition={{ 
-                                delay: idx * 0.15, 
+                              transition={{
+                                delay: idx * 0.15,
                                 duration: 0.6,
                                 type: "spring",
                                 stiffness: 200,
-                                damping: 25
+                                damping: 25,
                               }}
                               className="bg-white/70 backdrop-blur-sm rounded-3xl border border-gray-200/80 shadow-lg hover:shadow-xl transition-all duration-500 p-6"
                               style={{
-                                background: "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%)"
+                                background:
+                                  "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%)",
                               }}
                             >
-                              <ZaloChatConversationView 
-                                log={log} 
+                              <ZaloChatConversationView
+                                log={log}
                                 onImageClick={handleImageClick}
                               />
                             </motion.div>
@@ -1163,7 +1543,7 @@ export const CustomerLogModal = ({
                         animate={{
                           y: [0, -12, 0],
                           rotate: [0, 8, -8, 0],
-                          scale: [1, 1.05, 1]
+                          scale: [1, 1.05, 1],
                         }}
                         transition={{
                           duration: 4,
@@ -1175,7 +1555,7 @@ export const CustomerLogModal = ({
                         <div className="absolute -inset-6 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full opacity-40 blur-2xl"></div>
                         <MessageCircle className="h-20 w-20 text-gray-300 relative z-10" />
                       </motion.div>
-                      
+
                       <motion.div
                         initial={{ opacity: 0, y: 15 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -1196,11 +1576,14 @@ export const CustomerLogModal = ({
               </div>
             </motion.div>
 
-            <ImageModal
-              isOpen={showImageModal}
-              imageSrc={selectedImage}
-              onClose={handleCloseImageModal}
-            />
+            {/* ImageModal */}
+            {showImageModal && (
+              <ImageModal
+                isOpen={showImageModal}
+                imageSrc={selectedImage}
+                onClose={handleCloseImageModal}
+              />
+            )}
           </DialogContent>
         </Dialog>
       )}

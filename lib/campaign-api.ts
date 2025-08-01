@@ -31,40 +31,48 @@ export interface CampaignResponse {
   };
 }
 
-// ✅ LAZY LOADING CONFIG
-const LAZY_LOADING_CONFIG = {
-  // Tăng pageSize lên 1,000,000 để tải toàn bộ dữ liệu một lần
-  MAX_PAGE_SIZE: 1000000,
-  // Default page size cho các API khác
-  DEFAULT_PAGE_SIZE: 50,
-};
-
 // Campaign API functions
 export const campaignAPI = {
   // Get logs of a customer in a campaign
-  getCustomerLogs: async (campaignId: string, customerId: string) => {
+  // getCustomerLogs: async (campaignId: string, customerId: string) => {
+  //   const response = await api.get(
+  //     `/campaigns/${campaignId}/customers/${customerId}/logs`
+  //   );
+  //   return response.data;
+  // },
+
+  getCustomerLogs: async (
+    campaignId: string,
+    customerId: string,
+    sentDate?: string
+  ) => {
+    const params: any = {};
+    if (sentDate) {
+      params.sent_date = sentDate; // Format: YYYY-MM-DD
+    }
+
     const response = await api.get(
-      `/campaigns/${campaignId}/customers/${customerId}/logs`
+      `/campaigns/${campaignId}/customers/${customerId}/logs`,
+      { params }
     );
     return response.data;
   },
-  
   // Get all campaigns with filters
   getAll: async (filters: CampaignFilters = {}): Promise<CampaignResponse> => {
-    const response = await api.get("/campaigns", { 
+    const response = await api.get("/campaigns", {
       params: filters,
       // ✅ FIX: Custom serialization để loại bỏ []
       paramsSerializer: {
         serialize: (params) => {
           const searchParams = new URLSearchParams();
-          
+
           Object.entries(params).forEach(([key, value]) => {
             if (value === undefined || value === null) return;
-            
+
             if (Array.isArray(value)) {
               // ✅ Gửi multiple values với cùng key thay vì key[]
-              value.forEach(item => {
-                if (item !== undefined && item !== null && item !== '') {
+              value.forEach((item) => {
+                if (item !== undefined && item !== null && item !== "") {
                   searchParams.append(key, String(item));
                 }
               });
@@ -72,15 +80,15 @@ export const campaignAPI = {
               searchParams.append(key, String(value));
             }
           });
-          
+
           return searchParams.toString();
-        }
-      }
+        },
+      },
     });
     return response.data;
   },
 
-  // ✅ UPDATED: Get customers of a campaign with LAZY LOADING support
+  // Get customers of a campaign with filters
   getCampaignCustomers: async (
     campaignId: string,
     params: {
@@ -88,39 +96,10 @@ export const campaignAPI = {
       status?: string;
       page?: number;
       limit?: number;
-      // ✅ NEW: Thêm flag để enable lazy loading
-      enableLazyLoading?: boolean;
-    } = {}
-  ) => {
-    // ✅ Nếu enable lazy loading, tự động set limit = 1,000,000
-    const finalParams = {
-      ...params,
-      limit: params.enableLazyLoading 
-        ? LAZY_LOADING_CONFIG.MAX_PAGE_SIZE 
-        : (params.limit || LAZY_LOADING_CONFIG.DEFAULT_PAGE_SIZE),
-      page: params.enableLazyLoading ? 1 : (params.page || 1),
-    };
-
-    const response = await api.get(`/campaigns/${campaignId}/customers`, {
-      params: finalParams,
-    });
-    return response.data;
-  },
-
-  // ✅ NEW: Specialized method for lazy loading - tải toàn bộ dữ liệu
-  getCampaignCustomersLazyLoad: async (
-    campaignId: string,
-    params: {
-      search?: string;
-      status?: string;
     } = {}
   ) => {
     const response = await api.get(`/campaigns/${campaignId}/customers`, {
-      params: {
-        ...params,
-        page: 1,
-        limit: LAZY_LOADING_CONFIG.MAX_PAGE_SIZE, // ✅ 1,000,000 records
-      },
+      params,
     });
     return response.data;
   },
@@ -200,11 +179,13 @@ export const campaignAPI = {
     return response.data;
   },
 
-  getAllUsersForFilter: async (): Promise<Array<{
-    value: number;
-    label: string;
-    departmentIds: number[];
-  }>> => {
+  getAllUsersForFilter: async (): Promise<
+    Array<{
+      value: number;
+      label: string;
+      departmentIds: number[];
+    }>
+  > => {
     const response = await api.get("/users/all-for-filter");
     return response.data;
   },
@@ -212,27 +193,9 @@ export const campaignAPI = {
 
 // Campaign Customer API functions
 export const campaignCustomerAPI = {
-  // ✅ UPDATED: Get all customers with lazy loading support
+  // Get all customers
   getAll: async (params: any = {}) => {
-    // ✅ Tự động apply lazy loading nếu không có limit
-    const finalParams = {
-      ...params,
-      limit: params.limit || LAZY_LOADING_CONFIG.DEFAULT_PAGE_SIZE,
-    };
-    
-    const response = await api.get("/campaign-customers", { params: finalParams });
-    return response.data;
-  },
-
-  // ✅ NEW: Lazy load all customers
-  getAllLazyLoad: async (params: any = {}) => {
-    const finalParams = {
-      ...params,
-      page: 1,
-      limit: LAZY_LOADING_CONFIG.MAX_PAGE_SIZE, // ✅ 1,000,000 records
-    };
-    
-    const response = await api.get("/campaign-customers", { params: finalParams });
+    const response = await api.get("/campaign-customers", { params });
     return response.data;
   },
 
@@ -294,31 +257,11 @@ export const campaignScheduleAPI = {
   },
 };
 
-// ✅ UPDATED: Campaign Interaction Log API functions with lazy loading
+// Campaign Interaction Log API functions
 export const campaignLogAPI = {
-  // ✅ UPDATED: Get all logs with lazy loading support
   getAll: async (filters: any = {}) => {
-    const finalParams = {
-      ...filters,
-      limit: filters.limit || LAZY_LOADING_CONFIG.DEFAULT_PAGE_SIZE,
-    };
-    
     const response = await api.get("/campaign-interaction-logs", {
-      params: finalParams,
-    });
-    return response.data;
-  },
-
-  // ✅ NEW: Lazy load all logs
-  getAllLazyLoad: async (filters: any = {}) => {
-    const finalParams = {
-      ...filters,
-      page: 1,
-      limit: LAZY_LOADING_CONFIG.MAX_PAGE_SIZE, // ✅ 1,000,000 records
-    };
-    
-    const response = await api.get("/campaign-interaction-logs", {
-      params: finalParams,
+      params: filters,
     });
     return response.data;
   },
@@ -328,18 +271,9 @@ export const campaignLogAPI = {
     return response.data;
   },
 
-  // ✅ UPDATED: Get logs by campaign with lazy loading
-  getByCampaign: async (campaignId: string, enableLazyLoading = false) => {
-    const params = enableLazyLoading 
-      ? { 
-          page: 1, 
-          limit: LAZY_LOADING_CONFIG.MAX_PAGE_SIZE 
-        }
-      : {};
-      
+  getByCampaign: async (campaignId: string) => {
     const response = await api.get(
-      `/campaign-interaction-logs/campaign/${campaignId}`,
-      { params }
+      `/campaign-interaction-logs/campaign/${campaignId}`
     );
     return response.data;
   },
@@ -355,45 +289,3 @@ export const campaignLogAPI = {
     return response.data;
   },
 };
-
-// ✅ NEW: Utility functions for lazy loading
-export const lazyLoadingUtils = {
-  // Check if lazy loading should be enabled based on expected data size
-  shouldEnableLazyLoading: (expectedCount: number): boolean => {
-    return expectedCount > 1000; // Enable lazy loading cho > 1000 records
-  },
-
-  // Get optimal page size based on data size
-  getOptimalPageSize: (totalCount: number): number => {
-    if (totalCount > 100000) return LAZY_LOADING_CONFIG.MAX_PAGE_SIZE;
-    if (totalCount > 10000) return 1000;
-    if (totalCount > 1000) return 500;
-    return LAZY_LOADING_CONFIG.DEFAULT_PAGE_SIZE;
-  },
-
-  // Split large dataset into chunks for processing
-  chunkArray: <T>(array: T[], chunkSize: number = 50): T[][] => {
-    const chunks: T[][] = [];
-    for (let i = 0; i < array.length; i += chunkSize) {
-      chunks.push(array.slice(i, i + chunkSize));
-    }
-    return chunks;
-  },
-
-  // Virtual scrolling helper
-  getVisibleRange: (
-    scrollTop: number,
-    containerHeight: number,
-    itemHeight: number,
-    totalItems: number
-  ): { start: number; end: number } => {
-    const start = Math.floor(scrollTop / itemHeight);
-    const visibleCount = Math.ceil(containerHeight / itemHeight);
-    const end = Math.min(start + visibleCount + 5, totalItems); // +5 for buffer
-    
-    return { start: Math.max(0, start - 5), end }; // -5 for buffer
-  },
-};
-
-// ✅ Export config for use in components
-export { LAZY_LOADING_CONFIG };

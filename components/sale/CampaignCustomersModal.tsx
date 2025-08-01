@@ -65,6 +65,7 @@ interface CustomerWithStatus extends CampaignCustomer {
   last_interaction_at?: string;
   status?: LogStatus | null;
   conversation_metadata?: any;
+  sent_at?: Date | null;
 }
 
 interface CampaignCustomersModalProps {
@@ -110,6 +111,15 @@ const LOG_STATUS_CONFIG = {
     color: "bg-orange-50 text-orange-700 border-orange-200",
     icon: AlertCircle,
   },
+};
+
+// Generate a simple UUID
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
 };
 
 const formatDateShort = (date: string | Date): string => {
@@ -163,35 +173,35 @@ const CustomerLoadingSkeleton = () => (
   <>
     {Array.from({ length: 5 }).map((_, index) => (
       <motion.tr
-        key={`loading-${index}`}
+        key={`loading-skeleton-${index}`}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.1 }}
         className="animate-pulse"
       >
-        <TableCell>
-          <div className="h-4 w-8 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-4 w-8 bg-gray-200 rounded mx-auto" />
         </TableCell>
         <TableCell>
           <div className="h-4 w-32 bg-gray-200 rounded" />
         </TableCell>
-        <TableCell>
-          <div className="h-4 w-24 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-4 w-24 bg-gray-200 rounded mx-auto" />
         </TableCell>
-        <TableCell>
-          <div className="h-4 w-16 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-4 w-16 bg-gray-200 rounded mx-auto" />
         </TableCell>
-        <TableCell>
-          <div className="h-6 w-20 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-6 w-20 bg-gray-200 rounded mx-auto" />
         </TableCell>
-        <TableCell>
-          <div className="h-4 w-16 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-4 w-16 bg-gray-200 rounded mx-auto" />
         </TableCell>
-        <TableCell>
-          <div className="h-4 w-16 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-4 w-16 bg-gray-200 rounded mx-auto" />
         </TableCell>
-        <TableCell>
-          <div className="h-8 w-8 bg-gray-200 rounded" />
+        <TableCell className="text-center">
+          <div className="h-8 w-8 bg-gray-200 rounded mx-auto" />
         </TableCell>
       </motion.tr>
     ))}
@@ -302,7 +312,14 @@ export default function CampaignCustomersModal({
   };
 
   const handleViewLogs = (customer: CustomerWithStatus) => {
-    setSelectedCustomer(customer);
+    const customerWithSentDate = {
+      ...customer,
+      sent_date: customer.sent_at
+        ? new Date(customer.sent_at).toISOString().split("T")[0]
+        : undefined,
+    };
+
+    setSelectedCustomer(customerWithSentDate);
     setIsLogModalOpen(true);
   };
 
@@ -374,6 +391,18 @@ export default function CampaignCustomersModal({
   };
 
   if (!campaign) return null;
+
+  const tableHeaders = [
+    "#",
+    "Khách hàng",
+    "Số điện thoại",
+    "Ngày tạo DSKH",
+    "Ngày Gửi",
+    "Trạng thái gửi",
+    "Tương tác",
+    "Lần cuối",
+    "Thao tác",
+  ];
 
   return (
     <>
@@ -587,25 +616,17 @@ export default function CampaignCustomersModal({
                     <Table>
                       <TableHeader className="sticky top-0 bg-white z-10">
                         <TableRow>
-                          {[
-                            "#",
-                            "Khách hàng",
-                            "Số điện thoại",
-                            "Ngày thêm",
-                            "Trạng thái gửi",
-                            "Tương tác",
-                            "Lần cuối",
-                            "Thao tác",
-                          ].map((header, index) => (
+                          {tableHeaders.map((header, index) => (
                             <motion.th
-                              key={header}
+                              key={`header-${index}`}
                               initial={{ opacity: 0, y: -10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.3 + index * 0.05 }}
                               className={cn(
-                                "h-12 px-4 text-left align-middle font-medium text-muted-foreground border-b",
+                                "h-12 px-4 text-center align-middle font-medium text-muted-foreground border-b",
                                 header === "#" && "w-12",
-                                header === "Thao tác" && "w-20"
+                                header === "Thao tác" && "w-20",
+                                header === "Khách hàng" && "text-left"
                               )}
                             >
                               {header}
@@ -621,7 +642,7 @@ export default function CampaignCustomersModal({
                             <>
                               {displayedCustomers.map((customer, index) => (
                                 <motion.tr
-                                  key={customer.id}
+                                  key={`customer-${customer.id}-${generateUUID()}`}
                                   initial={{ opacity: 0, y: 20 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   exit={{ opacity: 0, y: -20 }}
@@ -659,9 +680,9 @@ export default function CampaignCustomersModal({
                                       {customer.full_name}
                                     </motion.div>
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-center">
                                     <motion.div
-                                      className="flex items-center gap-1 text-sm"
+                                      className="flex items-center justify-center gap-1 text-sm"
                                       initial={{ opacity: 0, x: -5 }}
                                       animate={{ opacity: 1, x: 0 }}
                                       transition={{ delay: 0.15 }}
@@ -670,22 +691,60 @@ export default function CampaignCustomersModal({
                                       {customer.phone_number}
                                     </motion.div>
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-center">
                                     <motion.div
-                                      className="flex items-center gap-1 text-sm text-gray-600"
+                                      className="flex items-center justify-center gap-1 text-sm text-gray-600"
                                       initial={{ opacity: 0, x: -5 }}
                                       animate={{ opacity: 1, x: 0 }}
                                       transition={{ delay: 0.2 }}
                                     >
                                       <Calendar className="h-3 w-3 text-gray-400" />
-                                      {formatDateShort(customer.added_at)}
+                                      {(() => {
+                                        const d = new Date(customer.added_at);
+                                        const pad = (n: number) =>
+                                          n.toString().padStart(2, "0");
+                                        return `${d.getFullYear()}-${pad(
+                                          d.getMonth() + 1
+                                        )}-${pad(d.getDate())} ${pad(
+                                          d.getHours()
+                                        )}:${pad(d.getMinutes())}:${pad(
+                                          d.getSeconds()
+                                        )}`;
+                                      })()}
                                     </motion.div>
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-center">
+                                    <motion.div
+                                      className="flex items-center justify-center gap-1 text-sm text-gray-600"
+                                      initial={{ opacity: 0, x: -5 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ delay: 0.2 }}
+                                    >
+                                      <Calendar className="h-3 w-3 text-gray-400" />
+                                      {customer.sent_at
+                                        ? (() => {
+                                            const d = new Date(
+                                              customer.sent_at
+                                            );
+                                            const pad = (n: number) =>
+                                              n.toString().padStart(2, "0");
+                                            return `${d.getFullYear()}-${pad(
+                                              d.getMonth() + 1
+                                            )}-${pad(d.getDate())} ${pad(
+                                              d.getHours()
+                                            )}:${pad(d.getMinutes())}:${pad(
+                                              d.getSeconds()
+                                            )}`;
+                                          })()
+                                        : "Chưa Gửi"}
+                                    </motion.div>
+                                  </TableCell>
+                                  <TableCell className="text-center">
                                     <motion.div
                                       initial={{ opacity: 0, scale: 0.8 }}
                                       animate={{ opacity: 1, scale: 1 }}
                                       transition={{ delay: 0.25 }}
+                                      className="flex justify-center"
                                     >
                                       {customer.status ? (
                                         <LogStatusBadge
@@ -701,7 +760,7 @@ export default function CampaignCustomersModal({
                                       )}
                                     </motion.div>
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-center">
                                     <motion.span
                                       className="font-medium text-sm"
                                       initial={{ opacity: 0 }}
@@ -719,7 +778,7 @@ export default function CampaignCustomersModal({
                                       lần
                                     </motion.span>
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-center">
                                     <motion.div
                                       className="text-sm text-gray-600"
                                       initial={{ opacity: 0 }}
@@ -746,10 +805,11 @@ export default function CampaignCustomersModal({
                                       })()}
                                     </motion.div>
                                   </TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-center">
                                     <motion.div
                                       whileHover={{ scale: 1.1 }}
                                       whileTap={{ scale: 0.9 }}
+                                      className="flex justify-center"
                                     >
                                       <Button
                                         variant="ghost"
@@ -773,7 +833,7 @@ export default function CampaignCustomersModal({
                               {isLoadingMore && (
                                 <TableRow>
                                   <TableCell
-                                    colSpan={8}
+                                    colSpan={9}
                                     className="h-16 text-center"
                                   >
                                     <motion.div
@@ -800,7 +860,7 @@ export default function CampaignCustomersModal({
                               {hasMoreData && !isLoadingMore && (
                                 <TableRow>
                                   <TableCell
-                                    colSpan={8}
+                                    colSpan={9}
                                     className="h-16 text-center"
                                   >
                                     <motion.div
@@ -825,7 +885,7 @@ export default function CampaignCustomersModal({
                           ) : (
                             <TableRow>
                               <TableCell
-                                colSpan={8}
+                                colSpan={9}
                                 className="h-32 text-center"
                               >
                                 <motion.div

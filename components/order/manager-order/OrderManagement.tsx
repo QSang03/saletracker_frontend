@@ -23,6 +23,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   MoreVertical,
   Edit,
   Trash2,
@@ -33,6 +39,7 @@ import {
   Zap,
   Star,
   TrendingUp,
+  Eye,
 } from "lucide-react";
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
@@ -90,8 +97,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(
     null
   );
+  const [viewingDetail, setViewingDetail] = useState<OrderDetail | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
   const handleEditClick = (orderDetail: OrderDetail) => {
     setEditingDetail(orderDetail);
@@ -101,6 +110,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleDeleteClick = (orderDetail: OrderDetail) => {
     setDeletingDetail(orderDetail);
     setIsDeleteModalOpen(true);
+  };
+
+  const handleViewClick = (orderDetail: OrderDetail) => {
+    setViewingDetail(orderDetail);
+    setIsViewModalOpen(true);
   };
 
   const handleEditSave = (data: Partial<OrderDetail>) => {
@@ -127,6 +141,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleDeleteCancel = () => {
     setIsDeleteModalOpen(false);
     setDeletingDetail(null);
+  };
+
+  const handleViewCancel = () => {
+    setIsViewModalOpen(false);
+    setViewingDetail(null);
   };
 
   const getStatusLabel = (status: string) => {
@@ -455,16 +474,36 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         </span>
                       </TableCell>
                       <TableCell className="text-center text-slate-600 text-sm">
-                        <div className="text-truncate">
-                          {orderDetail.created_at
-                            ? typeof orderDetail.created_at === "string"
-                              ? orderDetail.created_at.split(" ")[0]
-                              : orderDetail.created_at instanceof Date
-                              ? orderDetail.created_at.toLocaleDateString(
-                                  "vi-VN"
-                                )
-                              : ""
-                            : ""}
+                        <div className="flex flex-col">
+                          {orderDetail.created_at ? (
+                            typeof orderDetail.created_at === "string" ? (
+                              <>
+                                <div className="font-medium text-blue-600">
+                                  {orderDetail.created_at.includes(" ") 
+                                    ? orderDetail.created_at.split(" ")[1] || ""
+                                    : ""}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {orderDetail.created_at.includes(" ") 
+                                    ? orderDetail.created_at.split(" ")[0] || ""
+                                    : orderDetail.created_at}
+                                </div>
+                              </>
+                            ) : orderDetail.created_at instanceof Date ? (
+                              <>
+                                <div className="font-medium text-blue-600">
+                                  {orderDetail.created_at.toLocaleTimeString("vi-VN")}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {orderDetail.created_at.toLocaleDateString("vi-VN")}
+                                </div>
+                              </>
+                            ) : (
+                              <div>""</div>
+                            )
+                          ) : (
+                            <div>""</div>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-center font-medium text-purple-700 text-sm">
@@ -539,6 +578,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             align="end"
                             className="w-48 shadow-xl border-slate-200"
                           >
+                            <POrderDynamic action="read">
+                              <DropdownMenuItem
+                                onClick={() => handleViewClick(orderDetail)}
+                                className="hover:bg-green-50 hover:text-green-700 transition-colors"
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                Xem tin nhắn
+                              </DropdownMenuItem>
+                            </POrderDynamic>
                             <POrderDynamic action="update">
                               <DropdownMenuItem
                                 onClick={() => handleEditClick(orderDetail)}
@@ -606,6 +654,188 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           onConfirm={handleDeleteConfirm}
           loading={loading}
         />
+      )}
+
+      {/* Messages Modal */}
+      {viewingDetail && (
+        <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-semibold text-slate-800">
+                💬 Tin nhắn đơn hàng #{viewingDetail.id}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col h-[60vh] bg-gray-50 rounded-lg border">
+              {/* Chat Header */}
+              <div className="p-4 bg-blue-600 text-white rounded-t-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-bold">
+                        {viewingDetail.customer_name?.charAt(0) || "K"}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="font-medium">{viewingDetail.customer_name || "Khách hàng"}</h3>
+                      <p className="text-sm opacity-90">Mã đơn: {viewingDetail.id}</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-sm opacity-90">
+                    <p>Sale: {viewingDetail.order?.sale_by?.fullName || viewingDetail.order?.sale_by?.username || "N/A"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Messages Container */}
+              <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gradient-to-b from-gray-50 to-gray-100">
+                {/* Sample messages - Replace with actual message data */}
+                
+                {/* Customer message (left side) */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs text-white font-bold">
+                      {viewingDetail.customer_name?.charAt(0) || "K"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
+                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border">
+                      <p className="text-sm text-gray-800">
+                        {viewingDetail.raw_item || "Xin chào, tôi muốn hỏi về sản phẩm này"}
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-500 ml-3">
+                      {viewingDetail.created_at 
+                        ? typeof viewingDetail.created_at === "string"
+                          ? viewingDetail.created_at.includes(" ") 
+                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
+                            : ""
+                          : viewingDetail.created_at instanceof Date
+                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
+                          : ""
+                        : ""}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sale message (right side) */}
+                <div className="flex items-start space-x-3 justify-end">
+                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
+                    <div className="bg-blue-500 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm">
+                      <p className="text-sm">
+                        Chào bạn! Sản phẩm này hiện tại có giá {viewingDetail.unit_price
+                          ? Number(viewingDetail.unit_price).toLocaleString() + "₫"
+                          : "Liên hệ"}. Bạn có muốn đặt hàng không?
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-500 mr-3 text-right">
+                      {viewingDetail.created_at 
+                        ? typeof viewingDetail.created_at === "string"
+                          ? viewingDetail.created_at.includes(" ") 
+                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
+                            : ""
+                          : viewingDetail.created_at instanceof Date
+                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
+                          : ""
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs text-white font-bold">
+                      {viewingDetail.order?.sale_by?.fullName?.charAt(0) || 
+                       viewingDetail.order?.sale_by?.username?.charAt(0) || "S"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Customer response */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs text-white font-bold">
+                      {viewingDetail.customer_name?.charAt(0) || "K"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
+                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border">
+                      <p className="text-sm text-gray-800">
+                        Số lượng: {viewingDetail.quantity || 1}. Được rồi, tôi sẽ đặt hàng.
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-500 ml-3">
+                      {viewingDetail.created_at 
+                        ? typeof viewingDetail.created_at === "string"
+                          ? viewingDetail.created_at.includes(" ") 
+                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
+                            : ""
+                          : viewingDetail.created_at instanceof Date
+                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
+                          : ""
+                        : ""}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sale confirmation */}
+                <div className="flex items-start space-x-3 justify-end">
+                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
+                    <div className="bg-green-500 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm">
+                      <p className="text-sm">
+                        Cảm ơn bạn! Đơn hàng đã được ghi nhận. 
+                        {viewingDetail.notes && (
+                          <>
+                            <br />
+                            <span className="text-green-100">Ghi chú: {viewingDetail.notes}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-500 mr-3 text-right">
+                      {viewingDetail.created_at 
+                        ? typeof viewingDetail.created_at === "string"
+                          ? viewingDetail.created_at.includes(" ") 
+                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
+                            : ""
+                          : viewingDetail.created_at instanceof Date
+                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
+                          : ""
+                        : ""}
+                    </span>
+                  </div>
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs text-white font-bold">
+                      {viewingDetail.order?.sale_by?.fullName?.charAt(0) || 
+                       viewingDetail.order?.sale_by?.username?.charAt(0) || "S"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chat Footer with Order Status */}
+              <div className="p-4 bg-white border-t rounded-b-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">Trạng thái:</span>
+                    <span
+                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                        viewingDetail.status || ""
+                      )}`}
+                    >
+                      {getStatusIcon(viewingDetail.status || "")}
+                      {getStatusLabel(viewingDetail.status || "")}
+                    </span>
+                  </div>
+                  <Button
+                    onClick={handleViewCancel}
+                    variant="outline"
+                    size="sm"
+                    className="text-gray-600 hover:text-gray-800"
+                  >
+                    Đóng
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </TooltipProvider>
   );
