@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import * as ExcelJS from "exceljs";
 import {
   Dialog,
@@ -322,125 +322,147 @@ export default function CampaignModal({
     }>
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  // ✅ SIMPLIFIED ALERT SYSTEM - Chỉ cần 2 states thay vì 3
   const [alert, setAlert] = useState<{
     type: "success" | "error" | "warning" | "info";
     message: string;
+    id: string;
   } | null>(null);
 
-  const [alertControl, setAlertControl] = useState({
-    preventAutoClose: false,
-    forceVisible: false,
-    userCanClose: true,
-  });
+  const alertRef = useRef<{
+    id: string;
+    type: string;
+    isPersistent: boolean;
+    timestamp: number;
+  } | null>(null);
 
-  const [alertDelayed, setAlertDelayed] = useState<typeof alert>(null);
+  const setAlertSafe = useCallback(
+    (
+      alertData: {
+        type: "success" | "error" | "warning" | "info";
+        message: string;
+      } | null
+    ) => {
+      const timestamp = Date.now();
+      const alertId = `alert_${timestamp}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
 
-  // ✅ THÊM USEEFFECT ĐỂ TRACK ALERT STATE CHANGES
-  useEffect(() => {
-    console.log("🚨 [ALERT STATE] Alert state changed:", {
-      hasAlert: !!alert,
-      type: alert?.type,
-      messageLength: alert?.message?.length,
-      messagePreview: alert?.message?.substring(0, 3000),
-      timestamp: new Date().toISOString(),
-    });
-  }, [alert]);
+      if (alertData === null) {
+        setAlert(null);
+        alertRef.current = null;
+        return;
+      }
 
-  const setAlertSafe = useCallback((alertData: typeof alert) => {
-    console.log("🔧 [SET ALERT] Setting alert with delay control:", {
-      type: alertData?.type,
-      hasMessage: !!alertData?.message,
-      timestamp: new Date().toISOString(),
-    });
+      const isPersistent =
+        alertData.type === "error" || alertData.type === "warning";
 
-    if (alertData === null) {
-      // Reset both alert and control immediately
-      setAlert(null);
-      setAlertDelayed(null);
-      setAlertControl({
-        preventAutoClose: false,
-        forceVisible: false,
-        userCanClose: true,
-      });
-      console.log("🔧 [SET ALERT] Alert and control reset");
-      return;
-    }
+      alertRef.current = {
+        id: alertId,
+        type: alertData.type,
+        isPersistent,
+        timestamp,
+      };
 
-    // ✅ SET IMMEDIATE ALERT FOR STATE TRACKING
-    setAlert(alertData);
+      const alertWithId = {
+        ...alertData,
+        id: alertId,
+      };
 
-    // ✅ SET CONTROL FLAGS FIRST
-    const shouldPreventAutoClose =
-      alertData.type === "error" || alertData.type === "warning";
-    setAlertControl({
-      preventAutoClose: shouldPreventAutoClose,
-      forceVisible: true,
-      userCanClose: true,
-    });
-
-    console.log("🔧 [SET ALERT] Control set, delaying alert render:", {
-      preventAutoClose: shouldPreventAutoClose,
-      delayMs: shouldPreventAutoClose ? 3000 : 0,
-    });
-
-    // ✅ DELAY ALERT RENDERING FOR ERROR/WARNING
-    if (shouldPreventAutoClose) {
-      // Delay render để control state apply trước
       setTimeout(() => {
-        setAlertDelayed(alertData);
-        console.log(
-          "🔧 [SET ALERT] Delayed alert rendered after control setup"
-        );
-      }, 100); // Delay 100ms để đảm bảo control state ready
-    } else {
-      // Success/info render ngay
-      setAlertDelayed(alertData);
-      console.log("🔧 [SET ALERT] Immediate alert rendered (success/info)");
-    }
-  }, []);
+        setAlert(alertWithId);
+
+        if (!isPersistent) {
+          setTimeout(() => {
+            if (alertRef.current?.id === alertId) {
+              setAlert(null);
+              alertRef.current = null;
+            }
+          }, 5000);
+        }
+      }, 10); // 10ms delay để đảm bảo ref sync
+    },
+    []
+  );
 
   useEffect(() => {
-    console.log("🔄 [MODAL EFFECT] Modal state changed:", {
-      open,
-      hasAlert: !!alert,
-      alertType: alert?.type,
-      mode,
-    });
-
     if (open) {
-      // Load users first, then load campaign data
       loadUsersWithEmail().then(() => {
         if (mode === "edit" && initialData) {
           loadCampaignData(initialData);
         } else if (mode === "create") {
-          // ✅ CHỈ RESET FORM KHI KHÔNG CÓ ALERT ERROR
-          if (!alert || alert.type !== "error") {
-            console.log("🔄 [MODAL EFFECT] Resetting form (no error alert)");
-            resetForm();
-          } else {
-            console.log(
-              "🔄 [MODAL EFFECT] Keeping error alert, not resetting form"
-            );
-          }
         }
       });
     }
-  }, [open, mode, initialData]); // ✅ Loại bỏ `alert` khỏi dependencies để tránh loop
+  }, [open, mode, initialData]);
+
+  // Move resetForm definition above this useEffect
+  const resetForm = useCallback(() => {
+    if (
+      alert &&
+      (alert.type === "error" || alert.type === "warning") &&
+      alertRef.current?.isPersistent
+    ) {
+      return; // Không reset để giữ alert hiện tại
+    }
+
+    // Reset theo thứ tự để tránh conflict
+    setCurrentTab("basic");
+    setCampaignName("");
+    setSelectedType("");
+    setStartTime("");
+    setEndTime("");
+    setSelectedDays([]);
+    setDaySelectionMode("single");
+    setIncludeSaturday(true);
+    setTimeOfDay("");
+    setMessageContent("");
+    setAttachmentType(null);
+    setAttachmentData("");
+    setReminders([{ content: "", minutes: 30 }]);
+
+    // ✅ Reset email states theo thứ tự đúng
+    setRecipientsTo("");
+    setRecipientsCc([]);
+    setCustomEmails([""]);
+    setReportInterval("60");
+    setStopSendingTime("");
+
+    // ✅ Reset customer states
+    setCustomerFile(null);
+    setUploadedCustomers([]);
+
+    // Reset UI states
+    setIsSubmitting(false);
+    setShowSuccess(false);
+
+    // ✅ CHỈ RESET ALERT KHI KHÔNG PHẢI ERROR/WARNING
+    if (
+      !alert ||
+      (alert.type !== "error" && alert.type !== "warning") ||
+      !alertRef.current?.isPersistent
+    ) {
+      setAlertSafe(null);
+    } else {
+    }
+  }, [alert, setAlertSafe]);
 
   useEffect(() => {
     if (!open) {
-      // Cleanup khi modal đóng - KHÔNG reset alert error
       const timer = setTimeout(() => {
-        if (mode === "create" && (!alert || alert.type !== "error")) {
-          console.log("🔄 [CLEANUP] Resetting form after modal close");
+        // ✅ IMPROVED LOGIC: Chỉ reset khi không có persistent alert
+        const shouldReset =
+          mode === "create" && (!alert || !alertRef.current?.isPersistent);
+
+        if (shouldReset) {
           resetForm();
         } else {
-          console.log("🔄 [CLEANUP] Keeping alert, not resetting form");
         }
-      }, 200); // Đợi animation đóng modal hoàn tất
+      }, 500);
+
       return () => clearTimeout(timer);
     }
-  }, [open, mode, alert]); // ✅ Thêm alert vào dependency để check type
+  }, [open, mode, alert, resetForm]);
 
   // ✅ SỬA LOGIC - TÁCH RIÊNG RECIPIENTS_TO RA KHỎI PHÂN LOẠI
   useEffect(() => {
@@ -665,49 +687,6 @@ export default function CampaignModal({
     return steps.indexOf(currentTab) + 1;
   };
 
-  const resetForm = () => {
-    console.log("🔄 [RESET FORM] Called - Current alert:", alert?.type);
-
-    // Reset theo thứ tự để tránh conflict
-    setCurrentTab("basic");
-    setCampaignName("");
-    setSelectedType("");
-    setStartTime("");
-    setEndTime("");
-    setSelectedDays([]);
-    setDaySelectionMode("single");
-    setIncludeSaturday(true);
-    setTimeOfDay("");
-    setMessageContent("");
-    setAttachmentType(null);
-    setAttachmentData("");
-    setReminders([{ content: "", minutes: 30 }]);
-
-    // ✅ QUAN TRỌNG: Reset email states theo thứ tự đúng
-    setRecipientsTo(""); // Reset TO trước
-    setRecipientsCc([]); // Sau đó reset CC
-    setCustomEmails([""]); // Cuối cùng reset custom emails
-    setReportInterval("60");
-    setStopSendingTime("");
-    setCustomerFile(null);
-    setUploadedCustomers([]);
-    setIsSubmitting(false);
-    setShowSuccess(false);
-
-    // ✅ CHỈ RESET ALERT KHI KHÔNG PHẢI ERROR VÀ WARNING
-    if (!alert || (alert.type !== "error" && alert.type !== "warning")) {
-      console.log("🔄 [RESET FORM] Resetting alert safely");
-      setAlert(null);
-      setAlertControl({
-        preventAutoClose: false,
-        forceVisible: false,
-        userCanClose: true,
-      });
-    } else {
-      console.log("🔄 [RESET FORM] Keeping alert (error/warning)");
-    }
-  };
-
   // Handle tab change with animation
   const handleTabChange = (tab: string) => {
     // In edit mode, allow navigation to any tab
@@ -789,72 +768,27 @@ export default function CampaignModal({
     );
   };
 
+  // ✅ SIMPLIFIED ALERT HANDLERS WITH ENHANCED PROTECTION
   const handleCloseAlert = useCallback(() => {
-    console.log("🔔 [ALERT] Close attempt (delayed version):", {
-      preventAutoClose: alertControl.preventAutoClose,
-      alertType: alert?.type,
-      userCanClose: alertControl.userCanClose,
-      hasDelayedAlert: !!alertDelayed,
-      timestamp: new Date().toISOString(),
-    });
-
-    // ✅ CHỈ ĐÓNG KHI KHÔNG PREVENT AUTO-CLOSE
-    if (!alertControl.preventAutoClose) {
-      console.log("🔔 [ALERT] Allowing close (success/info type)");
-      setAlert(null);
-      setAlertDelayed(null);
-      setAlertControl({
-        preventAutoClose: false,
-        forceVisible: false,
-        userCanClose: true,
-      });
+    if (!alert || !alertRef.current?.isPersistent) {
+      setAlertSafe(null);
     } else {
-      console.log("🔔 [ALERT] BLOCKED auto-close for error/warning");
-      // ✅ QUAN TRỌNG: Không làm gì, giữ cả alert và alertDelayed
+      console.warn("⚠️ [ALERT] Persistent alert close attempted but blocked!");
     }
-  }, [alertControl, alert?.type, alertDelayed]);
+  }, [alert, setAlertSafe]);
 
   const handleManualCloseAlert = useCallback(() => {
-    console.log("🔔 [ALERT] Manual close by user button");
-    setAlert(null);
-    setAlertDelayed(null);
-    setAlertControl({
-      preventAutoClose: false,
-      forceVisible: false,
-      userCanClose: true,
-    });
-  }, []);
-
-  useEffect(() => {
-    console.log("🎛️ [ALERT DELAYED] Delayed alert state changed:", {
-      hasAlert: !!alert,
-      hasDelayedAlert: !!alertDelayed,
-      alertType: alert?.type,
-      delayedType: alertDelayed?.type,
-      preventAutoClose: alertControl.preventAutoClose,
-      timestamp: new Date().toISOString(),
-    });
-  }, [alert, alertDelayed, alertControl]);
+    setAlertSafe(null);
+  }, [setAlertSafe]);
 
   const handleCSVFallback = useCallback(
     async (file: File, originalExcelError: any): Promise<boolean> => {
-      console.log("🔄 [CSV FALLBACK] Starting CSV fallback", {
-        fileName: file.name,
-        fileSize: file.size,
-        originalError: originalExcelError?.message || "Unknown",
-      });
-
       try {
         const text = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (e) => resolve((e.target?.result as string) || "");
           reader.onerror = () => reject(new Error("FileReader failed"));
           reader.readAsText(file);
-        });
-
-        console.log("📝 [CSV FALLBACK] File content loaded", {
-          hasText: !!text,
-          textLength: text?.length || 0,
         });
 
         // Check empty file
@@ -977,8 +911,11 @@ export default function CampaignModal({
           return false;
         }
 
-        // Success - Import CSV
         setUploadedCustomers(csvCustomers);
+
+        // ✅ DELAY QUAN TRỌNG ĐỂ ĐẢM BẢO CUSTOMERS ĐÃ ĐƯỢC SET XONG
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         setAlertSafe({
           type: "warning",
           message: `⚠️ Excel lỗi nhưng đã import CSV thành công!
@@ -992,10 +929,6 @@ export default function CampaignModal({
           }
 
 💡 Khuyến nghị: Sử dụng file Excel (.xlsx) để có hiệu suất tốt hơn!`,
-        });
-
-        console.log("✅ [CSV FALLBACK] CSV import successful", {
-          customerCount: csvCustomers.length,
         });
         return true;
       } catch (error) {
@@ -1024,20 +957,10 @@ export default function CampaignModal({
 
   const handleCustomerFileUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
-      console.log("📁 [FILE UPLOAD] Upload started");
-
       const file = event.target.files?.[0];
       if (!file) {
-        console.log("❌ [FILE UPLOAD] No file selected");
         return;
       }
-
-      console.log("📋 [FILE UPLOAD] File info", {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: new Date(file.lastModified).toISOString(),
-      });
 
       // ✅ VALIDATION FILE TRƯỚC KHI XỬ LÝ
       const maxSize = 10 * 1024 * 1024; // 10MB
@@ -1049,7 +972,6 @@ export default function CampaignModal({
       ];
 
       if (file.size > maxSize) {
-        console.log("❌ [FILE UPLOAD] File too large");
         setAlertSafe({
           type: "error",
           message: `❌ File quá lớn!
@@ -1070,7 +992,6 @@ export default function CampaignModal({
         !allowedTypes.includes(file.type) &&
         !file.name.toLowerCase().match(/\.(xlsx|xls|csv)$/)
       ) {
-        console.log("❌ [FILE UPLOAD] Invalid file type");
         setAlertSafe({
           type: "error",
           message: `❌ Định dạng file không được hỗ trợ!
@@ -1089,24 +1010,15 @@ export default function CampaignModal({
       }
 
       setCustomerFile(file);
-      console.log("🔄 [FILE UPLOAD] Resetting alert");
-      setAlertSafe(null); // Reset alert
 
       try {
-        console.log("📊 [FILE UPLOAD] Starting Excel processing");
         const workbook = new ExcelJS.Workbook();
         const arrayBuffer = await file.arrayBuffer();
-        console.log(
-          "📊 [FILE UPLOAD] ArrayBuffer loaded, size:",
-          arrayBuffer.byteLength
-        );
 
         await workbook.xlsx.load(arrayBuffer);
-        console.log("📊 [FILE UPLOAD] Excel workbook loaded successfully");
 
         const worksheet = workbook.getWorksheet(1);
         if (!worksheet) {
-          console.log("❌ [FILE UPLOAD] No worksheet found - Setting alert");
           setAlertSafe({
             type: "error",
             message: `❌ Không tìm thấy worksheet trong file Excel!
@@ -1119,15 +1031,9 @@ export default function CampaignModal({
 • Thử mở file bằng Excel để kiểm tra
 • Tải file mẫu và làm theo đúng định dạng`,
           });
-          setCustomerFile(null);
-          setUploadedCustomers([]);
           event.target.value = "";
-          console.log("✅ [FILE UPLOAD] No worksheet alert set, returning");
           return;
         }
-
-        console.log("📊 [FILE UPLOAD] Worksheet found, processing data");
-
         const customers: Array<{
           phone_number: string;
           full_name: string;
@@ -1136,7 +1042,6 @@ export default function CampaignModal({
 
         // ✅ KIỂM TRA WORKSHEET CÓ DỮ LIỆU KHÔNG
         if (worksheet.rowCount <= 1) {
-          console.log("❌ [FILE UPLOAD] Empty worksheet");
           setAlertSafe({
             type: "error",
             message: `❌ Worksheet trống!
@@ -1149,8 +1054,6 @@ export default function CampaignModal({
 • Dòng 1: Tiêu đề cột
 • Dòng 2+: Dữ liệu khách hàng`,
           });
-          setCustomerFile(null);
-          setUploadedCustomers([]);
           event.target.value = "";
           return;
         }
@@ -1165,18 +1068,9 @@ export default function CampaignModal({
         headerRow.eachCell((cell, colNumber) => {
           const value = cell.value?.toString().trim().toUpperCase();
           foundHeaders.push(value || `CỘT ${colNumber}`);
-
           if (value === "TÊN KHÁCH HÀNG") fullNameCol = colNumber;
           if (value === "SỐ ĐIỆN THOẠI") phoneNumberCol = colNumber;
           if (value === "NGƯỜI LIÊN HỆ") salutationCol = colNumber;
-        });
-
-        console.log("🔍 [FILE UPLOAD] Header analysis", {
-          foundHeaders,
-          fullNameCol,
-          phoneNumberCol,
-          salutationCol,
-          totalColumns: foundHeaders.length,
         });
 
         // Check required headers
@@ -1185,14 +1079,6 @@ export default function CampaignModal({
         if (!phoneNumberCol) missingHeaders.push("SỐ ĐIỆN THOẠI");
 
         if (missingHeaders.length > 0) {
-          console.log(
-            "❌ [FILE UPLOAD] Missing headers detected - Setting alert",
-            {
-              missingHeaders,
-              foundHeaders,
-            }
-          );
-
           setAlertSafe({
             type: "error",
             message: `❌ Sai định dạng header! Thiếu cột: ${missingHeaders.join(
@@ -1204,7 +1090,7 @@ export default function CampaignModal({
 
 ✅ Header cần có:
 • TÊN KHÁCH HÀNG (bắt buộc)
-• SỐ ĐIỆN THOẠI (bắt buộc) 
+• SỐ ĐIỆN THOẠI (bắt buộc)
 • NGƯỜI LIÊN HỆ (tùy chọn)
 
 💡 Vui lòng:
@@ -1212,11 +1098,7 @@ export default function CampaignModal({
 • Đảm bảo dòng đầu tiên là tiêu đề cột
 • Sử dụng chính xác tên cột như trên`,
           });
-
-          setCustomerFile(null);
-          setUploadedCustomers([]);
           event.target.value = "";
-          console.log("✅ [FILE UPLOAD] Missing headers alert set, returning");
           return;
         }
 
@@ -1225,12 +1107,6 @@ export default function CampaignModal({
         let invalidRows: string[] = [];
         let processedRows = 0;
         const totalDataRows = worksheet.rowCount - 1; // Excluding header
-
-        console.log("📊 [FILE UPLOAD] Starting data processing", {
-          totalRows: worksheet.rowCount,
-          totalDataRows,
-          headerRow: 1,
-        });
 
         worksheet.eachRow((row, rowNumber) => {
           if (rowNumber === 1) return; // Skip header row
@@ -1244,9 +1120,8 @@ export default function CampaignModal({
             ? row.getCell(salutationCol).value?.toString().trim() || ""
             : "";
 
-          // ✅ VALIDATION DỮ LIỆU CHI TIẾT HỚN
+          // ✅ VALIDATION DỮ LIỆU CHI TIẾT HƠN
           const validationErrors = [];
-
           if (!fullName) validationErrors.push("Tên");
           if (!phoneNumber) validationErrors.push("SĐT");
 
@@ -1270,25 +1145,9 @@ export default function CampaignModal({
               `Dòng ${rowNumber}: ${validationErrors.join(", ")}`
             );
           }
-
-          // Log progress every 100 rows
-          if (processedRows % 100 === 0) {
-            console.log(
-              `📊 [FILE UPLOAD] Processing progress: ${processedRows}/${totalDataRows} rows`
-            );
-          }
-        });
-
-        console.log("👥 [FILE UPLOAD] Data processing complete", {
-          validCustomers,
-          invalidRowsCount: invalidRows.length,
-          totalCustomers: customers.length,
-          processedRows,
-          totalDataRows,
         });
 
         if (customers.length === 0) {
-          console.log("❌ [FILE UPLOAD] No valid data - Setting alert");
           setAlertSafe({
             type: "error",
             message: `❌ Không có dữ liệu hợp lệ!
@@ -1306,19 +1165,16 @@ ${invalidRows.length > 5 ? `\n... và ${invalidRows.length - 5} dòng khác` : "
 • Đảm bảo có đủ thông tin Tên và SĐT
 • Kiểm tra định dạng số điện thoại`,
           });
-          setCustomerFile(null);
-          setUploadedCustomers([]);
           event.target.value = "";
-          console.log("✅ [FILE UPLOAD] No valid data alert set, returning");
           return;
         }
 
-        // ✅ SUCCESS - THÔNG BÁO CHI TIẾT HƠN
-        console.log("✅ [FILE UPLOAD] Excel processing successful");
         setUploadedCustomers(customers);
 
+        // ✅ DELAY ĐỂ ĐẢM BẢO CUSTOMERS ĐÃ ĐƯỢC SET
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         if (invalidRows.length > 0) {
-          console.log("⚠️ [FILE UPLOAD] Success with warnings - Setting alert");
           setAlertSafe({
             type: "warning",
             message: `⚠️ Import thành công với cảnh báo!
@@ -1336,7 +1192,6 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
 💡 Bạn có thể tiếp tục hoặc sửa lỗi và import lại.`,
           });
         } else {
-          console.log("✅ [FILE UPLOAD] Complete success - Setting alert");
           setAlertSafe({
             type: "success",
             message: `🎉 Import Excel thành công!
@@ -1350,58 +1205,36 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
         }
       } catch (error) {
         console.error("💥 [FILE UPLOAD] Excel processing failed:", error);
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
-        // Reset file state
-        setCustomerFile(null);
-        setUploadedCustomers([]);
-        event.target.value = "";
-
-        // ✅ GHI LOG CHI TIẾT LỖI
-        const excelErrorMessage =
-          error instanceof Error ? error.message : "Không xác định";
-        console.log("💥 [FILE UPLOAD] Excel error details", {
-          errorMessage: excelErrorMessage,
-          errorType:
-            error instanceof Error ? error.constructor.name : typeof error,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-        });
-
-        // ✅ CHỈ CHẠY CSV FALLBACK - KHÔNG SET ALERT TRUNG GIAN
-        console.log("🔄 [FILE UPLOAD] Starting CSV fallback directly");
         try {
-          await handleCSVFallback(file, error);
-          console.log("✅ [FILE UPLOAD] CSV fallback completed successfully");
-        } catch (fallbackError) {
-          console.error(
-            "💥 [FILE UPLOAD] CSV fallback also failed:",
-            fallbackError
-          );
+          const csvSuccess = await handleCSVFallback(file, error);
 
-          // ✅ FALLBACK CUỐI CÙNG - HIỂN THỊ THÔNG BÁO LỖI TỔNG HỢP
+          // ✅ CHỈ RESET INPUT KHI CSV FALLBACK THẤT BẠI
+          if (!csvSuccess) {
+            event.target.value = "";
+          }
+        } catch (fallbackError) {
+          console.error("💥 [CSV FALLBACK] Also failed:", fallbackError);
+          // Reset states khi cả Excel và CSV đều fail
+          setCustomerFile(null);
+          setUploadedCustomers([]);
+          event.target.value = "";
           setAlertSafe({
             type: "error",
             message: `❌ Không thể xử lý file!
 
-📋 File: ${file.name}
-📊 Kích thước: ${(file.size / 1024).toFixed(1)}KB
-🔧 Đã thử: Excel + CSV
-
-💥 Lỗi Excel: ${excelErrorMessage}
-💥 Lỗi CSV: ${
+📋 Excel: ${error instanceof Error ? error.message : "Không đọc được"}
+📋 CSV: ${
               fallbackError instanceof Error
                 ? fallbackError.message
-                : "Không xác định"
+                : "Không xử lý được"
             }
 
-💡 Hướng dẫn khắc phục:
-• Tải file mẫu và làm theo đúng định dạng
+💡 Vui lòng:
 • Kiểm tra file có bị hỏng không
-• Thử lưu lại file ở định dạng khác
-• Liên hệ hỗ trợ nếu vẫn gặp vấn đề
-
-🔗 Hoặc copy dữ liệu sang file mẫu mới`,
+• Thử tải file mẫu và làm lại
+• Liên hệ hỗ trợ nếu vẫn lỗi`,
           });
         }
       }
@@ -1591,144 +1424,437 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
   return (
     <AnimatePresence>
       {open && (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={onOpenChange} modal={true}>
           <DialogContent className="!max-w-[85vw] !max-h-[85vh] p-0 bg-white flex flex-col">
-            <motion.div
-              className="relative h-full flex flex-col min-h-0"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-            >
-              {alertDelayed && (
-                <motion.div
-                  key={`alert-${alertDelayed.type}-${Date.now()}`}
-                  className="absolute top-4 left-4 right-4 z-[200]"
-                  initial={{ opacity: 0, y: -50, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -50, scale: 0.9 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                  }}
-                >
-                  <div className="relative">
-                    <ServerResponseAlert
-                      type={alertDelayed.type as any}
-                      message={alertDelayed.message}
-                      onClose={handleCloseAlert} // ✅ Controlled close với delay
-                      duration={
-                        alertControl.preventAutoClose
-                          ? 0 // Error/Warning: không tự đóng
-                          : alertDelayed.type === "success"
-                          ? 4000 // Success: 4s
-                          : 3000 // Default: 3s
+            {alert && (
+              <motion.div
+                key={`alert-${alert.id}`}
+                className="absolute top-4 left-4 right-4 z-[10000]"
+                initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -50, scale: 0.9 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 30,
+                }}
+              >
+                <div className="relative">
+                  {alertRef.current?.isPersistent ? (
+                    // ✅ CUSTOM PERSISTENT ALERT - Không có auto-close logic
+                    <div
+                      className={`
+                      p-4 rounded-lg border-l-4 shadow-lg
+                      ${
+                        alert.type === "error"
+                          ? "bg-red-50 border-red-500 text-red-800"
+                          : "bg-yellow-50 border-yellow-500 text-yellow-800"
                       }
-                    />
-
-                    {/* ✅ MANUAL CLOSE BUTTON CHO ERROR/WARNING */}
-                    {alertControl.preventAutoClose &&
-                      alertControl.userCanClose && (
+                    `}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            {alert.type === "error" ? (
+                              <AlertCircle className="h-5 w-5 text-red-500" />
+                            ) : (
+                              <AlertCircle className="h-5 w-5 text-yellow-500" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium mb-1">
+                              {alert.type === "error" ? "Lỗi" : "Cảnh báo"}
+                            </div>
+                            <div className="text-sm whitespace-pre-line">
+                              {alert.message}
+                            </div>
+                          </div>
+                        </div>
                         <button
                           onClick={handleManualCloseAlert}
-                          className="absolute top-2 right-2 p-1 rounded-md hover:bg-red-100 transition-colors z-10 bg-white/90 backdrop-blur-sm border border-red-200"
+                          className="flex-shrink-0 ml-4 p-1 rounded-md hover:bg-red-100 transition-colors"
                           aria-label="Đóng thông báo"
                           title="Đóng thông báo"
                         >
-                          <X className="h-4 w-4 text-red-600" />
+                          <X className="h-4 w-4" />
                         </button>
-                      )}
-                  </div>
-                </motion.div>
-              )}
-              {/* Animated background */}
-              <motion.div
-                className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-2xl opacity-50 pointer-events-none"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.3, 0.5, 0.3],
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-              />
-
-              {/* FIXED HEADER - Update với dynamic title */}
-              <motion.div
-                className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative z-10"
-                initial={{ y: -20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-3 text-lg font-semibold">
-                    <motion.div
-                      className="p-2 bg-white/20 rounded-lg"
-                      whileHover={{ scale: 1.05, rotate: 5 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <Target className="h-5 w-5" />
-                    </motion.div>
-                    {modalTitle}
-                  </DialogTitle>
-                </DialogHeader>
-
-                {/* Progress bar */}
-                <motion.div
-                  className="mt-3"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-white/80">Tiến độ</span>
-                    <motion.span
-                      className="text-sm font-medium"
-                      key={Math.round(calculateProgress())}
-                      initial={{ scale: 1.2 }}
-                      animate={{ scale: 1 }}
-                    >
-                      {Math.round(calculateProgress())}%
-                    </motion.span>
-                  </div>
-                  <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-white/90 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${calculateProgress()}%` }}
-                      transition={{ duration: 0.5, ease: "easeOut" }}
+                      </div>
+                    </div>
+                  ) : (
+                    // ✅ STANDARD ALERT CHO SUCCESS/INFO - Có auto-close
+                    <ServerResponseAlert
+                      type={alert.type as any}
+                      message={alert.message}
+                      onClose={handleCloseAlert}
+                      duration={alert.type === "success" ? 4000 : 3000}
                     />
-                  </div>
-                </motion.div>
+                  )}
+                </div>
               </motion.div>
+            )}
+            {/* Animated background */}
+            <motion.div
+              className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-2xl opacity-50 pointer-events-none"
+              animate={{
+                scale: [1, 1.2, 1],
+                opacity: [0.3, 0.5, 0.3],
+              }}
+              transition={{
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
 
-              {/* FIXED STEP INDICATOR */}
+            {/* FIXED HEADER - Update với dynamic title */}
+            <motion.div
+              className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative z-10"
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+            >
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3 text-lg font-semibold">
+                  <motion.div
+                    className="p-2 bg-white/20 rounded-lg"
+                    whileHover={{ scale: 1.05, rotate: 5 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Target className="h-5 w-5" />
+                  </motion.div>
+                  {modalTitle}
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Progress bar */}
               <motion.div
-                className="flex-shrink-0 px-6 py-3 bg-gray-50 border-b relative z-10"
+                className="mt-3"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: 0.2 }}
               >
-                <StepIndicator
-                  currentStep={getCurrentStepNumber()}
-                  totalSteps={needsReminderTab ? 5 : 4}
-                  labels={getTabLabels()}
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs text-white/80">Tiến độ</span>
+                  <motion.span
+                    className="text-sm font-medium"
+                    key={Math.round(calculateProgress())}
+                    initial={{ scale: 1.2 }}
+                    animate={{ scale: 1 }}
+                  >
+                    {Math.round(calculateProgress())}%
+                  </motion.span>
+                </div>
+                <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-white/90 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${calculateProgress()}%` }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                  />
+                </div>
               </motion.div>
+            </motion.div>
 
-              {/* SCROLLABLE CONTENT AREA */}
-              <div className="flex-1 overflow-y-auto min-h-0">
-                <Tabs
-                  value={currentTab}
-                  onValueChange={handleTabChange}
-                  className="h-full"
-                >
-                  <div className="p-6 space-y-6">
-                    {/* Tab 1: Basic Information */}
-                    <TabsContent value="basic" className="mt-0">
+            {/* FIXED STEP INDICATOR */}
+            <motion.div
+              className="flex-shrink-0 px-6 py-3 bg-gray-50 border-b relative z-10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <StepIndicator
+                currentStep={getCurrentStepNumber()}
+                totalSteps={needsReminderTab ? 5 : 4}
+                labels={getTabLabels()}
+              />
+            </motion.div>
+
+            {/* SCROLLABLE CONTENT AREA */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <Tabs
+                value={currentTab}
+                onValueChange={handleTabChange}
+                className="h-full"
+              >
+                <div className="p-6 space-y-6">
+                  {/* Tab 1: Basic Information */}
+                  <TabsContent value="basic" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="border border-gray-200 shadow-sm">
+                        <CardHeader className="pb-4">
+                          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <motion.div
+                              animate={{ rotate: [0, 360] }}
+                              transition={{
+                                duration: 20,
+                                repeat: Infinity,
+                                ease: "linear",
+                              }}
+                            >
+                              <Target className="h-5 w-5 text-blue-600" />
+                            </motion.div>
+                            Thông tin cơ bản
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Campaign name */}
+                          <motion.div
+                            className="space-y-2"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                          >
+                            <Label className="text-sm font-medium">
+                              Tên chương trình{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              value={campaignName}
+                              onChange={(e) => setCampaignName(e.target.value)}
+                              placeholder="VD: Khuyến mãi mùa hè 2024..."
+                              className="h-10 transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                            />
+                          </motion.div>
+
+                          {/* Campaign type */}
+                          <motion.div
+                            className="space-y-3"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <Label className="text-sm font-medium">
+                              Loại chương trình{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {campaignTypeOptions.map((option, index) => {
+                                const isSelected =
+                                  selectedType === option.value;
+                                return (
+                                  <motion.button
+                                    key={option.value}
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.3 + index * 0.1 }}
+                                    whileHover={{
+                                      scale: 1.02,
+                                      y: -2,
+                                      transition: { duration: 0.1 },
+                                    }}
+                                    whileTap={{ scale: 0.98 }}
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedType(
+                                        isSelected ? "" : option.value
+                                      )
+                                    }
+                                    className={cn(
+                                      "p-4 rounded-lg border-2 transition-all duration-200 text-left",
+                                      isSelected
+                                        ? "border-blue-500 bg-blue-50 shadow-lg"
+                                        : "border-gray-200 hover:border-gray-300 hover:shadow-md"
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <motion.span
+                                        className="text-2xl"
+                                        animate={
+                                          isSelected
+                                            ? {
+                                                rotate: [0, 10, -10, 0],
+                                                scale: [1, 1.1, 1],
+                                              }
+                                            : {}
+                                        }
+                                        transition={{ duration: 0.5 }}
+                                      >
+                                        {option.emoji}
+                                      </motion.span>
+                                      <div className="flex-1">
+                                        <h3 className="font-medium text-sm mb-1">
+                                          {option.label}
+                                        </h3>
+                                        <p className="text-xs text-gray-600">
+                                          {option.description}
+                                        </p>
+                                      </div>
+                                      <AnimatePresence>
+                                        {isSelected && (
+                                          <motion.div
+                                            initial={{
+                                              scale: 0,
+                                              rotate: -90,
+                                            }}
+                                            animate={{ scale: 1, rotate: 0 }}
+                                            exit={{ scale: 0, rotate: 90 }}
+                                          >
+                                            <Check className="h-4 w-4 text-blue-600" />
+                                          </motion.div>
+                                        )}
+                                      </AnimatePresence>
+                                    </div>
+                                  </motion.button>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </TabsContent>
+
+                  {/* Tab 2: Schedule & Content */}
+                  <TabsContent value="schedule" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="border border-gray-200 shadow-sm">
+                        <CardHeader className="pb-4">
+                          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <motion.div
+                              animate={{ rotate: [0, 360] }}
+                              transition={{
+                                duration: 2,
+                                repeat: Infinity,
+                                ease: "linear",
+                              }}
+                            >
+                              <Clock className="h-5 w-5 text-purple-600" />
+                            </motion.div>
+                            Lịch trình & Nội dung
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Time configuration */}
+                          {(selectedType === CampaignType.HOURLY_KM ||
+                            selectedType === CampaignType.DAILY_KM) && (
+                            <motion.div
+                              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.1 }}
+                            >
+                              <ModernTimePicker
+                                value={startTime}
+                                onChange={setStartTime}
+                                label="Giờ bắt đầu gửi *"
+                              />
+                              <ModernTimePicker
+                                value={endTime}
+                                onChange={setEndTime}
+                                label="Giờ kết thúc gửi *"
+                              />
+                            </motion.div>
+                          )}
+
+                          {/* 3-day campaign schedule */}
+                          {selectedType === CampaignType.THREE_DAY_KM && (
+                            <motion.div
+                              className="space-y-4"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.1 }}
+                            >
+                              <ModernDaySelector
+                                value={selectedDays}
+                                onChange={handleDaySelectionChange}
+                                mode="adjacent"
+                                adjacentDayCount={3}
+                                includeSaturday={includeSaturday}
+                                label="Chọn 3 ngày liền kề *"
+                              />
+                              <ModernTimePicker
+                                value={timeOfDay}
+                                onChange={setTimeOfDay}
+                                label="Thời gian gửi trong ngày *"
+                              />
+                            </motion.div>
+                          )}
+
+                          {/* Weekly campaign schedule */}
+                          {(selectedType === CampaignType.WEEKLY_SP ||
+                            selectedType === CampaignType.WEEKLY_BBG) && (
+                            <motion.div
+                              className="space-y-4"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.1 }}
+                            >
+                              <ModernDaySelector
+                                value={selectedDays}
+                                onChange={handleDaySelectionChange}
+                                mode="single"
+                                onModeChange={handleDaySelectionModeChange}
+                                includeSaturday={includeSaturday}
+                                label="Chọn ngày trong tuần *"
+                              />
+                              <ModernTimePicker
+                                value={timeOfDay}
+                                onChange={setTimeOfDay}
+                                label="Thời gian gửi trong ngày *"
+                              />
+                            </motion.div>
+                          )}
+
+                          {/* Message content */}
+                          <motion.div
+                            className="space-y-2"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <Label className="text-sm font-medium flex items-center justify-between">
+                              <span>
+                                Nội dung tin nhắn{" "}
+                                <span className="text-red-500">*</span>
+                              </span>
+                              <TextCounter
+                                current={messageContent.length}
+                                max={500}
+                              />
+                            </Label>
+                            <Textarea
+                              value={messageContent}
+                              onChange={(e) =>
+                                setMessageContent(e.target.value)
+                              }
+                              placeholder="Nhập nội dung tin nhắn hấp dẫn của bạn..."
+                              rows={4}
+                              className="resize-none transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                              maxLength={500}
+                            />
+                          </motion.div>
+
+                          {/* Attachment */}
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                          >
+                            <ModernAttachmentSelector
+                              type={attachmentType}
+                              onTypeChange={setAttachmentType}
+                              data={attachmentData}
+                              onDataChange={setAttachmentData}
+                            />
+                          </motion.div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </TabsContent>
+
+                  {/* Tab 3: Reminders */}
+                  {needsReminderTab && (
+                    <TabsContent value="reminders" className="mt-0">
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -1739,1660 +1865,1378 @@ ${invalidRows.length > 3 ? `\n... và ${invalidRows.length - 3} dòng khác` : "
                           <CardHeader className="pb-4">
                             <CardTitle className="text-lg font-semibold flex items-center gap-2">
                               <motion.div
-                                animate={{ rotate: [0, 360] }}
+                                animate={{
+                                  rotate: [0, 15, -15, 0],
+                                  scale: [1, 1.1, 1],
+                                }}
+                                transition={{
+                                  duration: 2,
+                                  repeat: Infinity,
+                                  ease: "easeInOut",
+                                }}
+                              >
+                                <Bell className="h-5 w-5 text-orange-600" />
+                              </motion.div>
+                              Cấu hình nhắc lại
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <AnimatePresence>
+                              {reminders.map((reminder, index) => (
+                                <motion.div
+                                  key={index}
+                                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                                  transition={{
+                                    duration: 0.3,
+                                    delay: index * 0.1,
+                                  }}
+                                  layout
+                                  className="border border-gray-200 rounded-lg p-4 space-y-4"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <motion.h4
+                                      className="font-medium text-sm"
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      transition={{ delay: 0.1 }}
+                                    >
+                                      Lần nhắc thứ {index + 1}
+                                    </motion.h4>
+                                    {reminders.length > 1 && (
+                                      <motion.div
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                      >
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => removeReminder(index)}
+                                          className="text-red-600 hover:text-red-700"
+                                        >
+                                          <motion.div
+                                            whileHover={{ rotate: 90 }}
+                                            transition={{ duration: 0.2 }}
+                                          >
+                                            <X className="h-4 w-4" />
+                                          </motion.div>
+                                        </Button>
+                                      </motion.div>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-3">
+                                    <motion.div
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ delay: 0.2 }}
+                                    >
+                                      <Label className="text-sm">
+                                        Nội dung nhắc lại
+                                      </Label>
+                                      <motion.div
+                                        whileFocus={{ scale: 1.01 }}
+                                        transition={{ duration: 0.1 }}
+                                      >
+                                        <Textarea
+                                          value={reminder.content}
+                                          onChange={(e) =>
+                                            updateReminder(
+                                              index,
+                                              "content",
+                                              e.target.value
+                                            )
+                                          }
+                                          placeholder="VD: Ưu đãi sắp hết hạn! Nhanh tay nhận ngay..."
+                                          rows={2}
+                                          className="resize-none mt-1 transition-all duration-200 focus:ring-2 focus:ring-orange-500"
+                                        />
+                                      </motion.div>
+                                    </motion.div>
+
+                                    <motion.div
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ delay: 0.3 }}
+                                    >
+                                      <Label className="text-sm">
+                                        Thời gian chờ:
+                                        <motion.span
+                                          className="font-semibold text-orange-600 ml-1"
+                                          key={reminder.minutes}
+                                          initial={{
+                                            scale: 1.2,
+                                            color: "#ea580c",
+                                          }}
+                                          animate={{
+                                            scale: 1,
+                                            color: "#ea580c",
+                                          }}
+                                          transition={{ duration: 0.2 }}
+                                        >
+                                          {reminder.minutes} phút
+                                        </motion.span>
+                                      </Label>
+                                      <motion.div
+                                        className="mt-2"
+                                        whileHover={{ scale: 1.01 }}
+                                        transition={{ duration: 0.1 }}
+                                      >
+                                        <Slider
+                                          value={[reminder.minutes]}
+                                          onValueChange={(value) =>
+                                            updateReminder(
+                                              index,
+                                              "minutes",
+                                              value[0]
+                                            )
+                                          }
+                                          min={5}
+                                          max={120}
+                                          step={5}
+                                          className="transition-all duration-200"
+                                        />
+                                      </motion.div>
+                                      <motion.div
+                                        className="flex justify-between text-xs text-gray-500 mt-1"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: 0.4 }}
+                                      >
+                                        <span>5 phút</span>
+                                        <span>2 giờ</span>
+                                      </motion.div>
+                                    </motion.div>
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+
+                            <motion.div
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.2 }}
+                              whileHover={{ scale: 1.01 }}
+                              whileTap={{ scale: 0.99 }}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={addReminder}
+                                className="w-full border-dashed hover:bg-orange-50 hover:border-orange-200 transition-all duration-200"
+                              >
+                                <motion.div
+                                  animate={{ rotate: [0, 2, 0] }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                  }}
+                                  className="mr-2"
+                                >
+                                  <Plus className="h-4 w-4 inline-block" />
+                                  <span className="inline-block">
+                                    Thêm lần nhắc mới
+                                  </span>
+                                </motion.div>
+                              </Button>
+                            </motion.div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    </TabsContent>
+                  )}
+                  {/* Tab 4: Email Reports */}
+                  <TabsContent value="email" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="border border-gray-200 shadow-sm">
+                        <CardHeader className="pb-4">
+                          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            <motion.div
+                              animate={{
+                                rotate: [0, -10, 10, 0],
+                                scale: [1, 1.05, 1],
+                              }}
+                              transition={{
+                                duration: 3,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                              }}
+                            >
+                              <Mail className="h-5 w-5 text-green-600" />
+                            </motion.div>
+                            Cấu hình email báo cáo
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* System emails */}
+                          <motion.div
+                            className="space-y-2"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                          >
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <motion.div
+                                animate={{ rotate: 360 }}
                                 transition={{
                                   duration: 20,
                                   repeat: Infinity,
                                   ease: "linear",
                                 }}
                               >
-                                <Target className="h-5 w-5 text-blue-600" />
+                                <Users className="h-3 w-3 text-gray-500" />
                               </motion.div>
-                              Thông tin cơ bản
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-6">
-                            {/* Campaign name */}
-                            <motion.div
-                              className="space-y-2"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.1 }}
-                            >
-                              <Label className="text-sm font-medium">
-                                Tên chương trình{" "}
-                                <span className="text-red-500">*</span>
-                              </Label>
-                              <Input
-                                value={campaignName}
-                                onChange={(e) =>
-                                  setCampaignName(e.target.value)
-                                }
-                                placeholder="VD: Khuyến mãi mùa hè 2024..."
-                                className="h-10 transition-all duration-200 focus:ring-2 focus:ring-blue-500"
-                              />
-                            </motion.div>
+                              Email từ hệ thống
+                            </Label>
 
-                            {/* Campaign type */}
-                            <motion.div
-                              className="space-y-3"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.2 }}
-                            >
-                              <Label className="text-sm font-medium">
-                                Loại chương trình{" "}
-                                <span className="text-red-500">*</span>
-                              </Label>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {campaignTypeOptions.map((option, index) => {
-                                  const isSelected =
-                                    selectedType === option.value;
-                                  return (
-                                    <motion.button
-                                      key={option.value}
-                                      initial={{ opacity: 0, scale: 0.9 }}
-                                      animate={{ opacity: 1, scale: 1 }}
-                                      transition={{ delay: 0.3 + index * 0.1 }}
-                                      whileHover={{
-                                        scale: 1.02,
-                                        y: -2,
-                                        transition: { duration: 0.1 },
-                                      }}
-                                      whileTap={{ scale: 0.98 }}
-                                      type="button"
-                                      onClick={() =>
-                                        setSelectedType(
-                                          isSelected ? "" : option.value
-                                        )
-                                      }
-                                      className={cn(
-                                        "p-4 rounded-lg border-2 transition-all duration-200 text-left",
-                                        isSelected
-                                          ? "border-blue-500 bg-blue-50 shadow-lg"
-                                          : "border-gray-200 hover:border-gray-300 hover:shadow-md"
-                                      )}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <motion.span
-                                          className="text-2xl"
-                                          animate={
-                                            isSelected
-                                              ? {
-                                                  rotate: [0, 10, -10, 0],
-                                                  scale: [1, 1.1, 1],
-                                                }
-                                              : {}
-                                          }
-                                          transition={{ duration: 0.5 }}
-                                        >
-                                          {option.emoji}
-                                        </motion.span>
-                                        <div className="flex-1">
-                                          <h3 className="font-medium text-sm mb-1">
-                                            {option.label}
-                                          </h3>
-                                          <p className="text-xs text-gray-600">
-                                            {option.description}
-                                          </p>
-                                        </div>
-                                        <AnimatePresence>
-                                          {isSelected && (
-                                            <motion.div
-                                              initial={{
-                                                scale: 0,
-                                                rotate: -90,
-                                              }}
-                                              animate={{ scale: 1, rotate: 0 }}
-                                              exit={{ scale: 0, rotate: 90 }}
-                                            >
-                                              <Check className="h-4 w-4 text-blue-600" />
-                                            </motion.div>
-                                          )}
-                                        </AnimatePresence>
-                                      </div>
-                                    </motion.button>
-                                  );
-                                })}
-                              </div>
-                            </motion.div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    </TabsContent>
-
-                    {/* Tab 2: Schedule & Content */}
-                    <TabsContent value="schedule" className="mt-0">
-                      <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Card className="border border-gray-200 shadow-sm">
-                          <CardHeader className="pb-4">
-                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            {/* ✅ SỬA MultiSelectCombobox - Loại bỏ Recipients TO khỏi options */}
+                            {loadingUsers ? (
                               <motion.div
-                                animate={{ rotate: [0, 360] }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Infinity,
-                                  ease: "linear",
-                                }}
+                                className="flex items-center justify-center p-4 text-sm text-gray-500"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
                               >
-                                <Clock className="h-5 w-5 text-purple-600" />
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                                Đang tải danh sách email...
                               </motion.div>
-                              Lịch trình & Nội dung
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-6">
-                            {/* Time configuration */}
-                            {(selectedType === CampaignType.HOURLY_KM ||
-                              selectedType === CampaignType.DAILY_KM) && (
-                              <motion.div
-                                className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 }}
-                              >
-                                <ModernTimePicker
-                                  value={startTime}
-                                  onChange={setStartTime}
-                                  label="Giờ bắt đầu gửi *"
-                                />
-                                <ModernTimePicker
-                                  value={endTime}
-                                  onChange={setEndTime}
-                                  label="Giờ kết thúc gửi *"
-                                />
-                              </motion.div>
-                            )}
-
-                            {/* 3-day campaign schedule */}
-                            {selectedType === CampaignType.THREE_DAY_KM && (
-                              <motion.div
-                                className="space-y-4"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 }}
-                              >
-                                <ModernDaySelector
-                                  value={selectedDays}
-                                  onChange={handleDaySelectionChange}
-                                  mode="adjacent"
-                                  adjacentDayCount={3}
-                                  includeSaturday={includeSaturday}
-                                  label="Chọn 3 ngày liền kề *"
-                                />
-                                <ModernTimePicker
-                                  value={timeOfDay}
-                                  onChange={setTimeOfDay}
-                                  label="Thời gian gửi trong ngày *"
-                                />
-                              </motion.div>
-                            )}
-
-                            {/* Weekly campaign schedule */}
-                            {(selectedType === CampaignType.WEEKLY_SP ||
-                              selectedType === CampaignType.WEEKLY_BBG) && (
-                              <motion.div
-                                className="space-y-4"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 }}
-                              >
-                                <ModernDaySelector
-                                  value={selectedDays}
-                                  onChange={handleDaySelectionChange}
-                                  mode="single"
-                                  onModeChange={handleDaySelectionModeChange}
-                                  includeSaturday={includeSaturday}
-                                  label="Chọn ngày trong tuần *"
-                                />
-                                <ModernTimePicker
-                                  value={timeOfDay}
-                                  onChange={setTimeOfDay}
-                                  label="Thời gian gửi trong ngày *"
-                                />
-                              </motion.div>
-                            )}
-
-                            {/* Message content */}
-                            <motion.div
-                              className="space-y-2"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.2 }}
-                            >
-                              <Label className="text-sm font-medium flex items-center justify-between">
-                                <span>
-                                  Nội dung tin nhắn{" "}
-                                  <span className="text-red-500">*</span>
-                                </span>
-                                <TextCounter
-                                  current={messageContent.length}
-                                  max={500}
-                                />
-                              </Label>
-                              <Textarea
-                                value={messageContent}
-                                onChange={(e) =>
-                                  setMessageContent(e.target.value)
-                                }
-                                placeholder="Nhập nội dung tin nhắn hấp dẫn của bạn..."
-                                rows={4}
-                                className="resize-none transition-all duration-200 focus:ring-2 focus:ring-purple-500"
-                                maxLength={500}
-                              />
-                            </motion.div>
-
-                            {/* Attachment */}
-                            <motion.div
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.3 }}
-                            >
-                              <ModernAttachmentSelector
-                                type={attachmentType}
-                                onTypeChange={setAttachmentType}
-                                data={attachmentData}
-                                onDataChange={setAttachmentData}
-                              />
-                            </motion.div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    </TabsContent>
-
-                    {/* Tab 3: Reminders */}
-                    {needsReminderTab && (
-                      <TabsContent value="reminders" className="mt-0">
-                        <motion.div
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          <Card className="border border-gray-200 shadow-sm">
-                            <CardHeader className="pb-4">
-                              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                                <motion.div
-                                  animate={{
-                                    rotate: [0, 15, -15, 0],
-                                    scale: [1, 1.1, 1],
-                                  }}
-                                  transition={{
-                                    duration: 2,
-                                    repeat: Infinity,
-                                    ease: "easeInOut",
-                                  }}
-                                >
-                                  <Bell className="h-5 w-5 text-orange-600" />
-                                </motion.div>
-                                Cấu hình nhắc lại
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                              <AnimatePresence>
-                                {reminders.map((reminder, index) => (
-                                  <motion.div
-                                    key={index}
-                                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                                    transition={{
-                                      duration: 0.3,
-                                      delay: index * 0.1,
-                                    }}
-                                    layout
-                                    className="border border-gray-200 rounded-lg p-4 space-y-4"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <motion.h4
-                                        className="font-medium text-sm"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ delay: 0.1 }}
-                                      >
-                                        Lần nhắc thứ {index + 1}
-                                      </motion.h4>
-                                      {reminders.length > 1 && (
-                                        <motion.div
-                                          whileHover={{ scale: 1.1 }}
-                                          whileTap={{ scale: 0.9 }}
-                                        >
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              removeReminder(index)
-                                            }
-                                            className="text-red-600 hover:text-red-700"
-                                          >
-                                            <motion.div
-                                              whileHover={{ rotate: 90 }}
-                                              transition={{ duration: 0.2 }}
-                                            >
-                                              <X className="h-4 w-4" />
-                                            </motion.div>
-                                          </Button>
-                                        </motion.div>
-                                      )}
-                                    </div>
-
-                                    <div className="space-y-3">
-                                      <motion.div
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.2 }}
-                                      >
-                                        <Label className="text-sm">
-                                          Nội dung nhắc lại
-                                        </Label>
-                                        <motion.div
-                                          whileFocus={{ scale: 1.01 }}
-                                          transition={{ duration: 0.1 }}
-                                        >
-                                          <Textarea
-                                            value={reminder.content}
-                                            onChange={(e) =>
-                                              updateReminder(
-                                                index,
-                                                "content",
-                                                e.target.value
-                                              )
-                                            }
-                                            placeholder="VD: Ưu đãi sắp hết hạn! Nhanh tay nhận ngay..."
-                                            rows={2}
-                                            className="resize-none mt-1 transition-all duration-200 focus:ring-2 focus:ring-orange-500"
-                                          />
-                                        </motion.div>
-                                      </motion.div>
-
-                                      <motion.div
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.3 }}
-                                      >
-                                        <Label className="text-sm">
-                                          Thời gian chờ:
-                                          <motion.span
-                                            className="font-semibold text-orange-600 ml-1"
-                                            key={reminder.minutes}
-                                            initial={{
-                                              scale: 1.2,
-                                              color: "#ea580c",
-                                            }}
-                                            animate={{
-                                              scale: 1,
-                                              color: "#ea580c",
-                                            }}
-                                            transition={{ duration: 0.2 }}
-                                          >
-                                            {reminder.minutes} phút
-                                          </motion.span>
-                                        </Label>
-                                        <motion.div
-                                          className="mt-2"
-                                          whileHover={{ scale: 1.01 }}
-                                          transition={{ duration: 0.1 }}
-                                        >
-                                          <Slider
-                                            value={[reminder.minutes]}
-                                            onValueChange={(value) =>
-                                              updateReminder(
-                                                index,
-                                                "minutes",
-                                                value[0]
-                                              )
-                                            }
-                                            min={5}
-                                            max={120}
-                                            step={5}
-                                            className="transition-all duration-200"
-                                          />
-                                        </motion.div>
-                                        <motion.div
-                                          className="flex justify-between text-xs text-gray-500 mt-1"
-                                          initial={{ opacity: 0 }}
-                                          animate={{ opacity: 1 }}
-                                          transition={{ delay: 0.4 }}
-                                        >
-                                          <span>5 phút</span>
-                                          <span>2 giờ</span>
-                                        </motion.div>
-                                      </motion.div>
-                                    </div>
-                                  </motion.div>
-                                ))}
-                              </AnimatePresence>
-
-                              <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.2 }}
-                                whileHover={{ scale: 1.01 }}
-                                whileTap={{ scale: 0.99 }}
-                              >
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={addReminder}
-                                  className="w-full border-dashed hover:bg-orange-50 hover:border-orange-200 transition-all duration-200"
-                                >
-                                  <motion.div
-                                    animate={{ rotate: [0, 2, 0] }}
-                                    transition={{
-                                      duration: 2,
-                                      repeat: Infinity,
-                                      ease: "easeInOut",
-                                    }}
-                                    className="mr-2"
-                                  >
-                                    <Plus className="h-4 w-4 inline-block" />
-                                    <span className="inline-block">
-                                      Thêm lần nhắc mới
-                                    </span>
-                                  </motion.div>
-                                </Button>
-                              </motion.div>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      </TabsContent>
-                    )}
-                    {/* Tab 4: Email Reports */}
-                    <TabsContent value="email" className="mt-0">
-                      <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Card className="border border-gray-200 shadow-sm">
-                          <CardHeader className="pb-4">
-                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                              <motion.div
-                                animate={{
-                                  rotate: [0, -10, 10, 0],
-                                  scale: [1, 1.05, 1],
-                                }}
-                                transition={{
-                                  duration: 3,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                }}
-                              >
-                                <Mail className="h-5 w-5 text-green-600" />
-                              </motion.div>
-                              Cấu hình email báo cáo
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-6">
-                            {/* System emails */}
-                            <motion.div
-                              className="space-y-2"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.1 }}
-                            >
-                              <Label className="text-sm font-medium flex items-center gap-2">
-                                <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{
-                                    duration: 20,
-                                    repeat: Infinity,
-                                    ease: "linear",
-                                  }}
-                                >
-                                  <Users className="h-3 w-3 text-gray-500" />
-                                </motion.div>
-                                Email từ hệ thống
-                              </Label>
-
-                              {/* ✅ SỬA MultiSelectCombobox - Loại bỏ Recipients TO khỏi options */}
-                              {loadingUsers ? (
-                                <motion.div
-                                  className="flex items-center justify-center p-4 text-sm text-gray-500"
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                >
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
-                                  Đang tải danh sách email...
-                                </motion.div>
-                              ) : (
-                                <motion.div
-                                  whileHover={{ scale: 1.01 }}
-                                  transition={{ duration: 0.1 }}
-                                >
-                                  <MultiSelectCombobox
-                                    key={`multiselect-${recipientsTo}-${mode}`}
-                                    options={usersWithEmail
-                                      .filter((user) => {
-                                        // ✅ LOẠI BỎ email đã là Recipients TO khỏi options
-                                        const isRecipientsTo =
-                                          user.email.trim().toLowerCase() ===
-                                          recipientsTo.trim().toLowerCase();
-                                        return !isRecipientsTo;
-                                      })
-                                      .map((user) => ({
-                                        value: user.email,
-                                        label: `${user.fullName}${
-                                          user.employeeCode
-                                            ? ` (${user.employeeCode})`
-                                            : ""
-                                        } - ${user.email}`,
-                                      }))}
-                                    value={recipientsCc}
-                                    onChange={(values) =>
-                                      setRecipientsCc(
-                                        values.map((v) => v.toString())
-                                      )
-                                    }
-                                    placeholder={
-                                      usersWithEmail.length === 0
-                                        ? "Không có email nào trong hệ thống"
-                                        : usersWithEmail.filter(
-                                            (user) =>
-                                              user.email
-                                                .trim()
-                                                .toLowerCase() !==
-                                              recipientsTo.trim().toLowerCase()
-                                          ).length === 0
-                                        ? "Tất cả email hệ thống đã được sử dụng"
-                                        : "Chọn người nhận từ hệ thống..."
-                                    }
-                                  />
-                                </motion.div>
-                              )}
-
-                              {/* ✅ THÊM MESSAGE KHI KHÔNG CÓ USER NÀO CÓ EMAIL */}
-                              {usersWithEmail.length === 0 && !loadingUsers && (
-                                <motion.p
-                                  className="text-sm text-gray-500 mt-1"
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  transition={{ delay: 0.2 }}
-                                >
-                                  Không có user nào có email trong hệ thống
-                                </motion.p>
-                              )}
-                            </motion.div>
-
-                            <motion.div
-                              className="space-y-2"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.05 }}
-                            >
-                              <Label className="text-sm font-medium flex items-center gap-2">
-                                <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{
-                                    duration: 15,
-                                    repeat: Infinity,
-                                    ease: "linear",
-                                  }}
-                                >
-                                  <AtSign className="h-3 w-3 text-blue-500" />
-                                </motion.div>
-                                Người nhận chính{" "}
-                                <span className="text-red-500">*</span>
-                              </Label>
-
+                            ) : (
                               <motion.div
                                 whileHover={{ scale: 1.01 }}
                                 transition={{ duration: 0.1 }}
                               >
-                                <Input
-                                  value={recipientsTo}
-                                  onChange={(e) => {
-                                    setRecipientsTo(e.target.value);
-                                  }}
-                                  placeholder="example@email.com"
-                                  type="email"
-                                  className={cn(
-                                    "transition-all duration-200 focus:ring-2 focus:ring-blue-500",
-                                    !recipientsTo.trim() &&
-                                      (recipientsCc.length > 0 ||
-                                        customEmails.some((e) => e.trim()))
-                                      ? "border-orange-300 bg-orange-50"
-                                      : ""
-                                  )}
+                                <MultiSelectCombobox
+                                  key={`multiselect-${recipientsTo}-${mode}`}
+                                  options={usersWithEmail
+                                    .filter((user) => {
+                                      // ✅ LOẠI BỎ email đã là Recipients TO khỏi options
+                                      const isRecipientsTo =
+                                        user.email.trim().toLowerCase() ===
+                                        recipientsTo.trim().toLowerCase();
+                                      return !isRecipientsTo;
+                                    })
+                                    .map((user) => ({
+                                      value: user.email,
+                                      label: `${user.fullName}${
+                                        user.employeeCode
+                                          ? ` (${user.employeeCode})`
+                                          : ""
+                                      } - ${user.email}`,
+                                    }))}
+                                  value={recipientsCc}
+                                  onChange={(values) =>
+                                    setRecipientsCc(
+                                      values.map((v) => v.toString())
+                                    )
+                                  }
+                                  placeholder={
+                                    usersWithEmail.length === 0
+                                      ? "Không có email nào trong hệ thống"
+                                      : usersWithEmail.filter(
+                                          (user) =>
+                                            user.email.trim().toLowerCase() !==
+                                            recipientsTo.trim().toLowerCase()
+                                        ).length === 0
+                                      ? "Tất cả email hệ thống đã được sử dụng"
+                                      : "Chọn người nhận từ hệ thống..."
+                                  }
                                 />
                               </motion.div>
+                            )}
 
-                              {/* ✅ THÊM MESSAGE KHI RECIPIENTS TO LÀ SYSTEM EMAIL */}
-                              {recipientsTo &&
-                                usersWithEmail.some(
-                                  (user) =>
-                                    user.email.trim().toLowerCase() ===
-                                    recipientsTo.trim().toLowerCase()
-                                ) && (
-                                  <motion.div
-                                    className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                  >
-                                    <div className="flex items-center gap-2 text-blue-700">
-                                      <CheckCircle2 className="h-4 w-4" />
-                                      <span>
-                                        Email <strong>"{recipientsTo}"</strong>{" "}
-                                        đã được chọn làm người nhận chính nên
-                                        không hiện trong danh sách CC
-                                      </span>
-                                    </div>
-                                  </motion.div>
+                            {/* ✅ THÊM MESSAGE KHI KHÔNG CÓ USER NÀO CÓ EMAIL */}
+                            {usersWithEmail.length === 0 && !loadingUsers && (
+                              <motion.p
+                                className="text-sm text-gray-500 mt-1"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.2 }}
+                              >
+                                Không có user nào có email trong hệ thống
+                              </motion.p>
+                            )}
+                          </motion.div>
+
+                          <motion.div
+                            className="space-y-2"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.05 }}
+                          >
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{
+                                  duration: 15,
+                                  repeat: Infinity,
+                                  ease: "linear",
+                                }}
+                              >
+                                <AtSign className="h-3 w-3 text-blue-500" />
+                              </motion.div>
+                              Người nhận chính{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+
+                            <motion.div
+                              whileHover={{ scale: 1.01 }}
+                              transition={{ duration: 0.1 }}
+                            >
+                              <Input
+                                value={recipientsTo}
+                                onChange={(e) => {
+                                  setRecipientsTo(e.target.value);
+                                }}
+                                placeholder="example@email.com"
+                                type="email"
+                                className={cn(
+                                  "transition-all duration-200 focus:ring-2 focus:ring-blue-500",
+                                  !recipientsTo.trim() &&
+                                    (recipientsCc.length > 0 ||
+                                      customEmails.some((e) => e.trim()))
+                                    ? "border-orange-300 bg-orange-50"
+                                    : ""
                                 )}
+                              />
+                            </motion.div>
 
-                              {/* ✅ MESSAGE KHI KHÔNG CÓ EMAIL NÀO KHÁC */}
-                              {usersWithEmail.length > 0 &&
-                                usersWithEmail.filter(
-                                  (user) =>
-                                    user.email.trim().toLowerCase() !==
-                                    recipientsTo.trim().toLowerCase()
-                                ).length === 0 && (
-                                  <motion.p
-                                    className="text-sm text-orange-600 mt-1"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                  >
-                                    ⚠️ Tất cả email hệ thống đã được sử dụng làm
-                                    người nhận chính
-                                  </motion.p>
-                                )}
-
-                              {/* Original message khi không có user */}
-                              {usersWithEmail.length === 0 && !loadingUsers && (
-                                <motion.p
-                                  className="text-sm text-gray-500 mt-1"
+                            {/* ✅ THÊM MESSAGE KHI RECIPIENTS TO LÀ SYSTEM EMAIL */}
+                            {recipientsTo &&
+                              usersWithEmail.some(
+                                (user) =>
+                                  user.email.trim().toLowerCase() ===
+                                  recipientsTo.trim().toLowerCase()
+                              ) && (
+                                <motion.div
+                                  className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm"
                                   initial={{ opacity: 0 }}
                                   animate={{ opacity: 1 }}
-                                  transition={{ delay: 0.2 }}
                                 >
-                                  Không có user nào có email trong hệ thống
-                                </motion.p>
-                              )}
-
-                              {/* ✅ WARNING STATE - Khi TO trống nhưng có emails trong CC */}
-                              {!recipientsTo.trim() &&
-                                (recipientsCc.length > 0 ||
-                                  customEmails.some((e) => e.trim())) && (
-                                  <motion.div
-                                    className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg"
-                                    initial={{ opacity: 0, y: -10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                  >
-                                    <div className="flex items-start gap-2 text-orange-700">
-                                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                      <div className="flex-1">
-                                        <div className="font-medium text-sm">
-                                          Người nhận chính trống!
-                                        </div>
-                                        <div className="text-xs mt-1 text-orange-600">
-                                          Email cần có ít nhất 1 người nhận
-                                          chính để gửi báo cáo.
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* ✅ SUGGESTION BUTTONS */}
-                                    <div className="mt-3 space-y-2">
-                                      <div className="text-xs text-orange-600 font-medium">
-                                        💡 Gợi ý: Chọn một email từ danh sách CC
-                                        để làm người nhận chính:
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        {/* System emails suggestions */}
-                                        {recipientsCc
-                                          .slice(0, 2)
-                                          .map((email, index) => (
-                                            <motion.button
-                                              key={`system-${index}`}
-                                              className="w-full text-left text-xs p-2 bg-white border border-orange-200 rounded hover:bg-orange-25 hover:border-orange-300 transition-all duration-200 flex items-center justify-between group"
-                                              onClick={() => {
-                                                setRecipientsTo(email);
-                                                setRecipientsCc(
-                                                  recipientsCc.filter(
-                                                    (e) => e !== email
-                                                  )
-                                                );
-                                              }}
-                                              whileHover={{ scale: 1.02 }}
-                                              whileTap={{ scale: 0.98 }}
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                                <span className="text-blue-700">
-                                                  {email}
-                                                </span>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="text-xs px-1 py-0"
-                                                >
-                                                  Hệ thống
-                                                </Badge>
-                                              </div>
-                                              <ArrowRight className="h-3 w-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            </motion.button>
-                                          ))}
-
-                                        {/* Custom emails suggestions */}
-                                        {customEmails
-                                          .filter((e) => e.trim())
-                                          .slice(0, 2)
-                                          .map((email, index) => (
-                                            <motion.button
-                                              key={`custom-${index}`}
-                                              className="w-full text-left text-xs p-2 bg-white border border-orange-200 rounded hover:bg-orange-25 hover:border-orange-300 transition-all duration-200 flex items-center justify-between group"
-                                              onClick={() => {
-                                                setRecipientsTo(email);
-                                                const updatedCustomEmails =
-                                                  customEmails.filter(
-                                                    (e) => e !== email
-                                                  );
-                                                setCustomEmails(
-                                                  updatedCustomEmails.length > 0
-                                                    ? updatedCustomEmails
-                                                    : [""]
-                                                );
-                                              }}
-                                              whileHover={{ scale: 1.02 }}
-                                              whileTap={{ scale: 0.98 }}
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                                                <span className="text-green-700">
-                                                  {email}
-                                                </span>
-                                                <Badge
-                                                  variant="outline"
-                                                  className="text-xs px-1 py-0"
-                                                >
-                                                  Tùy chỉnh
-                                                </Badge>
-                                              </div>
-                                              <ArrowRight className="h-3 w-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            </motion.button>
-                                          ))}
-
-                                        {/* Show more button if there are more emails */}
-                                        {recipientsCc.length +
-                                          customEmails.filter((e) => e.trim())
-                                            .length >
-                                          4 && (
-                                          <div className="text-xs text-orange-500 text-center mt-1">
-                                            ... và{" "}
-                                            {recipientsCc.length +
-                                              customEmails.filter((e) =>
-                                                e.trim()
-                                              ).length -
-                                              4}{" "}
-                                            email khác
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </motion.div>
-                                )}
-                            </motion.div>
-
-                            {/* Custom emails */}
-                            <motion.div
-                              className="space-y-3"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.2 }}
-                            >
-                              <Label className="text-sm font-medium flex items-center gap-2">
-                                <motion.div
-                                  animate={{
-                                    scale: [1, 1.1, 1],
-                                    rotate: [0, 5, -5, 0],
-                                  }}
-                                  transition={{
-                                    duration: 2,
-                                    repeat: Infinity,
-                                    ease: "easeInOut",
-                                  }}
-                                >
-                                  <AtSign className="h-3 w-3 text-gray-500" />
-                                </motion.div>
-                                Email tùy chỉnh (CC)
-                              </Label>
-
-                              <AnimatePresence>
-                                {customEmails.map((email, index) => (
-                                  <motion.div
-                                    key={index}
-                                    className="flex items-center gap-2"
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                  >
-                                    <Input
-                                      value={email}
-                                      onChange={(e) => {
-                                        updateCustomEmail(
-                                          index,
-                                          e.target.value
-                                        );
-                                      }}
-                                      placeholder="example@email.com"
-                                      type="email"
-                                      className="transition-all duration-200 focus:ring-2 focus:ring-green-500"
-                                    />
-                                    {customEmails.length > 1 && (
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                          removeCustomEmail(index);
-                                        }}
-                                        className="text-red-600 hover:bg-red-50"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    )}
-                                  </motion.div>
-                                ))}
-                              </AnimatePresence>
-
-                              <motion.div
-                                whileHover={{ scale: 1.01 }}
-                                whileTap={{ scale: 0.99 }}
-                              >
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={addCustomEmail}
-                                  className="border-dashed hover:bg-green-50 hover:border-green-200 transition-all duration-200"
-                                >
-                                  <motion.div
-                                    animate={{ rotate: [0, 2, 0] }}
-                                    transition={{
-                                      duration: 2,
-                                      repeat: Infinity,
-                                      ease: "easeInOut",
-                                    }}
-                                    className="mr-2"
-                                  >
-                                    <Plus className="h-4 w-4 inline-block" />
-                                    <span className="inline-block">
-                                      Thêm email
+                                  <div className="flex items-center gap-2 text-blue-700">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    <span>
+                                      Email <strong>"{recipientsTo}"</strong> đã
+                                      được chọn làm người nhận chính nên không
+                                      hiện trong danh sách CC
                                     </span>
-                                  </motion.div>
-                                </Button>
-                              </motion.div>
-                            </motion.div>
-
-                            {/* Settings */}
-                            <motion.div
-                              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.3 }}
-                            >
-                              <motion.div
-                                className="space-y-2"
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: 0.4 }}
-                              >
-                                <Label className="text-sm flex items-center gap-2">
-                                  <motion.div
-                                    animate={{
-                                      rotate: [0, 360],
-                                      scale: [1, 1.05, 1],
-                                    }}
-                                    transition={{
-                                      rotate: {
-                                        duration: 4,
-                                        repeat: Infinity,
-                                        ease: "linear",
-                                      },
-                                      scale: {
-                                        duration: 2,
-                                        repeat: Infinity,
-                                        ease: "easeInOut",
-                                      },
-                                    }}
-                                  >
-                                    <Clock className="h-3 w-3 text-gray-500" />
-                                  </motion.div>
-                                  Tần suất gửi báo cáo
-                                </Label>
-                                <motion.div
-                                  whileHover={{ scale: 1.01 }}
-                                  whileTap={{ scale: 0.99 }}
-                                >
-                                  <Select
-                                    value={reportInterval}
-                                    onValueChange={setReportInterval}
-                                  >
-                                    <SelectTrigger className="transition-all duration-200 hover:border-green-300">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="30">
-                                        <motion.div
-                                          className="flex items-center gap-2"
-                                          whileHover={{ x: 2 }}
-                                        >
-                                          <span>⚡</span>
-                                          Mỗi 30 phút
-                                        </motion.div>
-                                      </SelectItem>
-                                      <SelectItem value="60">
-                                        <motion.div
-                                          className="flex items-center gap-2"
-                                          whileHover={{ x: 2 }}
-                                        >
-                                          <span>🕐</span>
-                                          Mỗi 1 giờ
-                                        </motion.div>
-                                      </SelectItem>
-                                      <SelectItem value="120">
-                                        <motion.div
-                                          className="flex items-center gap-2"
-                                          whileHover={{ x: 2 }}
-                                        >
-                                          <span>🕑</span>
-                                          Mỗi 2 giờ
-                                        </motion.div>
-                                      </SelectItem>
-                                      <SelectItem value="240">
-                                        <motion.div
-                                          className="flex items-center gap-2"
-                                          whileHover={{ x: 2 }}
-                                        >
-                                          <span>🕓</span>
-                                          Mỗi 4 giờ
-                                        </motion.div>
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </motion.div>
-                              </motion.div>
-
-                              <motion.div
-                                className="space-y-2"
-                                initial={{ opacity: 0, x: 10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: 0.5 }}
-                              >
-                                <motion.div
-                                  whileHover={{ scale: 1.005 }}
-                                  transition={{ duration: 0.1 }}
-                                >
-                                  <ModernTimePicker
-                                    value={stopSendingTime}
-                                    onChange={setStopSendingTime}
-                                    label="Thời gian dừng gửi"
-                                  />
-                                </motion.div>
-                              </motion.div>
-                            </motion.div>
-
-                            {/* Summary indicator */}
-                            <AnimatePresence>
-                              {(recipientsCc.length > 0 ||
-                                customEmails.some((email) => email.trim())) && (
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                                  exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                                  className="bg-green-50 border border-green-200 rounded-lg p-3"
-                                >
-                                  <div className="flex items-center gap-2 text-green-700">
-                                    <motion.div
-                                      animate={{
-                                        scale: [1, 1.2, 1],
-                                        rotate: [0, -10, 10, 0],
-                                      }}
-                                      transition={{
-                                        duration: 2,
-                                        repeat: Infinity,
-                                      }}
-                                    >
-                                      <Mail className="h-4 w-4" />
-                                    </motion.div>
-                                    <span className="text-sm font-medium">
-                                      Email đã cấu hình:
-                                    </span>
-                                    <motion.span
-                                      className="text-sm font-semibold"
-                                      key={
-                                        recipientsCc.length +
-                                        customEmails.filter((e) => e.trim())
-                                          .length
-                                      }
-                                      initial={{ scale: 1.2, color: "#059669" }}
-                                      animate={{ scale: 1, color: "#059669" }}
-                                      transition={{ duration: 0.2 }}
-                                    >
-                                      {recipientsCc.length +
-                                        customEmails.filter((e) => e.trim())
-                                          .length}{" "}
-                                      người nhận
-                                    </motion.span>
                                   </div>
                                 </motion.div>
                               )}
-                            </AnimatePresence>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    </TabsContent>
 
-                    {/* Tab 5: Customer Import */}
-                    <TabsContent value="customers" className="mt-0">
-                      <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <Card className="border border-gray-200 shadow-sm">
-                          <CardHeader className="pb-4">
-                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                            {/* ✅ MESSAGE KHI KHÔNG CÓ EMAIL NÀO KHÁC */}
+                            {usersWithEmail.length > 0 &&
+                              usersWithEmail.filter(
+                                (user) =>
+                                  user.email.trim().toLowerCase() !==
+                                  recipientsTo.trim().toLowerCase()
+                              ).length === 0 && (
+                                <motion.p
+                                  className="text-sm text-orange-600 mt-1"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                >
+                                  ⚠️ Tất cả email hệ thống đã được sử dụng làm
+                                  người nhận chính
+                                </motion.p>
+                              )}
+
+                            {/* Original message khi không có user */}
+                            {usersWithEmail.length === 0 && !loadingUsers && (
+                              <motion.p
+                                className="text-sm text-gray-500 mt-1"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.2 }}
+                              >
+                                Không có user nào có email trong hệ thống
+                              </motion.p>
+                            )}
+
+                            {/* ✅ WARNING STATE - Khi TO trống nhưng có emails trong CC */}
+                            {!recipientsTo.trim() &&
+                              (recipientsCc.length > 0 ||
+                                customEmails.some((e) => e.trim())) && (
+                                <motion.div
+                                  className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg"
+                                  initial={{ opacity: 0, y: -10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.3 }}
+                                >
+                                  <div className="flex items-start gap-2 text-orange-700">
+                                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <div className="font-medium text-sm">
+                                        Người nhận chính trống!
+                                      </div>
+                                      <div className="text-xs mt-1 text-orange-600">
+                                        Email cần có ít nhất 1 người nhận chính
+                                        để gửi báo cáo.
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* ✅ SUGGESTION BUTTONS */}
+                                  <div className="mt-3 space-y-2">
+                                    <div className="text-xs text-orange-600 font-medium">
+                                      💡 Gợi ý: Chọn một email từ danh sách CC
+                                      để làm người nhận chính:
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      {/* System emails suggestions */}
+                                      {recipientsCc
+                                        .slice(0, 2)
+                                        .map((email, index) => (
+                                          <motion.button
+                                            key={`system-${index}`}
+                                            className="w-full text-left text-xs p-2 bg-white border border-orange-200 rounded hover:bg-orange-25 hover:border-orange-300 transition-all duration-200 flex items-center justify-between group"
+                                            onClick={() => {
+                                              setRecipientsTo(email);
+                                              setRecipientsCc(
+                                                recipientsCc.filter(
+                                                  (e) => e !== email
+                                                )
+                                              );
+                                            }}
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                              <span className="text-blue-700">
+                                                {email}
+                                              </span>
+                                              <Badge
+                                                variant="outline"
+                                                className="text-xs px-1 py-0"
+                                              >
+                                                Hệ thống
+                                              </Badge>
+                                            </div>
+                                            <ArrowRight className="h-3 w-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                          </motion.button>
+                                        ))}
+
+                                      {/* Custom emails suggestions */}
+                                      {customEmails
+                                        .filter((e) => e.trim())
+                                        .slice(0, 2)
+                                        .map((email, index) => (
+                                          <motion.button
+                                            key={`custom-${index}`}
+                                            className="w-full text-left text-xs p-2 bg-white border border-orange-200 rounded hover:bg-orange-25 hover:border-orange-300 transition-all duration-200 flex items-center justify-between group"
+                                            onClick={() => {
+                                              setRecipientsTo(email);
+                                              const updatedCustomEmails =
+                                                customEmails.filter(
+                                                  (e) => e !== email
+                                                );
+                                              setCustomEmails(
+                                                updatedCustomEmails.length > 0
+                                                  ? updatedCustomEmails
+                                                  : [""]
+                                              );
+                                            }}
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                              <span className="text-green-700">
+                                                {email}
+                                              </span>
+                                              <Badge
+                                                variant="outline"
+                                                className="text-xs px-1 py-0"
+                                              >
+                                                Tùy chỉnh
+                                              </Badge>
+                                            </div>
+                                            <ArrowRight className="h-3 w-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                          </motion.button>
+                                        ))}
+
+                                      {/* Show more button if there are more emails */}
+                                      {recipientsCc.length +
+                                        customEmails.filter((e) => e.trim())
+                                          .length >
+                                        4 && (
+                                        <div className="text-xs text-orange-500 text-center mt-1">
+                                          ... và{" "}
+                                          {recipientsCc.length +
+                                            customEmails.filter((e) => e.trim())
+                                              .length -
+                                            4}{" "}
+                                          email khác
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              )}
+                          </motion.div>
+
+                          {/* Custom emails */}
+                          <motion.div
+                            className="space-y-3"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <Label className="text-sm font-medium flex items-center gap-2">
                               <motion.div
                                 animate={{
                                   scale: [1, 1.1, 1],
                                   rotate: [0, 5, -5, 0],
                                 }}
                                 transition={{
-                                  duration: 3,
+                                  duration: 2,
                                   repeat: Infinity,
                                   ease: "easeInOut",
                                 }}
                               >
-                                <Users className="h-5 w-5 text-indigo-600" />
+                                <AtSign className="h-3 w-3 text-gray-500" />
                               </motion.div>
-                              Import danh sách khách hàng
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-6">
-                            {/* Upload area */}
+                              Email tùy chỉnh (CC)
+                            </Label>
+
+                            <AnimatePresence>
+                              {customEmails.map((email, index) => (
+                                <motion.div
+                                  key={index}
+                                  className="flex items-center gap-2"
+                                  initial={{ opacity: 0, x: -20 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: index * 0.1 }}
+                                >
+                                  <Input
+                                    value={email}
+                                    onChange={(e) => {
+                                      updateCustomEmail(index, e.target.value);
+                                    }}
+                                    placeholder="example@email.com"
+                                    type="email"
+                                    className="transition-all duration-200 focus:ring-2 focus:ring-green-500"
+                                  />
+                                  {customEmails.length > 1 && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        removeCustomEmail(index);
+                                      }}
+                                      className="text-red-600 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+
                             <motion.div
-                              className="relative"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.1 }}
+                              whileHover={{ scale: 1.01 }}
+                              whileTap={{ scale: 0.99 }}
                             >
-                              <input
-                                type="file"
-                                accept=".csv,.xlsx,.xls"
-                                onChange={handleCustomerFileUpload}
-                                className="hidden"
-                                id="customer-upload"
-                              />
-                              <label
-                                htmlFor="customer-upload"
-                                className="block cursor-pointer"
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addCustomEmail}
+                                className="border-dashed hover:bg-green-50 hover:border-green-200 transition-all duration-200"
                               >
                                 <motion.div
-                                  whileHover={{
-                                    scale: 1.01,
-                                    borderColor: "#9ca3af",
+                                  animate={{ rotate: [0, 2, 0] }}
+                                  transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
                                   }}
-                                  whileTap={{ scale: 0.99 }}
-                                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all duration-200 bg-gray-50 hover:bg-gray-100"
+                                  className="mr-2"
                                 >
+                                  <Plus className="h-4 w-4 inline-block" />
+                                  <span className="inline-block">
+                                    Thêm email
+                                  </span>
+                                </motion.div>
+                              </Button>
+                            </motion.div>
+                          </motion.div>
+
+                          {/* Settings */}
+                          <motion.div
+                            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                          >
+                            <motion.div
+                              className="space-y-2"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.4 }}
+                            >
+                              <Label className="text-sm flex items-center gap-2">
+                                <motion.div
+                                  animate={{
+                                    rotate: [0, 360],
+                                    scale: [1, 1.05, 1],
+                                  }}
+                                  transition={{
+                                    rotate: {
+                                      duration: 4,
+                                      repeat: Infinity,
+                                      ease: "linear",
+                                    },
+                                    scale: {
+                                      duration: 2,
+                                      repeat: Infinity,
+                                      ease: "easeInOut",
+                                    },
+                                  }}
+                                >
+                                  <Clock className="h-3 w-3 text-gray-500" />
+                                </motion.div>
+                                Tần suất gửi báo cáo
+                              </Label>
+                              <motion.div
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.99 }}
+                              >
+                                <Select
+                                  value={reportInterval}
+                                  onValueChange={setReportInterval}
+                                >
+                                  <SelectTrigger className="transition-all duration-200 hover:border-green-300">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="30">
+                                      <motion.div
+                                        className="flex items-center gap-2"
+                                        whileHover={{ x: 2 }}
+                                      >
+                                        <span>⚡</span>
+                                        Mỗi 30 phút
+                                      </motion.div>
+                                    </SelectItem>
+                                    <SelectItem value="60">
+                                      <motion.div
+                                        className="flex items-center gap-2"
+                                        whileHover={{ x: 2 }}
+                                      >
+                                        <span>🕐</span>
+                                        Mỗi 1 giờ
+                                      </motion.div>
+                                    </SelectItem>
+                                    <SelectItem value="120">
+                                      <motion.div
+                                        className="flex items-center gap-2"
+                                        whileHover={{ x: 2 }}
+                                      >
+                                        <span>🕑</span>
+                                        Mỗi 2 giờ
+                                      </motion.div>
+                                    </SelectItem>
+                                    <SelectItem value="240">
+                                      <motion.div
+                                        className="flex items-center gap-2"
+                                        whileHover={{ x: 2 }}
+                                      >
+                                        <span>🕓</span>
+                                        Mỗi 4 giờ
+                                      </motion.div>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </motion.div>
+                            </motion.div>
+
+                            <motion.div
+                              className="space-y-2"
+                              initial={{ opacity: 0, x: 10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: 0.5 }}
+                            >
+                              <motion.div
+                                whileHover={{ scale: 1.005 }}
+                                transition={{ duration: 0.1 }}
+                              >
+                                <ModernTimePicker
+                                  value={stopSendingTime}
+                                  onChange={setStopSendingTime}
+                                  label="Thời gian dừng gửi"
+                                />
+                              </motion.div>
+                            </motion.div>
+                          </motion.div>
+
+                          {/* Summary indicator */}
+                          <AnimatePresence>
+                            {(recipientsCc.length > 0 ||
+                              customEmails.some((email) => email.trim())) && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                                className="bg-green-50 border border-green-200 rounded-lg p-3"
+                              >
+                                <div className="flex items-center gap-2 text-green-700">
                                   <motion.div
                                     animate={{
-                                      y: [0, -5, 0],
-                                      rotate: [0, 2, -2, 0],
+                                      scale: [1, 1.2, 1],
+                                      rotate: [0, -10, 10, 0],
                                     }}
                                     transition={{
                                       duration: 2,
                                       repeat: Infinity,
-                                      ease: "easeInOut",
                                     }}
                                   >
-                                    <FileSpreadsheet className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                                    <Mail className="h-4 w-4" />
                                   </motion.div>
-                                  <motion.p
-                                    className="text-lg font-medium text-gray-700 mb-1"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.2 }}
+                                  <span className="text-sm font-medium">
+                                    Email đã cấu hình:
+                                  </span>
+                                  <motion.span
+                                    className="text-sm font-semibold"
+                                    key={
+                                      recipientsCc.length +
+                                      customEmails.filter((e) => e.trim())
+                                        .length
+                                    }
+                                    initial={{ scale: 1.2, color: "#059669" }}
+                                    animate={{ scale: 1, color: "#059669" }}
+                                    transition={{ duration: 0.2 }}
                                   >
-                                    Kéo thả hoặc nhấn để tải file
-                                  </motion.p>
-                                  <motion.p
-                                    className="text-sm text-gray-500"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.3 }}
-                                  >
-                                    Hỗ trợ CSV, Excel (.xlsx, .xls) - Tối đa
-                                    10MB
-                                  </motion.p>
-                                </motion.div>
-                              </label>
-                            </motion.div>
+                                    {recipientsCc.length +
+                                      customEmails.filter((e) => e.trim())
+                                        .length}{" "}
+                                    người nhận
+                                  </motion.span>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </TabsContent>
 
-                            {/* Download sample */}
+                  {/* Tab 5: Customer Import */}
+                  <TabsContent value="customers" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="border border-gray-200 shadow-sm">
+                        <CardHeader className="pb-4">
+                          <CardTitle className="text-lg font-semibold flex items-center gap-2">
                             <motion.div
-                              className="text-center"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.2 }}
+                              animate={{
+                                scale: [1, 1.1, 1],
+                                rotate: [0, 5, -5, 0],
+                              }}
+                              transition={{
+                                duration: 3,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                              }}
+                            >
+                              <Users className="h-5 w-5 text-indigo-600" />
+                            </motion.div>
+                            Import danh sách khách hàng
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Upload area */}
+                          <motion.div
+                            className="relative"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                          >
+                            <input
+                              type="file"
+                              accept=".csv,.xlsx,.xls"
+                              onChange={handleCustomerFileUpload}
+                              className="hidden"
+                              id="customer-upload"
+                            />
+                            <label
+                              htmlFor="customer-upload"
+                              className="block cursor-pointer"
                             >
                               <motion.div
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
+                                whileHover={{
+                                  scale: 1.01,
+                                  borderColor: "#9ca3af",
+                                }}
+                                whileTap={{ scale: 0.99 }}
+                                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all duration-200 bg-gray-50 hover:bg-gray-100"
                               >
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={downloadSampleFile}
-                                  size="sm"
-                                  className="hover:bg-indigo-50 hover:border-indigo-200 transition-all duration-200"
-                                >
-                                  <motion.div
-                                    animate={{
-                                      y: [0, -2, 0],
-                                    }}
-                                    transition={{
-                                      duration: 1.5,
-                                      repeat: Infinity,
-                                      ease: "easeInOut",
-                                    }}
-                                    className="mr-2"
-                                  >
-                                    <Download className="h-4 w-4 inline-block" />
-                                    <span className="inline-block">
-                                      Tải file mẫu
-                                    </span>
-                                  </motion.div>
-                                </Button>
-                              </motion.div>
-                            </motion.div>
-
-                            {/* Preview uploaded customers */}
-                            <AnimatePresence>
-                              {uploadedCustomers.length > 0 && (
-                                <motion.div
-                                  className="space-y-3"
-                                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                                  transition={{ duration: 0.4 }}
-                                >
-                                  <motion.div
-                                    className="flex items-center justify-between"
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.1 }}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <motion.div
-                                        animate={{
-                                          scale: [1, 1.2, 1],
-                                          rotate: [0, 360],
-                                        }}
-                                        transition={{
-                                          scale: {
-                                            duration: 1,
-                                            repeat: Infinity,
-                                          },
-                                          rotate: {
-                                            duration: 2,
-                                            repeat: Infinity,
-                                            ease: "linear",
-                                          },
-                                        }}
-                                      >
-                                        <CheckCircle2 className="h-5 w-5 text-green-600" />
-                                      </motion.div>
-                                      <motion.span
-                                        className="font-medium"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ delay: 0.2 }}
-                                      >
-                                        Đã tải thành công{" "}
-                                        <motion.span
-                                          className="text-green-600 font-bold"
-                                          key={uploadedCustomers.length}
-                                          initial={{
-                                            scale: 1.3,
-                                            color: "#059669",
-                                          }}
-                                          animate={{
-                                            scale: 1,
-                                            color: "#059669",
-                                          }}
-                                          transition={{ duration: 0.3 }}
-                                        >
-                                          {uploadedCustomers.length}
-                                        </motion.span>{" "}
-                                        khách hàng
-                                      </motion.span>
-                                    </div>
-                                    <motion.div
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.9 }}
-                                    >
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                          setCustomerFile(null);
-                                          setUploadedCustomers([]);
-                                        }}
-                                        className="text-red-600 hover:bg-red-50"
-                                      >
-                                        <motion.div
-                                          whileHover={{ rotate: 90 }}
-                                          transition={{ duration: 0.2 }}
-                                          className="mr-1"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </motion.div>
-                                        Xóa
-                                      </Button>
-                                    </motion.div>
-                                  </motion.div>
-
-                                  <motion.div
-                                    className="border rounded-lg overflow-hidden"
-                                    initial={{ opacity: 0, scale: 0.98 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: 0.3 }}
-                                  >
-                                    <motion.div
-                                      className="bg-gray-50 px-4 py-2 border-b"
-                                      initial={{ opacity: 0, y: -10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      transition={{ delay: 0.4 }}
-                                    >
-                                      <div className="grid grid-cols-3 gap-4 text-sm font-medium text-gray-700">
-                                        <motion.div
-                                          initial={{ opacity: 0, x: -5 }}
-                                          animate={{ opacity: 1, x: 0 }}
-                                          transition={{ delay: 0.5 }}
-                                        >
-                                          Số điện thoại
-                                        </motion.div>
-                                        <motion.div
-                                          initial={{ opacity: 0, x: -5 }}
-                                          animate={{ opacity: 1, x: 0 }}
-                                          transition={{ delay: 0.6 }}
-                                        >
-                                          Tên khách hàng
-                                        </motion.div>
-                                        <motion.div
-                                          initial={{ opacity: 0, x: -5 }}
-                                          animate={{ opacity: 1, x: 0 }}
-                                          transition={{ delay: 0.7 }}
-                                        >
-                                          Xưng hô
-                                        </motion.div>
-                                      </div>
-                                    </motion.div>
-                                    <div className="max-h-48 overflow-y-auto">
-                                      <AnimatePresence>
-                                        {uploadedCustomers
-                                          .slice(0, 10)
-                                          .map((customer, index) => (
-                                            <motion.div
-                                              key={index}
-                                              initial={{ opacity: 0, y: 10 }}
-                                              animate={{ opacity: 1, y: 0 }}
-                                              exit={{ opacity: 0, y: -10 }}
-                                              transition={{
-                                                delay: 0.5 + index * 0.05,
-                                                duration: 0.3,
-                                              }}
-                                              whileHover={{
-                                                backgroundColor: "#f9fafb",
-                                                scale: 1.005,
-                                              }}
-                                              className="grid grid-cols-3 gap-4 px-4 py-2 border-b border-gray-100 cursor-default"
-                                            >
-                                              <motion.div
-                                                className="text-sm font-mono"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{
-                                                  delay: 0.6 + index * 0.05,
-                                                }}
-                                              >
-                                                {customer.phone_number}
-                                              </motion.div>
-                                              <motion.div
-                                                className="text-sm font-medium"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{
-                                                  delay: 0.7 + index * 0.05,
-                                                }}
-                                              >
-                                                {customer.full_name}
-                                              </motion.div>
-                                              <motion.div
-                                                className="text-sm text-gray-600"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{
-                                                  delay: 0.8 + index * 0.05,
-                                                }}
-                                              >
-                                                {customer.salutation || "--"}
-                                              </motion.div>
-                                            </motion.div>
-                                          ))}
-                                      </AnimatePresence>
-                                    </div>
-                                    {uploadedCustomers.length > 10 && (
-                                      <motion.div
-                                        className="bg-gray-50 px-4 py-2 text-center text-sm text-gray-600"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ delay: 1 }}
-                                      >
-                                        <motion.span
-                                          animate={{
-                                            scale: [1, 1.05, 1],
-                                          }}
-                                          transition={{
-                                            duration: 2,
-                                            repeat: Infinity,
-                                            ease: "easeInOut",
-                                          }}
-                                        >
-                                          ... và {uploadedCustomers.length - 10}{" "}
-                                          khách hàng khác
-                                        </motion.span>
-                                      </motion.div>
-                                    )}
-                                  </motion.div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-
-                            {/* Info */}
-                            <motion.div
-                              className="bg-blue-50 border border-blue-200 rounded-lg p-4"
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: 0.3 }}
-                              whileHover={{ scale: 1.005 }}
-                            >
-                              <div className="flex gap-3">
                                 <motion.div
                                   animate={{
-                                    rotate: [0, 10, -10, 0],
-                                    scale: [1, 1.1, 1],
+                                    y: [0, -5, 0],
+                                    rotate: [0, 2, -2, 0],
                                   }}
                                   transition={{
-                                    duration: 3,
+                                    duration: 2,
                                     repeat: Infinity,
                                     ease: "easeInOut",
                                   }}
-                                  className="flex-shrink-0 mt-0.5"
                                 >
-                                  <AlertCircle className="h-5 w-5 text-blue-600" />
+                                  <FileSpreadsheet className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                                 </motion.div>
-                                <div className="text-sm text-blue-800">
-                                  <motion.p
-                                    className="font-medium mb-1"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
+                                <motion.p
+                                  className="text-lg font-medium text-gray-700 mb-1"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: 0.2 }}
+                                >
+                                  Kéo thả hoặc nhấn để tải file
+                                </motion.p>
+                                <motion.p
+                                  className="text-sm text-gray-500"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: 0.3 }}
+                                >
+                                  Hỗ trợ CSV, Excel (.xlsx, .xls) - Tối đa 10MB
+                                </motion.p>
+                              </motion.div>
+                            </label>
+                          </motion.div>
+
+                          {/* Download sample */}
+                          <motion.div
+                            className="text-center"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
+                          >
+                            <motion.div
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                            >
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={downloadSampleFile}
+                                size="sm"
+                                className="hover:bg-indigo-50 hover:border-indigo-200 transition-all duration-200"
+                              >
+                                <motion.div
+                                  animate={{
+                                    y: [0, -2, 0],
+                                  }}
+                                  transition={{
+                                    duration: 1.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                  }}
+                                  className="mr-2"
+                                >
+                                  <Download className="h-4 w-4 inline-block" />
+                                  <span className="inline-block">
+                                    Tải file mẫu
+                                  </span>
+                                </motion.div>
+                              </Button>
+                            </motion.div>
+                          </motion.div>
+
+                          {/* Preview uploaded customers */}
+                          <AnimatePresence>
+                            {uploadedCustomers.length > 0 && (
+                              <motion.div
+                                className="space-y-3"
+                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                                transition={{ duration: 0.4 }}
+                              >
+                                <motion.div
+                                  className="flex items-center justify-between"
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: 0.1 }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <motion.div
+                                      animate={{
+                                        scale: [1, 1.2, 1],
+                                        rotate: [0, 360],
+                                      }}
+                                      transition={{
+                                        scale: {
+                                          duration: 1,
+                                          repeat: Infinity,
+                                        },
+                                        rotate: {
+                                          duration: 2,
+                                          repeat: Infinity,
+                                          ease: "linear",
+                                        },
+                                      }}
+                                    >
+                                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                    </motion.div>
+                                    <motion.span
+                                      className="font-medium"
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      transition={{ delay: 0.2 }}
+                                    >
+                                      Đã tải thành công{" "}
+                                      <motion.span
+                                        className="text-green-600 font-bold"
+                                        key={uploadedCustomers.length}
+                                        initial={{
+                                          scale: 1.3,
+                                          color: "#059669",
+                                        }}
+                                        animate={{
+                                          scale: 1,
+                                          color: "#059669",
+                                        }}
+                                        transition={{ duration: 0.3 }}
+                                      >
+                                        {uploadedCustomers.length}
+                                      </motion.span>{" "}
+                                      khách hàng
+                                    </motion.span>
+                                  </div>
+                                  <motion.div
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                  >
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setCustomerFile(null);
+                                        setUploadedCustomers([]);
+                                      }}
+                                      className="text-red-600 hover:bg-red-50"
+                                    >
+                                      <motion.div
+                                        whileHover={{ rotate: 90 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="mr-1"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </motion.div>
+                                      Xóa
+                                    </Button>
+                                  </motion.div>
+                                </motion.div>
+
+                                <motion.div
+                                  className="border rounded-lg overflow-hidden"
+                                  initial={{ opacity: 0, scale: 0.98 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  transition={{ delay: 0.3 }}
+                                >
+                                  <motion.div
+                                    className="bg-gray-50 px-4 py-2 border-b"
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.4 }}
                                   >
-                                    Định dạng file:
-                                  </motion.p>
-                                  <motion.ul
-                                    className="space-y-0.5 text-xs"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: 0.5 }}
-                                  >
-                                    {[
-                                      "Dòng đầu tiên là tiêu đề cột",
-                                      "Cột 1: Số điện thoại (bắt buộc)",
-                                      "Cột 2: Tên khách hàng (bắt buộc)",
-                                      "Cột 3: Xưng hô (tùy chọn)",
-                                    ].map((item, index) => (
-                                      <motion.li
-                                        key={index}
+                                    <div className="grid grid-cols-3 gap-4 text-sm font-medium text-gray-700">
+                                      <motion.div
                                         initial={{ opacity: 0, x: -5 }}
                                         animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.5 }}
+                                      >
+                                        Số điện thoại
+                                      </motion.div>
+                                      <motion.div
+                                        initial={{ opacity: 0, x: -5 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.6 }}
+                                      >
+                                        Tên khách hàng
+                                      </motion.div>
+                                      <motion.div
+                                        initial={{ opacity: 0, x: -5 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.7 }}
+                                      >
+                                        Xưng hô
+                                      </motion.div>
+                                    </div>
+                                  </motion.div>
+                                  <div className="max-h-48 overflow-y-auto">
+                                    <AnimatePresence>
+                                      {uploadedCustomers
+                                        .slice(0, 10)
+                                        .map((customer, index) => (
+                                          <motion.div
+                                            key={index}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -10 }}
+                                            transition={{
+                                              delay: 0.5 + index * 0.05,
+                                              duration: 0.3,
+                                            }}
+                                            whileHover={{
+                                              backgroundColor: "#f9fafb",
+                                              scale: 1.005,
+                                            }}
+                                            className="grid grid-cols-3 gap-4 px-4 py-2 border-b border-gray-100 cursor-default"
+                                          >
+                                            <motion.div
+                                              className="text-sm font-mono"
+                                              initial={{ opacity: 0 }}
+                                              animate={{ opacity: 1 }}
+                                              transition={{
+                                                delay: 0.6 + index * 0.05,
+                                              }}
+                                            >
+                                              {customer.phone_number}
+                                            </motion.div>
+                                            <motion.div
+                                              className="text-sm font-medium"
+                                              initial={{ opacity: 0 }}
+                                              animate={{ opacity: 1 }}
+                                              transition={{
+                                                delay: 0.7 + index * 0.05,
+                                              }}
+                                            >
+                                              {customer.full_name}
+                                            </motion.div>
+                                            <motion.div
+                                              className="text-sm text-gray-600"
+                                              initial={{ opacity: 0 }}
+                                              animate={{ opacity: 1 }}
+                                              transition={{
+                                                delay: 0.8 + index * 0.05,
+                                              }}
+                                            >
+                                              {customer.salutation || "--"}
+                                            </motion.div>
+                                          </motion.div>
+                                        ))}
+                                    </AnimatePresence>
+                                  </div>
+                                  {uploadedCustomers.length > 10 && (
+                                    <motion.div
+                                      className="bg-gray-50 px-4 py-2 text-center text-sm text-gray-600"
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      transition={{ delay: 1 }}
+                                    >
+                                      <motion.span
+                                        animate={{
+                                          scale: [1, 1.05, 1],
+                                        }}
                                         transition={{
-                                          delay: 0.6 + index * 0.1,
+                                          duration: 2,
+                                          repeat: Infinity,
+                                          ease: "easeInOut",
                                         }}
                                       >
-                                        • {item}
-                                      </motion.li>
-                                    ))}
-                                  </motion.ul>
-                                </div>
-                              </div>
-                            </motion.div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    </TabsContent>
-                    {/* Keeping the existing logic but adding motion wrappers */}
-                  </div>
-                </Tabs>
-              </div>
+                                        ... và {uploadedCustomers.length - 10}{" "}
+                                        khách hàng khác
+                                      </motion.span>
+                                    </motion.div>
+                                  )}
+                                </motion.div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
 
-              {/* ENHANCED FOOTER */}
-              <motion.div
-                className="flex-shrink-0 p-4 bg-gray-50 border-t shadow-lg relative z-10"
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4 }}
-              >
-                <div className="flex justify-between items-center">
-                  <div className="flex-shrink-0">
-                    <AnimatePresence>
-                      {currentTab !== "basic" && (
-                        <motion.div
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -20 }}
-                        >
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              if (currentTab === "schedule")
-                                setCurrentTab("basic");
-                              else if (currentTab === "reminders")
-                                setCurrentTab("schedule");
-                              else if (currentTab === "email")
-                                setCurrentTab(
-                                  needsReminderTab ? "reminders" : "schedule"
-                                );
-                              else if (currentTab === "customers")
-                                setCurrentTab("email");
-                            }}
-                            size="sm"
-                            className="flex items-center gap-1 hover:bg-gray-100 transition-colors"
+                          {/* Info */}
+                          <motion.div
+                            className="bg-blue-50 border border-blue-200 rounded-lg p-4"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            whileHover={{ scale: 1.005 }}
                           >
-                            <ChevronRight className="h-4 w-4 rotate-180 inline-block" />
-                            <span className="inline-block">Quay lại</span>
-                          </Button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      onClick={async () => {
-                        if (mode === "create") {
-                          resetForm();
-                          // Đợi một chút để state được reset hoàn toàn
-                          await new Promise((resolve) =>
-                            setTimeout(resolve, 50)
-                          );
-                        } else {
-                          if (initialData) {
-                            loadCampaignData(initialData);
-                            await new Promise((resolve) =>
-                              setTimeout(resolve, 50)
-                            );
-                          }
-                        }
-                        onOpenChange(false);
-                      }}
-                      disabled={isSubmitting}
-                      size="sm"
-                      className="hover:bg-gray-100 transition-colors"
-                    >
-                      Hủy
-                    </Button>
-
-                    {currentTab !== "customers" ? (
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Button
-                          onClick={() => {
-                            if (currentTab === "basic" && canProceedFromTab1)
-                              setCurrentTab("schedule");
-                            else if (
-                              currentTab === "schedule" &&
-                              canProceedFromTab2
-                            ) {
-                              setCurrentTab(
-                                needsReminderTab ? "reminders" : "email"
-                              );
-                            } else if (
-                              currentTab === "reminders" &&
-                              canProceedFromTab3
-                            )
-                              setCurrentTab("email");
-                            else if (currentTab === "email")
-                              setCurrentTab("customers");
-                          }}
-                          disabled={
-                            (currentTab === "basic" && !canProceedFromTab1) ||
-                            (currentTab === "schedule" &&
-                              !canProceedFromTab2) ||
-                            (currentTab === "reminders" && !canProceedFromTab3)
-                          }
-                          size="sm"
-                          className="flex items-center gap-1 hover:bg-blue-700 transition-colors"
-                        >
-                          <span className="inline-block">Tiếp tục</span>
-                          <ArrowRight className="h-4 w-4 inline-block" />
-                        </Button>
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Button
-                          onClick={handleSubmit}
-                          disabled={isSubmitting}
-                          className="bg-green-600 hover:bg-green-700 flex items-center gap-2 transition-colors"
-                          size="sm"
-                        >
-                          {isSubmitting ? (
-                            <>
+                            <div className="flex gap-3">
                               <motion.div
-                                className="h-4 w-4 border-2 border-white border-t-transparent rounded-full"
-                                animate={{ rotate: 360 }}
-                                transition={{
-                                  duration: 1,
-                                  repeat: Infinity,
-                                  ease: "linear",
+                                animate={{
+                                  rotate: [0, 10, -10, 0],
+                                  scale: [1, 1.1, 1],
                                 }}
-                              />
-                              {mode === "edit"
-                                ? "Đang cập nhật..."
-                                : "Đang tạo..."}
-                            </>
-                          ) : (
-                            <>
-                              <Send className="h-4 w-4 inline-block" />
-                              <span className="ml-2 inline-block">
-                                {submitButtonText}
-                              </span>
-                            </>
-                          )}
+                                transition={{
+                                  duration: 3,
+                                  repeat: Infinity,
+                                  ease: "easeInOut",
+                                }}
+                                className="flex-shrink-0 mt-0.5"
+                              >
+                                <AlertCircle className="h-5 w-5 text-blue-600" />
+                              </motion.div>
+                              <div className="text-sm text-blue-800">
+                                <motion.p
+                                  className="font-medium mb-1"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: 0.4 }}
+                                >
+                                  Định dạng file:
+                                </motion.p>
+                                <motion.ul
+                                  className="space-y-0.5 text-xs"
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  transition={{ delay: 0.5 }}
+                                >
+                                  {[
+                                    "Dòng đầu tiên là tiêu đề cột",
+                                    "Cột 1: Số điện thoại (bắt buộc)",
+                                    "Cột 2: Tên khách hàng (bắt buộc)",
+                                    "Cột 3: Xưng hô (tùy chọn)",
+                                  ].map((item, index) => (
+                                    <motion.li
+                                      key={index}
+                                      initial={{ opacity: 0, x: -5 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{
+                                        delay: 0.6 + index * 0.1,
+                                      }}
+                                    >
+                                      • {item}
+                                    </motion.li>
+                                  ))}
+                                </motion.ul>
+                              </div>
+                            </div>
+                          </motion.div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </TabsContent>
+                  {/* Keeping the existing logic but adding motion wrappers */}
+                </div>
+              </Tabs>
+            </div>
+
+            {/* ENHANCED FOOTER */}
+            <motion.div
+              className="flex-shrink-0 p-4 bg-gray-50 border-t shadow-lg relative z-10"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex-shrink-0">
+                  <AnimatePresence>
+                    {currentTab !== "basic" && (
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                      >
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (currentTab === "schedule")
+                              setCurrentTab("basic");
+                            else if (currentTab === "reminders")
+                              setCurrentTab("schedule");
+                            else if (currentTab === "email")
+                              setCurrentTab(
+                                needsReminderTab ? "reminders" : "schedule"
+                              );
+                            else if (currentTab === "customers")
+                              setCurrentTab("email");
+                          }}
+                          size="sm"
+                          className="flex items-center gap-1 hover:bg-gray-100 transition-colors"
+                        >
+                          <ChevronRight className="h-4 w-4 rotate-180 inline-block" />
+                          <span className="inline-block">Quay lại</span>
                         </Button>
                       </motion.div>
                     )}
-                  </div>
+                  </AnimatePresence>
                 </div>
-              </motion.div>
 
-              {/* Enhanced Success overlay */}
-              <AnimatePresence>
-                {showSuccess && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    onClick={async () => {
+                      // ✅ KHÔNG GỌI resetForm() KHI CÓ ERROR ALERT
+                      if (
+                        alert &&
+                        (alert.type === "error" || alert.type === "warning")
+                      ) {
+                        onOpenChange(false);
+                        return;
+                      }
+
+                      if (mode === "create") {
+                        resetForm();
+                        // Đợi một chút để state được reset hoàn toàn
+                        await new Promise((resolve) => setTimeout(resolve, 50));
+                      } else {
+                        if (initialData) {
+                          loadCampaignData(initialData);
+                          await new Promise((resolve) =>
+                            setTimeout(resolve, 50)
+                          );
+                        }
+                      }
+                      onOpenChange(false);
+                    }}
+                    disabled={isSubmitting}
+                    size="sm"
+                    className="hover:bg-gray-100 transition-colors"
+                  >
+                    Hủy
+                  </Button>
+
+                  {currentTab !== "customers" ? (
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <Button
+                        onClick={() => {
+                          if (currentTab === "basic" && canProceedFromTab1)
+                            setCurrentTab("schedule");
+                          else if (
+                            currentTab === "schedule" &&
+                            canProceedFromTab2
+                          ) {
+                            setCurrentTab(
+                              needsReminderTab ? "reminders" : "email"
+                            );
+                          } else if (
+                            currentTab === "reminders" &&
+                            canProceedFromTab3
+                          )
+                            setCurrentTab("email");
+                          else if (currentTab === "email")
+                            setCurrentTab("customers");
+                        }}
+                        disabled={
+                          (currentTab === "basic" && !canProceedFromTab1) ||
+                          (currentTab === "schedule" && !canProceedFromTab2) ||
+                          (currentTab === "reminders" && !canProceedFromTab3)
+                        }
+                        size="sm"
+                        className="flex items-center gap-1 hover:bg-blue-700 transition-colors"
+                      >
+                        <span className="inline-block">Tiếp tục</span>
+                        <ArrowRight className="h-4 w-4 inline-block" />
+                      </Button>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="bg-green-600 hover:bg-green-700 flex items-center gap-2 transition-colors"
+                        size="sm"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <motion.div
+                              className="h-4 w-4 border-2 border-white border-t-transparent rounded-full"
+                              animate={{ rotate: 360 }}
+                              transition={{
+                                duration: 1,
+                                repeat: Infinity,
+                                ease: "linear",
+                              }}
+                            />
+                            {mode === "edit"
+                              ? "Đang cập nhật..."
+                              : "Đang tạo..."}
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 inline-block" />
+                            <span className="ml-2 inline-block">
+                              {submitButtonText}
+                            </span>
+                          </>
+                        )}
+                      </Button>
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Enhanced Success overlay */}
+            <AnimatePresence>
+              {showSuccess && (
+                <motion.div
+                  className="absolute inset-0 bg-black/50 flex items-center justify-center z-50"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
                   <motion.div
-                    className="absolute inset-0 bg-black/50 flex items-center justify-center z-50"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
+                    className="bg-white rounded-lg p-6 text-center shadow-xl max-w-sm"
+                    initial={{ scale: 0.5, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.5, y: 20 }}
+                    transition={{
+                      type: "spring",
+                      damping: 25,
+                      stiffness: 300,
+                    }}
                   >
                     <motion.div
-                      className="bg-white rounded-lg p-6 text-center shadow-xl max-w-sm"
-                      initial={{ scale: 0.5, y: 20 }}
-                      animate={{ scale: 1, y: 0 }}
-                      exit={{ scale: 0.5, y: 20 }}
+                      className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
                       transition={{
+                        delay: 0.2,
                         type: "spring",
                         damping: 25,
                         stiffness: 300,
                       }}
                     >
                       <motion.div
-                        className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{
-                          delay: 0.2,
-                          type: "spring",
-                          damping: 25,
-                          stiffness: 300,
-                        }}
+                        initial={{ scale: 0, rotate: -90 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ delay: 0.3 }}
                       >
-                        <motion.div
-                          initial={{ scale: 0, rotate: -90 }}
-                          animate={{ scale: 1, rotate: 0 }}
-                          transition={{ delay: 0.3 }}
-                        >
-                          <CheckCircle2 className="h-8 w-8 text-green-600" />
-                        </motion.div>
+                        <CheckCircle2 className="h-8 w-8 text-green-600" />
                       </motion.div>
-                      <motion.h3
-                        className="text-lg font-semibold text-gray-900 mb-2"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.4 }}
-                      >
-                        {successMessage}
-                      </motion.h3>
-                      <motion.p
-                        className="text-gray-600"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.5 }}
-                      >
-                        {successDescription}
-                      </motion.p>
                     </motion.div>
+                    <motion.h3
+                      className="text-lg font-semibold text-gray-900 mb-2"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.4 }}
+                    >
+                      {successMessage}
+                    </motion.h3>
+                    <motion.p
+                      className="text-gray-600"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.5 }}
+                    >
+                      {successDescription}
+                    </motion.p>
                   </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </DialogContent>
         </Dialog>
       )}

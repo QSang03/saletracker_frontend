@@ -25,6 +25,7 @@ const ModernAttachmentSelector = ({
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
 
   const attachmentTypes = [
     { 
@@ -181,6 +182,11 @@ const ModernAttachmentSelector = ({
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
     onTypeChange(newType === type ? null : newType);
+    if (newType === "link") {
+      setTimeout(() => {
+        linkInputRef.current?.focus();
+      }, 0);
+    }
   };
 
   // Handle drop zone click
@@ -269,7 +275,17 @@ const ModernAttachmentSelector = ({
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="button"
-              onClick={() => handleTypeChange(item.type)}
+              onClick={() => {
+                // If type is image or file, open file picker immediately
+                if (item.type === 'image' || item.type === 'file') {
+                  handleTypeChange(item.type);
+                  setTimeout(() => {
+                    if (fileInputRef.current) fileInputRef.current.click();
+                  }, 0);
+                } else {
+                  handleTypeChange(item.type);
+                }
+              }}
               className={`p-3 rounded-lg border-2 transition-all duration-200 text-center ${
                 isSelected 
                   ? `${item.borderColor} ${item.bgColor}` 
@@ -322,6 +338,7 @@ const ModernAttachmentSelector = ({
                     <ExternalLink className="h-4 w-4 text-gray-400" />
                   </div>
                   <input
+                    ref={linkInputRef}
                     value={data}
                     onChange={(e) => onDataChange(e.target.value)}
                     placeholder="https://example.com"
@@ -424,8 +441,8 @@ const ModernAttachmentSelector = ({
                       animate={{ opacity: 1, y: 0 }}
                       className="space-y-3"
                     >
-                      {type === "image" && (
-                        <div className="relative">
+                    {type === "image" && (
+                        <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                           <motion.img
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -457,18 +474,20 @@ const ModernAttachmentSelector = ({
                                 }
                               }
                             }}
-                            className="absolute top-2 right-2 p-1.5 bg-white/90 rounded text-gray-700 hover:bg-white transition-colors"
+                            className="absolute top-2 right-2 p-1.5 bg-white/90 rounded text-gray-700 hover:bg-white transition-colors z-10"
                           >
                             <Eye className="h-4 w-4" />
                           </motion.button>
+                          <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg z-0" />
                         </div>
                       )}
-                      
+
                       {type === "file" && (
                         <motion.div 
                           initial={{ x: -20 }}
                           animate={{ x: 0 }}
-                          className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200"
+                          className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 cursor-pointer"
+                          onClick={() => fileInputRef.current?.click()}
                         >
                           <div className="p-2 bg-gray-100 rounded">
                             <FileText className="h-5 w-5 text-gray-600" />
