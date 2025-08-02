@@ -688,125 +688,143 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
               {/* Messages Container */}
               <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gradient-to-b from-gray-50 to-gray-100">
-                {/* Sample messages - Replace with actual message data */}
-                
-                {/* Customer message (left side) */}
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs text-white font-bold">
-                      {viewingDetail.customer_name?.charAt(0) || "K"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
-                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border">
-                      <p className="text-sm text-gray-800">
-                        {viewingDetail.raw_item || "Xin chào, tôi muốn hỏi về sản phẩm này"}
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-500 ml-3">
-                      {viewingDetail.created_at 
-                        ? typeof viewingDetail.created_at === "string"
-                          ? viewingDetail.created_at.includes(" ") 
-                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
-                            : ""
-                          : viewingDetail.created_at instanceof Date
-                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
-                          : ""
-                        : ""}
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  try {
+                    // Parse content_lq from metadata
+                    const metadata = viewingDetail.metadata || {};
+                    const contentLq = metadata.content_lq || "";
+                    
+                    if (!contentLq) {
+                      return (
+                        <div className="flex justify-center items-center h-full">
+                          <div className="text-center text-gray-500">
+                            <div className="text-4xl mb-2">💬</div>
+                            <div>Không có tin nhắn nào</div>
+                          </div>
+                        </div>
+                      );
+                    }
 
-                {/* Sale message (right side) */}
-                <div className="flex items-start space-x-3 justify-end">
-                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
-                    <div className="bg-blue-500 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm">
-                      <p className="text-sm">
-                        Chào bạn! Sản phẩm này hiện tại có giá {viewingDetail.unit_price
-                          ? Number(viewingDetail.unit_price).toLocaleString() + "₫"
-                          : "Liên hệ"}. Bạn có muốn đặt hàng không?
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-500 mr-3 text-right">
-                      {viewingDetail.created_at 
-                        ? typeof viewingDetail.created_at === "string"
-                          ? viewingDetail.created_at.includes(" ") 
-                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
-                            : ""
-                          : viewingDetail.created_at instanceof Date
-                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
-                          : ""
-                        : ""}
-                    </span>
-                  </div>
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs text-white font-bold">
-                      {viewingDetail.order?.sale_by?.fullName?.charAt(0) || 
-                       viewingDetail.order?.sale_by?.username?.charAt(0) || "S"}
-                    </span>
-                  </div>
-                </div>
+                    // Split messages by [CUSTOMER] and [SALE] tags
+                    interface Message {
+                      type: 'customer' | 'sale';
+                      text: string;
+                      time: string;
+                      index: number;
+                    }
+                    
+                    const messages: Message[] = [];
+                    const lines = contentLq.split('\n');
+                    
+                    lines.forEach((line: string, index: number) => {
+                      const customerMatch = line.match(/\[CUSTOMER\]\s*(.+?)\s*\((\d+:\d+)\)/);
+                      const saleMatch = line.match(/\[SALE\]\s*(.+?)\s*\((\d+:\d+)\)/);
+                      
+                      if (customerMatch) {
+                        try {
+                          const messageData = JSON.parse(customerMatch[1]);
+                          messages.push({
+                            type: 'customer',
+                            text: messageData.text || '',
+                            time: customerMatch[2] || '',
+                            index: index
+                          });
+                        } catch (e) {
+                          // If JSON parsing fails, use raw text
+                          messages.push({
+                            type: 'customer',
+                            text: customerMatch[1] || '',
+                            time: customerMatch[2] || '',
+                            index: index
+                          });
+                        }
+                      } else if (saleMatch) {
+                        try {
+                          const messageData = JSON.parse(saleMatch[1]);
+                          messages.push({
+                            type: 'sale',
+                            text: messageData.text || '',
+                            time: saleMatch[2] || '',
+                            index: index
+                          });
+                        } catch (e) {
+                          // If JSON parsing fails, use raw text
+                          messages.push({
+                            type: 'sale',
+                            text: saleMatch[1] || '',
+                            time: saleMatch[2] || '',
+                            index: index
+                          });
+                        }
+                      }
+                    });
 
-                {/* Customer response */}
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs text-white font-bold">
-                      {viewingDetail.customer_name?.charAt(0) || "K"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
-                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border">
-                      <p className="text-sm text-gray-800">
-                        Số lượng: {viewingDetail.quantity || 1}. Được rồi, tôi sẽ đặt hàng.
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-500 ml-3">
-                      {viewingDetail.created_at 
-                        ? typeof viewingDetail.created_at === "string"
-                          ? viewingDetail.created_at.includes(" ") 
-                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
-                            : ""
-                          : viewingDetail.created_at instanceof Date
-                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
-                          : ""
-                        : ""}
-                    </span>
-                  </div>
-                </div>
+                    if (messages.length === 0) {
+                      return (
+                        <div className="flex justify-center items-center h-full">
+                          <div className="text-center text-gray-500">
+                            <div className="text-4xl mb-2">💬</div>
+                            <div>Không thể tải tin nhắn</div>
+                          </div>
+                        </div>
+                      );
+                    }
 
-                {/* Sale confirmation */}
-                <div className="flex items-start space-x-3 justify-end">
-                  <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
-                    <div className="bg-green-500 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm">
-                      <p className="text-sm">
-                        Cảm ơn bạn! Đơn hàng đã được ghi nhận. 
-                        {viewingDetail.notes && (
-                          <>
-                            <br />
-                            <span className="text-green-100">Ghi chú: {viewingDetail.notes}</span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-500 mr-3 text-right">
-                      {viewingDetail.created_at 
-                        ? typeof viewingDetail.created_at === "string"
-                          ? viewingDetail.created_at.includes(" ") 
-                            ? viewingDetail.created_at.split(" ")[1]?.substring(0, 5) || ""
-                            : ""
-                          : viewingDetail.created_at instanceof Date
-                          ? viewingDetail.created_at.toLocaleTimeString("vi-VN").substring(0, 5)
-                          : ""
-                        : ""}
-                    </span>
-                  </div>
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs text-white font-bold">
-                      {viewingDetail.order?.sale_by?.fullName?.charAt(0) || 
-                       viewingDetail.order?.sale_by?.username?.charAt(0) || "S"}
-                    </span>
-                  </div>
-                </div>
+                    return messages.map((message: Message, index: number) => {
+                      if (message.type === 'customer') {
+                        return (
+                          <div key={`customer-${index}`} className="flex items-start space-x-3">
+                            <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs text-white font-bold">
+                                {viewingDetail.customer_name?.charAt(0) || "K"}
+                              </span>
+                            </div>
+                            <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
+                              <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border">
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                                  {message.text.replace(/\\n/g, '\n')}
+                                </p>
+                              </div>
+                              <span className="text-xs text-gray-500 ml-3">
+                                {message.time}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div key={`sale-${index}`} className="flex items-start space-x-3 justify-end">
+                            <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
+                              <div className="bg-blue-500 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm">
+                                <p className="text-sm whitespace-pre-wrap">
+                                  {message.text.replace(/\\n/g, '\n')}
+                                </p>
+                              </div>
+                              <span className="text-xs text-gray-500 mr-3 text-right">
+                                {message.time}
+                              </span>
+                            </div>
+                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs text-white font-bold">
+                                {viewingDetail.order?.sale_by?.fullName?.charAt(0) || 
+                                 viewingDetail.order?.sale_by?.username?.charAt(0) || "S"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                    });
+                  } catch (error) {
+                    return (
+                      <div className="flex justify-center items-center h-full">
+                        <div className="text-center text-red-500">
+                          <div className="text-4xl mb-2">⚠️</div>
+                          <div>Lỗi khi tải tin nhắn</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                })()}
               </div>
 
               {/* Chat Footer with Order Status */}
