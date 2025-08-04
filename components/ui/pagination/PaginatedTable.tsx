@@ -326,20 +326,19 @@ export default function PaginatedTable({
       const merged = { ...filters, ...initialFilters };
       setFilters(merged);
 
-      // ✅ Send initial filters to parent after a brief delay
-      setTimeout(() => {
-        if (
-          onFilterChange &&
-          (!preventEmptyFilterCall || !isFiltersEmpty(merged))
-        ) {
-          onFilterChange(merged);
-        }
-      }, 100);
+      // ✅ Send initial filters to parent immediately but only once
+      if (
+        onFilterChange &&
+        (!preventEmptyFilterCall || !isFiltersEmpty(merged))
+      ) {
+        onFilterChange(merged);
+      }
     }
   }, []);
 
+  // ✅ IMPROVED: Simplified sync logic
   useEffect(() => {
-    if (memoizedInitialFilters && !hasUserInteracted) {
+    if (memoizedInitialFilters && !hasUserInteracted && isInitializedRef.current) {
       setFilters((prev) => {
         const newFilters = {
           search:
@@ -417,25 +416,8 @@ export default function PaginatedTable({
     setPendingPageSize(currentPageSize);
   }, [currentPageSize]);
 
-  // Debounce filter cho backend: giảm thời gian xuống 150ms để responsive hơn
+  // Debounce filter cho backend: giảm thời gian xuống 300ms để responsive hơn
   const filterTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const debouncedSetFilters = useCallback(
-    (newFilters: Filters) => {
-      if (filterTimeout.current) clearTimeout(filterTimeout.current);
-      filterTimeout.current = setTimeout(() => {
-        if (preventEmptyFilterCall && isFiltersEmpty(newFilters)) {
-          // Nếu filter trống, reset filter
-          handleResetFilter();
-          return;
-        }
-        if (onFilterChange) {
-          onFilterChange(newFilters);
-        }
-      }, 150);
-    },
-    [onFilterChange, preventEmptyFilterCall, isFiltersEmpty]
-  );
 
   const handleResetFilter = useCallback(() => {
     const reset: Filters = {
@@ -473,6 +455,24 @@ export default function PaginatedTable({
       onResetFilter();
     }
   }, [onPageChange, onResetFilter, onFilterChange, onDepartmentChange]);
+
+  // ✅ FIXED: Debounce filter với sync state management
+  const debouncedSetFilters = useCallback(
+    (newFilters: Filters) => {
+      if (filterTimeout.current) clearTimeout(filterTimeout.current);
+      filterTimeout.current = setTimeout(() => {
+        if (preventEmptyFilterCall && isFiltersEmpty(newFilters)) {
+          // ✅ SỬA: Không gọi handleResetFilter để tránh recursive call
+          // Chỉ đơn giản là không gọi onFilterChange
+          return;
+        }
+        if (onFilterChange) {
+          onFilterChange(newFilters);
+        }
+      }, 300); // ✅ Increase debounce time for stability
+    },
+    [onFilterChange, preventEmptyFilterCall, isFiltersEmpty] // ✅ Loại bỏ handleResetFilter khỏi deps
+  );
 
   useEffect(() => {
     if (totalRows !== previousTotalRef.current) {
@@ -593,10 +593,17 @@ export default function PaginatedTable({
   // State cho panel xuất CSV
   const [openExport, setOpenExport] = useState(false);
 
-  // Đổi page size
+  // ✅ IMPROVED: Better page size management
   const handlePageSizeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newSize = Number(e.target.value);
+      
+      // Validate page size
+      if (newSize <= 0 || isNaN(newSize)) {
+        console.warn('Invalid page size:', newSize);
+        return;
+      }
+      
       if (isBackendPaging && onPageSizeChange) {
         onPageSizeChange(newSize);
       } else {
@@ -607,17 +614,28 @@ export default function PaginatedTable({
     [isBackendPaging, onPageSizeChange]
   );
 
-  // Chuyển trang
+  // ✅ IMPROVED: Better page management
   const goToPage = useCallback(
     (newPage: number) => {
+      // Ensure page is within valid range
+      const validPage = Math.max(1, Math.min(newPage, totalPages));
+      
       if (isBackendPaging && onPageChange) {
-        onPageChange(newPage);
+        onPageChange(validPage);
       } else {
-        setInternalPage(newPage - 1);
+        setInternalPage(validPage - 1);
       }
     },
-    [isBackendPaging, onPageChange]
+    [isBackendPaging, onPageChange, totalPages]
   );
+
+  // ✅ IMPROVED: Auto-correct page when pageSize changes to prevent empty pages
+  useEffect(() => {
+    if (totalRows > 0 && currentPage > totalPages) {
+      const correctedPage = Math.max(1, totalPages);
+      goToPage(correctedPage);
+    }
+  }, [totalPages, currentPage, totalRows, goToPage]);
 
   // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định
   useEffect(() => {

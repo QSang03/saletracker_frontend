@@ -27,6 +27,7 @@ import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert
 import StatBox from "@/components/common/StatBox";
 import CampaignModal from "@/components/sale/CampaignModal";
 import { useCampaignFilters } from "@/hooks/useCampaignFilters";
+import { usePaginationSync } from "@/hooks/usePaginationSync"; // ✅ NEW IMPORT
 
 // Types
 interface CampaignStats {
@@ -73,13 +74,11 @@ const DEFAULT_STATS: CampaignStats = {
   archivedCampaigns: 0,
 };
 
-// ✅ CẬP NHẬT: Custom hook for campaign data với parameter isArchived
+// ✅ CẬP NHẬT: Custom hook for campaign data với pagination sync
 const useCampaignData = (
   canRead: boolean,
-  currentPage: number,
-  filters: CampaignFilters,
-  pageSize: number,
-  isArchived: boolean = false // ✅ THÊM PARAMETER
+  paginationState: { page: number; pageSize: number; filters: CampaignFilters },
+  isArchived: boolean = false
 ) => {
   const [campaigns, setCampaigns] = useState<CampaignWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,14 +96,14 @@ const useCampaignData = (
       // ✅ GỌI API KHÁC TÙY THEO isArchived
       const response = isArchived 
         ? await campaignAPI.getAllArchived({
-            ...filters,
-            page: currentPage,
-            pageSize,
+            ...paginationState.filters,
+            page: paginationState.page,
+            pageSize: paginationState.pageSize,
           })
         : await campaignAPI.getAll({
-            ...filters,
-            page: currentPage,
-            pageSize,
+            ...paginationState.filters,
+            page: paginationState.page,
+            pageSize: paginationState.pageSize,
           });
 
       setCampaigns(response.data || []);
@@ -123,7 +122,7 @@ const useCampaignData = (
     } finally {
       setLoading(false);
     }
-  }, [canRead, currentPage, filters, pageSize, isArchived]);
+  }, [canRead, paginationState, isArchived]);
 
   useEffect(() => {
     loadCampaigns();
@@ -140,13 +139,22 @@ const useCampaignData = (
 };
 
 export default function CampaignPage() {
+  // ✅ THÊM: Constants cho localStorage
+  const PAGE_SIZE_KEY = "campaignPageSize";
+  
   // State management
   const [alert, setAlert] = useState<Alert | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [currentFilters, setCurrentFilters] = useState<CampaignFilters>({});
-  const [isViewingArchived, setIsViewingArchived] = useState(false); // ✅ THÊM STATE
+  const [isViewingArchived, setIsViewingArchived] = useState(false);
+
+  // ✅ THÊM: Lấy pageSize từ localStorage
+  const getInitialPageSize = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(PAGE_SIZE_KEY);
+      return saved ? parseInt(saved, 10) : 10;
+    }
+    return 10;
+  }, []); // ✅ SỬA: Không cần PAGE_SIZE_KEY trong deps vì nó là constant
 
   // Permissions
   const { canAccess } = usePermission();
@@ -160,8 +168,18 @@ export default function CampaignPage() {
     loading: optionsLoading,
     handleDepartmentChange,
   } = useCampaignFilters();
+
+  // ✅ CẬP NHẬT: Use pagination sync hook với pageSize từ localStorage
+  const pagination = usePaginationSync({
+    initialPage: 1,
+    initialPageSize: getInitialPageSize(),
+    initialFilters: {},
+    onStateChange: (state) => {
+    },
+    debounceMs: 300
+  });
   
-  // ✅ CẬP NHẬT: Data fetching với isViewingArchived parameter
+  // ✅ CẬP NHẬT: Data fetching với pagination state
   const {
     campaigns,
     loading: campaignsLoading,
@@ -169,7 +187,7 @@ export default function CampaignPage() {
     stats,
     error,
     loadCampaigns,
-  } = useCampaignData(canRead, currentPage, currentFilters, pageSize, isViewingArchived);
+  } = useCampaignData(canRead, pagination.state, isViewingArchived);
 
   // Memoized calculations
   const statsData = useMemo(
@@ -208,7 +226,7 @@ export default function CampaignPage() {
     [stats]
   );
 
-  // Event handlers
+  // Event handlers với pagination sync
   const handleFilterChange = useCallback(
     (filters: Filters) => {
       const campaignFilters: CampaignFilters = {
@@ -234,68 +252,76 @@ export default function CampaignPage() {
             ? filters.singleDate
             : filters.singleDate.toISOString().split("T")[0]
           : undefined,
-        page: currentPage,
-        pageSize: pageSize,
+        page: 1, // ✅ ALWAYS reset to page 1 when filters change
+        pageSize: pagination.pageSize,
       };
-      setCurrentFilters(campaignFilters);
-      setCurrentPage(1); // Reset về trang 1 khi filter thay đổi
+      
+      // ✅ UPDATE: Use pagination hook
+      pagination.setFilters(campaignFilters);
     },
-    [currentPage, pageSize]
+    [pagination]
   );
 
   const handleResetFilter = useCallback(() => {
-    setCurrentFilters({});
-    setCurrentPage(1);
+    // ✅ Reset pageSize về mặc định và cập nhật localStorage
+    const defaultPageSize = 10;
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PAGE_SIZE_KEY, defaultPageSize.toString());
+    }
+    
+    // ✅ Reset pagination state với pageSize mặc định
+    pagination.setPageSize(defaultPageSize);
+    pagination.setFilters({});
+    pagination.setPage(1);
+    
+    // ✅ Reset department selection
     handleDepartmentChange([]);
-  }, [handleDepartmentChange]);
+  }, [pagination, handleDepartmentChange]);
 
   const handleDepartmentFilterChange = useCallback(
     (departments: (string | number)[]) => {
       handleDepartmentChange(departments);
 
       const updatedFilters: Filters = {
-        search: currentFilters.search || "",
+        search: pagination.filters.search || "",
         departments: departments,
         roles: [],
         statuses:
-          currentFilters.statuses?.map((s) => s as string | number) || [],
+          pagination.filters.statuses?.map((s: any) => s as string | number) || [],
         categories:
-          currentFilters.campaign_types?.map((c) => c as string | number) || [],
+          pagination.filters.campaign_types?.map((c: any) => c as string | number) || [],
         brands: [],
         employees:
-          currentFilters.employees?.map((e) => e as string | number) || [],
+          pagination.filters.employees?.map((e: any) => e as string | number) || [],
         dateRange: { from: undefined, to: undefined },
-        singleDate: currentFilters.singleDate || undefined,
+        singleDate: pagination.filters.singleDate || undefined,
       };
 
+      // ✅ UPDATE: Use handleFilterChange to ensure proper sync
       handleFilterChange(updatedFilters);
-
-      setCurrentPage(1);
     },
-    [handleDepartmentChange, handleFilterChange, currentFilters, setCurrentPage]
+    [handleDepartmentChange, handleFilterChange, pagination.filters]
   );
 
   const handlePageChange = useCallback(
     (page: number) => {
-      setCurrentPage(page);
-
-      // Update filters với page mới
-      const newFilters = { ...currentFilters, page };
-      setCurrentFilters(newFilters);
+      // ✅ UPDATE: Use pagination hook
+      pagination.setPage(page);
     },
-    [currentFilters]
+    [pagination]
   );
 
   const handlePageSizeChange = useCallback(
     (newPageSize: number) => {
-      setPageSize(newPageSize);
-      setCurrentPage(1);
-
-      // Update filters với pageSize mới
-      const newFilters = { ...currentFilters, pageSize: newPageSize, page: 1 };
-      setCurrentFilters(newFilters);
+      // ✅ UPDATE: Use pagination hook và lưu vào localStorage
+      pagination.setPageSize(newPageSize);
+      
+      // ✅ THÊM: Lưu pageSize vào localStorage
+      if (typeof window !== "undefined") {
+        localStorage.setItem(PAGE_SIZE_KEY, newPageSize.toString());
+      }
     },
-    [currentFilters]
+    [pagination] // ✅ SỬA: Không cần PAGE_SIZE_KEY trong deps vì nó là constant
   );
 
   const handleCreateCampaign = useCallback(() => {
@@ -335,11 +361,13 @@ export default function CampaignPage() {
 
   // ✅ THÊM MỚI: Handle toggle view archived
   const handleToggleViewArchived = useCallback(() => {
-    setIsViewingArchived(!isViewingArchived);
-    setCurrentPage(1);
-    setCurrentFilters({});
+    const newIsArchived = !isViewingArchived;
+    setIsViewingArchived(newIsArchived);
+    
+    // ✅ UPDATE: Reset everything using pagination hook
+    pagination.reset();
     handleDepartmentChange([]);
-  }, [isViewingArchived, handleDepartmentChange]);
+  }, [isViewingArchived, pagination, handleDepartmentChange]);
 
   // Show error state
   if (error && !campaignsLoading) {
@@ -491,15 +519,16 @@ export default function CampaignPage() {
 
         {/* Campaign Table */}
         <Card className="shadow-sm border-0">
-          <CardContent className="p-0">
+          <CardContent className="p-3">
             <PaginatedTable
-              key={`pagination-${currentPage}-${pageSize}`}
+              key={`pagination-${pagination.page}-${pagination.pageSize}`}
               enableSearch={true}
               enableCategoriesFilter={true} // Cho campaign types
               enableStatusFilter={!isViewingArchived} // ✅ KHÔNG HIỂN THỊ STATUS FILTER CHO ARCHIVED
               enableEmployeeFilter={isAdmin || isManager} // Chỉ admin và manager
               enableDepartmentFilter={isAdmin} // Chỉ admin
               enableSingleDateFilter={true}
+              enablePageSize={true} // ✅ THÊM: Bật tính năng thay đổi số dòng
               singleDateLabel="Lọc theo ngày tạo"
               // **Options data từ hook**
               availableCategories={CAMPAIGN_TYPE_OPTIONS}
@@ -507,8 +536,8 @@ export default function CampaignPage() {
               availableEmployees={options.employees}
               availableDepartments={options.departments}
               // **Pagination**
-              page={currentPage}
-              pageSize={pageSize}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
               total={totalCount}
               onResetFilter={handleResetFilter}
               onPageChange={handlePageChange}
@@ -520,10 +549,10 @@ export default function CampaignPage() {
               // **Export functionality**
             >
               <CampaignManagement
-                key={`campaign-mgmt-${totalCount}-${currentPage}`}
+                key={`campaign-mgmt-${totalCount}-${pagination.page}`}
                 campaigns={campaigns}
-                expectedRowCount={pageSize}
-                startIndex={(currentPage - 1) * pageSize}
+                expectedRowCount={pagination.pageSize}
+                startIndex={(pagination.page - 1) * pagination.pageSize}
                 onReload={loadCampaigns}
               />
             </PaginatedTable>

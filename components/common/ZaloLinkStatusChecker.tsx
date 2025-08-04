@@ -14,3 +14,7 @@ export default function ZaloLinkStatusChecker() {
   }, [currentUser?.zaloLinkStatus, pathname, router]);
   return null;
 }
+
+export function isZaloNotLinked(currentUser?: { zaloLinkStatus?: number }): boolean {
+  return currentUser?.zaloLinkStatus === 0 ? true : false;
+}

@@ -34,8 +34,11 @@ import {
   Calendar,
   Users,
   Clock,
-  Copy, // ✅ THÊM Copy icon
-  AlertTriangle, // ✅ THÊM warning icon
+  Copy,
+  AlertTriangle,
+  Plus,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { campaignAPI } from "@/lib/campaign-api";
 import { toast } from "sonner";
@@ -44,14 +47,24 @@ import { cn } from "@/lib/utils";
 import CampaignCustomersModal from "./CampaignCustomersModal";
 import CampaignModal from "./CampaignModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
-import { transformToCampaignWithDetails } from "@/utils/campaignUtils"; // ✅ Import helper
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"; // ✅ Import Tooltip
+import { transformToCampaignWithDetails } from "@/utils/campaignUtils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+import { isZaloNotLinked } from "@/components/common/ZaloLinkStatusChecker";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 interface CampaignManagementProps {
   campaigns: CampaignWithDetails[];
   expectedRowCount: number;
   startIndex: number;
   onReload: () => void;
+  isLoading?: boolean;
+  onCreateNew?: () => void;
+  availableUsers?: any[];
 }
 
 // Status config
@@ -96,8 +109,10 @@ const STATUS_CONFIG = {
 
 // ✅ HELPER FUNCTION: Kiểm tra cảnh báo lịch
 const hasScheduleWarning = (campaign: CampaignWithDetails): boolean => {
-  return campaign.status === CampaignStatus.SCHEDULED && 
-         (!campaign.start_date || !campaign.end_date);
+  return (
+    campaign.status === CampaignStatus.SCHEDULED &&
+    (!campaign.start_date || !campaign.end_date)
+  );
 };
 
 const getValidStatusTransitions = (
@@ -120,27 +135,25 @@ const StatusDropdown = React.memo(
     status,
     onChange,
     loading,
-    campaign, // ✅ THÊM campaign prop để kiểm tra start_date/end_date
+    campaign,
   }: {
     status: CampaignStatus;
     onChange: (newStatus: CampaignStatus) => void;
     loading: boolean;
-    campaign?: CampaignWithDetails; // ✅ THÊM campaign prop
+    campaign?: CampaignWithDetails;
   }) => {
     const config = STATUS_CONFIG[status] || STATUS_CONFIG[CampaignStatus.DRAFT];
     const validStatuses = getValidStatusTransitions(status);
 
-    // ✅ KIỂM TRA CẢNH BÁO CHO SCHEDULED STATUS
     const hasWarningStatus = useMemo(() => {
       return campaign ? hasScheduleWarning(campaign) : false;
     }, [campaign]);
 
     const getStatusTooltip = (currentStatus: CampaignStatus) => {
-      // ✅ KHÔNG HIỆN TOOLTIP CHO STATUS NỮA (vì toàn bộ dòng có tooltip)
       if (hasWarningStatus) {
         return "";
       }
-      
+
       switch (currentStatus) {
         case CampaignStatus.SCHEDULED:
           return "Bot Python sẽ tự động chuyển thành 'Đang chạy' khi đến thời gian";
@@ -151,9 +164,8 @@ const StatusDropdown = React.memo(
       }
     };
 
-    // ✅ DYNAMIC COLOR CHO WARNING STATE
-    const buttonColor = hasWarningStatus 
-      ? "bg-orange-100 text-orange-700 border-orange-200" 
+    const buttonColor = hasWarningStatus
+      ? "bg-orange-100 text-orange-700 border-orange-200"
       : config.color;
 
     return (
@@ -162,11 +174,13 @@ const StatusDropdown = React.memo(
           <Button
             variant="ghost"
             size="sm"
-            className={cn("h-6 gap-1 px-2 text-xs min-w-[80px] justify-start", buttonColor)}
+            className={cn(
+              "h-6 gap-1 px-2 text-xs min-w-[80px] justify-start",
+              buttonColor
+            )}
             disabled={loading}
             title={getStatusTooltip(status)}
           >
-            {/* ✅ HIỂN THỊ WARNING ICON CHO SCHEDULED + NULL DATES */}
             <div className="flex items-center gap-1">
               {hasWarningStatus ? (
                 <>
@@ -227,13 +241,24 @@ const formatDate = (date: string | Date): string => {
   }
 };
 
-// Loading skeleton
+// ✅ CẬP NHẬT: Loading skeleton với header indicator
 const LoadingSkeleton = ({
   expectedRowCount,
 }: {
   expectedRowCount: number;
 }) => (
   <>
+    {/* Loading Header */}
+    <TableRow>
+      <TableCell colSpan={9} className="bg-blue-50 border-b text-center py-3">
+        <div className="flex items-center justify-center gap-3 text-blue-600">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm font-medium">Đang tải danh sách chiến dịch...</span>
+        </div>
+      </TableCell>
+    </TableRow>
+    
+    {/* Skeleton Rows */}
     {Array.from({ length: expectedRowCount }).map((_, index) => (
       <TableRow key={`loading-${index}`} className="animate-pulse">
         <TableCell className="text-center">
@@ -261,6 +286,9 @@ const LoadingSkeleton = ({
           <div className="h-4 w-16 bg-gray-200 rounded mx-auto" />
         </TableCell>
         <TableCell className="text-center">
+          <div className="h-4 w-16 bg-gray-200 rounded mx-auto" />
+        </TableCell>
+        <TableCell className="text-center">
           <div className="h-8 w-8 bg-gray-200 rounded mx-auto" />
         </TableCell>
       </TableRow>
@@ -268,7 +296,6 @@ const LoadingSkeleton = ({
   </>
 );
 
-// ✅ CẬP NHẬT: Campaign row với nút Copy cho archived campaigns
 const CampaignRow = React.memo(
   ({
     campaign,
@@ -288,11 +315,9 @@ const CampaignRow = React.memo(
     const { canAccess } = usePermission();
     const canUpdate = canAccess("chien-dich", "update");
     const canDelete = canAccess("chien-dich", "delete");
-    const canCreate = canAccess("chien-dich", "create"); // ✅ THÊM permission create cho copy
+    const canCreate = canAccess("chien-dich", "create");
 
     const isArchived = campaign.status === CampaignStatus.ARCHIVED;
-    
-    // ✅ KIỂM TRA CẢNH BÁO LỊCH CHO TOÀN BỘ DÒNG
     const hasWarning = hasScheduleWarning(campaign);
 
     const canToggleStatus = useMemo(
@@ -321,7 +346,6 @@ const CampaignRow = React.memo(
       [canUpdate, campaign.status]
     );
 
-    // Show customers
     const handleDoubleClick = useCallback(() => {
       onShowCustomers(campaign);
     }, [campaign, onShowCustomers]);
@@ -334,13 +358,12 @@ const CampaignRow = React.memo(
       [campaign, onShowCustomers]
     );
 
-    // ✅ MAIN TABLE ROW WITH CONDITIONAL TOOLTIP
     const tableRowContent = (
       <TableRow
         className={cn(
           "group transition-all duration-200 cursor-pointer",
-          hasWarning 
-            ? "bg-orange-50 hover:bg-orange-100 border-l-4 border-l-orange-400" 
+          hasWarning
+            ? "bg-orange-50 hover:bg-orange-100 border-l-4 border-l-orange-400"
             : "hover:bg-gray-50",
           isLoading && "opacity-50 pointer-events-none"
         )}
@@ -391,7 +414,7 @@ const CampaignRow = React.memo(
           <StatusDropdown
             status={campaign.status}
             loading={isLoading}
-            campaign={campaign} // ✅ THÊM campaign prop
+            campaign={campaign}
             onChange={(newStatus) =>
               onAction("change-status", {
                 id: campaign.id,
@@ -499,7 +522,6 @@ const CampaignRow = React.memo(
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Thao tác</DropdownMenuLabel>
 
-              {/* Xem khách hàng - luôn có thể */}
               <DropdownMenuItem
                 onClick={() => onShowCustomers(campaign)}
                 className="flex items-center gap-2 cursor-pointer"
@@ -508,11 +530,10 @@ const CampaignRow = React.memo(
                 Xem khách hàng
               </DropdownMenuItem>
 
-              {/* ✅ THÊM MỚI: Copy campaign - Chỉ hiển thị cho archived campaigns */}
               {isArchived && canCreate && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => onAction("copy", campaign)}
                     disabled={isLoading}
                     className="flex items-center gap-2 cursor-pointer text-blue-600 focus:text-blue-600"
@@ -523,12 +544,10 @@ const CampaignRow = React.memo(
                 </>
               )}
 
-              {/* Actions for non-archived campaigns */}
               {!isArchived && (
                 <>
                   <DropdownMenuSeparator />
-                  
-                  {/* Chỉnh sửa - CHỈ KHI DRAFT HOẶC PAUSED */}
+
                   {canEdit && (
                     <DropdownMenuItem
                       onClick={() => onAction("edit", campaign)}
@@ -539,7 +558,6 @@ const CampaignRow = React.memo(
                     </DropdownMenuItem>
                   )}
 
-                  {/* Status Toggle cho RUNNING và PAUSED thôi */}
                   {canToggleStatus && (
                     <DropdownMenuItem
                       onClick={() => onAction("toggle", campaign)}
@@ -559,7 +577,6 @@ const CampaignRow = React.memo(
                     </DropdownMenuItem>
                   )}
 
-                  {/* Archive - CHỈ KHI COMPLETED */}
                   {canArchiveCampaign && (
                     <DropdownMenuItem
                       onClick={() => onAction("archive", campaign)}
@@ -570,7 +587,6 @@ const CampaignRow = React.memo(
                     </DropdownMenuItem>
                   )}
 
-                  {/* Delete - CHỈ KHI DRAFT */}
                   {canDeleteCampaign && (
                     <>
                       <DropdownMenuSeparator />
@@ -591,14 +607,14 @@ const CampaignRow = React.memo(
       </TableRow>
     );
 
-    // ✅ RETURN: Wrap với Tooltip nếu có warning
     return hasWarning ? (
       <Tooltip>
-        <TooltipTrigger asChild>
-          {tableRowContent}
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{tableRowContent}</TooltipTrigger>
         <TooltipContent className="max-w-xs">
-          <p className="text-sm">Chiến dịch đã lên lịch nhưng thời gian cấu hình không hợp lệ theo quy định phòng ban</p>
+          <p className="text-sm">
+            Chiến dịch đã lên lịch nhưng thời gian cấu hình không hợp lệ theo
+            quy định phòng ban
+          </p>
         </TooltipContent>
       </Tooltip>
     ) : (
@@ -609,22 +625,30 @@ const CampaignRow = React.memo(
 
 CampaignRow.displayName = "CampaignRow";
 
-// ✅ MAIN COMPONENT với logic copy và auto-open modal
+// ✅ MAIN COMPONENT
 export default function CampaignManagement({
   campaigns,
   expectedRowCount,
   startIndex,
   onReload,
+  isLoading = false,
+  onCreateNew,
+  availableUsers = [],
 }: CampaignManagementProps) {
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
+    null
+  );
   const [isCustomersModalOpen, setIsCustomersModalOpen] = useState(false);
-
-  // ✅ THÊM STATE cho Copy & Edit flow
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingCampaign, setEditingCampaign] = useState<CampaignWithDetails | null>(null);
-  const [isCopyAndEditMode, setIsCopyAndEditMode] = useState(false); // ✅ Track copy mode
+  const [editingCampaign, setEditingCampaign] =
+    useState<CampaignWithDetails | null>(null);
+  const [isCopyAndEditMode, setIsCopyAndEditMode] = useState(false);
 
+  // ✅ THÊM STATE CHO CREATE MODAL
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  const { currentUser } = useCurrentUser();
   const { canAccess } = usePermission();
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -656,73 +680,85 @@ export default function CampaignManagement({
     }));
   }, []);
 
-  // ✅ THÊM MỚI: Handle copy campaign với auto-open modal
-  const handleCopyCampaign = useCallback(async (campaign: CampaignWithDetails) => {
-    try {
-      setItemLoading(campaign.id, true);
-      
-      // 1. Lấy data để copy
-      const copyData = await campaignAPI.getCopyData(campaign.id);
-      
-      // 2. Tạo campaign mới
-      const newCampaign = await campaignAPI.create(copyData);
-      
-      // 3. Thông báo thành công
-      toast.success(
-        `Đã sao chép chiến dịch "${campaign.name}" thành công! Đang mở để chỉnh sửa...`
-      );
-      
-      // 4. Reload để có campaign mới trong danh sách
-      await onReload();
-      
-      // 5. Delay ngắn để đảm bảo reload hoàn thành
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // 6. ✅ SỬA: Transform safely từ Campaign sang CampaignWithDetails
-      const safeCampaign = transformToCampaignWithDetails(newCampaign);
-      setEditingCampaign(safeCampaign);
-      setIsCopyAndEditMode(true);
-      setIsEditModalOpen(true);
-      
-      // 7. Thông báo hướng dẫn
-      setTimeout(() => {
-        toast.info("💡 Bạn có thể chỉnh sửa campaign đã sao chép ngay bây giờ!", {
-          duration: 3000
-        });
-      }, 800);
-      
-    } catch (error: any) {
-      console.error('Error copying campaign:', error);
-      toast.error(
-        error.response?.data?.message || 
-        'Có lỗi xảy ra khi sao chép chiến dịch'
-      );
-    } finally {
-      setItemLoading(campaign.id, false);
-    }
-  }, [onReload]);
+  // ✅ THÊM HANDLER CHO CREATE CAMPAIGN
+  const handleCreateCampaign = useCallback(() => {
+    setCreateModalOpen(true);
+  }, []);
 
-  // Handle edit action (cho campaigns thường)
+  const handleCampaignCreated = useCallback(
+    async (data: any) => {
+      try {
+        await campaignAPI.create(data);
+        setCreateModalOpen(false);
+        toast.success("Chiến dịch đã được tạo thành công!");
+        await onReload();
+      } catch (error: any) {
+        console.error("Error creating campaign:", error);
+        toast.error(
+          error.response?.data?.message || "Có lỗi xảy ra khi tạo chiến dịch"
+        );
+        throw error;
+      }
+    },
+    [onReload]
+  );
+
+  const handleCopyCampaign = useCallback(
+    async (campaign: CampaignWithDetails) => {
+      try {
+        setItemLoading(campaign.id, true);
+
+        const copyData = await campaignAPI.getCopyData(campaign.id);
+        const newCampaign = await campaignAPI.create(copyData);
+
+        toast.success(
+          `Đã sao chép chiến dịch "${campaign.name}" thành công! Đang mở để chỉnh sửa...`
+        );
+
+        await onReload();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        const safeCampaign = transformToCampaignWithDetails(newCampaign);
+        setEditingCampaign(safeCampaign);
+        setIsCopyAndEditMode(true);
+        setIsEditModalOpen(true);
+
+        setTimeout(() => {
+          toast.info(
+            "💡 Bạn có thể chỉnh sửa campaign đã sao chép ngay bây giờ!",
+            { duration: 3000 }
+          );
+        }, 800);
+      } catch (error: any) {
+        console.error("Error copying campaign:", error);
+        toast.error(
+          error.response?.data?.message ||
+            "Có lỗi xảy ra khi sao chép chiến dịch"
+        );
+      } finally {
+        setItemLoading(campaign.id, false);
+      }
+    },
+    [onReload]
+  );
+
   const handleEdit = useCallback((campaign: CampaignWithDetails) => {
     setEditingCampaign(campaign);
-    setIsCopyAndEditMode(false); // ✅ Không phải copy mode
+    setIsCopyAndEditMode(false);
     setIsEditModalOpen(true);
   }, []);
 
-  // Handle modal close
   const handleEditModalClose = useCallback(() => {
     setIsEditModalOpen(false);
     setEditingCampaign(null);
-    setIsCopyAndEditMode(false); // ✅ Reset copy mode
+    setIsCopyAndEditMode(false);
   }, []);
 
-  // ✅ CẬP NHẬT: Handle edit submit với logic đặc biệt cho copy mode
   const handleEditSubmit = useCallback(
     async (data: CampaignFormData) => {
       try {
         await campaignAPI.update(data.id!, data);
-        
-        // ✅ THÔNG BÁO KHÁC NHAU TÙY THEO MODE
+
         if (isCopyAndEditMode) {
           toast.success(
             `✅ Hoàn thành! Campaign "${data.name}" đã được sao chép và cập nhật thành công.`
@@ -730,7 +766,7 @@ export default function CampaignManagement({
         } else {
           toast.success("Cập nhật chiến dịch thành công");
         }
-        
+
         onReload();
         handleEditModalClose();
       } catch (error: any) {
@@ -767,14 +803,12 @@ export default function CampaignManagement({
     setSelectedCampaign(null);
   }, []);
 
-  // ✅ CẬP NHẬT: handleAction với case copy
   const handleAction = useCallback(
     async (action: string, payload: any) => {
       const canUpdate = canAccess("chien-dich", "update");
       const canDelete = canAccess("chien-dich", "delete");
       const canCreate = canAccess("chien-dich", "create");
 
-      // ✅ THÊM CASE CHO COPY
       if (action === "copy") {
         if (!canCreate) {
           toast.error("Bạn không có quyền tạo chiến dịch mới");
@@ -784,13 +818,10 @@ export default function CampaignManagement({
           toast.error("Chỉ có thể sao chép chiến dịch đã lưu trữ");
           return;
         }
-        
-        // Gọi handler copy
         await handleCopyCampaign(payload);
         return;
       }
 
-      // ✅ KIỂM TRA QUYỀN VÀ TRẠNG THÁI CHO TỪNG ACTION
       if (action === "edit") {
         if (!canUpdate) {
           toast.error("Bạn không có quyền chỉnh sửa chiến dịch");
@@ -830,12 +861,21 @@ export default function CampaignManagement({
         }
       }
 
+      if (
+        (action === "toggle" || action === "change-status") &&
+        isZaloNotLinked(currentUser ?? undefined)
+      ) {
+        toast.error(
+          "Bạn cần liên kết Zalo trước khi đổi trạng thái chiến dịch!"
+        );
+        return;
+      }
+
       if ((action === "toggle" || action === "change-status") && !canUpdate) {
         toast.error("Bạn không có quyền thực hiện thao tác này");
         return;
       }
 
-      // Confirm delete logic
       if (action === "delete") {
         showConfirmDialog({
           title: "Xác nhận xóa chiến dịch",
@@ -888,8 +928,11 @@ export default function CampaignManagement({
               payload.status === CampaignStatus.RUNNING
                 ? CampaignStatus.PAUSED
                 : CampaignStatus.RUNNING;
-            const result = await campaignAPI.updateStatus(payload.id, newStatus);
-            
+            const result = await campaignAPI.updateStatus(
+              payload.id,
+              newStatus
+            );
+
             if (result.success) {
               toast.success(
                 `Đã ${
@@ -897,20 +940,24 @@ export default function CampaignManagement({
                 } chiến dịch`
               );
             } else {
-              toast.error(result.error || "Có lỗi xảy ra khi thay đổi trạng thái");
-              return; // Không reload nếu có lỗi
+              toast.error(
+                result.error || "Có lỗi xảy ra khi thay đổi trạng thái"
+              );
+              return;
             }
             break;
           }
 
           case "archive": {
             const result = await campaignAPI.archive(payload.id);
-            
+
             if (result.success) {
               toast.success("Đã lưu trữ chiến dịch");
             } else {
-              toast.error(result.error || "Có lỗi xảy ra khi lưu trữ chiến dịch");
-              return; // Không reload nếu có lỗi
+              toast.error(
+                result.error || "Có lỗi xảy ra khi lưu trữ chiến dịch"
+              );
+              return;
             }
             break;
           }
@@ -918,13 +965,18 @@ export default function CampaignManagement({
           case "change-status": {
             if (!payload.newStatus || payload.newStatus === payload.status)
               return;
-            const result = await campaignAPI.updateStatus(payload.id, payload.newStatus);
-            
+            const result = await campaignAPI.updateStatus(
+              payload.id,
+              payload.newStatus
+            );
+
             if (result.success) {
               toast.success("Đã chuyển trạng thái chiến dịch");
             } else {
-              toast.error(result.error || "Có lỗi xảy ra khi chuyển trạng thái");
-              return; // Không reload nếu có lỗi
+              toast.error(
+                result.error || "Có lỗi xảy ra khi chuyển trạng thái"
+              );
+              return;
             }
             break;
           }
@@ -967,10 +1019,18 @@ export default function CampaignManagement({
         setItemLoading(payload.id, false);
       }
     },
-    [onReload, setItemLoading, handleEdit, canAccess, handleCopyCampaign, showConfirmDialog, hideConfirmDialog]
+    [
+      onReload,
+      setItemLoading,
+      handleEdit,
+      canAccess,
+      handleCopyCampaign,
+      showConfirmDialog,
+      hideConfirmDialog,
+      currentUser,
+    ]
   );
 
-  // Khoảng trống cho UI
   const emptyRows = useMemo(
     () => Math.max(0, expectedRowCount - campaigns.length),
     [expectedRowCount, campaigns.length]
@@ -1021,13 +1081,13 @@ export default function CampaignManagement({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {/* Loading state */}
-            {campaigns.length === 0 && expectedRowCount > 0 && (
+            {/* ✅ LOADING STATE - CHỈ hiển thị khi isLoading = true */}
+            {isLoading && campaigns.length === 0 && (
               <LoadingSkeleton expectedRowCount={expectedRowCount} />
             )}
 
-            {/* Campaign rows */}
-            {campaigns.map((campaign, index) => (
+            {/* ✅ CAMPAIGN ROWS - CHỈ hiển thị khi không loading */}
+            {!isLoading && campaigns.map((campaign, index) => (
               <CampaignRow
                 key={campaign.id}
                 campaign={campaign}
@@ -1039,8 +1099,8 @@ export default function CampaignManagement({
               />
             ))}
 
-            {/* Empty rows for consistent height */}
-            {emptyRows > 0 && campaigns.length > 0 && (
+            {/* ✅ EMPTY ROWS - CHỈ khi có campaigns */}
+            {!isLoading && emptyRows > 0 && campaigns.length > 0 && (
               <>
                 {Array.from({ length: emptyRows }).map((_, index) => (
                   <TableRow
@@ -1053,17 +1113,39 @@ export default function CampaignManagement({
               </>
             )}
 
-            {/* No data state */}
-            {campaigns.length === 0 && expectedRowCount === 0 && (
+            {/* ✅ EMPTY STATE - Icon Plus có thể click */}
+            {!isLoading && campaigns.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center">
-                  <div className="flex flex-col items-center justify-center space-y-3 text-gray-500">
-                    <div className="text-4xl">📭</div>
-                    <div>
-                      <p className="font-medium">Chưa có chiến dịch nào</p>
-                      <p className="text-sm">
-                        Tạo chiến dịch đầu tiên để bắt đầu
+                <TableCell colSpan={9} className="text-center py-12">
+                  <div className="flex flex-col items-center justify-center space-y-6 text-gray-500">
+                    {/* ✅ Icon lớn với Plus button clickable */}
+                    <div className="relative">
+                      <div className="w-24 h-24 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-full flex items-center justify-center">
+                        <div className="text-5xl">🚀</div>
+                      </div>
+                      {/* ✅ Plus icon có thể click */}
+                      <div 
+                        className="absolute -bottom-2 -right-2 w-8 h-8 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 transform hover:scale-110 shadow-lg hover:shadow-xl"
+                        onClick={handleCreateCampaign}
+                        title="Click để tạo chiến dịch mới"
+                      >
+                        <Plus className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    
+                    {/* Nội dung mô tả */}
+                    <div className="space-y-3 max-w-md">
+                      <h3 className="text-xl font-semibold text-gray-800">
+                        Chưa có chiến dịch nào
+                      </h3>
+                      <p className="text-gray-600 leading-relaxed">
+                        Tạo chiến dịch đầu tiên để bắt đầu gửi tin nhắn đến khách hàng của bạn
                       </p>
+                    </div>
+                    
+                    {/* Hướng dẫn nhỏ */}
+                    <div className="text-xs text-gray-400 mt-4">
+                      💡 Tip: Click vào dấu + hoặc nút "Thêm mới" ở phía trên để tạo chiến dịch
                     </div>
                   </div>
                 </TableCell>
@@ -1080,12 +1162,21 @@ export default function CampaignManagement({
         campaign={selectedCampaign}
       />
 
-      {/* ✅ CẬP NHẬT: Edit Modal */}
+      {/* ✅ THÊM: Create Campaign Modal */}
+      <CampaignModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        onSubmit={handleCampaignCreated}
+        availableUsers={availableUsers}
+        mode="create"
+      />
+
+      {/* Edit Modal */}
       <CampaignModal
         open={isEditModalOpen}
         onOpenChange={handleEditModalClose}
         onSubmit={handleEditSubmit}
-        availableUsers={[]}
+        availableUsers={availableUsers}
         mode="edit"
         initialData={editingCampaign}
       />
