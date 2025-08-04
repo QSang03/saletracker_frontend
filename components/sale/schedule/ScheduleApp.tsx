@@ -27,13 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ChevronLeft,
@@ -47,18 +40,14 @@ import {
   Target,
   CheckCircle,
   Loader2,
-  AlertCircle,
   Save,
   X,
   Search,
-  Filter,
-  Download,
   Eye,
   EyeOff,
   AlertTriangle,
-  Info,
-  Settings,
-  Zap,
+  MousePointer,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
@@ -66,7 +55,6 @@ import { toast } from "sonner";
 import {
   DepartmentSchedule,
   CreateDepartmentScheduleDto,
-  UpdateDepartmentScheduleDto,
   ScheduleType,
   ScheduleStatus,
   DailyDatesConfig,
@@ -74,6 +62,7 @@ import {
 } from "@/types/schedule";
 import { ScheduleService } from "@/lib/schedule-api";
 
+// Types
 interface Department {
   id: number;
   name: string;
@@ -90,14 +79,19 @@ interface TimeSlot {
   day_of_week?: number;
   start_time: string;
   end_time: string;
-  department_ids: number[];
+  department_id: number;
 }
 
 interface SelectedDay {
   date: number;
   month: number;
   year: number;
-  department_ids: number[];
+  department_id: number;
+}
+
+interface DepartmentSelections {
+  days: SelectedDay[];
+  timeSlots: TimeSlot[];
 }
 
 interface ConflictInfo {
@@ -106,7 +100,14 @@ interface ConflictInfo {
   departments: Department[];
 }
 
-// Màu sắc cố định theo Department ID
+interface DragState {
+  isDragging: boolean;
+  startSlot: { day: number; time: string } | null;
+  currentSlot: { day: number; time: string } | null;
+  isSelecting: boolean;
+}
+
+// Constants
 const getDepartmentColor = (departmentId: number) => {
   const colors = [
     {
@@ -170,13 +171,10 @@ const getDepartmentColor = (departmentId: number) => {
       text: "text-cyan-700",
     },
   ];
-
   return colors[departmentId % colors.length];
 };
 
 const timeSlots = [
-  "07:00",
-  "07:30",
   "08:00",
   "08:30",
   "09:00",
@@ -197,15 +195,6 @@ const timeSlots = [
   "16:30",
   "17:00",
   "17:30",
-  "18:00",
-  "18:30",
-  "19:00",
-  "19:30",
-  "20:00",
-  "20:30",
-  "21:00",
-  "21:30",
-  "22:00",
 ];
 
 const weekDays = [
@@ -218,36 +207,46 @@ const weekDays = [
   "Chủ nhật",
 ];
 
-export default function ModernScheduleApp() {
+export default function CompleteScheduleApp() {
+  // View state
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [activeView, setActiveView] = useState<"week" | "month">("week");
 
-  // State cho departments
+  // Data state
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
-  const [visibleDepartments, setVisibleDepartments] = useState<number[]>([]);
-
-  // State cho schedules
   const [schedules, setSchedules] = useState<DepartmentSchedule[]>([]);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
-  // State cho selection
-  const [selectedDays, setSelectedDays] = useState<SelectedDay[]>([]);
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState<TimeSlot[]>([]);
+  // Visibility
+  const [visibleDepartments, setVisibleDepartments] = useState<number[]>([]);
+
+  // Selection state
   const [selectedDepartment, setSelectedDepartment] = useState<number | null>(
     null
   );
+  const [departmentSelections, setDepartmentSelections] = useState<
+    Map<number, DepartmentSelections>
+  >(new Map());
 
-  // State cho dialogs và forms
+  // Drag state
+  const [dragState, setDragState] = useState<DragState>({
+    isDragging: false,
+    startSlot: null,
+    currentSlot: null,
+    isSelecting: false,
+  });
+
+  // Dialog state
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isConflictDialogOpen, setIsConflictDialogOpen] = useState(false);
   const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
   const [editingSchedule, setEditingSchedule] =
     useState<DepartmentSchedule | null>(null);
 
-  // State cho filters và search
+  // Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<ScheduleStatus | "all">(
     "all"
@@ -262,7 +261,7 @@ export default function ModernScheduleApp() {
     end_time: "",
   });
 
-  // Fetch departments
+  // Data fetching
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
@@ -282,7 +281,6 @@ export default function ModernScheduleApp() {
     fetchDepartments();
   }, []);
 
-  // Fetch all schedules
   useEffect(() => {
     const fetchAllSchedules = async () => {
       try {
@@ -299,6 +297,38 @@ export default function ModernScheduleApp() {
 
     fetchAllSchedules();
   }, []);
+
+  // Drag handling
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (dragState.isDragging) {
+        setDragState({
+          isDragging: false,
+          startSlot: null,
+          currentSlot: null,
+          isSelecting: false,
+        });
+      }
+    };
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (dragState.isDragging) {
+        e.preventDefault();
+      }
+    };
+
+    if (dragState.isDragging) {
+      document.addEventListener("mouseup", handleGlobalMouseUp);
+      document.addEventListener("mousemove", handleGlobalMouseMove);
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      document.removeEventListener("mouseup", handleGlobalMouseUp);
+      document.removeEventListener("mousemove", handleGlobalMouseMove);
+      document.body.style.userSelect = "";
+    };
+  }, [dragState.isDragging]);
 
   // Utility functions
   const getWeekDates = useCallback(() => {
@@ -327,38 +357,232 @@ export default function ModernScheduleApp() {
     const prevMonth = new Date(year, month - 1, 0);
     for (let i = startDay - 1; i >= 0; i--) {
       const day = prevMonth.getDate() - i;
-      calendar.push({
-        date: day,
-        isCurrentMonth: false,
-        isPrevMonth: true,
-      });
+      calendar.push({ date: day, isCurrentMonth: false, isPrevMonth: true });
     }
 
     // Current month days
     for (let day = 1; day <= daysInMonth; day++) {
-      calendar.push({
-        date: day,
-        isCurrentMonth: true,
-        isPrevMonth: false,
-      });
+      calendar.push({ date: day, isCurrentMonth: true, isPrevMonth: false });
     }
 
     // Next month days
     const remaining = 42 - calendar.length;
     for (let day = 1; day <= remaining; day++) {
-      calendar.push({
-        date: day,
-        isCurrentMonth: false,
-        isPrevMonth: false,
-      });
+      calendar.push({ date: day, isCurrentMonth: false, isPrevMonth: false });
     }
 
     return calendar;
   }, [currentMonth]);
 
-  // Check for conflicts
+  const getCurrentDepartmentSelections =
+    useCallback((): DepartmentSelections => {
+      if (!selectedDepartment) {
+        return { days: [], timeSlots: [] };
+      }
+      return (
+        departmentSelections.get(selectedDepartment) || {
+          days: [],
+          timeSlots: [],
+        }
+      );
+    }, [selectedDepartment, departmentSelections]);
+
+  const updateDepartmentSelections = useCallback(
+    (departmentId: number, selections: DepartmentSelections) => {
+      setDepartmentSelections((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(departmentId, selections);
+        return newMap;
+      });
+    },
+    []
+  );
+
+  const getAllSelections = useCallback(() => {
+    const allDays: SelectedDay[] = [];
+    const allTimeSlots: TimeSlot[] = [];
+
+    departmentSelections.forEach((selections) => {
+      allDays.push(...selections.days);
+      allTimeSlots.push(...selections.timeSlots);
+    });
+
+    return { allDays, allTimeSlots };
+  }, [departmentSelections]);
+
+  // Drag utilities
+  const getDragSelectionRange = useCallback(() => {
+    if (!dragState.startSlot || !dragState.currentSlot) return [];
+
+    const startDay = Math.min(
+      dragState.startSlot.day,
+      dragState.currentSlot.day
+    );
+    const endDay = Math.max(dragState.startSlot.day, dragState.currentSlot.day);
+    const startTimeIndex = Math.min(
+      timeSlots.indexOf(dragState.startSlot.time),
+      timeSlots.indexOf(dragState.currentSlot.time)
+    );
+    const endTimeIndex = Math.max(
+      timeSlots.indexOf(dragState.startSlot.time),
+      timeSlots.indexOf(dragState.currentSlot.time)
+    );
+
+    const range: { day: number; time: string }[] = [];
+    for (let day = startDay; day <= endDay; day++) {
+      for (
+        let timeIndex = startTimeIndex;
+        timeIndex <= endTimeIndex;
+        timeIndex++
+      ) {
+        range.push({ day, time: timeSlots[timeIndex] });
+      }
+    }
+
+    return range;
+  }, [dragState.startSlot, dragState.currentSlot]);
+
+  const isSlotInDragRange = useCallback(
+    (dayIndex: number, time: string) => {
+      if (!dragState.isDragging) return false;
+      const range = getDragSelectionRange();
+      return range.some((slot) => slot.day === dayIndex && slot.time === time);
+    },
+    [dragState.isDragging, getDragSelectionRange]
+  );
+
+  // Event handlers
+  const handleDayClick = useCallback(
+    (date: number, isCurrentMonth: boolean) => {
+      if (!isCurrentMonth || !selectedDepartment) {
+        if (!selectedDepartment) {
+          toast.error("Vui lòng chọn phòng ban trước");
+        }
+        return;
+      }
+
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const currentSelections = getCurrentDepartmentSelections();
+
+      const existingIndex = currentSelections.days.findIndex(
+        (day) => day.date === date && day.month === month && day.year === year
+      );
+
+      let newDays: SelectedDay[];
+      if (existingIndex !== -1) {
+        newDays = currentSelections.days.filter(
+          (_, index) => index !== existingIndex
+        );
+      } else {
+        newDays = [
+          ...currentSelections.days,
+          { date, month, year, department_id: selectedDepartment },
+        ];
+      }
+
+      updateDepartmentSelections(selectedDepartment, {
+        ...currentSelections,
+        days: newDays,
+      });
+    },
+    [
+      selectedDepartment,
+      currentMonth,
+      getCurrentDepartmentSelections,
+      updateDepartmentSelections,
+    ]
+  );
+
+  const handleTimeSlotMouseDown = useCallback(
+    (dayIndex: number, time: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      if (!selectedDepartment) {
+        toast.error("Vui lòng chọn phòng ban trước");
+        return;
+      }
+
+      const currentSelections = getCurrentDepartmentSelections();
+      const isCurrentlySelected = currentSelections.timeSlots.some(
+        (slot) => slot.day_of_week === dayIndex + 1 && slot.start_time === time
+      );
+
+      setDragState({
+        isDragging: true,
+        startSlot: { day: dayIndex, time },
+        currentSlot: { day: dayIndex, time },
+        isSelecting: !isCurrentlySelected,
+      });
+    },
+    [selectedDepartment, getCurrentDepartmentSelections]
+  );
+
+  const handleTimeSlotMouseEnter = useCallback(
+    (dayIndex: number, time: string) => {
+      if (dragState.isDragging) {
+        setDragState((prev) => ({
+          ...prev,
+          currentSlot: { day: dayIndex, time },
+        }));
+      }
+    },
+    [dragState.isDragging]
+  );
+
+  const handleTimeSlotMouseUp = useCallback(() => {
+    if (!dragState.isDragging || !selectedDepartment) return;
+
+    const currentSelections = getCurrentDepartmentSelections();
+    const range = getDragSelectionRange();
+
+    let newTimeSlots = [...currentSelections.timeSlots];
+
+    range.forEach(({ day, time }) => {
+      const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
+      const existingIndex = newTimeSlots.findIndex(
+        (slot) => slot.day_of_week === day + 1 && slot.start_time === time
+      );
+
+      if (dragState.isSelecting) {
+        if (existingIndex === -1) {
+          newTimeSlots.push({
+            day_of_week: day + 1,
+            start_time: time,
+            end_time: endTime,
+            department_id: selectedDepartment,
+          });
+        }
+      } else {
+        if (existingIndex !== -1) {
+          newTimeSlots = newTimeSlots.filter(
+            (_, index) => index !== existingIndex
+          );
+        }
+      }
+    });
+
+    updateDepartmentSelections(selectedDepartment, {
+      ...currentSelections,
+      timeSlots: newTimeSlots,
+    });
+
+    setDragState({
+      isDragging: false,
+      startSlot: null,
+      currentSlot: null,
+      isSelecting: false,
+    });
+  }, [
+    dragState,
+    selectedDepartment,
+    getCurrentDepartmentSelections,
+    getDragSelectionRange,
+    updateDepartmentSelections,
+  ]);
+
+  // Schedule operations
   const checkConflicts = useCallback(
-    (newDays: SelectedDay[], newTimeSlots: TimeSlot[]): ConflictInfo | null => {
+    (allDays: SelectedDay[], allTimeSlots: TimeSlot[]): ConflictInfo | null => {
       const conflictingSchedules: DepartmentSchedule[] = [];
 
       schedules.forEach((schedule) => {
@@ -366,13 +590,15 @@ export default function ModernScheduleApp() {
 
         if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
           const config = schedule.schedule_config as DailyDatesConfig;
-          const hasConflict = newDays.some(
+          const hasConflict = allDays.some(
             (day) =>
               config.dates.some(
                 (date) =>
                   date.day_of_month === day.date &&
                   (date.month === day.month + 1 || !date.month)
-              ) && schedule.department && day.department_ids.includes(schedule.department.id)
+              ) &&
+              schedule.department &&
+              day.department_id === schedule.department.id
           );
 
           if (hasConflict) {
@@ -380,7 +606,7 @@ export default function ModernScheduleApp() {
           }
         } else if (schedule.schedule_type === ScheduleType.HOURLY_SLOTS) {
           const config = schedule.schedule_config as HourlySlotsConfig;
-          const hasConflict = newTimeSlots.some((slot) =>
+          const hasConflict = allTimeSlots.some((slot) =>
             config.slots.some((existingSlot) => {
               const slotStart = slot.start_time;
               const slotEnd = slot.end_time;
@@ -396,7 +622,8 @@ export default function ModernScheduleApp() {
               return (
                 timeOverlap &&
                 dayMatch &&
-                schedule.department && slot.department_ids.includes(schedule.department.id)
+                schedule.department &&
+                slot.department_id === schedule.department.id
               );
             })
           );
@@ -410,12 +637,13 @@ export default function ModernScheduleApp() {
       if (conflictingSchedules.length > 0) {
         const conflictingDepartments = departments.filter((dept) =>
           conflictingSchedules.some(
-            (schedule) => schedule.department && schedule.department.id === dept.id
+            (schedule) =>
+              schedule.department && schedule.department.id === dept.id
           )
         );
 
         return {
-          type: newDays.length > 0 ? "date" : "time",
+          type: allDays.length > 0 ? "date" : "time",
           conflicting_schedules: conflictingSchedules,
           departments: conflictingDepartments,
         };
@@ -426,88 +654,15 @@ export default function ModernScheduleApp() {
     [schedules, departments]
   );
 
-  // Event handlers
-  const handleDayClick = useCallback(
-    (date: number, isCurrentMonth: boolean) => {
-      if (!isCurrentMonth || !selectedDepartment) {
-        if (!selectedDepartment) {
-          toast.error("Vui lòng chọn phòng ban trước");
-        }
-        return;
-      }
-
-      const year = currentMonth.getFullYear();
-      const month = currentMonth.getMonth();
-
-      setSelectedDays((prev) => {
-        const existingIndex = prev.findIndex(
-          (day) => day.date === date && day.month === month && day.year === year
-        );
-
-        if (existingIndex !== -1) {
-          return prev.filter((_, index) => index !== existingIndex);
-        } else {
-          return [
-            ...prev,
-            {
-              date,
-              month,
-              year,
-              department_ids: [selectedDepartment], // Single department
-            },
-          ];
-        }
-      });
-    },
-    [selectedDepartment, currentMonth] // Thay đổi dependency
-  );
-
-  const handleTimeSlotClick = useCallback(
-    (dayIndex: number, time: string) => {
-      if (!selectedDepartment) {
-        toast.error("Vui lòng chọn phòng ban trước");
-        return;
-      }
-
-      const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
-
-      setSelectedTimeSlots((prev) => {
-        const existingIndex = prev.findIndex(
-          (slot) =>
-            slot.day_of_week === dayIndex + 1 && slot.start_time === time
-        );
-
-        if (existingIndex !== -1) {
-          return prev.filter((_, index) => index !== existingIndex);
-        } else {
-          return [
-            ...prev,
-            {
-              day_of_week: dayIndex + 1,
-              start_time: time,
-              end_time: endTime,
-              department_ids: [selectedDepartment], // Single department
-            },
-          ];
-        }
-      });
-    },
-    [selectedDepartment] // Thay đổi dependency
-  );
-
   const handleSaveSchedule = async () => {
-    if (!selectedDepartment) {
-      toast.error("Vui lòng chọn phòng ban");
-      return;
-    }
+    const { allDays, allTimeSlots } = getAllSelections();
 
-    if (selectedDays.length === 0 && selectedTimeSlots.length === 0) {
+    if (allDays.length === 0 && allTimeSlots.length === 0) {
       toast.error("Vui lòng chọn ít nhất một ngày hoặc khung giờ");
       return;
     }
 
-    // Check conflicts chỉ cho 1 phòng ban
-    const conflicts = checkConflicts(selectedDays, selectedTimeSlots);
+    const conflicts = checkConflicts(allDays, allTimeSlots);
     if (conflicts) {
       setConflictInfo(conflicts);
       setIsConflictDialogOpen(true);
@@ -520,68 +675,70 @@ export default function ModernScheduleApp() {
   const saveScheduleWithoutConflictCheck = async () => {
     try {
       setIsSavingSchedule(true);
+      const promises: Promise<any>[] = [];
 
-      const department = departments.find((d) => d.id === selectedDepartment);
-      if (!department) return;
+      departmentSelections.forEach((selections, departmentId) => {
+        if (selections.days.length === 0 && selections.timeSlots.length === 0)
+          return;
 
-      let scheduleData: CreateDepartmentScheduleDto;
+        const department = departments.find((d) => d.id === departmentId);
+        if (!department) return;
 
-      if (selectedTimeSlots.length > 0) {
-        // Create hourly slots schedule
-        scheduleData = {
-          name: formData.name || `Lịch khung giờ - ${department.name}`,
-          description:
-            formData.description ||
-            `Lịch hoạt động khung giờ cho ${department.name}`,
-          department_id: selectedDepartment!,
-          status: ScheduleStatus.ACTIVE,
-          schedule_type: ScheduleType.HOURLY_SLOTS,
-          schedule_config: {
-            type: "hourly_slots",
-            slots: selectedTimeSlots.map((slot) => ({
-              day_of_week: slot.day_of_week,
-              start_time: slot.start_time,
-              end_time: slot.end_time,
-              activity_description: formData.description,
-            })),
-          } as HourlySlotsConfig,
-        };
-      } else {
-        // Create daily dates schedule
-        scheduleData = {
-          name: formData.name || `Lịch theo ngày - ${department.name}`,
-          description:
-            formData.description ||
-            `Lịch hoạt động theo ngày cho ${department.name}`,
-          department_id: selectedDepartment!,
-          status: ScheduleStatus.ACTIVE,
-          schedule_type: ScheduleType.DAILY_DATES,
-          schedule_config: {
-            type: "daily_dates",
-            dates: selectedDays.map((day) => ({
-              day_of_month: day.date,
-              month: day.month + 1,
-              year: day.year,
-              activity_description: formData.description,
-            })),
-          } as DailyDatesConfig,
-        };
-      }
+        if (selections.timeSlots.length > 0) {
+          const scheduleData: CreateDepartmentScheduleDto = {
+            name: formData.name || `Lịch khung giờ - ${department.name}`,
+            description:
+              formData.description ||
+              `Lịch hoạt động khung giờ cho ${department.name}`,
+            department_id: departmentId,
+            status: ScheduleStatus.ACTIVE,
+            schedule_type: ScheduleType.HOURLY_SLOTS,
+            schedule_config: {
+              type: "hourly_slots",
+              slots: selections.timeSlots.map((slot) => ({
+                day_of_week: slot.day_of_week,
+                start_time: slot.start_time,
+                end_time: slot.end_time,
+                activity_description: formData.description,
+              })),
+            } as HourlySlotsConfig,
+          };
+          promises.push(ScheduleService.create(scheduleData));
+        }
 
-      await ScheduleService.create(scheduleData);
+        if (selections.days.length > 0) {
+          const scheduleData: CreateDepartmentScheduleDto = {
+            name: formData.name || `Lịch theo ngày - ${department.name}`,
+            description:
+              formData.description ||
+              `Lịch hoạt động theo ngày cho ${department.name}`,
+            department_id: departmentId,
+            status: ScheduleStatus.ACTIVE,
+            schedule_type: ScheduleType.DAILY_DATES,
+            schedule_config: {
+              type: "daily_dates",
+              dates: selections.days.map((day) => ({
+                day_of_month: day.date,
+                month: day.month + 1,
+                year: day.year,
+                activity_description: formData.description,
+              })),
+            } as DailyDatesConfig,
+          };
+          promises.push(ScheduleService.create(scheduleData));
+        }
+      });
 
-      toast.success("Tạo lịch hoạt động thành công!");
+      await Promise.all(promises);
 
-      // Reset form và selections
-      setSelectedDays([]);
-      setSelectedTimeSlots([]);
-      setSelectedDepartment(null); // Reset single selection
+      setDepartmentSelections(new Map());
+      setSelectedDepartment(null);
       setFormData({ name: "", description: "", start_time: "", end_time: "" });
       setIsCreateDialogOpen(false);
 
-      // Refresh schedules
       const data = await ScheduleService.findAll();
       setSchedules(data.data);
+      toast.success("Lưu lịch hoạt động thành công!");
     } catch (error: any) {
       console.error("Error saving schedule:", error);
       toast.error("Không thể lưu lịch hoạt động");
@@ -590,7 +747,7 @@ export default function ModernScheduleApp() {
     }
   };
 
-  // Filter schedules based on search and filters
+  // Filter schedules
   const filteredSchedules = useMemo(() => {
     return schedules.filter((schedule) => {
       const matchesSearch =
@@ -602,13 +759,14 @@ export default function ModernScheduleApp() {
         typeFilter === "all" || schedule.schedule_type === typeFilter;
       const departmentId = schedule.department?.id;
       const matchesDepartment =
-        typeof departmentId === "number" && visibleDepartments.includes(departmentId);
+        typeof departmentId === "number" &&
+        visibleDepartments.includes(departmentId);
 
       return matchesSearch && matchesStatus && matchesType && matchesDepartment;
     });
   }, [schedules, searchTerm, statusFilter, typeFilter, visibleDepartments]);
 
-  // Get schedules for specific slot or day
+  // Helper functions
   const getSchedulesForSlot = useCallback(
     (dayIndex: number, time: string) => {
       return filteredSchedules.filter((schedule) => {
@@ -647,7 +805,6 @@ export default function ModernScheduleApp() {
     if (selectedDepartment) {
       return getDepartmentColor(selectedDepartment);
     }
-    // Màu mặc định khi chưa chọn phòng ban
     return {
       bg: "bg-slate-500",
       light: "bg-slate-100",
@@ -658,28 +815,69 @@ export default function ModernScheduleApp() {
 
   const isDaySelected = useCallback(
     (date: number, month: number, year: number) => {
-      return selectedDays.some(
+      const currentSelections = getCurrentDepartmentSelections();
+      return currentSelections.days.some(
         (day) => day.date === date && day.month === month && day.year === year
       );
     },
-    [selectedDays]
+    [getCurrentDepartmentSelections]
   );
 
   const isTimeSlotSelected = useCallback(
     (dayIndex: number, time: string) => {
-      return selectedTimeSlots.some(
+      const currentSelections = getCurrentDepartmentSelections();
+      return currentSelections.timeSlots.some(
         (slot) => slot.day_of_week === dayIndex + 1 && slot.start_time === time
       );
     },
-    [selectedTimeSlots]
+    [getCurrentDepartmentSelections]
+  );
+
+  const isDaySelectedByAnyDept = useCallback(
+    (date: number, month: number, year: number) => {
+      for (const [deptId, selections] of departmentSelections) {
+        if (
+          selections.days.some(
+            (day) =>
+              day.date === date && day.month === month && day.year === year
+          )
+        ) {
+          return { isSelected: true, departmentId: deptId };
+        }
+      }
+      return { isSelected: false, departmentId: null };
+    },
+    [departmentSelections]
+  );
+
+  const isTimeSlotSelectedByAnyDept = useCallback(
+    (dayIndex: number, time: string) => {
+      for (const [deptId, selections] of departmentSelections) {
+        if (
+          selections.timeSlots.some(
+            (slot) =>
+              slot.day_of_week === dayIndex + 1 && slot.start_time === time
+          )
+        ) {
+          return { isSelected: true, departmentId: deptId };
+        }
+      }
+      return { isSelected: false, departmentId: null };
+    },
+    [departmentSelections]
   );
 
   if (isLoadingDepartments) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <p>Đang tải dữ liệu...</p>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          >
+            <Loader2 className="w-12 h-12 text-blue-600 mx-auto mb-4" />
+          </motion.div>
+          <p className="text-lg text-slate-600">Đang tải dữ liệu...</p>
         </div>
       </div>
     );
@@ -688,213 +886,707 @@ export default function ModernScheduleApp() {
   const weekDates = getWeekDates();
 
   return (
-    <TooltipProvider>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-800 mb-2">
-                  Quản lý lịch hoạt động
-                </h1>
-                <p className="text-slate-600">
-                  Lên kế hoạch và quản lý lịch hoạt động cho tất cả phòng ban
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={() =>
-                    setActiveView(activeView === "week" ? "month" : "week")
-                  }
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  {activeView === "week" ? (
-                    <span className="flex items-center">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Xem theo tháng
-                    </span>
-                  ) : (
-                    <span className="flex items-center">
-                      <Clock className="w-4 h-4 mr-2" />
-                      Xem theo tuần
-                    </span>
-                  )}
-                </Button>
-
-                <Dialog
-                  open={isCreateDialogOpen}
-                  onOpenChange={setIsCreateDialogOpen}
-                >
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2">
-                      <span className="flex items-center">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Tạo lịch mới
-                      </span>
-                    </Button>
-                  </DialogTrigger>
-                </Dialog>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-800 mb-2 flex items-center gap-3">
+                <Sparkles className="w-8 h-8 text-blue-600" />
+                Quản lý lịch hoạt động
+              </h1>
+              <p className="text-slate-600">
+                Lên kế hoạch và quản lý lịch hoạt động cho tất cả phòng ban với
+                drag selection
+              </p>
             </div>
 
-            {/* Department Legend & Controls */}
-            <Card className="mb-6">
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() =>
+                  setActiveView(activeView === "week" ? "month" : "week")
+                }
+                variant="outline"
+                className="flex items-center gap-2 hover:bg-blue-50"
+              >
+                {activeView === "week" ? (
+                  <span className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Xem theo tháng
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Xem theo tuần
+                  </span>
+                )}
+              </Button>
+
+              <Dialog
+                open={isCreateDialogOpen}
+                onOpenChange={setIsCreateDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all">
+                    <span className="flex items-center gap-2">
+                      <Plus className="w-4 h-4" />
+                      Tạo lịch mới
+                    </span>
+                  </Button>
+                </DialogTrigger>
+              </Dialog>
+            </div>
+          </div>
+
+          {/* Department Legend & Controls */}
+          <Card className="mb-6 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-600" />
+                  Phòng ban & Bộ lọc
+                </CardTitle>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Search className="w-4 h-4 text-slate-500" />
+                    <Input
+                      placeholder="Tìm kiếm lịch..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-48 border-slate-200 focus:border-blue-400"
+                    />
+                  </div>
+
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value: any) => setStatusFilter(value)}
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Trạng thái" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả</SelectItem>
+                      <SelectItem value={ScheduleStatus.ACTIVE}>
+                        Hoạt động
+                      </SelectItem>
+                      <SelectItem value={ScheduleStatus.INACTIVE}>
+                        Tạm dừng
+                      </SelectItem>
+                      <SelectItem value={ScheduleStatus.EXPIRED}>
+                        Đã hết hạn
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                {departments.map((dept) => {
+                  const color = getDepartmentColor(dept.id);
+                  const isVisible = visibleDepartments.includes(dept.id);
+                  const isSelected = selectedDepartment === dept.id;
+                  const hasSelections =
+                    departmentSelections.has(dept.id) &&
+                    (departmentSelections.get(dept.id)!.days.length > 0 ||
+                      departmentSelections.get(dept.id)!.timeSlots.length > 0);
+
+                  return (
+                    <div key={dept.id} className="flex items-center gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 ${
+                          isSelected
+                            ? `${color.light} ${color.border} ${color.text} border-2 ring-2 ring-blue-300 shadow-md`
+                            : hasSelections
+                            ? `${color.light} ${color.border} border-2 shadow-sm`
+                            : "hover:bg-slate-50 hover:shadow-sm"
+                        }`}
+                        onClick={() => {
+                          setSelectedDepartment(
+                            selectedDepartment === dept.id ? null : dept.id
+                          );
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-3 h-3 mr-2 rounded-full ${color.bg} shadow-sm`}
+                          />
+                          <span className="truncate text-sm">{dept.name}</span>
+                          {isSelected && (
+                            <CheckCircle className="w-4 h-4 text-blue-600 ml-auto" />
+                          )}
+                          {hasSelections && !isSelected && (
+                            <Badge
+                              variant="secondary"
+                              className="ml-auto text-xs"
+                            >
+                              {(() => {
+                                const selections = departmentSelections.get(
+                                  dept.id
+                                )!;
+                                const total =
+                                  selections.days.length +
+                                  selections.timeSlots.length;
+                                return total;
+                              })()}
+                            </Badge>
+                          )}
+                        </div>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-1 h-8 w-8 hover:bg-slate-100"
+                        onClick={() => {
+                          setVisibleDepartments((prev) =>
+                            prev.includes(dept.id)
+                              ? prev.filter((id) => id !== dept.id)
+                              : [...prev, dept.id]
+                          );
+                        }}
+                      >
+                        {isVisible ? (
+                          <Eye className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <EyeOff className="w-4 h-4 text-slate-400" />
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedDepartment && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mt-4 p-4 rounded-lg border-2 bg-gradient-to-r from-blue-50 to-indigo-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-4 h-4 rounded-full ${
+                        getDepartmentColor(selectedDepartment).bg
+                      } shadow-sm`}
+                    />
+                    <div className="flex-1">
+                      <p
+                        className={`text-sm font-medium ${
+                          getSelectedDepartmentColor().text
+                        }`}
+                      >
+                        Phòng ban đang chọn:{" "}
+                        {
+                          departments.find((d) => d.id === selectedDepartment)
+                            ?.name
+                        }
+                      </p>
+                      <p className="text-xs text-slate-600 mt-1 flex items-center gap-2">
+                        <MousePointer className="w-3 h-3" />
+                        Click & kéo để chọn nhiều khung giờ, click ngày để chọn
+                        lịch theo ngày
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedDepartment(null)}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+
+              {departmentSelections.size > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200"
+                >
+                  <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    Tổng quan lịch đã chọn:
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {Array.from(departmentSelections.entries()).map(
+                      ([deptId, selections]) => {
+                        if (
+                          selections.days.length === 0 &&
+                          selections.timeSlots.length === 0
+                        )
+                          return null;
+
+                        const dept = departments.find((d) => d.id === deptId);
+                        const color = getDepartmentColor(deptId);
+
+                        return (
+                          <div
+                            key={deptId}
+                            className={`text-xs p-2 rounded ${color.light} ${color.border} border shadow-sm`}
+                          >
+                            <div className={`font-medium ${color.text}`}>
+                              {dept?.name}
+                            </div>
+                            <div className="text-slate-600">
+                              📅 {selections.days.length} ngày, 🕐{" "}
+                              {selections.timeSlots.length} khung giờ
+                            </div>
+                          </div>
+                        );
+                      }
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Main Calendar View */}
+          <div className="xl:col-span-3">
+            <Card className="h-full shadow-lg border-0 bg-white/90 backdrop-blur-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Phòng ban & Bộ lọc
+                  <CardTitle className="flex items-center gap-2">
+                    {activeView === "week" ? (
+                      <span className="flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-blue-600" />
+                        Lịch tuần - Khung giờ
+                        {dragState.isDragging && (
+                          <Badge
+                            variant="default"
+                            className="bg-green-600 animate-pulse"
+                          >
+                            <MousePointer className="w-3 h-3 mr-1" />
+                            Đang chọn...
+                          </Badge>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-blue-600" />
+                        Lịch tháng - Theo ngày
+                      </span>
+                    )}
                   </CardTitle>
 
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <Search className="w-4 h-4 text-slate-500" />
-                      <Input
-                        placeholder="Tìm kiếm lịch..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-48"
-                      />
-                    </div>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const { allDays, allTimeSlots } = getAllSelections();
+                      const totalSelections =
+                        allDays.length + allTimeSlots.length;
+                      return (
+                        totalSelections > 0 && (
+                          <Badge
+                            variant="default"
+                            className="bg-blue-600 shadow-sm"
+                          >
+                            {activeView === "week"
+                              ? `${allTimeSlots.length} khung giờ`
+                              : `${allDays.length} ngày`}{" "}
+                            từ {departmentSelections.size} phòng ban
+                          </Badge>
+                        )
+                      );
+                    })()}
 
-                    <Select
-                      value={statusFilter}
-                      onValueChange={(value: any) => setStatusFilter(value)}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (activeView === "week") {
+                          setCurrentWeek(
+                            new Date(
+                              currentWeek.getTime() - 7 * 24 * 60 * 60 * 1000
+                            )
+                          );
+                        } else {
+                          setCurrentMonth(
+                            new Date(
+                              currentMonth.getFullYear(),
+                              currentMonth.getMonth() - 1
+                            )
+                          );
+                        }
+                      }}
+                      className="hover:bg-blue-50"
                     >
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="Trạng thái" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả</SelectItem>
-                        <SelectItem value={ScheduleStatus.ACTIVE}>
-                          Hoạt động
-                        </SelectItem>
-                        <SelectItem value={ScheduleStatus.INACTIVE}>
-                          Tạm dừng
-                        </SelectItem>
-                        <SelectItem value={ScheduleStatus.EXPIRED}>
-                          Đã hết hạn
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+
+                    <span className="font-medium min-w-[200px] text-center">
+                      {activeView === "week"
+                        ? `${weekDates[0].toLocaleDateString(
+                            "vi-VN"
+                          )} - ${weekDates[6].toLocaleDateString("vi-VN")}`
+                        : `Tháng ${
+                            currentMonth.getMonth() + 1
+                          }, ${currentMonth.getFullYear()}`}
+                    </span>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (activeView === "week") {
+                          setCurrentWeek(
+                            new Date(
+                              currentWeek.getTime() + 7 * 24 * 60 * 60 * 1000
+                            )
+                          );
+                        } else {
+                          setCurrentMonth(
+                            new Date(
+                              currentMonth.getFullYear(),
+                              currentMonth.getMonth() + 1
+                            )
+                          );
+                        }
+                      }}
+                      className="hover:bg-blue-50"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
 
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {departments.map((dept) => {
-                    const color = getDepartmentColor(dept.id);
-                    const isVisible = visibleDepartments.includes(dept.id);
-                    const isSelected = selectedDepartment === dept.id; // Thay đổi logic so sánh
+              <CardContent className="p-0">
+                {activeView === "week" ? (
+                  // Weekly Time Grid with Drag Selection
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[800px]">
+                      {/* Header */}
+                      <div className="grid grid-cols-8 bg-slate-50 border-b">
+                        <div className="p-3 font-medium text-center border-r bg-slate-100">
+                          Giờ
+                        </div>
+                        {weekDays.map((day, index) => (
+                          <div
+                            key={index}
+                            className="p-3 text-center border-r last:border-r-0"
+                          >
+                            <div className="font-medium text-sm">{day}</div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {weekDates[index].getDate()}/
+                              {weekDates[index].getMonth() + 1}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
 
-                    return (
-                      <div key={dept.id} className="flex items-center gap-3">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={`flex-1 justify-start gap-2 h-auto py-2 transition-all ${
-                                isSelected
-                                  ? `${color.light} ${color.border} ${color.text} border-2 ring-2 ring-blue-300` // Tăng highlight
-                                  : "hover:bg-slate-50"
-                              }`}
-                              onClick={() => {
-                                // Logic chọn single department
-                                setSelectedDepartment(
-                                  selectedDepartment === dept.id
-                                    ? null
-                                    : dept.id
-                                );
-                              }}
+                      {/* Time slots with drag selection */}
+                      <ScrollArea className="h-[600px]">
+                        <div className="select-none">
+                          {timeSlots.map((time, timeIndex) => (
+                            <div
+                              key={time}
+                              className="grid grid-cols-8 border-b hover:bg-slate-25"
                             >
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className={`w-3 h-3 mr-2 rounded-full ${color.bg}`}
-                                />
-                                <span className="truncate text-sm">
-                                  {dept.name}
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle className="w-4 h-4 text-blue-600 ml-auto" />
+                              <div className="p-2 text-center border-r font-mono text-sm bg-slate-50 font-medium">
+                                {time}
+                              </div>
+
+                              {Array.from({ length: 7 }, (_, dayIndex) => {
+                                const isSelectedByCurrentDept =
+                                  isTimeSlotSelected(dayIndex, time);
+                                const {
+                                  isSelected: isSelectedByAny,
+                                  departmentId: selectedByDeptId,
+                                } = isTimeSlotSelectedByAnyDept(dayIndex, time);
+                                const slotSchedules = getSchedulesForSlot(
+                                  dayIndex,
+                                  time
+                                );
+                                const isInDragRange = isSlotInDragRange(
+                                  dayIndex,
+                                  time
+                                );
+                                const isPreviewSelection =
+                                  isInDragRange &&
+                                  dragState.isSelecting &&
+                                  !isSelectedByCurrentDept;
+                                const isPreviewDeselection =
+                                  isInDragRange &&
+                                  !dragState.isSelecting &&
+                                  isSelectedByCurrentDept;
+
+                                return (
+                                  <div
+                                    key={dayIndex}
+                                    className={`p-1 border-r last:border-r-0 cursor-pointer transition-all min-h-[40px] relative
+                                      ${
+                                        isPreviewSelection
+                                          ? `${
+                                              getSelectedDepartmentColor().light
+                                            } ${
+                                              getSelectedDepartmentColor()
+                                                .border
+                                            } border-2 shadow-md opacity-70 scale-105`
+                                          : isPreviewDeselection
+                                          ? "bg-red-100 border-red-300 border-2 opacity-70 scale-95"
+                                          : isSelectedByCurrentDept &&
+                                            selectedDepartment
+                                          ? `${
+                                              getSelectedDepartmentColor().light
+                                            } ${
+                                              getSelectedDepartmentColor()
+                                                .border
+                                            } border-2 shadow-md transform hover:scale-105`
+                                          : isSelectedByAny && selectedByDeptId
+                                          ? `${
+                                              getDepartmentColor(
+                                                selectedByDeptId
+                                              ).light
+                                            } ${
+                                              getDepartmentColor(
+                                                selectedByDeptId
+                                              ).border
+                                            } border-2 shadow-sm`
+                                          : slotSchedules.length > 0
+                                          ? "bg-slate-100 hover:bg-slate-150"
+                                          : selectedDepartment
+                                          ? "hover:bg-blue-50 hover:border-blue-200 hover:shadow-sm"
+                                          : "hover:bg-slate-50"
+                                      }`}
+                                    onMouseDown={(e) =>
+                                      handleTimeSlotMouseDown(dayIndex, time, e)
+                                    }
+                                    onMouseEnter={() =>
+                                      handleTimeSlotMouseEnter(dayIndex, time)
+                                    }
+                                    onMouseUp={handleTimeSlotMouseUp}
+                                  >
+                                    {/* Existing schedules */}
+                                    {slotSchedules.map((schedule, index) => {
+                                      const color = getDepartmentColor(
+                                        schedule.department!.id
+                                      );
+                                      return (
+                                        <div
+                                          key={schedule.id}
+                                          className={`text-xs p-1 mb-1 rounded ${color.light} ${color.border} border shadow-sm`}
+                                          style={{ zIndex: index + 1 }}
+                                        >
+                                          <div
+                                            className={`font-medium ${color.text}`}
+                                          >
+                                            {schedule.name}
+                                          </div>
+                                          <div className="text-slate-600">
+                                            {schedule.department?.name}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+
+                                    {/* Selection indicators */}
+                                    {isSelectedByCurrentDept &&
+                                      selectedDepartment &&
+                                      !isInDragRange && (
+                                        <motion.div
+                                          initial={{ scale: 0, opacity: 0 }}
+                                          animate={{ scale: 1, opacity: 1 }}
+                                          exit={{ scale: 0, opacity: 0 }}
+                                          className={`absolute inset-0 ${
+                                            getSelectedDepartmentColor().light
+                                          } bg-opacity-30 rounded flex items-center justify-center border-2 ${
+                                            getSelectedDepartmentColor().border
+                                          }`}
+                                        >
+                                          <CheckCircle
+                                            className={`w-5 h-5 ${
+                                              getSelectedDepartmentColor().text
+                                            } bg-white rounded-full shadow-sm`}
+                                          />
+                                        </motion.div>
+                                      )}
+
+                                    {/* Drag preview */}
+                                    {isPreviewSelection && (
+                                      <div
+                                        className={`absolute inset-0 ${
+                                          getSelectedDepartmentColor().light
+                                        } bg-opacity-50 rounded flex items-center justify-center border-2 ${
+                                          getSelectedDepartmentColor().border
+                                        } border-dashed animate-pulse`}
+                                      >
+                                        <Plus
+                                          className={`w-4 h-4 ${
+                                            getSelectedDepartmentColor().text
+                                          } opacity-70`}
+                                        />
+                                      </div>
+                                    )}
+
+                                    {isPreviewDeselection && (
+                                      <div className="absolute inset-0 bg-red-100 bg-opacity-50 rounded flex items-center justify-center border-2 border-red-300 border-dashed animate-pulse">
+                                        <X className="w-4 h-4 text-red-600 opacity-70" />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </div>
+                ) : (
+                  // Monthly Calendar
+                  <div className="p-4">
+                    {/* Calendar header */}
+                    <div className="grid grid-cols-7 mb-2">
+                      {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((day) => (
+                        <div
+                          key={day}
+                          className="p-3 text-center font-medium text-slate-600 border-b bg-slate-50"
+                        >
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calendar days */}
+                    <div className="grid grid-cols-7 gap-0 border rounded-lg overflow-hidden shadow-sm">
+                      {getMonthCalendar.map((day, index) => {
+                        const isSelectedByCurrentDept = isDaySelected(
+                          day.date,
+                          currentMonth.getMonth(),
+                          currentMonth.getFullYear()
+                        );
+                        const {
+                          isSelected: isSelectedByAny,
+                          departmentId: selectedByDeptId,
+                        } = isDaySelectedByAnyDept(
+                          day.date,
+                          currentMonth.getMonth(),
+                          currentMonth.getFullYear()
+                        );
+                        const daySchedules = day.isCurrentMonth
+                          ? getSchedulesForDay(
+                              day.date,
+                              currentMonth.getMonth(),
+                              currentMonth.getFullYear()
+                            )
+                          : [];
+
+                        const currentDate = new Date(
+                          currentMonth.getFullYear(),
+                          currentMonth.getMonth(),
+                          day.date
+                        );
+                        const isSunday =
+                          day.isCurrentMonth && currentDate.getDay() === 0;
+
+                        return (
+                          <div
+                            key={index}
+                            className={`min-h-[80px] p-2 border-r border-b transition-all relative hover:shadow-sm
+                            ${
+                              !day.isCurrentMonth
+                                ? "bg-slate-50 text-slate-400"
+                                : isSunday
+                                ? "bg-red-50 text-red-400 cursor-not-allowed opacity-60"
+                                : isSelectedByCurrentDept && selectedDepartment
+                                ? `${getSelectedDepartmentColor().light} ${
+                                    getSelectedDepartmentColor().border
+                                  } border-2 shadow-lg cursor-pointer transform hover:scale-105`
+                                : isSelectedByAny && selectedByDeptId
+                                ? `${
+                                    getDepartmentColor(selectedByDeptId).light
+                                  } ${
+                                    getDepartmentColor(selectedByDeptId).border
+                                  } border-2 cursor-pointer shadow-sm`
+                                : daySchedules.length > 0
+                                ? "bg-green-50 cursor-pointer hover:bg-green-100"
+                                : "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
+                            }`}
+                            onClick={() => {
+                              if (!isSunday) {
+                                handleDayClick(day.date, day.isCurrentMonth);
+                              }
+                            }}
+                          >
+                            {/* Day number */}
+                            <div
+                              className={`font-medium text-sm mb-1 
+                              ${
+                                day.date === new Date().getDate() &&
+                                currentMonth.getMonth() ===
+                                  new Date().getMonth() &&
+                                currentMonth.getFullYear() ===
+                                  new Date().getFullYear() &&
+                                day.isCurrentMonth &&
+                                !isSunday
+                                  ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-md"
+                                  : isSelectedByCurrentDept &&
+                                    selectedDepartment &&
+                                    !isSunday
+                                  ? `${
+                                      getSelectedDepartmentColor().text
+                                    } font-bold`
+                                  : isSunday
+                                  ? "text-red-400"
+                                  : ""
+                              }`}
+                            >
+                              {day.date}
+                            </div>
+
+                            {/* Day schedules */}
+                            {!isSunday && (
+                              <div className="space-y-1">
+                                {daySchedules.slice(0, 2).map((schedule) => {
+                                  const color = getDepartmentColor(
+                                    schedule.department!.id
+                                  );
+                                  return (
+                                    <div
+                                      key={schedule.id}
+                                      className={`text-xs p-1 rounded truncate ${color.light} ${color.text} shadow-sm`}
+                                    >
+                                      {schedule.name}
+                                    </div>
+                                  );
+                                })}
+
+                                {daySchedules.length > 2 && (
+                                  <div className="text-xs text-slate-500 font-medium">
+                                    +{daySchedules.length - 2} khác
+                                  </div>
                                 )}
                               </div>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-pink-500 text-white shadow-lg border-none">
-                            <div className="text-base font-semibold mb-1">
-                              {dept.name}
-                            </div>
-                            <div className="text-sm">ID: {dept.id}</div>
-                            <div className="text-sm">Slug: {dept.slug}</div>
-                            {isSelected && (
-                              <div className="text-sm mt-1 font-bold">
-                                ✓ Đã chọn
-                              </div>
                             )}
-                          </TooltipContent>
-                        </Tooltip>
 
-                        {/* Giữ nguyên button visibility */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="p-1 h-8 w-8"
-                          onClick={() => {
-                            setVisibleDepartments((prev) =>
-                              prev.includes(dept.id)
-                                ? prev.filter((id) => id !== dept.id)
-                                : [...prev, dept.id]
-                            );
-                          }}
-                        >
-                          {isVisible ? (
-                            <Eye className="w-4 h-4" />
-                          ) : (
-                            <EyeOff className="w-4 h-4 text-slate-400" />
-                          )}
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {selectedDepartment && (
-                  <div className="mt-4 p-3 rounded-lg border-2">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-4 h-4 rounded-full ${
-                          getDepartmentColor(selectedDepartment).bg
-                        }`}
-                      />
-                      <div className="flex-1">
-                        <p
-                          className={`text-sm font-medium ${
-                            getSelectedDepartmentColor().text
-                          }`}
-                        >
-                          Phòng ban được chọn:{" "}
-                          {
-                            departments.find((d) => d.id === selectedDepartment)
-                              ?.name
-                          }
-                        </p>
-                        <p className="text-xs text-slate-600 mt-1">
-                          Tất cả lịch sẽ được tạo cho phòng ban này
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedDepartment(null)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
+                            {/* Selection indicator */}
+                            {isSelectedByCurrentDept &&
+                              selectedDepartment &&
+                              !isSunday && (
+                                <div className="absolute top-1 right-1 bg-white rounded-full shadow-md">
+                                  <CheckCircle
+                                    className={`w-5 h-5 ${
+                                      getSelectedDepartmentColor().text
+                                    } border-2 border-white rounded-full`}
+                                  />
+                                </div>
+                              )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -902,619 +1594,282 @@ export default function ModernScheduleApp() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-            {/* Main Calendar View */}
-            <div className="xl:col-span-3">
-              <Card className="h-full">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      {activeView === "week" ? (
-                        <span className="flex items-center gap-2">
-                          <Clock className="w-5 h-5" />
-                          Lịch tuần - Khung giờ
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <Calendar className="w-5 h-5" />
-                          Lịch tháng - Theo ngày
-                        </span>
-                      )}
-                    </CardTitle>
-
-                    <div className="flex items-center gap-2">
-                      {(selectedDays.length > 0 ||
-                        selectedTimeSlots.length > 0) && (
-                        <Badge variant="default" className="bg-blue-600">
-                          {activeView === "week"
-                            ? `${selectedTimeSlots.length} khung giờ`
-                            : `${selectedDays.length} ngày`}{" "}
-                          đã chọn
-                        </Badge>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (activeView === "week") {
-                            setCurrentWeek(
-                              new Date(
-                                currentWeek.getTime() - 7 * 24 * 60 * 60 * 1000
-                              )
-                            );
-                          } else {
-                            setCurrentMonth(
-                              new Date(
-                                currentMonth.getFullYear(),
-                                currentMonth.getMonth() - 1
-                              )
-                            );
-                          }
-                        }}
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
-
-                      <span className="font-medium min-w-[200px] text-center">
-                        {activeView === "week"
-                          ? `${weekDates[0].toLocaleDateString(
-                              "vi-VN"
-                            )} - ${weekDates[6].toLocaleDateString("vi-VN")}`
-                          : `Tháng ${
-                              currentMonth.getMonth() + 1
-                            }, ${currentMonth.getFullYear()}`}
-                      </span>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (activeView === "week") {
-                            setCurrentWeek(
-                              new Date(
-                                currentWeek.getTime() + 7 * 24 * 60 * 60 * 1000
-                              )
-                            );
-                          } else {
-                            setCurrentMonth(
-                              new Date(
-                                currentMonth.getFullYear(),
-                                currentMonth.getMonth() + 1
-                              )
-                            );
-                          }
-                        }}
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="p-0">
-                  {activeView === "week" ? (
-                    // Weekly Time Grid
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[800px]">
-                        {/* Header */}
-                        <div className="grid grid-cols-8 bg-slate-50 border-b">
-                          <div className="p-3 font-medium text-center border-r">
-                            Giờ
-                          </div>
-                          {weekDays.map((day, index) => (
-                            <div
-                              key={index}
-                              className="p-3 text-center border-r last:border-r-0"
-                            >
-                              <div className="font-medium text-sm">{day}</div>
-                              <div className="text-xs text-slate-500 mt-1">
-                                {weekDates[index].getDate()}/
-                                {weekDates[index].getMonth() + 1}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Time slots */}
-                        <ScrollArea className="h-[600px]">
-                          {timeSlots.map((time, timeIndex) => (
-                            <div
-                              key={time}
-                              className="grid grid-cols-8 border-b hover:bg-slate-25"
-                            >
-                              <div className="p-2 text-center border-r font-mono text-sm bg-slate-50">
-                                {time}
-                              </div>
-
-                              {Array.from({ length: 7 }, (_, dayIndex) => {
-                                const isSelected = isTimeSlotSelected(
-                                  dayIndex,
-                                  time
-                                );
-                                const slotSchedules = getSchedulesForSlot(
-                                  dayIndex,
-                                  time
-                                );
-
-                                const selectedColor =
-                                  getSelectedDepartmentColor();
-
-                                return (
-                                  <Tooltip key={dayIndex}>
-                                    <TooltipTrigger asChild>
-                                      <div
-                                        className={`p-1 border-r last:border-r-0 cursor-pointer transition-all min-h-[40px] relative
-                                        ${
-                                          isSelected
-                                            ? `${selectedColor.light} ${selectedColor.border} border-2 shadow-md` // Dùng màu phòng ban
-                                            : slotSchedules.length > 0
-                                            ? "bg-slate-100"
-                                            : "hover:bg-blue-50 hover:border-blue-200"
-                                        }`}
-                                        onClick={() =>
-                                          handleTimeSlotClick(dayIndex, time)
-                                        }
-                                      >
-                                        {/* Hiện thị schedules */}
-                                        {slotSchedules.map(
-                                          (schedule, index) => {
-                                            const color = getDepartmentColor(
-                                              schedule.department!.id
-                                            );
-                                            return (
-                                              <div
-                                                key={schedule.id}
-                                                className={`text-xs p-1 mb-1 rounded ${color.light} ${color.border} border`}
-                                                style={{ zIndex: index + 1 }}
-                                              >
-                                                <div
-                                                  className={`font-medium ${color.text}`}
-                                                >
-                                                  {schedule.name}
-                                                </div>
-                                                <div className="text-slate-600">
-                                                  {schedule.department?.name}
-                                                </div>
-                                              </div>
-                                            );
-                                          }
-                                        )}
-
-                                        {/* Icon check với màu phòng ban */}
-                                        {isSelected && (
-                                          <motion.div
-                                            initial={{ scale: 0, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            exit={{ scale: 0, opacity: 0 }}
-                                            className={`absolute inset-0 ${selectedColor.light} bg-opacity-30 rounded flex items-center justify-center border-2 ${selectedColor.border}`}
-                                          >
-                                            <CheckCircle
-                                              className={`w-5 h-5 ${selectedColor.text} bg-white rounded-full`}
-                                            />
-                                          </motion.div>
-                                        )}
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <div className="text-sm">
-                                        <p className="font-medium text-blue-800">
-                                          {weekDays[dayIndex]} - {time}
-                                        </p>
-                                        {slotSchedules.length > 0 ? (
-                                          <div className="mt-1">
-                                            {slotSchedules.map((schedule) => (
-                                              <p
-                                                key={schedule.id}
-                                                className="text-blue-900"
-                                              >
-                                                {schedule.name} (
-                                                {schedule.department?.name})
-                                              </p>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <p className="text-blue-700">
-                                            Click để chọn khung giờ
-                                          </p>
-                                        )}
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                );
-                              })}
-                            </div>
-                          ))}
-                        </ScrollArea>
-                      </div>
-                    </div>
-                  ) : (
-                    // Monthly Calendar
-                    <div className="p-4">
-                      {/* Calendar header */}
-                      <div className="grid grid-cols-7 mb-2">
-                        {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map(
-                          (day) => (
-                            <div
-                              key={day}
-                              className="p-3 text-center font-medium text-slate-600 border-b"
-                            >
-                              {day}
-                            </div>
-                          )
-                        )}
-                      </div>
-
-                      {/* Calendar days */}
-                      <div className="grid grid-cols-7 gap-0 border rounded-lg overflow-hidden">
-                        {getMonthCalendar.map((day, index) => {
-                          const isSelected = isDaySelected(
-                            day.date,
-                            currentMonth.getMonth(),
-                            currentMonth.getFullYear()
-                          );
-                          const daySchedules = day.isCurrentMonth
-                            ? getSchedulesForDay(
-                                day.date,
-                                currentMonth.getMonth(),
-                                currentMonth.getFullYear()
-                              )
-                            : [];
-
-                          const selectedColor = getSelectedDepartmentColor();
-
-                          return (
-                            <Tooltip key={index}>
-                              <TooltipTrigger asChild>
-                                <div
-                                  className={`min-h-[80px] p-2 border-r border-b cursor-pointer transition-all relative
-                                    ${
-                                      !day.isCurrentMonth
-                                        ? "bg-slate-50 text-slate-400"
-                                        : isSelected
-                                        ? `${selectedColor.light} ${selectedColor.border} border-2 shadow-lg` // Dùng màu phòng ban
-                                        : daySchedules.length > 0
-                                        ? "bg-green-50"
-                                        : "hover:bg-blue-50 hover:border-blue-200"
-                                    }`}
-                                  onClick={() =>
-                                    handleDayClick(day.date, day.isCurrentMonth)
-                                  }
-                                >
-                                  {/* Số ngày với highlight theo phòng ban */}
-                                  <div
-                                    className={`font-medium text-sm mb-1 
-                                      ${
-                                        day.date === new Date().getDate() &&
-                                        currentMonth.getMonth() ===
-                                          new Date().getMonth() &&
-                                        currentMonth.getFullYear() ===
-                                          new Date().getFullYear() &&
-                                        day.isCurrentMonth
-                                          ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center"
-                                          : isSelected
-                                          ? `${selectedColor.text} font-bold` // Dùng màu text phòng ban
-                                          : ""
-                                      }`}
-                                  >
-                                    {day.date}
-                                  </div>
-
-                                  {/* Hiển thị schedules */}
-                                  <div className="space-y-1">
-                                    {daySchedules
-                                      .slice(0, 2)
-                                      .map((schedule) => {
-                                        const color = getDepartmentColor(
-                                          schedule.department!.id
-                                        );
-                                        return (
-                                          <div
-                                            key={schedule.id}
-                                            className={`text-xs p-1 rounded truncate ${color.light} ${color.text}`}
-                                          >
-                                            {schedule.name}
-                                          </div>
-                                        );
-                                      })}
-
-                                    {daySchedules.length > 2 && (
-                                      <div className="text-xs text-slate-500">
-                                        +{daySchedules.length - 2} khác
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Icon check với màu phòng ban */}
-                                  {isSelected && (
-                                    <div className="absolute top-1 right-1 bg-white rounded-full">
-                                      <CheckCircle
-                                        className={`w-5 h-5 ${selectedColor.text} border-2 border-white rounded-full`}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="text-sm">
-                                  <p className="font-medium">
-                                    Ngày {day.date}/
-                                    {currentMonth.getMonth() + 1}/
-                                    {currentMonth.getFullYear()}
-                                  </p>
-                                  {daySchedules.length > 0 ? (
-                                    <div className="mt-1 max-w-xs">
-                                      {daySchedules.map((schedule) => (
-                                        <p
-                                          key={schedule.id}
-                                          className="text-slate-600 mb-1"
-                                        >
-                                          <span className="font-medium">
-                                            {schedule.name}
-                                          </span>
-                                          <br />
-                                          <span className="text-xs">
-                                            ({schedule.department?.name})
-                                          </span>
-                                          {schedule.description && (
-                                            <>
-                                              <br />
-                                              <span className="text-xs text-slate-500">
-                                                {schedule.description}
-                                              </span>
-                                            </>
-                                          )}
-                                        </p>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-slate-500">
-                                      Click để chọn ngày
-                                    </p>
-                                  )}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Sidebar - Schedule List & Actions */}
-            <div className="xl:col-span-1">
-              <div className="space-y-4">
-                {/* Selection Summary & Save */}
-                {(selectedDays.length > 0 || selectedTimeSlots.length > 0) && (
-                  <Card>
+          {/* Sidebar */}
+          <div className="xl:col-span-1">
+            <div className="space-y-4">
+              {/* Selection Summary */}
+              {departmentSelections.size > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                >
+                  <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Target className="w-5 h-5 text-green-600" />
-                        Đã chọn
+                        Lịch đã chọn
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {selectedDays.length > 0 && (
-                        <div>
-                          <p className="text-sm font-medium text-slate-700 mb-2">
-                            {selectedDays.length} ngày đã chọn
-                          </p>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {selectedDays.map((day, index) => (
-                              <div
-                                key={index}
-                                className="text-xs bg-blue-50 rounded p-2"
-                              >
-                                {day.date}/{day.month + 1}/{day.year}
-                                <div className="text-slate-600 mt-1">
-                                  {day.department_ids
-                                    .map(
-                                      (id) =>
-                                        departments.find((d) => d.id === id)
-                                          ?.name
-                                    )
-                                    .join(", ")}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <div className="max-h-40 overflow-y-auto space-y-2">
+                        {Array.from(departmentSelections.entries()).map(
+                          ([deptId, selections]) => {
+                            if (
+                              selections.days.length === 0 &&
+                              selections.timeSlots.length === 0
+                            )
+                              return null;
 
-                      {(selectedDays.length > 0 ||
-                        selectedTimeSlots.length > 0) &&
-                        selectedDepartment && (
-                          <Badge
-                            variant="default"
-                            className={`${
-                              getSelectedDepartmentColor().bg
-                            } text-white`}
-                          >
-                            {activeView === "week"
-                              ? `${selectedTimeSlots.length} khung giờ`
-                              : `${selectedDays.length} ngày`}{" "}
-                            đã chọn
-                            <span className="ml-1">
-                              •{" "}
-                              {
-                                departments.find(
-                                  (d) => d.id === selectedDepartment
-                                )?.name
-                              }
-                            </span>
-                          </Badge>
+                            const dept = departments.find(
+                              (d) => d.id === deptId
+                            );
+                            const color = getDepartmentColor(deptId);
+
+                            return (
+                              <div
+                                key={deptId}
+                                className={`p-3 rounded-lg ${color.light} ${color.border} border shadow-sm`}
+                              >
+                                <div
+                                  className={`font-medium text-sm ${color.text} mb-2`}
+                                >
+                                  {dept?.name}
+                                </div>
+
+                                {selections.days.length > 0 && (
+                                  <div className="mb-2">
+                                    <p className="text-xs font-medium text-slate-700 mb-1">
+                                      {selections.days.length} ngày:
+                                    </p>
+                                    <div className="text-xs text-slate-600">
+                                      {selections.days
+                                        .slice(0, 3)
+                                        .map((day, idx) => (
+                                          <span key={idx}>
+                                            {day.date}/{day.month + 1}
+                                            {idx <
+                                            Math.min(
+                                              2,
+                                              selections.days.length - 1
+                                            )
+                                              ? ", "
+                                              : ""}
+                                          </span>
+                                        ))}
+                                      {selections.days.length > 3 && " ..."}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {selections.timeSlots.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-slate-700 mb-1">
+                                      {selections.timeSlots.length} khung giờ:
+                                    </p>
+                                    <div className="text-xs text-slate-600">
+                                      {selections.timeSlots
+                                        .slice(0, 2)
+                                        .map((slot, idx) => (
+                                          <div key={idx}>
+                                            {weekDays[slot.day_of_week! - 1]}{" "}
+                                            {slot.start_time}
+                                          </div>
+                                        ))}
+                                      {selections.timeSlots.length > 2 && (
+                                        <div>
+                                          +{selections.timeSlots.length - 2}{" "}
+                                          khác
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
                         )}
+                      </div>
 
                       <Button
                         onClick={() => setIsCreateDialogOpen(true)}
-                        className="w-full"
-                        disabled={selectedDepartment === null}
+                        className="w-full bg-green-600 hover:bg-green-700 shadow-md"
+                        disabled={departmentSelections.size === 0}
                       >
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
-                          Lưu lịch
+                          Lưu lịch ({departmentSelections.size} phòng ban)
                         </span>
                       </Button>
 
                       <Button
                         onClick={() => {
-                          setSelectedDays([]);
-                          setSelectedTimeSlots([]);
+                          setDepartmentSelections(new Map());
                           setSelectedDepartment(null);
                         }}
                         variant="outline"
-                        className="w-full"
+                        className="w-full hover:bg-red-50 hover:border-red-200"
                       >
                         <span className="flex items-center gap-2">
                           <X className="w-4 h-4" />
-                          Xóa chọn
+                          Xóa tất cả
                         </span>
                       </Button>
                     </CardContent>
                   </Card>
-                )}
+                </motion.div>
+              )}
 
-                {/* Schedule List */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center justify-between">
-                      <span className="flex items-center gap-2">
-                        <Calendar className="w-5 h-5" />
-                        Lịch hoạt động
-                      </span>
-                      <Badge variant="outline">
-                        {filteredSchedules.length}
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
+              {/* Schedule List */}
+              <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-blue-600" />
+                      Lịch hoạt động
+                    </span>
+                    <Badge variant="outline" className="bg-blue-50">
+                      {filteredSchedules.length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
 
-                  <CardContent className="p-0">
-                    <ScrollArea className="h-[500px]">
-                      <div className="space-y-2 p-4">
-                        {isLoadingSchedules ? (
-                          <div className="text-center py-8">
-                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                            <p className="text-sm text-slate-500">
-                              Đang tải...
-                            </p>
-                          </div>
-                        ) : filteredSchedules.length === 0 ? (
-                          <div className="text-center py-8 text-slate-500">
-                            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                            <p>Không có lịch hoạt động</p>
-                          </div>
-                        ) : (
-                          filteredSchedules.map((schedule) => {
-                            const color = getDepartmentColor(
-                              schedule.department!.id
-                            );
-                            return (
-                              <Tooltip key={schedule.id}>
-                                <TooltipTrigger asChild>
-                                  <Card
-                                    className={`cursor-pointer transition-all hover:shadow-md ${
-                                      schedule.status !== ScheduleStatus.ACTIVE
-                                        ? "opacity-60"
-                                        : ""
-                                    }`}
-                                  >
-                                    <CardContent className="p-3">
-                                      <div className="flex items-start justify-between mb-2">
-                                        <div className="flex-1">
-                                          <h4 className="font-medium text-sm truncate">
-                                            {schedule.name}
-                                          </h4>
-                                          <div className="flex items-center gap-2 mt-1">
-                                            <div
-                                              className={`w-2 h-2 rounded-full ${color.bg}`}
-                                            />
-                                            <span className="text-xs text-slate-500 truncate">
-                                              {schedule.department?.name}
-                                            </span>
-                                          </div>
-                                        </div>
-
-                                        <Badge
-                                          variant={
-                                            schedule.status ===
-                                            ScheduleStatus.ACTIVE
-                                              ? "default"
-                                              : schedule.status ===
-                                                ScheduleStatus.EXPIRED
-                                              ? "destructive"
-                                              : "secondary"
-                                          }
-                                          className="text-xs"
-                                        >
-                                          {schedule.status ===
-                                          ScheduleStatus.ACTIVE
-                                            ? "Hoạt động"
-                                            : schedule.status ===
-                                              ScheduleStatus.EXPIRED
-                                            ? "Hết hạn"
-                                            : "Tạm dừng"}
-                                        </Badge>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[500px]">
+                    <div className="space-y-2 p-4">
+                      {isLoadingSchedules ? (
+                        <div className="text-center py-8">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                          >
+                            <Loader2 className="w-6 h-6 text-blue-600 mx-auto mb-2" />
+                          </motion.div>
+                          <p className="text-sm text-slate-500">Đang tải...</p>
+                        </div>
+                      ) : (
+                        filteredSchedules.map((schedule) => {
+                          const color = getDepartmentColor(
+                            schedule.department!.id
+                          );
+                          return (
+                            <motion.div
+                              key={schedule.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              whileHover={{ scale: 1.02 }}
+                            >
+                              <Card
+                                className={`cursor-pointer transition-all hover:shadow-md border-l-4 ${
+                                  color.border
+                                } ${
+                                  schedule.status !== ScheduleStatus.ACTIVE
+                                    ? "opacity-60"
+                                    : ""
+                                }`}
+                              >
+                                <CardContent className="p-3">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-medium text-sm truncate mb-1">
+                                        {schedule.name}
+                                      </h4>
+                                      <div className="flex items-center gap-2">
+                                        <div
+                                          className={`w-2 h-2 rounded-full ${color.bg}`}
+                                        />
+                                        <span className="text-xs text-slate-500 truncate">
+                                          {schedule.department?.name}
+                                        </span>
                                       </div>
+                                    </div>
 
-                                      <div className="flex items-center gap-4 text-xs text-slate-500">
+                                    <Badge
+                                      variant={
+                                        schedule.status ===
+                                        ScheduleStatus.ACTIVE
+                                          ? "default"
+                                          : schedule.status ===
+                                            ScheduleStatus.EXPIRED
+                                          ? "destructive"
+                                          : "secondary"
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {schedule.status === ScheduleStatus.ACTIVE
+                                        ? "Hoạt động"
+                                        : schedule.status ===
+                                          ScheduleStatus.EXPIRED
+                                        ? "Hết hạn"
+                                        : "Tạm dừng"}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
+                                    <span className="flex items-center gap-1">
+                                      {schedule.schedule_type ===
+                                      ScheduleType.HOURLY_SLOTS ? (
                                         <span className="flex items-center gap-1">
-                                          {schedule.schedule_type ===
-                                          ScheduleType.HOURLY_SLOTS ? (
-                                            <>
-                                              <Clock className="w-3 h-3" />
-                                              {
-                                                (
-                                                  schedule.schedule_config as HourlySlotsConfig
-                                                ).slots.length
-                                              }{" "}
-                                              khung giờ
-                                            </>
-                                          ) : (
-                                            <>
-                                              <Calendar className="w-3 h-3" />
-                                              {
-                                                (
-                                                  schedule.schedule_config as DailyDatesConfig
-                                                ).dates.length
-                                              }{" "}
-                                              ngày
-                                            </>
-                                          )}
+                                          <Clock className="w-3 h-3" />
+                                          {
+                                            (
+                                              schedule.schedule_config as HourlySlotsConfig
+                                            ).slots.length
+                                          }{" "}
+                                          khung giờ
                                         </span>
-                                      </div>
-
-                                      {schedule.description && (
-                                        <p className="text-xs text-slate-600 mt-2 line-clamp-2">
-                                          {schedule.description}
-                                        </p>
+                                      ) : (
+                                        <span className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3" />
+                                          {
+                                            (
+                                              schedule.schedule_config as DailyDatesConfig
+                                            ).dates.length
+                                          }{" "}
+                                          ngày
+                                        </span>
                                       )}
+                                    </span>
+                                  </div>
 
-                                      <div className="flex items-center justify-between mt-3">
-                                        <span className="text-xs text-slate-400">
-                                          {new Date(
-                                            schedule.created_at
-                                          ).toLocaleDateString("vi-VN")}
-                                        </span>
+                                  {schedule.description && (
+                                    <p className="text-xs text-slate-600 mb-2 line-clamp-2">
+                                      {schedule.description}
+                                    </p>
+                                  )}
 
-                                        <div className="flex items-center gap-1">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 w-6 p-0"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setEditingSchedule(schedule);
-                                              // Load data for editing
-                                              if (
-                                                schedule.schedule_type ===
-                                                ScheduleType.DAILY_DATES
-                                              ) {
-                                                const config =
-                                                  schedule.schedule_config as DailyDatesConfig;
-                                                setSelectedDays(
-                                                  config.dates.map((date) => ({
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-400">
+                                      {new Date(
+                                        schedule.created_at
+                                      ).toLocaleDateString("vi-VN")}
+                                    </span>
+
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-blue-100"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingSchedule(schedule);
+
+                                          // Load data for editing
+                                          if (
+                                            schedule.schedule_type ===
+                                            ScheduleType.DAILY_DATES
+                                          ) {
+                                            const config =
+                                              schedule.schedule_config as DailyDatesConfig;
+                                            const newSelections = new Map();
+                                            newSelections.set(
+                                              schedule.department!.id,
+                                              {
+                                                days: config.dates.map(
+                                                  (date) => ({
                                                     date: date.day_of_month,
                                                     month: date.month
                                                       ? date.month - 1
@@ -1522,149 +1877,108 @@ export default function ModernScheduleApp() {
                                                     year:
                                                       date.year ||
                                                       currentMonth.getFullYear(),
-                                                    department_ids: [
+                                                    department_id:
                                                       schedule.department!.id,
-                                                    ],
-                                                  }))
-                                                );
-                                                setSelectedTimeSlots([]);
-                                              } else {
-                                                const config =
-                                                  schedule.schedule_config as HourlySlotsConfig;
-                                                setSelectedTimeSlots(
-                                                  config.slots.map((slot) => ({
+                                                  })
+                                                ),
+                                                timeSlots: [],
+                                              }
+                                            );
+                                            setDepartmentSelections(
+                                              newSelections
+                                            );
+                                          } else {
+                                            const config =
+                                              schedule.schedule_config as HourlySlotsConfig;
+                                            const newSelections = new Map();
+                                            newSelections.set(
+                                              schedule.department!.id,
+                                              {
+                                                days: [],
+                                                timeSlots: config.slots.map(
+                                                  (slot) => ({
                                                     day_of_week:
                                                       slot.day_of_week,
                                                     start_time: slot.start_time,
                                                     end_time: slot.end_time,
-                                                    department_ids: [
+                                                    department_id:
                                                       schedule.department!.id,
-                                                    ],
-                                                  }))
-                                                );
-                                                setSelectedDays([]);
+                                                  })
+                                                ),
                                               }
-                                              setSelectedDepartment(
-                                                schedule.department!.id,
+                                            );
+                                            setDepartmentSelections(
+                                              newSelections
+                                            );
+                                          }
+
+                                          setSelectedDepartment(
+                                            schedule.department!.id
+                                          );
+                                          setFormData({
+                                            name: schedule.name,
+                                            description:
+                                              schedule.description || "",
+                                            start_time: "",
+                                            end_time: "",
+                                          });
+                                          setIsCreateDialogOpen(true);
+                                        }}
+                                      >
+                                        <Edit className="w-3 h-3 text-blue-600" />
+                                      </Button>
+
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          if (
+                                            window.confirm(
+                                              "Bạn có chắc chắn muốn xóa lịch này?"
+                                            )
+                                          ) {
+                                            try {
+                                              await ScheduleService.remove(
+                                                schedule.id
                                               );
-                                              setFormData({
-                                                name: schedule.name,
-                                                description:
-                                                  schedule.description || "",
-                                                start_time: "",
-                                                end_time: "",
-                                              });
-                                              setIsCreateDialogOpen(true);
-                                            }}
-                                          >
-                                            <Edit className="w-3 h-3" />
-                                          </Button>
-
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                                            onClick={async (e) => {
-                                              e.stopPropagation();
-                                              if (
-                                                confirm(
-                                                  "Bạn có chắc chắn muốn xóa lịch này?"
-                                                )
-                                              ) {
-                                                try {
-                                                  await ScheduleService.remove(
-                                                    schedule.id
-                                                  );
-                                                  toast.success(
-                                                    "Xóa lịch thành công"
-                                                  );
-                                                  const data =
-                                                    await ScheduleService.findAll();
-                                                  setSchedules(data.data);
-                                                } catch (error) {
-                                                  toast.error(
-                                                    "Không thể xóa lịch"
-                                                  );
-                                                }
-                                              }
-                                            }}
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="left"
-                                  className="max-w-xs bg-pink-500 text-white border-none shadow-lg"
-                                >
-                                  <div className="text-sm">
-                                    <p className="font-semibold mb-1">
-                                      {schedule.name}
-                                    </p>
-                                    <p className="mb-1">
-                                      {schedule.department?.name}
-                                    </p>
-                                    {schedule.description && (
-                                      <p className="mb-2 opacity-90">
-                                        {schedule.description}
-                                      </p>
-                                    )}
-
-                                    <div className="space-y-1">
-                                      <p className="font-semibold">Chi tiết:</p>
-                                      {schedule.schedule_type ===
-                                      ScheduleType.HOURLY_SLOTS ? (
-                                        <div>
-                                          {(
-                                            schedule.schedule_config as HourlySlotsConfig
-                                          ).slots.map((slot, i) => (
-                                            <p key={i} className="text-xs">
-                                              {slot.day_of_week
-                                                ? weekDays[slot.day_of_week - 1]
-                                                : "Mọi ngày"}
-                                              : {slot.start_time} -{" "}
-                                              {slot.end_time}
-                                            </p>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <div>
-                                          {(
-                                            schedule.schedule_config as DailyDatesConfig
-                                          ).dates.map((date, i) => (
-                                            <p key={i} className="text-xs">
-                                              {date.day_of_month}/
-                                              {date.month || "mọi tháng"}/
-                                              {date.year || "mọi năm"}
-                                            </p>
-                                          ))}
-                                        </div>
-                                      )}
+                                              toast.success(
+                                                "Xóa lịch thành công"
+                                              );
+                                              const data =
+                                                await ScheduleService.findAll();
+                                              setSchedules(data.data);
+                                            } catch (error) {
+                                              toast.error("Không thể xóa lịch");
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
                                     </div>
                                   </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
-              </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
 
-        {/* Create Schedule Dialog */}
+        {/* Create/Edit Schedule Dialog */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Plus className="w-5 h-5" />
+                <Plus className="w-5 h-5 text-blue-600" />
                 {editingSchedule
                   ? "Chỉnh sửa lịch hoạt động"
                   : "Tạo lịch hoạt động mới"}
@@ -1678,7 +1992,7 @@ export default function ModernScheduleApp() {
                   <Input
                     id="name"
                     value={formData.name}
-                    className="mt-2"
+                    className="mt-2 border-slate-200 focus:border-blue-400"
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, name: e.target.value }))
                     }
@@ -1687,12 +2001,10 @@ export default function ModernScheduleApp() {
                 </div>
 
                 <div>
-                  <Label>Loại lịch</Label>
+                  <Label>Phạm vi tạo lịch</Label>
                   <div className="mt-2">
-                    <Badge variant="outline">
-                      {selectedDays.length > 0
-                        ? "Lịch theo ngày"
-                        : "Lịch theo khung giờ"}
+                    <Badge variant="outline" className="bg-blue-50">
+                      {departmentSelections.size} phòng ban
                     </Badge>
                   </div>
                 </div>
@@ -1703,7 +2015,7 @@ export default function ModernScheduleApp() {
                 <Textarea
                   id="description"
                   value={formData.description}
-                  className="mt-2"
+                  className="mt-2 border-slate-200 focus:border-blue-400"
                   onChange={(e) =>
                     setFormData((prev) => ({
                       ...prev,
@@ -1715,60 +2027,80 @@ export default function ModernScheduleApp() {
                 />
               </div>
 
+              {/* Schedule Details */}
               <div>
-                <Label>Phòng ban được chọn</Label>
-                <div className="mt-2">
-                  {selectedDepartment ? (
-                    <Badge
-                      className={`${getSelectedDepartmentColor().light} ${
-                        getSelectedDepartmentColor().text
-                      }`}
-                    >
-                      {
-                        departments.find((d) => d.id === selectedDepartment)
-                          ?.name
-                      }
-                    </Badge>
-                  ) : (
-                    <p className="text-sm text-slate-500">
-                      Chưa chọn phòng ban
-                    </p>
+                <Label>Chi tiết lịch theo phòng ban</Label>
+                <div className="mt-2 max-h-60 overflow-y-auto space-y-3">
+                  {Array.from(departmentSelections.entries()).map(
+                    ([deptId, selections]) => {
+                      if (
+                        selections.days.length === 0 &&
+                        selections.timeSlots.length === 0
+                      )
+                        return null;
+
+                      const dept = departments.find((d) => d.id === deptId);
+                      const color = getDepartmentColor(deptId);
+
+                      return (
+                        <div
+                          key={deptId}
+                          className={`p-3 border rounded-lg ${color.light} ${color.border} shadow-sm`}
+                        >
+                          <div
+                            className={`font-medium text-sm ${color.text} mb-2 flex items-center gap-2`}
+                          >
+                            <div
+                              className={`w-3 h-3 rounded-full ${color.bg}`}
+                            />
+                            {dept?.name}
+                          </div>
+
+                          {selections.days.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs font-medium text-slate-700 mb-1">
+                                📅 {selections.days.length} ngày được chọn:
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {selections.days.map((day, idx) => (
+                                  <Badge
+                                    key={idx}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {day.date}/{day.month + 1}/{day.year}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {selections.timeSlots.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-700 mb-1">
+                                🕐 {selections.timeSlots.length} khung giờ được
+                                chọn:
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {selections.timeSlots.map((slot, idx) => (
+                                  <Badge
+                                    key={idx}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {weekDays[slot.day_of_week! - 1]}{" "}
+                                    {slot.start_time}-{slot.end_time}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
                   )}
                 </div>
               </div>
-
-              {selectedDays.length > 0 && (
-                <div>
-                  <Label>Ngày đã chọn ({selectedDays.length})</Label>
-                  <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
-                    {selectedDays.map((day, index) => (
-                      <div
-                        key={index}
-                        className="text-sm bg-blue-50 rounded p-2"
-                      >
-                        📅 {day.date}/{day.month + 1}/{day.year}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedTimeSlots.length > 0 && (
-                <div>
-                  <Label>Khung giờ đã chọn ({selectedTimeSlots.length})</Label>
-                  <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
-                    {selectedTimeSlots.map((slot, index) => (
-                      <div
-                        key={index}
-                        className="text-sm bg-green-50 rounded p-2"
-                      >
-                        🕐 {weekDays[slot.day_of_week! - 1]} {slot.start_time} -{" "}
-                        {slot.end_time}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className="flex items-center justify-between pt-4 border-t">
                 <Button
@@ -1783,6 +2115,7 @@ export default function ModernScheduleApp() {
                       end_time: "",
                     });
                   }}
+                  className="hover:bg-slate-50"
                 >
                   Hủy
                 </Button>
@@ -1792,10 +2125,9 @@ export default function ModernScheduleApp() {
                   disabled={
                     isSavingSchedule ||
                     !formData.name ||
-                    selectedDepartment === null ||
-                    (selectedDays.length === 0 &&
-                      selectedTimeSlots.length === 0)
+                    departmentSelections.size === 0
                   }
+                  className="bg-blue-600 hover:bg-blue-700 shadow-md"
                 >
                   {isSavingSchedule ? (
                     <span className="flex items-center gap-2">
@@ -1805,7 +2137,9 @@ export default function ModernScheduleApp() {
                   ) : (
                     <span className="flex items-center gap-2">
                       <Save className="w-4 h-4" />
-                      {editingSchedule ? "Cập nhật" : "Tạo lịch"}
+                      {editingSchedule
+                        ? "Cập nhật"
+                        : `Tạo lịch (${departmentSelections.size} phòng ban)`}
                     </span>
                   )}
                 </Button>
@@ -1819,7 +2153,7 @@ export default function ModernScheduleApp() {
           open={isConflictDialogOpen}
           onOpenChange={setIsConflictDialogOpen}
         >
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-orange-600">
                 <AlertTriangle className="w-5 h-5" />
@@ -1830,19 +2164,22 @@ export default function ModernScheduleApp() {
             {conflictInfo && (
               <div className="space-y-4">
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <p className="text-sm text-orange-800">
+                  <p className="text-sm text-orange-800 mb-3">
                     Lịch hoạt động bạn đang tạo có xung đột với{" "}
-                    {conflictInfo.conflicting_schedules.length} lịch khác:
+                    <span className="font-bold">
+                      {conflictInfo.conflicting_schedules.length}
+                    </span>{" "}
+                    lịch khác:
                   </p>
 
-                  <div className="mt-3 space-y-2">
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
                     {conflictInfo.conflicting_schedules.map((schedule) => (
                       <div
                         key={schedule.id}
-                        className="text-sm bg-white rounded p-2 border border-orange-200"
+                        className="text-sm bg-white rounded p-2 border border-orange-200 shadow-sm"
                       >
                         <p className="font-medium">{schedule.name}</p>
-                        <p className="text-slate-600">
+                        <p className="text-slate-600 text-xs">
                           {schedule.department?.name}
                         </p>
                       </div>
@@ -1850,10 +2187,11 @@ export default function ModernScheduleApp() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <Button
                     variant="outline"
                     onClick={() => setIsConflictDialogOpen(false)}
+                    className="flex-1"
                   >
                     Quay lại chỉnh sửa
                   </Button>
@@ -1863,7 +2201,7 @@ export default function ModernScheduleApp() {
                       setIsConflictDialogOpen(false);
                       await saveScheduleWithoutConflictCheck();
                     }}
-                    className="bg-orange-600 hover:bg-orange-700"
+                    className="flex-1 bg-orange-600 hover:bg-orange-700"
                   >
                     Vẫn tạo lịch
                   </Button>
@@ -1873,6 +2211,6 @@ export default function ModernScheduleApp() {
           </DialogContent>
         </Dialog>
       </div>
-    </TooltipProvider>
+    </div>
   );
 }
