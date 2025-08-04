@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusIcon, RefreshCw } from "lucide-react";
+import { PlusIcon, RefreshCw, Archive } from "lucide-react"; // ✅ THÊM Archive icon
 import {
   Accordion,
   AccordionContent,
@@ -73,12 +73,13 @@ const DEFAULT_STATS: CampaignStats = {
   archivedCampaigns: 0,
 };
 
-// Custom hook for campaign data
+// ✅ CẬP NHẬT: Custom hook for campaign data với parameter isArchived
 const useCampaignData = (
   canRead: boolean,
   currentPage: number,
   filters: CampaignFilters,
-  pageSize: number
+  pageSize: number,
+  isArchived: boolean = false // ✅ THÊM PARAMETER
 ) => {
   const [campaigns, setCampaigns] = useState<CampaignWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,12 +93,19 @@ const useCampaignData = (
     try {
       setLoading(true);
       setError(null);
-
-      const response = await campaignAPI.getAll({
-        ...filters,
-        page: currentPage,
-        pageSize,
-      });
+      
+      // ✅ GỌI API KHÁC TÙY THEO isArchived
+      const response = isArchived 
+        ? await campaignAPI.getAllArchived({
+            ...filters,
+            page: currentPage,
+            pageSize,
+          })
+        : await campaignAPI.getAll({
+            ...filters,
+            page: currentPage,
+            pageSize,
+          });
 
       setCampaigns(response.data || []);
       setTotalCount(response.total || 0);
@@ -115,7 +123,7 @@ const useCampaignData = (
     } finally {
       setLoading(false);
     }
-  }, [canRead, currentPage, filters, pageSize]);
+  }, [canRead, currentPage, filters, pageSize, isArchived]);
 
   useEffect(() => {
     loadCampaigns();
@@ -138,6 +146,7 @@ export default function CampaignPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [currentFilters, setCurrentFilters] = useState<CampaignFilters>({});
+  const [isViewingArchived, setIsViewingArchived] = useState(false); // ✅ THÊM STATE
 
   // Permissions
   const { canAccess } = usePermission();
@@ -151,7 +160,8 @@ export default function CampaignPage() {
     loading: optionsLoading,
     handleDepartmentChange,
   } = useCampaignFilters();
-  // Data fetching
+  
+  // ✅ CẬP NHẬT: Data fetching với isViewingArchived parameter
   const {
     campaigns,
     loading: campaignsLoading,
@@ -159,7 +169,7 @@ export default function CampaignPage() {
     stats,
     error,
     loadCampaigns,
-  } = useCampaignData(canRead, currentPage, currentFilters, pageSize);
+  } = useCampaignData(canRead, currentPage, currentFilters, pageSize, isViewingArchived);
 
   // Memoized calculations
   const statsData = useMemo(
@@ -323,6 +333,14 @@ export default function CampaignPage() {
     setAlert(null);
   }, []);
 
+  // ✅ THÊM MỚI: Handle toggle view archived
+  const handleToggleViewArchived = useCallback(() => {
+    setIsViewingArchived(!isViewingArchived);
+    setCurrentPage(1);
+    setCurrentFilters({});
+    handleDepartmentChange([]);
+  }, [isViewingArchived, handleDepartmentChange]);
+
   // Show error state
   if (error && !campaignsLoading) {
     return (
@@ -357,28 +375,36 @@ export default function CampaignPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  Cấu hình chiến dịch
+                  {/* ✅ THÊM TITLE ĐIỀU KIỆN */}
+                  {isViewingArchived ? "Chiến dịch đã lưu trữ" : "Cấu hình chiến dịch"}
                 </CardTitle>
                 <p className="text-gray-600 mt-1">
-                  Quản lý và theo dõi các chiến dịch marketing
+                  {/* ✅ THÊM DESCRIPTION ĐIỀU KIỆN */}
+                  {isViewingArchived 
+                    ? "Xem và quản lý các chiến dịch đã lưu trữ"
+                    : "Quản lý và theo dõi các chiến dịch marketing"
+                  }
                 </p>
               </div>
 
               <div className="flex gap-2">
-                <PDynamic
-                  permission={{
-                    departmentSlug: "chien-dich",
-                    action: "create",
-                  }}
-                >
-                  <Button
-                    onClick={handleCreateCampaign}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg transition-all duration-200 hover:shadow-xl"
+                {/* ✅ CHỈ HIỂN THỊ NÚT TẠO CHIẾN DỊCH KHI KHÔNG XEM ARCHIVED */}
+                {!isViewingArchived && (
+                  <PDynamic
+                    permission={{
+                      departmentSlug: "chien-dich",
+                      action: "create",
+                    }}
                   >
-                    <PlusIcon className="h-4 w-4 mr-2 inline-block" />
-                    <span className="inline-block">Tạo Chiến Dịch</span>
-                  </Button>
-                </PDynamic>
+                    <Button
+                      onClick={handleCreateCampaign}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg transition-all duration-200 hover:shadow-xl"
+                    >
+                      <PlusIcon className="h-4 w-4 mr-2 inline-block" />
+                      <span className="inline-block">Tạo Chiến Dịch</span>
+                    </Button>
+                  </PDynamic>
+                )}
 
                 <Button
                   onClick={handleRefresh}
@@ -392,6 +418,18 @@ export default function CampaignPage() {
                     } inline-block`}
                   />
                   <span className="inline-block">Làm mới</span>
+                </Button>
+
+                {/* ✅ THÊM NÚT TOGGLE VIEW ARCHIVED */}
+                <Button
+                  variant={isViewingArchived ? "edit" : "add"}
+                  onClick={handleToggleViewArchived}
+                  className="transition-all duration-200"
+                >
+                  <span className="flex items-center gap-2">
+                  <Archive className="h-4 w-4" />
+                  {isViewingArchived ? "Quay lại chiến dịch" : "Xem lưu trữ"}
+                  </span>
                 </Button>
               </div>
             </div>
@@ -426,7 +464,8 @@ export default function CampaignPage() {
                   <span className="text-xl">📈</span>
                 </div>
                 <span className="text-lg font-semibold">
-                  Thống Kê Chiến Dịch
+                  {/* ✅ THÊM TITLE ĐIỀU KIỆN CHO STATS */}
+                  {isViewingArchived ? "Thống Kê Chiến Dịch Lưu Trữ" : "Thống Kê Chiến Dịch"}
                 </span>
               </div>
             </AccordionTrigger>
@@ -457,7 +496,7 @@ export default function CampaignPage() {
               key={`pagination-${currentPage}-${pageSize}`}
               enableSearch={true}
               enableCategoriesFilter={true} // Cho campaign types
-              enableStatusFilter={true}
+              enableStatusFilter={!isViewingArchived} // ✅ KHÔNG HIỂN THỊ STATUS FILTER CHO ARCHIVED
               enableEmployeeFilter={isAdmin || isManager} // Chỉ admin và manager
               enableDepartmentFilter={isAdmin} // Chỉ admin
               enableSingleDateFilter={true}
@@ -514,13 +553,15 @@ export default function CampaignPage() {
         </Card>
       </div>
 
-      {/* Create Campaign Modal */}
-      <CampaignModal
-        open={createModalOpen}
-        onOpenChange={setCreateModalOpen}
-        onSubmit={handleCampaignCreated}
-        mode="create"
-      />
+      {/* Create Campaign Modal - CHỈ HIỂN THỊ KHI KHÔNG XEM ARCHIVED */}
+      {!isViewingArchived && (
+        <CampaignModal
+          open={createModalOpen}
+          onOpenChange={setCreateModalOpen}
+          onSubmit={handleCampaignCreated}
+          mode="create"
+        />
+      )}
     </div>
   );
 }

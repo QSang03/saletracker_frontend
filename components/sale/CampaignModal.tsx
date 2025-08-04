@@ -66,6 +66,11 @@ import {
   X,
   Hash,
   AtSign,
+  Sunrise,
+  Sun,
+  Coffee,
+  UtensilsCrossed,
+  Sunset,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -564,12 +569,16 @@ export default function CampaignModal({
 
   // For edit mode, allow proceeding to tab 2 even if some data is missing
   const canProceedFromTab2 = Boolean(
-    // Validation error luôn được check trước
+    // ✅ Validation error luôn được check trước
     messageValidationError === null &&
-      attachmentValidationError === null && // ✅ Kiểm tra attachment validation
+      attachmentValidationError === null &&
       (mode === "edit" || // Edit mode chỉ skip required field validation
         (messageContent?.trim() &&
-          // Attachment is now required, so we check it implicitly through validation
+          // ✅ KIỂM TRA ATTACHMENT BẮT BUỘC - CHẶT CHẼ HƠN
+          attachmentType && // Phải chọn loại đính kèm
+          attachmentData?.trim() && // Phải có dữ liệu đính kèm
+          !attachmentValidationError && // Không có lỗi validation
+          // Kiểm tra schedule dựa trên loại campaign
           (selectedType === CampaignType.HOURLY_KM ||
           selectedType === CampaignType.DAILY_KM
             ? startTime && endTime
@@ -596,6 +605,55 @@ export default function CampaignModal({
         !needsReminderTab ||
         reminders.every((r) => r.content?.trim() && r.minutes > 0))
   );
+
+  const canProceedFromEmailTab = useMemo(() => {
+    // Nếu không bật email reports, luôn cho phép tiếp tục
+    if (!emailReportsEnabled) {
+      return true;
+    }
+
+    // Nếu đã bật email reports, cần kiểm tra các điều kiện:
+    const hasRecipientTo = recipientsTo.trim();
+    const hasSystemEmails = recipientsCc.length > 0;
+    const hasCustomEmails = customEmails.some((e) => e.trim());
+    const hasAnyEmails = hasRecipientTo || hasSystemEmails || hasCustomEmails;
+
+    // 1. Phải có ít nhất Recipients TO
+    if (!hasRecipientTo) {
+      return false;
+    }
+
+    // 2. Validate email format cho Recipients TO
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientsTo.trim())) {
+      return false;
+    }
+
+    // 3. Validate custom emails format
+    const invalidCustomEmails = customEmails
+      .filter((e) => e.trim())
+      .filter((e) => !emailRegex.test(e.trim()));
+    if (invalidCustomEmails.length > 0) {
+      return false;
+    }
+
+    // 4. Nếu chọn interval mode, cần có report interval hợp lệ
+    if (emailSendMode === "interval") {
+      const intervalNum = parseInt(reportInterval, 10);
+      if (isNaN(intervalNum) || intervalNum < 1 || intervalNum > 1440) {
+        return false;
+      }
+    }
+
+    return true;
+  }, [
+    emailReportsEnabled,
+    recipientsTo,
+    recipientsCc,
+    customEmails,
+    emailSendMode,
+    reportInterval,
+  ]);
 
   // Memoize complex computed values to prevent unnecessary re-renders
   const tabLabels = useMemo(() => {
@@ -630,7 +688,9 @@ export default function CampaignModal({
       stepErrors[2] =
         !canProceedFromTab2 ||
         messageValidationError !== null ||
-        attachmentValidationError !== null;
+        attachmentValidationError !== null ||
+        !attachmentType || // ✅ Thêm kiểm tra
+        !attachmentData?.trim();
     }
 
     // Step 3: Reminders (nếu cần) - chỉ validate khi đã truy cập hoặc đang ở step này
@@ -659,6 +719,9 @@ export default function CampaignModal({
     canProceedFromTab2,
     messageValidationError,
     attachmentValidationError,
+    attachmentType, // ✅ Thêm dependency
+    attachmentData, // ✅ Thêm dependency
+
     canProceedFromTab3,
     reminderValidationErrors,
   ]);
@@ -787,7 +850,11 @@ export default function CampaignModal({
   }, []);
 
   // Simplified alert handlers
-  const handleCloseAlert = useCallback(() => {
+  const handleCloseAlert = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setAlert((current) => {
       // Don't close error/warning alerts automatically
       if (current?.type === "error" || current?.type === "warning") {
@@ -797,7 +864,26 @@ export default function CampaignModal({
     });
   }, []);
 
-  const handleManualCloseAlert = useCallback(() => {
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (
+        !open &&
+        alert &&
+        (alert.type === "error" || alert.type === "warning")
+      ) {
+        // Không đóng modal khi có alert lỗi/cảnh báo
+        return;
+      }
+      onOpenChange(open);
+    },
+    [alert, onOpenChange]
+  );
+
+  const handleManualCloseAlert = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setAlert(null);
   }, []);
 
@@ -1108,6 +1194,13 @@ export default function CampaignModal({
         if (!phoneNumberCol) missingHeaders.push("SỐ ĐIỆN THOẠI");
 
         if (missingHeaders.length > 0) {
+          const safeHeaders = foundHeaders.filter(
+            (h) =>
+              h &&
+              h !== "[OBJECT OBJECT]" &&
+              !h.includes("[object") &&
+              h.length > 0
+          );
           setAlertSafe({
             type: "error",
             message: `❌ Sai định dạng header! Thiếu cột: ${missingHeaders.join(
@@ -1115,7 +1208,11 @@ export default function CampaignModal({
             )}
 
             📋 File: ${file.name}
-            🔍 Header hiện tại: ${foundHeaders.join(", ")}
+            ${
+              safeHeaders.length > 0
+                ? `🔍 Header hiện tại: ${safeHeaders.join(", ")}`
+                : "🔍 Không đọc được header"
+            }
 
             ✅ Header cần có:
             • TÊN KHÁCH HÀNG (bắt buộc)
@@ -1131,6 +1228,7 @@ export default function CampaignModal({
           return;
         }
 
+        // Read data with progress tracking
         // Read data with progress tracking
         let validCustomers = 0;
         let invalidRows: string[] = [];
@@ -1149,17 +1247,29 @@ export default function CampaignModal({
             ? row.getCell(salutationCol).value?.toString().trim() || ""
             : "";
 
-          // ✅ VALIDATION DỮ LIỆU CHI TIẾT HƠN
+          // ✅ VALIDATION DỮ LIỆU CHI TIẾT VÀ CHẶT CHẼ HƠN
           const validationErrors = [];
-          if (!fullName) validationErrors.push("Tên");
-          if (!phoneNumber) validationErrors.push("SĐT");
 
-          // Validate phone number format (basic)
-          if (
-            phoneNumber &&
-            !/^[0-9+\-\s()]{8,15}$/.test(phoneNumber.replace(/\s/g, ""))
-          ) {
-            validationErrors.push("SĐT không hợp lệ");
+          // Kiểm tra tên khách hàng (bắt buộc và không được chỉ là khoảng trắng)
+          if (!fullName || fullName.length === 0) {
+            validationErrors.push("Tên khách hàng trống");
+          } else if (fullName.length < 2) {
+            validationErrors.push("Tên khách hàng quá ngắn");
+          }
+
+          // Kiểm tra số điện thoại (bắt buộc và phải hợp lệ)
+          if (!phoneNumber || phoneNumber.length === 0) {
+            validationErrors.push("Số điện thoại trống");
+          } else {
+            // Validate phone number format (nâng cấp)
+            const cleanPhone = phoneNumber.replace(/\s/g, "");
+            if (!/^[0-9+\-\s()]{8,15}$/.test(cleanPhone)) {
+              validationErrors.push("SĐT không hợp lệ");
+            } else if (cleanPhone.length < 8) {
+              validationErrors.push("SĐT quá ngắn");
+            } else if (cleanPhone.length > 15) {
+              validationErrors.push("SĐT quá dài");
+            }
           }
 
           if (validationErrors.length === 0) {
@@ -1310,20 +1420,23 @@ export default function CampaignModal({
       errors.push(`📝 Nội dung tin nhắn: ${messageValidationError}`);
     }
 
-    // ✅ Kiểm tra attachment (bắt buộc)
+    // ✅ KIỂM TRA ATTACHMENT CHẶT CHẼ HƠN
     if (!attachmentType) {
       errors.push(
-        "📎 Chưa chọn loại đính kèm (Hình ảnh, Liên kết hoặc Tệp tin)"
+        "📎 Bắt buộc chọn loại đính kèm (Hình ảnh, Liên kết hoặc Tệp tin)"
       );
-    } else if (!attachmentData?.trim()) {
-      const typeNames = {
-        image: "hình ảnh",
-        link: "liên kết",
-        file: "tệp tin",
-      };
-      errors.push(`📎 Chưa tải lên ${typeNames[attachmentType]}`);
-    } else if (attachmentValidationError) {
-      errors.push(`📎 Đính kèm: ${attachmentValidationError}`);
+    } else {
+      // Đã chọn loại, kiểm tra dữ liệu
+      if (!attachmentData?.trim()) {
+        const typeNames = {
+          image: "hình ảnh",
+          link: "liên kết",
+          file: "tệp tin",
+        };
+        errors.push(`📎 Chưa tải lên ${typeNames[attachmentType]}`);
+      } else if (attachmentValidationError) {
+        errors.push(`📎 Đính kèm: ${attachmentValidationError}`);
+      }
     }
 
     // Kiểm tra schedule dựa trên loại campaign
@@ -1333,6 +1446,60 @@ export default function CampaignModal({
     ) {
       if (!startTime) errors.push("🕐 Giờ bắt đầu gửi chưa được chọn");
       if (!endTime) errors.push("🕐 Giờ kết thúc gửi chưa được chọn");
+
+      // ✅ ENHANCED VALIDATION: Multiple time validation checks
+      if (startTime && endTime) {
+        const timeToMinutes = (timeStr: string): number => {
+          const [hours, minutes] = timeStr.split(":").map(Number);
+          return hours * 60 + minutes;
+        };
+
+        const startMinutes = timeToMinutes(startTime);
+        const endMinutes = timeToMinutes(endTime);
+
+        // Check if end time is after start time
+        if (endMinutes <= startMinutes) {
+          errors.push(
+            `🕐 Giờ kết thúc (${endTime}) phải lớn hơn giờ bắt đầu (${startTime})`
+          );
+        } else {
+          // Check minimum gap (30 minutes)
+          const minGap = 30;
+          if (endMinutes - startMinutes < minGap) {
+            errors.push(
+              `🕐 Khoảng cách tối thiểu giữa giờ bắt đầu và kết thúc là ${minGap} phút`
+            );
+          }
+        }
+
+        // ✅ Additional business logic validation
+        const workingHoursStart = timeToMinutes("08:00");
+        const workingHoursEnd = timeToMinutes("17:45");
+
+        if (
+          startMinutes < workingHoursStart ||
+          startMinutes > workingHoursEnd
+        ) {
+          errors.push(
+            "🕐 Giờ bắt đầu phải trong khung thời gian làm việc (08:00 - 17:45)"
+          );
+        }
+
+        if (endMinutes < workingHoursStart || endMinutes > workingHoursEnd) {
+          errors.push(
+            "🕐 Giờ kết thúc phải trong khung thời gian làm việc (08:00 - 17:45)"
+          );
+        }
+
+        // ✅ Check for realistic campaign duration
+        const durationMinutes = endMinutes - startMinutes;
+        if (durationMinutes > 480) {
+          // 8 hours
+          errors.push(
+            "⚠️ Thời gian chiến dịch quá dài (tối đa 8 giờ). Vui lòng chia nhỏ chiến dịch."
+          );
+        }
+      }
     } else if (selectedType === CampaignType.THREE_DAY_KM) {
       if (
         Array.isArray(selectedDays) ? selectedDays.length === 0 : !selectedDays
@@ -1340,12 +1507,48 @@ export default function CampaignModal({
         errors.push("📅 Chưa chọn 3 ngày liền kề để gửi");
       }
       if (!timeOfDay) errors.push("🕐 Thời gian gửi trong ngày chưa được chọn");
+
+      // ✅ Validate time of day is within working hours
+      if (timeOfDay) {
+        const timeToMinutes = (timeStr: string): number => {
+          const [hours, minutes] = timeStr.split(":").map(Number);
+          return hours * 60 + minutes;
+        };
+
+        const timeMinutes = timeToMinutes(timeOfDay);
+        const workingStart = timeToMinutes("08:00");
+        const workingEnd = timeToMinutes("17:45");
+
+        if (timeMinutes < workingStart || timeMinutes > workingEnd) {
+          errors.push(
+            "🕐 Thời gian gửi phải trong khung làm việc (08:00 - 17:45)"
+          );
+        }
+      }
     } else if (
       selectedType === CampaignType.WEEKLY_SP ||
       selectedType === CampaignType.WEEKLY_BBG
     ) {
       if (!selectedDays) errors.push("📅 Chưa chọn ngày trong tuần để gửi");
       if (!timeOfDay) errors.push("🕐 Thời gian gửi trong ngày chưa được chọn");
+
+      // ✅ Validate time of day is within working hours
+      if (timeOfDay) {
+        const timeToMinutes = (timeStr: string): number => {
+          const [hours, minutes] = timeStr.split(":").map(Number);
+          return hours * 60 + minutes;
+        };
+
+        const timeMinutes = timeToMinutes(timeOfDay);
+        const workingStart = timeToMinutes("08:00");
+        const workingEnd = timeToMinutes("17:45");
+
+        if (timeMinutes < workingStart || timeMinutes > workingEnd) {
+          errors.push(
+            "🕐 Thời gian gửi phải trong khung làm việc (08:00 - 17:45)"
+          );
+        }
+      }
     }
 
     return errors;
@@ -1361,6 +1564,54 @@ export default function CampaignModal({
     selectedDays,
     timeOfDay,
   ]);
+
+  const formatDuration = useCallback(
+    (startTime: string, endTime: string): string => {
+      if (!startTime || !endTime) return "";
+
+      const timeToMinutes = (timeStr: string): number => {
+        const [hours, minutes] = timeStr.split(":").map(Number);
+        return hours * 60 + minutes;
+      };
+
+      const startMinutes = timeToMinutes(startTime);
+      const endMinutes = timeToMinutes(endTime);
+      const durationMinutes = endMinutes - startMinutes;
+
+      if (durationMinutes <= 0) return "Không hợp lệ";
+
+      const hours = Math.floor(durationMinutes / 60);
+      const minutes = durationMinutes % 60;
+
+      if (hours === 0) return `${minutes} phút`;
+      if (minutes === 0) return `${hours} giờ`;
+      return `${hours} giờ ${minutes} phút`;
+    },
+    []
+  );
+
+  const getDurationStatus = useCallback(():
+    | "good"
+    | "warning"
+    | "error"
+    | "none" => {
+    if (!startTime || !endTime) return "none";
+
+    const timeToMinutes = (timeStr: string): number => {
+      const [hours, minutes] = timeStr.split(":").map(Number);
+      return hours * 60 + minutes;
+    };
+
+    const startMinutes = timeToMinutes(startTime);
+    const endMinutes = timeToMinutes(endTime);
+    const durationMinutes = endMinutes - startMinutes;
+
+    if (durationMinutes <= 0) return "error";
+    if (durationMinutes < 30) return "error"; // Too short
+    if (durationMinutes > 480) return "warning"; // Too long (>8h)
+    if (durationMinutes > 240) return "warning"; // Long (>4h)
+    return "good";
+  }, [startTime, endTime]);
 
   // Handle tab change with animation - memoized
   const handleTabChange = useCallback(
@@ -1389,68 +1640,96 @@ export default function CampaignModal({
 
       if (tab === "reminders" && visitedSteps.has(2) && !canProceedFromTab2) {
         const tabErrors = getValidationErrorsForTab2();
+
+        // ✅ ENHANCED MESSAGE CHO ATTACHMENT
+        let alertMessage = "⚠️ Vui lòng hoàn thành lịch trình & nội dung!";
+
+        if (!attachmentType) {
+          alertMessage =
+            "📎 Bắt buộc chọn loại đính kèm!\n\nVui lòng chọn một trong ba loại: Hình ảnh, Liên kết hoặc Tệp tin.";
+        } else if (!attachmentData?.trim()) {
+          const typeNames = {
+            image: "hình ảnh",
+            link: "liên kết",
+            file: "tệp tin",
+          };
+          alertMessage = `📎 Chưa tải lên ${typeNames[attachmentType]}!\n\nVui lòng hoàn thành việc đính kèm để tiếp tục.`;
+        } else {
+          alertMessage = `⚠️ Vui lòng hoàn thành lịch trình & nội dung!\n\n${tabErrors.join(
+            "\n"
+          )}`;
+        }
+
         setAlertSafe({
           type: "warning",
-          message: `⚠️ Vui lòng hoàn thành lịch trình & nội dung!\n\n${tabErrors.join(
-            "\n"
-          )}\n\n💡 Hoàn thành tất cả thông tin trên để tiếp tục.`,
+          message: `${alertMessage}\n\n💡 Hoàn thành tất cả thông tin trên để tiếp tục.`,
         });
         return;
       }
 
       if (
         tab === "email" &&
-        (!canProceedFromTab2 || (needsReminderTab && !canProceedFromTab3))
+        visitedSteps.has(currentStepNumber) &&
+        !canProceedFromEmailTab
       ) {
         let errorMessage = "";
-        if (!canProceedFromTab2) {
-          const tabErrors = getValidationErrorsForTab2();
-          errorMessage = `⚠️ Lịch trình & nội dung chưa đầy đủ:\n\n${tabErrors.join(
-            "\n"
-          )}`;
-        } else if (needsReminderTab && !canProceedFromTab3) {
-          const reminderErrors = reminderValidationErrors
-            .map((error, index) =>
-              error ? `📢 Lần nhắc ${index + 1}: ${error}` : null
-            )
-            .filter(Boolean);
 
-          const missingReminders = reminders
-            .map((r, index) => {
-              const errors: string[] = [];
-              if (!r.content?.trim()) errors.push(`Nội dung trống`);
-              if (r.minutes <= 0) errors.push(`Thời gian không hợp lệ`);
-              return errors.length > 0
-                ? `📢 Lần nhắc ${index + 1}: ${errors.join(", ")}`
-                : null;
-            })
-            .filter(Boolean);
-
-          const allErrors = [...reminderErrors, ...missingReminders];
-          errorMessage = `⚠️ Cấu hình nhắc lại chưa đầy đủ:\n\n${allErrors.join(
-            "\n"
-          )}`;
+        if (!emailReportsEnabled) {
+          // Không bật email - cho phép tiếp tục
+          setCurrentTab(tab);
+          return;
         }
 
-        setAlertSafe({
-          type: "warning",
-          message: `${errorMessage}\n\n💡 Vui lòng hoàn thành để tiếp tục.`,
-        });
-        return;
+        // Đã bật email nhưng thiếu thông tin
+        if (!recipientsTo.trim()) {
+          errorMessage =
+            "📧 Thiếu người nhận chính!\n\nKhi bật gửi email báo cáo, bạn phải nhập ít nhất một địa chỉ email làm người nhận chính.";
+        } else {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(recipientsTo.trim())) {
+            errorMessage =
+              "📧 Email người nhận chính không hợp lệ!\n\nVui lòng nhập đúng định dạng email (example@domain.com)";
+          } else {
+            const invalidCustomEmails = customEmails
+              .filter((e) => e.trim())
+              .filter((e) => !emailRegex.test(e.trim()));
+
+            if (invalidCustomEmails.length > 0) {
+              errorMessage = `📧 Email tùy chỉnh không hợp lệ!\n\nCác email sau không đúng định dạng: ${invalidCustomEmails.join(
+                ", "
+              )}`;
+            } else if (emailSendMode === "interval") {
+              const intervalNum = parseInt(reportInterval, 10);
+              if (isNaN(intervalNum) || intervalNum < 1 || intervalNum > 1440) {
+                errorMessage =
+                  "📧 Khoảng thời gian gửi email không hợp lệ!\n\nVui lòng nhập số từ 1 đến 1440 phút.";
+              }
+            }
+          }
+        }
+
+        if (errorMessage) {
+          setAlertSafe({
+            type: "warning",
+            message: `${errorMessage}\n\n💡 Vui lòng hoàn thành cấu hình email để tiếp tục.`,
+          });
+          return;
+        }
       }
 
-      if (
-        tab === "customers" &&
-        (!canProceedFromTab2 || (needsReminderTab && !canProceedFromTab3))
-      ) {
-        // Similar logic as above for customers tab
+      if (tab === "customers") {
+        let hasErrors = false;
         let errorMessage = "";
+
+        // Kiểm tra các tab trước đó
         if (!canProceedFromTab2) {
+          hasErrors = true;
           const tabErrors = getValidationErrorsForTab2();
           errorMessage = `⚠️ Lịch trình & nội dung chưa đầy đủ:\n\n${tabErrors.join(
             "\n"
           )}`;
         } else if (needsReminderTab && !canProceedFromTab3) {
+          hasErrors = true;
           const reminderErrors = reminderValidationErrors
             .map((error, index) =>
               error ? `📢 Lần nhắc ${index + 1}: ${error}` : null
@@ -1472,13 +1751,19 @@ export default function CampaignModal({
           errorMessage = `⚠️ Cấu hình nhắc lại chưa đầy đủ:\n\n${allErrors.join(
             "\n"
           )}`;
+        } else if (!canProceedFromEmailTab) {
+          hasErrors = true;
+          errorMessage =
+            "⚠️ Cấu hình email chưa đầy đủ!\n\nBạn đã bật gửi email báo cáo nhưng chưa điền đủ thông tin email cần thiết.";
         }
 
-        setAlertSafe({
-          type: "warning",
-          message: `${errorMessage}\n\n💡 Vui lòng hoàn thành để tiếp tục.`,
-        });
-        return;
+        if (hasErrors) {
+          setAlertSafe({
+            type: "warning",
+            message: `${errorMessage}\n\n💡 Vui lòng hoàn thành để tiếp tục.`,
+          });
+          return;
+        }
       }
 
       setCurrentTab(tab);
@@ -1488,8 +1773,11 @@ export default function CampaignModal({
       canProceedFromTab1,
       canProceedFromTab2,
       canProceedFromTab3,
+      canProceedFromEmailTab,
       visitedSteps,
       needsReminderTab,
+      attachmentType,
+      attachmentData,
       campaignName,
       selectedType,
       getValidationErrorsForTab2,
@@ -1869,18 +2157,23 @@ export default function CampaignModal({
               damping: 30,
             }}
           >
-            <div className="relative pointer-events-auto max-w-md mx-auto">
+            <div className="relative max-w-md mx-auto">
               {alert?.type === "error" || alert?.type === "warning" ? (
                 // Persistent alert for errors and warnings
                 <div
                   className={`
-                  p-4 rounded-lg border-l-4 shadow-lg
-                  ${
-                    alert.type === "error"
-                      ? "bg-red-50 border-red-500 text-red-800"
-                      : "bg-yellow-50 border-yellow-500 text-yellow-800"
-                  }
-                `}
+              p-4 rounded-lg border-l-4 shadow-lg pointer-events-auto
+              ${
+                alert.type === "error"
+                  ? "bg-red-50 border-red-500 text-red-800"
+                  : "bg-yellow-50 border-yellow-500 text-yellow-800"
+              }
+            `}
+                  // ✅ Thêm onClick handler để ngăn event bubbling
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
@@ -1901,7 +2194,11 @@ export default function CampaignModal({
                       </div>
                     </div>
                     <button
-                      onClick={handleManualCloseAlert}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleManualCloseAlert();
+                      }}
                       className="flex-shrink-0 ml-4 p-1 rounded-md hover:bg-red-100 transition-colors"
                       aria-label="Đóng thông báo"
                       title="Đóng thông báo"
@@ -1911,13 +2208,15 @@ export default function CampaignModal({
                   </div>
                 </div>
               ) : (
-                // ✅ STANDARD ALERT CHO SUCCESS/INFO - Có auto-close
-                <ServerResponseAlert
-                  type={alert.type as any}
-                  message={alert.message}
-                  onClose={handleCloseAlert}
-                  duration={alert.type === "success" ? 4000 : 3000}
-                />
+                // ✅ STANDARD ALERT CHO SUCCESS/INFO
+                <div className="pointer-events-auto">
+                  <ServerResponseAlert
+                    type={alert.type as any}
+                    message={alert.message}
+                    onClose={handleCloseAlert}
+                    duration={alert.type === "success" ? 4000 : 3000}
+                  />
+                </div>
               )}
             </div>
           </motion.div>
@@ -1929,7 +2228,7 @@ export default function CampaignModal({
           <Dialog
             key={`campaign-modal-${mode}-${initialData?.id || "new"}`}
             open={open}
-            onOpenChange={onOpenChange}
+            onOpenChange={handleDialogOpenChange}
             modal={true}
           >
             <DialogContent className="!max-w-[85vw] !max-h-[85vh] p-0 bg-white flex flex-col">
@@ -2197,6 +2496,44 @@ export default function CampaignModal({
                                     startTime: "08:00",
                                     endTime: "17:45",
                                   }}
+                                  quickSlots={[
+                                    {
+                                      value: "09:00",
+                                      label: "9AM",
+                                      icon: Coffee,
+                                      color: "text-brown-600",
+                                    },
+                                    {
+                                      value: "12:00",
+                                      label: "12PM",
+                                      icon: Sun,
+                                      color: "text-yellow-600",
+                                    },
+                                    {
+                                      value: "13:00",
+                                      label: "1PM",
+                                      icon: UtensilsCrossed,
+                                      color: "text-orange-600",
+                                    },
+                                    {
+                                      value: "14:00",
+                                      label: "2PM",
+                                      icon: Sun,
+                                      color: "text-blue-600",
+                                    },
+                                    {
+                                      value: "16:00",
+                                      label: "4PM",
+                                      icon: Clock,
+                                      color: "text-purple-600",
+                                    },
+                                    {
+                                      value: "17:00",
+                                      label: "5PM",
+                                      icon: Sunset,
+                                      color: "text-red-600",
+                                    },
+                                  ]}
                                 />
                                 <ModernTimePicker
                                   value={endTime}
@@ -2206,11 +2543,59 @@ export default function CampaignModal({
                                     startTime: "08:00",
                                     endTime: "17:45",
                                   }}
+                                  quickSlots={[
+                                    {
+                                      value: "09:00",
+                                      label: "9AM",
+                                      icon: Coffee,
+                                      color: "text-brown-600",
+                                    },
+                                    {
+                                      value: "12:00",
+                                      label: "12PM",
+                                      icon: Sun,
+                                      color: "text-yellow-600",
+                                    },
+                                    {
+                                      value: "13:00",
+                                      label: "1PM",
+                                      icon: UtensilsCrossed,
+                                      color: "text-orange-600",
+                                    },
+                                    {
+                                      value: "14:00",
+                                      label: "2PM",
+                                      icon: Sun,
+                                      color: "text-blue-600",
+                                    },
+                                    {
+                                      value: "16:00",
+                                      label: "4PM",
+                                      icon: Clock,
+                                      color: "text-purple-600",
+                                    },
+                                    {
+                                      value: "17:00",
+                                      label: "5PM",
+                                      icon: Sunset,
+                                      color: "text-red-600",
+                                    },
+                                  ]}
+                                  isEndTime={true}
+                                  startTimeValue={startTime}
+                                  minGap={30} // Minimum 30 minutes gap
+                                  onError={(error) => {
+                                    // Optional: Handle error from time picker
+                                    console.log(
+                                      "End time validation error:",
+                                      error
+                                    );
+                                  }}
                                 />
                               </motion.div>
                             )}
 
-                            {/* 3-day campaign schedule */}
+                            {/* 3-day campaign schedule - UPDATED */}
                             {selectedType === CampaignType.THREE_DAY_KM && (
                               <motion.div
                                 className="space-y-4"
@@ -2226,6 +2611,8 @@ export default function CampaignModal({
                                   includeSaturday={includeSaturday}
                                   label="Chọn 3 ngày liền kề *"
                                 />
+
+                                {/* ✅ SINGLE TIME PICKER - Basic usage */}
                                 <ModernTimePicker
                                   value={timeOfDay}
                                   onChange={setTimeOfDay}
@@ -2234,6 +2621,44 @@ export default function CampaignModal({
                                     startTime: "08:00",
                                     endTime: "17:45",
                                   }}
+                                  quickSlots={[
+                                    {
+                                      value: "09:00",
+                                      label: "9AM",
+                                      icon: Coffee,
+                                      color: "text-brown-600",
+                                    },
+                                    {
+                                      value: "12:00",
+                                      label: "12PM",
+                                      icon: Sun,
+                                      color: "text-yellow-600",
+                                    },
+                                    {
+                                      value: "13:00",
+                                      label: "1PM",
+                                      icon: UtensilsCrossed,
+                                      color: "text-orange-600",
+                                    },
+                                    {
+                                      value: "14:00",
+                                      label: "2PM",
+                                      icon: Sun,
+                                      color: "text-blue-600",
+                                    },
+                                    {
+                                      value: "16:00",
+                                      label: "4PM",
+                                      icon: Clock,
+                                      color: "text-purple-600",
+                                    },
+                                    {
+                                      value: "17:00",
+                                      label: "5PM",
+                                      icon: Sunset,
+                                      color: "text-red-600",
+                                    },
+                                  ]}
                                 />
                               </motion.div>
                             )}
@@ -2255,6 +2680,8 @@ export default function CampaignModal({
                                   includeSaturday={includeSaturday}
                                   label="Chọn ngày trong tuần *"
                                 />
+
+                                {/* ✅ SINGLE TIME PICKER - Basic usage */}
                                 <ModernTimePicker
                                   value={timeOfDay}
                                   onChange={setTimeOfDay}
@@ -2263,6 +2690,44 @@ export default function CampaignModal({
                                     startTime: "08:00",
                                     endTime: "17:45",
                                   }}
+                                  quickSlots={[
+                                    {
+                                      value: "09:00",
+                                      label: "9AM",
+                                      icon: Coffee,
+                                      color: "text-brown-600",
+                                    },
+                                    {
+                                      value: "12:00",
+                                      label: "12PM",
+                                      icon: Sun,
+                                      color: "text-yellow-600",
+                                    },
+                                    {
+                                      value: "13:00",
+                                      label: "1PM",
+                                      icon: UtensilsCrossed,
+                                      color: "text-orange-600",
+                                    },
+                                    {
+                                      value: "14:00",
+                                      label: "2PM",
+                                      icon: Sun,
+                                      color: "text-blue-600",
+                                    },
+                                    {
+                                      value: "16:00",
+                                      label: "4PM",
+                                      icon: Clock,
+                                      color: "text-purple-600",
+                                    },
+                                    {
+                                      value: "17:00",
+                                      label: "5PM",
+                                      icon: Sunset,
+                                      color: "text-red-600",
+                                    },
+                                  ]}
                                 />
                               </motion.div>
                             )}
@@ -3283,10 +3748,49 @@ export default function CampaignModal({
                                               value={stopSendingTime}
                                               onChange={setStopSendingTime}
                                               label="Thời gian dừng gửi"
+                                              defaultTime="17:45"
                                               timeRange={{
                                                 startTime: "08:00",
                                                 endTime: "17:45",
                                               }}
+                                              quickSlots={[
+                                                {
+                                                  value: "09:00",
+                                                  label: "9AM",
+                                                  icon: Coffee,
+                                                  color: "text-brown-600",
+                                                },
+                                                {
+                                                  value: "12:00",
+                                                  label: "12PM",
+                                                  icon: Sun,
+                                                  color: "text-yellow-600",
+                                                },
+                                                {
+                                                  value: "13:00",
+                                                  label: "1PM",
+                                                  icon: UtensilsCrossed,
+                                                  color: "text-orange-600",
+                                                },
+                                                {
+                                                  value: "14:00",
+                                                  label: "2PM",
+                                                  icon: Sun,
+                                                  color: "text-blue-600",
+                                                },
+                                                {
+                                                  value: "16:00",
+                                                  label: "4PM",
+                                                  icon: Clock,
+                                                  color: "text-purple-600",
+                                                },
+                                                {
+                                                  value: "17:00",
+                                                  label: "5PM",
+                                                  icon: Sunset,
+                                                  color: "text-red-600",
+                                                },
+                                              ]}
                                             />
                                           </motion.div>
                                         </motion.div>
@@ -3884,7 +4388,9 @@ export default function CampaignModal({
                 <div className="flex justify-between items-center">
                   <div className="flex-shrink-0">
                     <Button
-                      onClick={async () => {
+                      onClick={async (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         // ✅ KHÔNG GỌI resetForm() KHI CÓ ERROR ALERT
                         if (
                           alert &&
@@ -3969,14 +4475,20 @@ export default function CampaignModal({
                               canProceedFromTab3
                             )
                               setCurrentTab("email");
-                            else if (currentTab === "email")
+                            else if (
+                              currentTab === "email" &&
+                              canProceedFromEmailTab
+                            )
+                              // ✅ Thêm validation mới
                               setCurrentTab("customers");
                           }}
                           disabled={
                             (currentTab === "basic" && !canProceedFromTab1) ||
                             (currentTab === "schedule" &&
                               !canProceedFromTab2) ||
-                            (currentTab === "reminders" && !canProceedFromTab3)
+                            (currentTab === "reminders" &&
+                              !canProceedFromTab3) ||
+                            (currentTab === "email" && !canProceedFromEmailTab)
                           }
                           size="sm"
                           className={cn(
@@ -3986,28 +4498,47 @@ export default function CampaignModal({
                               (currentTab === "schedule" &&
                                 (!canProceedFromTab2 ||
                                   messageValidationError ||
-                                  attachmentValidationError)) ||
+                                  attachmentValidationError ||
+                                  !attachmentType ||
+                                  !attachmentData?.trim())) ||
                               (currentTab === "reminders" &&
                                 (!canProceedFromTab3 ||
                                   reminderValidationErrors.some(
                                     (e) => e !== null
-                                  )))
+                                  ))) ||
+                              (currentTab === "email" &&
+                                !canProceedFromEmailTab) // ✅ Thêm style cho email validation
                               ? "opacity-50 cursor-not-allowed bg-red-100 hover:bg-red-100 text-red-600 border-red-200 shadow-red-100 animate-pulse"
                               : "hover:bg-blue-700 shadow-blue-100"
                           )}
                           title={
-                            // ✅ Detailed tooltip
+                            // ✅ Enhanced tooltip cho email tab
                             currentTab === "basic" && !canProceedFromTab1
                               ? "Vui lòng nhập tên chương trình và chọn loại chương trình"
                               : currentTab === "schedule" && !canProceedFromTab2
-                              ? attachmentValidationError
-                                ? `Lỗi đính kèm: ${attachmentValidationError}`
+                              ? !attachmentType
+                                ? "⚠️ Bắt buộc chọn loại đính kèm (Hình ảnh, Liên kết hoặc Tệp tin)"
+                                : !attachmentData?.trim()
+                                ? `⚠️ Chưa tải lên ${
+                                    attachmentType === "image"
+                                      ? "hình ảnh"
+                                      : attachmentType === "link"
+                                      ? "liên kết"
+                                      : "tệp tin"
+                                  }`
+                                : attachmentValidationError
+                                ? `❌ Lỗi đính kèm: ${attachmentValidationError}`
                                 : messageValidationError
-                                ? `Lỗi tin nhắn: ${messageValidationError}`
+                                ? `❌ Lỗi tin nhắn: ${messageValidationError}`
                                 : "Vui lòng hoàn thành nội dung tin nhắn, đính kèm và lịch trình"
                               : currentTab === "reminders" &&
                                 !canProceedFromTab3
                               ? "Vui lòng hoàn thành cấu hình nhắc lại"
+                              : currentTab === "email" &&
+                                !canProceedFromEmailTab
+                              ? emailReportsEnabled
+                                ? "⚠️ Đã bật email báo cáo, vui lòng điền đủ thông tin email"
+                                : "Tiếp tục đến bước tiếp theo"
                               : "Tiếp tục đến bước tiếp theo"
                           }
                         >
@@ -4015,14 +4546,17 @@ export default function CampaignModal({
                           <ArrowRight
                             className={cn(
                               "h-4 w-4 inline-block transition-transform",
-                              // ✅ Shake effect khi có lỗi
                               (currentTab === "schedule" &&
                                 (messageValidationError ||
-                                  attachmentValidationError)) ||
+                                  attachmentValidationError ||
+                                  !attachmentType ||
+                                  !attachmentData?.trim())) ||
                                 (currentTab === "reminders" &&
                                   reminderValidationErrors.some(
                                     (e) => e !== null
-                                  ))
+                                  )) ||
+                                (currentTab === "email" &&
+                                  !canProceedFromEmailTab) // ✅ Thêm animation cho email
                                 ? "animate-bounce"
                                 : ""
                             )}

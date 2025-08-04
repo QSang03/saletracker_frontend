@@ -38,6 +38,7 @@ import {
   MessageCircle,
   User,
   AlertCircle,
+  Edit, // ✅ THÊM MỚI: Import Edit icon
 } from "lucide-react";
 import { Campaign } from "@/types";
 import { campaignAPI } from "@/lib/campaign-api";
@@ -45,6 +46,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import CustomerLogModal, { LogStatus } from "./CampaignCustomerLogModal.tsx";
+import EditCustomerModal from "./EditCustomerModal"; // ✅ THÊM MỚI: Import EditCustomerModal
 
 interface CampaignCustomer {
   id: string;
@@ -115,9 +117,9 @@ const LOG_STATUS_CONFIG = {
 
 // Generate a simple UUID
 const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 };
@@ -228,6 +230,11 @@ export default function CampaignCustomersModal({
     useState<CustomerWithStatus | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
 
+  // ✅ THÊM MỚI: State cho EditCustomerModal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] =
+    useState<CustomerWithStatus | null>(null);
+
   const pageSize = 1000000;
 
   const fetchCustomers = async (searchQuery = "", status = "all") => {
@@ -323,21 +330,62 @@ export default function CampaignCustomersModal({
     setIsLogModalOpen(true);
   };
 
+  // ✅ THÊM MỚI: Handle edit customer
+  const handleEditCustomer = (customer: CustomerWithStatus) => {
+    setEditingCustomer(customer);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditModalClose = () => {
+    setIsEditModalOpen(false);
+    setEditingCustomer(null);
+  };
+
+  const handleEditSuccess = () => {
+    // Reload customers sau khi edit thành công
+    fetchCustomers(searchTerm, statusFilter);
+    handleEditModalClose();
+  };
+
   const handleExportCustomers = async () => {
     if (!campaign) return;
 
     try {
-      toast.info("Đang xuất dữ liệu...");
+      toast.info("Đang xuất báo cáo tổng quan...");
 
-      await campaignAPI.exportCampaignCustomers(campaign.id, {
-        search: searchTerm,
-        status: statusFilter === "all" ? undefined : statusFilter,
+      // ✅ Gọi API exportCampaignSummary (2 sheets)
+      const response = await campaignAPI.exportCampaignSummary(campaign.id);
+
+      // ✅ Tạo blob từ response data
+      const blob = new Blob([response], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
 
-      toast.success("Đã xuất danh sách khách hàng thành công");
+      // ✅ Tạo URL để download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      // ✅ Đặt tên file với timestamp
+      const timestamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:.]/g, "-");
+      const safeCampaignName = campaign.name.replace(/[^a-zA-Z0-9]/g, "_");
+      link.download = `${safeCampaignName}_summary_report_${timestamp}.xlsx`;
+
+      // ✅ Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // ✅ Cleanup URL object
+      window.URL.revokeObjectURL(url);
+
+      toast.success("Đã xuất báo cáo tổng quan thành công");
     } catch (error) {
-      console.error("Error exporting customers:", error);
-      toast.error("Không thể xuất danh sách khách hàng");
+      console.error("Error exporting campaign summary:", error);
+      toast.error("Không thể xuất báo cáo tổng quan");
     }
   };
 
@@ -642,7 +690,9 @@ export default function CampaignCustomersModal({
                             <>
                               {displayedCustomers.map((customer, index) => (
                                 <motion.tr
-                                  key={`customer-${customer.id}-${generateUUID()}`}
+                                  key={`customer-${
+                                    customer.id
+                                  }-${generateUUID()}`}
                                   initial={{ opacity: 0, y: 20 }}
                                   animate={{ opacity: 1, y: 0 }}
                                   exit={{ opacity: 0, y: -20 }}
@@ -806,26 +856,56 @@ export default function CampaignCustomersModal({
                                     </motion.div>
                                   </TableCell>
                                   <TableCell className="text-center">
-                                    <motion.div
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.9 }}
-                                      className="flex justify-center"
-                                    >
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleViewLogs(customer)}
-                                        className="h-8 w-8 p-0"
-                                        title="Xem lịch sử tương tác"
+                                    {/* ✅ CẬP NHẬT: Thêm nút Edit cho campaign bản nháp */}
+                                    <div className="flex items-center justify-center gap-1">
+                                      {/* Nút xem logs - luôn có */}
+                                      <motion.div
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
                                       >
-                                        <motion.div
-                                          whileHover={{ rotate: 5 }}
-                                          transition={{ duration: 0.2 }}
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleViewLogs(customer)
+                                          }
+                                          className="h-8 w-8 p-0"
+                                          title="Xem lịch sử tương tác"
                                         >
-                                          <Eye className="h-4 w-4" />
+                                          <motion.div
+                                            whileHover={{ rotate: 5 }}
+                                            transition={{ duration: 0.2 }}
+                                          >
+                                            <Eye className="h-4 w-4" />
+                                          </motion.div>
+                                        </Button>
+                                      </motion.div>
+
+                                      {/* Nút edit - CHỈ hiển thị khi campaign là DRAFT */}
+                                      {campaign.status === "draft" && (
+                                        <motion.div
+                                          whileHover={{ scale: 1.1 }}
+                                          whileTap={{ scale: 0.9 }}
+                                        >
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleEditCustomer(customer)
+                                            }
+                                            className="h-8 w-8 p-0"
+                                            title="Chỉnh sửa thông tin khách hàng"
+                                          >
+                                            <motion.div
+                                              whileHover={{ rotate: 5 }}
+                                              transition={{ duration: 0.2 }}
+                                            >
+                                              <Edit className="h-4 w-4" />
+                                            </motion.div>
+                                          </Button>
                                         </motion.div>
-                                      </Button>
-                                    </motion.div>
+                                      )}
+                                    </div>
                                   </TableCell>
                                 </motion.tr>
                               ))}
@@ -977,6 +1057,15 @@ export default function CampaignCustomersModal({
         onClose={() => setIsLogModalOpen(false)}
         customer={selectedCustomer}
         campaignId={campaign?.id || ""}
+      />
+
+      {/* ✅ THÊM MỚI: Edit Customer Modal */}
+      <EditCustomerModal
+        isOpen={isEditModalOpen}
+        onClose={handleEditModalClose}
+        customer={editingCustomer}
+        campaignId={campaign?.id || ""}
+        onSuccess={handleEditSuccess}
       />
     </>
   );

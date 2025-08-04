@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sunrise, Sun, Sunset, Moon, Clock, 
-  Plus, Minus, AlertCircle
+  Plus, Minus, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
 const defaultQuickTimeSlots = [
@@ -23,27 +23,37 @@ interface ModernTimePickerProps {
   value: string;
   onChange: (value: string) => void;
   label: string;
-  timeRange?: TimeRange; // Khung giờ phút cụ thể
+  defaultTime?: string;
+  timeRange?: TimeRange;
   quickSlots?: Array<{
     value: string;
     label: string;
     icon: any;
     color: string;
-  }>; // Tùy chỉnh quick slots
-  onError?: (error: string) => void; // Callback khi có lỗi
+  }>;
+  onError?: (error: string) => void;
+  // ✅ NEW PROPS for start/end time validation
+  isEndTime?: boolean; // Đánh dấu đây là input cho giờ kết thúc
+  startTimeValue?: string; // Giá trị giờ bắt đầu để so sánh
+  minGap?: number; // Khoảng cách tối thiểu giữa start và end (minutes)
 }
 
 const ModernTimePicker = ({ 
   value, 
   onChange, 
-  label, 
+  label,
+  defaultTime,
   timeRange = { startTime: "00:00", endTime: "23:59" },
   quickSlots = defaultQuickTimeSlots,
-  onError
+  onError,
+  isEndTime = false,
+  startTimeValue,
+  minGap = 30 // Default 30 minutes gap
 }: ModernTimePickerProps) => {
   const [showCustom, setShowCustom] = useState(false);
   const [customTime, setCustomTime] = useState({ hours: '12', minutes: '00' });
   const [error, setError] = useState<string>('');
+  const [isInitialized, setIsInitialized] = useState(false);
   const hoursInputRef = useRef<HTMLInputElement>(null);
   const minutesInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +70,30 @@ const ModernTimePicker = ({
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
   };
 
+  // ✅ NEW: Validate end time vs start time
+  const validateEndTimeVsStartTime = (endTimeStr: string, startTimeStr: string): boolean => {
+    if (!endTimeStr || !startTimeStr) return true;
+    
+    const endMinutes = timeToMinutes(endTimeStr);
+    const startMinutes = timeToMinutes(startTimeStr);
+    
+    if (endMinutes <= startMinutes) {
+      const errorMsg = `Giờ kết thúc (${endTimeStr}) phải lớn hơn giờ bắt đầu (${startTimeStr})`;
+      setError(errorMsg);
+      onError?.(errorMsg);
+      return false;
+    }
+    
+    if (endMinutes - startMinutes < minGap) {
+      const errorMsg = `Khoảng cách tối thiểu giữa giờ bắt đầu và kết thúc là ${minGap} phút`;
+      setError(errorMsg);
+      onError?.(errorMsg);
+      return false;
+    }
+    
+    return true;
+  };
+
   // Kiểm tra thời gian có hợp lệ không
   const isTimeInRange = (timeStr: string): boolean => {
     const timeMinutes = timeToMinutes(timeStr);
@@ -74,10 +108,11 @@ const ModernTimePicker = ({
     return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
   };
 
-  // Validate time value
+  // ✅ ENHANCED: Validate time value with start/end time check
   const validateTime = (timeValue: string): boolean => {
     if (!timeValue) return true;
     
+    // Basic range validation
     if (!isTimeInRange(timeValue)) {
       const errorMsg = `Thời gian phải trong khoảng ${timeRange.startTime} - ${timeRange.endTime}`;
       setError(errorMsg);
@@ -85,9 +120,57 @@ const ModernTimePicker = ({
       return false;
     }
     
+    // ✅ End time vs start time validation
+    if (isEndTime && startTimeValue) {
+      if (!validateEndTimeVsStartTime(timeValue, startTimeValue)) {
+        return false;
+      }
+    }
+    
     setError('');
+    onError?.(''); // Clear error callback
     return true;
   };
+
+  // ✅ ENHANCED: Get minimum time for end time picker
+  const getMinimumEndTime = (): string => {
+    if (isEndTime && startTimeValue) {
+      const startMinutes = timeToMinutes(startTimeValue);
+      const minEndMinutes = startMinutes + minGap;
+      
+      // Don't exceed the time range
+      const maxRangeMinutes = timeToMinutes(timeRange.endTime);
+      const actualMinEndMinutes = Math.min(minEndMinutes, maxRangeMinutes);
+      
+      return minutesToTime(actualMinEndMinutes);
+    }
+    return timeRange.startTime;
+  };
+
+  // Initialize default time
+  useEffect(() => {
+    if (!isInitialized && !value && defaultTime) {
+      if (validateTime(defaultTime)) {
+        onChange(defaultTime);
+      } else {
+        // ✅ For end time, use minimum valid time
+        const fallbackTime = isEndTime ? getMinimumEndTime() : timeRange.startTime;
+        const startMinutes = timeToMinutes(fallbackTime);
+        const nearestValidTime = minutesToTime(startMinutes);
+        onChange(nearestValidTime);
+      }
+      setIsInitialized(true);
+    } else if (!isInitialized) {
+      setIsInitialized(true);
+    }
+  }, [defaultTime, value, onChange, timeRange, isInitialized, isEndTime, startTimeValue]);
+
+  // ✅ RE-VALIDATE when startTimeValue changes
+  useEffect(() => {
+    if (isEndTime && value && startTimeValue) {
+      validateTime(value);
+    }
+  }, [startTimeValue, isEndTime, value]);
 
   // Format time for display
   const formatTime = (time: string) => {
@@ -98,8 +181,19 @@ const ModernTimePicker = ({
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
-  // Filter quick slots based on time range
-  const filteredQuickSlots = quickSlots.filter(slot => isTimeInRange(slot.value));
+  // ✅ ENHANCED: Filter quick slots based on time range AND start time
+  const filteredQuickSlots = quickSlots.filter(slot => {
+    if (!isTimeInRange(slot.value)) return false;
+    
+    // ✅ Additional filtering for end time
+    if (isEndTime && startTimeValue) {
+      const slotMinutes = timeToMinutes(slot.value);
+      const startMinutes = timeToMinutes(startTimeValue);
+      return slotMinutes > startMinutes + minGap;
+    }
+    
+    return true;
+  });
 
   // Update custom time from value
   useEffect(() => {
@@ -113,8 +207,11 @@ const ModernTimePicker = ({
       }
       
       validateTime(value);
+    } else if (defaultTime && !value) {
+      const [hours, minutes] = defaultTime.split(':');
+      setCustomTime({ hours, minutes });
     }
-  }, [value, timeRange]);
+  }, [value, defaultTime, timeRange, quickSlots]);
 
   // Handle custom time input
   const handleTimeInput = (type: 'hours' | 'minutes', inputValue: string) => {
@@ -139,23 +236,27 @@ const ModernTimePicker = ({
     }
   };
 
-  // Get next valid time when adjusting
+  // ✅ ENHANCED: Get next valid time with start time consideration
   const getNextValidTime = (currentTime: string, increment: boolean, type: 'hours' | 'minutes'): string => {
     const currentMinutes = timeToMinutes(currentTime);
-    const startMinutes = timeToMinutes(timeRange.startTime);
+    let startMinutes = timeToMinutes(timeRange.startTime);
     const endMinutes = timeToMinutes(timeRange.endTime);
+    
+    // ✅ For end time, minimum should be start time + gap
+    if (isEndTime && startTimeValue) {
+      const startTimeMinutes = timeToMinutes(startTimeValue);
+      startMinutes = Math.max(startMinutes, startTimeMinutes + minGap);
+    }
     
     let newMinutes = currentMinutes;
     const step = type === 'hours' ? 60 : 1;
     
     if (increment) {
       newMinutes += step;
-      // Handle day boundary
-      if (newMinutes >= 1440) newMinutes = 0;
+      if (newMinutes >= 1440) newMinutes = startMinutes; // Reset to minimum valid time
     } else {
       newMinutes -= step;
-      // Handle day boundary
-      if (newMinutes < 0) newMinutes = 1439;
+      if (newMinutes < startMinutes) newMinutes = endMinutes; // Wrap to maximum valid time
     }
     
     // Find next valid time within range
@@ -163,8 +264,9 @@ const ModernTimePicker = ({
     while (!isTimeInRange(minutesToTime(newMinutes)) && attempts < 1440) {
       if (increment) {
         newMinutes = (newMinutes + 1) % 1440;
+        if (newMinutes < startMinutes) newMinutes = startMinutes;
       } else {
-        newMinutes = newMinutes <= 0 ? 1439 : newMinutes - 1;
+        newMinutes = newMinutes <= startMinutes ? endMinutes : newMinutes - 1;
       }
       attempts++;
     }
@@ -184,27 +286,58 @@ const ModernTimePicker = ({
     }
   };
 
-  // Generate quick minute options based on range
+  // ✅ ENHANCED: Generate valid minute options considering start time
   const getValidMinuteOptions = (): string[] => {
     const currentHour = customTime.hours;
-    const baseTime = `${currentHour}:`;
+    let validMinutes = ['00', '15', '30', '45'];
     
-    return ['00', '15', '30', '45'].filter(minute => 
+    // Filter by time range
+    validMinutes = validMinutes.filter(minute => 
       isTimeInRange(`${currentHour}:${minute}`)
     );
+    
+    // ✅ Additional filtering for end time vs start time
+    if (isEndTime && startTimeValue) {
+      validMinutes = validMinutes.filter(minute => {
+        const testTime = `${currentHour}:${minute}`;
+        const testMinutes = timeToMinutes(testTime);
+        const startMinutes = timeToMinutes(startTimeValue);
+        return testMinutes > startMinutes + minGap;
+      });
+    }
+    
+    return validMinutes;
   };
 
   // Format time range for display
   const formatTimeRange = (): string => {
-    const startMinutes = timeToMinutes(timeRange.startTime);
-    const endMinutes = timeToMinutes(timeRange.endTime);
+    let displayStartTime = timeRange.startTime;
+    let displayEndTime = timeRange.endTime;
     
-    if (startMinutes > endMinutes) {
-      return `${timeRange.startTime} - ${timeRange.endTime} (+1 ngày)`;
+    // ✅ Show adjusted range for end time picker
+    if (isEndTime && startTimeValue) {
+      const minEndTime = getMinimumEndTime();
+      displayStartTime = minEndTime;
     }
     
-    return `${timeRange.startTime} - ${timeRange.endTime}`;
+    const startMinutes = timeToMinutes(displayStartTime);
+    const endMinutes = timeToMinutes(displayEndTime);
+    
+    if (startMinutes > endMinutes) {
+      return `${displayStartTime} - ${displayEndTime} (+1 ngày)`;
+    }
+    
+    return `${displayStartTime} - ${displayEndTime}`;
   };
+
+  // ✅ Get status for visual feedback
+  const getValidationStatus = () => {
+    if (error) return 'error';
+    if (value && !error) return 'success';
+    return 'neutral';
+  };
+
+  const validationStatus = getValidationStatus();
 
   return (
     <motion.div 
@@ -224,16 +357,41 @@ const ModernTimePicker = ({
           <div className="flex flex-col">
             <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
               <motion.div
-                animate={{ rotate: [0, 360] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                animate={{ 
+                  rotate: [0, 360],
+                  scale: validationStatus === 'error' ? [1, 1.1, 1] : 1
+                }}
+                transition={{ 
+                  rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+                  scale: { duration: 0.5, repeat: validationStatus === 'error' ? Infinity : 0 }
+                }}
               >
-                <Clock className="h-4 w-4 text-gray-500" />
+                <Clock className={`h-4 w-4 ${
+                  validationStatus === 'error' ? 'text-red-500' : 
+                  validationStatus === 'success' ? 'text-green-500' : 'text-gray-500'
+                }`} />
               </motion.div>
               {label}
+              {isEndTime && (
+                <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">
+                  Kết thúc
+                </span>
+              )}
             </label>
-            <span className="text-xs text-gray-500 mt-1">
-              Khung thời gian: {formatTimeRange()}
-            </span>
+            <div className="flex flex-col gap-1 mt-1">
+              <span className="text-xs text-gray-500">
+                {isEndTime && startTimeValue ? (
+                  <>Tối thiểu: {getMinimumEndTime()} (sau giờ bắt đầu {minGap} phút)</>
+                ) : (
+                  <>Khung thời gian: {formatTimeRange()}</>
+                )}
+              </span>
+              {defaultTime && (
+                <span className="text-xs text-blue-600">
+                  Mặc định: {formatTime(defaultTime)}
+                </span>
+              )}
+            </div>
           </div>
           
           <motion.button
@@ -259,17 +417,28 @@ const ModernTimePicker = ({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+            className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
           >
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>{error}</span>
+            <motion.div
+              animate={{ 
+                rotate: [0, 10, -10, 0],
+                scale: [1, 1.1, 1]
+              }}
+              transition={{ 
+                duration: 0.5,
+                repeat: Infinity
+              }}
+            >
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            </motion.div>
+            <span className="font-medium">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
         {!showCustom ? (
-          // Quick Time Slots - Filtered by range
+          // Quick Time Slots - Enhanced filtering
           <motion.div 
             key="quick-slots"
             initial={{ opacity: 0, y: 20 }}
@@ -321,19 +490,27 @@ const ModernTimePicker = ({
                 animate={{ opacity: 1 }}
                 className="col-span-3 text-center text-gray-500 text-sm p-4"
               >
-                Không có gợi ý nào phù hợp với khung thời gian đã chọn
+                {isEndTime && startTimeValue ? (
+                  <>Không có gợi ý nào phù hợp.<br/>Giờ kết thúc phải sau {startTimeValue}</>
+                ) : (
+                  <>Không có gợi ý nào phù hợp với khung thời gian đã chọn</>
+                )}
               </motion.div>
             )}
           </motion.div>
         ) : (
-          // Custom Time Input - With range validation
+          // ✅ FIXED: Custom Time Input - Proper controls
           <motion.div 
             key="custom-time"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="bg-gray-50 rounded-lg p-3 border border-gray-200"
+            className={`rounded-lg p-3 border transition-all ${
+              validationStatus === 'error' ? 'bg-red-50 border-red-200' :
+              validationStatus === 'success' ? 'bg-green-50 border-green-200' :
+              'bg-gray-50 border-gray-200'
+            }`}
           >
             {/* Time Input */}
             <motion.div 
@@ -365,7 +542,6 @@ const ModernTimePicker = ({
                     const formattedHours = hours.toString().padStart(2, '0');
                     const testTime = `${formattedHours}:${customTime.minutes}`;
                     
-                    // If current time is invalid, find nearest valid time
                     if (!isTimeInRange(testTime) && customTime.minutes.length === 2) {
                       const nearestTime = getNextValidTime(testTime, true, 'hours');
                       const [nearestHours, nearestMinutes] = nearestTime.split(':');
@@ -383,7 +559,9 @@ const ModernTimePicker = ({
                   }}
                   onFocus={() => hoursInputRef.current?.select()}
                   className={`w-8 h-8 text-center text-sm font-semibold bg-white rounded border transition-all ${
-                    error ? 'border-red-300 focus:border-red-400' : 'border-gray-300 focus:border-blue-400'
+                    validationStatus === 'error' ? 'border-red-300 focus:border-red-400' : 
+                    validationStatus === 'success' ? 'border-green-300 focus:border-green-400' :
+                    'border-gray-300 focus:border-blue-400'
                   } focus:outline-none`}
                   maxLength={2}
                 />
@@ -429,7 +607,6 @@ const ModernTimePicker = ({
                     let minutes = Math.min(59, Math.max(0, parseInt(customTime.minutes) || 0)).toString().padStart(2, '0');
                     const testTime = `${customTime.hours}:${minutes}`;
                     
-                    // If current time is invalid, find nearest valid time
                     if (!isTimeInRange(testTime) && customTime.hours.length === 2) {
                       const nearestTime = getNextValidTime(testTime, true, 'minutes');
                       const [nearestHours, nearestMinutes] = nearestTime.split(':');
@@ -446,7 +623,11 @@ const ModernTimePicker = ({
                     }
                   }}
                   onFocus={() => minutesInputRef.current?.select()}
-                  className="w-8 h-8 text-center text-sm font-semibold bg-white rounded border border-gray-300 focus:border-blue-400 focus:outline-none transition-all"
+                  className={`w-8 h-8 text-center text-sm font-semibold bg-white rounded border transition-all ${
+                    validationStatus === 'error' ? 'border-red-300 focus:border-red-400' : 
+                    validationStatus === 'success' ? 'border-green-300 focus:border-green-400' :
+                    'border-gray-300 focus:border-blue-400'
+                  } focus:outline-none`}
                   maxLength={2}
                 />
                 
@@ -462,7 +643,7 @@ const ModernTimePicker = ({
               </div>
             </motion.div>
 
-            {/* Quick minute buttons - Filtered by range */}
+            {/* Quick minute buttons - Enhanced filtering */}
             <motion.div 
               className="flex justify-center gap-1"
               initial={{ opacity: 0 }}
@@ -501,10 +682,10 @@ const ModernTimePicker = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: -10 }}
             transition={{ duration: 0.3 }}
-            className="text-center p-2 bg-blue-50 rounded-lg border border-blue-200"
+            className="text-center p-2 bg-green-50 rounded-lg border border-green-200"
           >
             <motion.div 
-              className="flex items-center justify-center gap-2 text-sm text-blue-700"
+              className="flex items-center justify-center gap-2 text-sm text-green-700"
               initial={{ x: -10 }}
               animate={{ x: 0 }}
             >
@@ -518,7 +699,7 @@ const ModernTimePicker = ({
                   scale: { duration: 1, repeat: Infinity }
                 }}
               >
-                <Clock className="h-3 w-3" />
+                <CheckCircle2 className="h-3 w-3" />
               </motion.div>
               <motion.span 
                 className="font-medium"
@@ -527,6 +708,11 @@ const ModernTimePicker = ({
                 transition={{ delay: 0.1 }}
               >
                 Đã chọn: {formatTime(value)}
+                {isEndTime && startTimeValue && (
+                  <span className="ml-2 text-xs text-green-600">
+                    (sau {formatTime(startTimeValue)})
+                  </span>
+                )}
               </motion.span>
             </motion.div>
           </motion.div>

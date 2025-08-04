@@ -395,6 +395,7 @@ export interface Campaign {
   created_by: User;
   created_at: Date;
   updated_at: Date;
+  deleted_at?: Date | null; // Optional for soft delete
   customer_count?: number;
   progress_percentage?: number;
   response_rate?: number;

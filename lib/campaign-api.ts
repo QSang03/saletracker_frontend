@@ -88,6 +88,13 @@ export const campaignAPI = {
     return response.data;
   },
 
+  exportCampaignSummary: async (campaignId: string) => {
+    const response = await api.get(`/campaigns/${campaignId}/export-summary`, {
+      responseType: "blob",
+    });
+    return response.data;
+  },
+
   // Get customers of a campaign with filters
   getCampaignCustomers: async (
     campaignId: string,
@@ -104,6 +111,38 @@ export const campaignAPI = {
     return response.data;
   },
 
+  getAllArchived: async (
+    filters: CampaignFilters = {}
+  ): Promise<CampaignResponse> => {
+    const response = await api.get("/campaigns/archived", {
+      params: filters,
+      paramsSerializer: {
+        serialize: (params) => {
+          const searchParams = new URLSearchParams();
+          Object.entries(params).forEach(([key, value]) => {
+            if (value === undefined || value === null) return;
+            if (Array.isArray(value)) {
+              value.forEach((item) => {
+                if (item !== undefined && item !== null && item !== "") {
+                  searchParams.append(key, String(item));
+                }
+              });
+            } else {
+              searchParams.append(key, String(value));
+            }
+          });
+          return searchParams.toString();
+        },
+      },
+    });
+    return response.data;
+  },
+
+  getCopyData: async (id: string): Promise<Partial<CampaignFormData>> => {
+    const response = await api.get(`/campaigns/${id}/copy-data`);
+    return response.data;
+  },
+
   // Export customers of a campaign
   exportCampaignCustomers: async (
     campaignId: string,
@@ -115,6 +154,22 @@ export const campaignAPI = {
         params,
         responseType: "blob",
       }
+    );
+    return response.data;
+  },
+
+  updateCampaignCustomer: async (
+    campaignId: string,
+    customerId: string,
+    data: {
+      phone_number: string;
+      full_name: string;
+      salutation?: string;
+    }
+  ): Promise<{ success: boolean; message: string }> => {
+    const response = await api.patch(
+      `/campaigns/${campaignId}/customers/${customerId}`,
+      data
     );
     return response.data;
   },

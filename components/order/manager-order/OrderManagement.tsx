@@ -255,7 +255,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     return (
       <div className="space-y-2">
         <div className="overflow-x-auto scrollbar-hide">
-          <Table className="min-w-[1600px] table-fixed">
+          <Table className="min-w-[1750px] table-fixed">
             <TableHeader>
               <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                 <TableHead className="font-bold text-gray-700 w-[50px] text-center">
@@ -276,22 +276,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[120px] text-center">
                   Khách hàng
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[430px] text-center">
+                <TableHead className="font-bold text-gray-700 w-[400px] text-center">
                   Mặt hàng
                 </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[60px] text-center">
                   SL
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[100px] text-right">
+                <TableHead className="font-bold text-gray-700 w-[120px] text-right">
                   Đơn giá
                 </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[120px] text-center">
                   Trạng thái
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-left">
+                <TableHead className="font-bold text-gray-700 w-[140px] text-center">
                   Ghi chú
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[80px] text-center">
+                <TableHead className="font-bold text-gray-700 w-[200px] text-center">
                   Thao tác
                 </TableHead>
               </TableRow>
@@ -321,8 +321,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 rounded mx-auto" />
                   </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-full rounded" />
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-full rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-8 rounded mx-auto" />
@@ -333,11 +333,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 rounded mx-auto" />
                   </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-24 rounded" />
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-24 rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
-                    <Skeleton className="h-4 w-8 rounded mx-auto" />
+                    <div className="flex items-center justify-center space-x-1">
+                      <Skeleton className="h-6 w-6 rounded" />
+                      <Skeleton className="h-6 w-6 rounded" />
+                      <Skeleton className="h-6 w-6 rounded" />
+                      <Skeleton className="h-6 w-6 rounded" />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -388,7 +393,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <div className="space-y-2">
         <div className="relative">
           <div className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200">
-            <Table className="min-w-[1600px] table-fixed bg-white">
+            <Table className="min-w-[1750px] table-fixed bg-white">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
                   <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-0 bg-slate-100 z-10">
@@ -421,10 +426,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     📊 Trạng thái
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[140px] text-center">
                     📝 Ghi chú
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center sticky right-0 bg-slate-100 z-10">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[200px] text-center">
                     ⚙️ Thao tác
                   </TableHead>
                 </TableRow>
@@ -556,75 +561,87 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           </span>
                         </span>
                       </TableCell>
-                      <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm">
+                      <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
                         <TruncatedText
                           text={orderDetail.notes || "—"}
-                          maxLength={15}
+                          maxLength={18}
                           className="text-wrap leading-relaxed"
                         />
                       </TableCell>
-                      <TableCell className="text-center sticky right-0 bg-inherit z-10">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 hover:bg-slate-200 hover:shadow-md transition-all duration-200 rounded-full mx-auto"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="w-48 shadow-xl border-slate-200"
-                          >
-                            <POrderDynamic action="read">
-                              <DropdownMenuItem
-                                onClick={() => handleViewClick(orderDetail)}
-                                className="hover:bg-green-50 hover:text-green-700 transition-colors"
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                                Xem tin nhắn
-                              </DropdownMenuItem>
-                            </POrderDynamic>
-                            <POrderDynamic action="update">
-                              <DropdownMenuItem
-                                onClick={() => handleEditClick(orderDetail)}
-                                className="hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                              >
-                                <Edit className="mr-2 h-4 w-4" />
-                                Sửa
-                              </DropdownMenuItem>
-                            </POrderDynamic>
-                            <POrderDynamic action="delete">
-                              <DropdownMenuItem
-                                onClick={() => handleDeleteClick(orderDetail)}
-                                className="text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Xóa
-                              </DropdownMenuItem>
-                            </POrderDynamic>
-                            <POrderDynamic action="update">
-                              <DropdownMenuItem className="hover:bg-purple-50 hover:text-purple-700 transition-colors">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center">
-                                      <Shield className="mr-2 h-4 w-4" />
-                                      Blacklist
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>
-                                      Chặn khách hàng này (Tính năng sẽ có trong
-                                      tương lai)
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </DropdownMenuItem>
-                            </POrderDynamic>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center space-x-1">
+                          <POrderDynamic action="read">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() => handleViewClick(orderDetail)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Xem tin nhắn</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </POrderDynamic>
+                          
+                          <POrderDynamic action="update">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() => handleEditClick(orderDetail)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Sửa</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </POrderDynamic>
+
+                          <POrderDynamic action="delete">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() => handleDeleteClick(orderDetail)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Xóa</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </POrderDynamic>
+
+                          <POrderDynamic action="update">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
+                                  disabled
+                                >
+                                  <Shield className="h-3 w-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Blacklist (Tính năng sẽ có trong tương lai)</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </POrderDynamic>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

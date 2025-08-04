@@ -330,7 +330,7 @@ export default function DebtDetailDialog({
                 <div className="relative">
                   <h2 className="text-2xl font-bold flex items-center gap-3">
                     <span className="text-3xl animate-bounce">✨</span>
-                    Chi Tiết Công Nợ
+                    Chi Tiết Công Nợ Ngày Hiện Tại
                   </h2>
                   <p className="text-blue-100 mt-2 opacity-90">
                     Đang tải thông tin chi tiết với hiệu ứng siêu đỉnh...

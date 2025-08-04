@@ -166,7 +166,7 @@ const formatFullDateTime = (date: string | Date): string => {
   }
 };
 
-// ✅ ENHANCED: Parse message content with image URL and sticker handling
+// ✅ ENHANCED: Parse message content with image URL, sticker handling và file URL
 const parseMessageContent = (content: string, contentType?: string) => {
   try {
     // Try to parse as JSON first
@@ -191,6 +191,18 @@ const parseMessageContent = (content: string, contentType?: string) => {
         stickerId: parsed.stickerId,
         stickerUrl: stickerUrl,
         categoryId: parsed.categoryId || "",
+        description: parsed.description || ""
+      };
+    }
+
+    // ✅ Handle FILE contentType with fileUrl
+    if (contentType === "FILE" && parsed.fileUrl) {
+      return {
+        type: "file",
+        fileName: parsed.fileName || "file",
+        fileUrl: parsed.fileUrl,
+        fileSize: parsed.fileSize || 0,
+        fileExtension: parsed.fileExtension || "",
         description: parsed.description || ""
       };
     }
@@ -271,6 +283,30 @@ const downloadFile = (fileData: any, filename: string = "downloaded-file") => {
   } catch (error) {
     console.error("Error downloading file:", error);
     toast.error("Lỗi khi tải file");
+  }
+};
+
+// ✅ ENHANCED: Download file from URL utility
+const downloadFileFromUrl = (fileUrl: string, fileName: string) => {
+  try {
+    // ✅ Tạo link tạm để download file từ URL
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = fileName;
+    link.target = "_blank"; // Mở trong tab mới để tránh lỗi CORS
+    link.rel = "noopener noreferrer";
+    
+    // ✅ Thêm vào DOM, click và xóa
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success(`Đang tải xuống: ${fileName}`);
+  } catch (error) {
+    console.error("Error downloading file from URL:", error);
+    // ✅ Fallback: mở URL trong tab mới nếu download trực tiếp không được
+    window.open(fileUrl, "_blank");
+    toast.info(`Đã mở file trong tab mới: ${fileName}`);
   }
 };
 
@@ -574,7 +610,7 @@ const ZaloAttachmentRenderer = ({
   );
 };
 
-// ✅ ENHANCED: Chat Message Component với xử lý ảnh và sticker (sticker không thể phóng to)
+// ✅ ENHANCED: Chat Message Component với xử lý ảnh, sticker và file (sticker không thể phóng to)
 const ZaloChatMessage = ({
   message,
   index,
@@ -590,8 +626,40 @@ const ZaloChatMessage = ({
   const isBot = message.sender === "bot";
   const isCustomer = message.sender === "customer";
 
-  // ✅ Parse message content với xử lý ảnh và sticker
+  // ✅ Parse message content với xử lý ảnh, sticker và file
   const parsedMessage = parseMessageContent(message.content, message.contentType);
+
+  // ✅ Helper function để get file icon từ extension
+  const getFileIconFromExtension = (extension: string) => {
+    const ext = extension.toLowerCase();
+    if (ext.includes("xlsx") || ext.includes("xls")) {
+      return "📊";
+    }
+    if (ext.includes("docx") || ext.includes("doc")) {
+      return "📄";
+    }
+    if (ext.includes("pdf")) {
+      return "📋";
+    }
+    if (ext.includes("ppt") || ext.includes("pptx")) {
+      return "📈";
+    }
+    if (ext.includes("txt")) {
+      return "📝";
+    }
+    return "📁";
+  };
+
+  // ✅ Helper function để format file size
+  const formatFileSize = (sizeInBytes: number) => {
+    if (sizeInBytes < 1024) {
+      return `${sizeInBytes} B`;
+    } else if (sizeInBytes < 1024 * 1024) {
+      return `${Math.round(sizeInBytes / 1024)} KB`;
+    } else {
+      return `${Math.round(sizeInBytes / (1024 * 1024))} MB`;
+    }
+  };
 
   return (
     <motion.div
@@ -636,7 +704,7 @@ const ZaloChatMessage = ({
                 : "bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-md"
             )}
           >
-            {/* ✅ ENHANCED: Handle attachment, inline image và sticker */}
+            {/* ✅ ENHANCED: Handle attachment, inline image, sticker và file */}
             {message.attachment && (
               <div className="mb-3">
                 <ZaloAttachmentRenderer
@@ -695,15 +763,14 @@ const ZaloChatMessage = ({
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
-                  className="relative mb-2" // ✅ Loại bỏ cursor-pointer và onClick
+                  className="relative mb-2"
                 >
                   <img
                     src={parsedMessage.stickerUrl}
                     alt={`Sticker ${parsedMessage.stickerId}`}
-                    className="w-auto h-auto max-w-[150px] max-h-[150px] rounded-lg shadow-md object-contain transition-all duration-300" // ✅ Loại bỏ hover effects
+                    className="w-auto h-auto max-w-[150px] max-h-[150px] rounded-lg shadow-md object-contain transition-all duration-300"
                     loading="lazy"
                     onError={(e) => {
-                      // ✅ Fallback nếu không load được sticker
                       e.currentTarget.style.display = "none";
                       e.currentTarget.parentElement!.innerHTML = `
                         <div class="w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center">
@@ -712,10 +779,108 @@ const ZaloChatMessage = ({
                       `;
                     }}
                   />
-                  {/* ✅ Loại bỏ hover overlay và click hint cho sticker */}
                 </motion.div>
 
                 {/* Sticker description if exists */}
+                {parsedMessage.description && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {parsedMessage.description}
+                  </p>
+                )}
+              </div>
+            ) : parsedMessage.type === "file" ? (
+              // ✅ Display file from fileUrl
+              <div className="mb-3">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className={cn(
+                    "p-3 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-md",
+                    isStaff
+                      ? "bg-white/20 border-white/30 hover:bg-white/30"
+                      : isBot
+                      ? "bg-white/20 border-white/30 hover:bg-white/30"
+                      : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                  )}
+                  onClick={() => downloadFileFromUrl(parsedMessage.fileUrl, parsedMessage.fileName)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl",
+                        isStaff
+                          ? "bg-white/30"
+                          : isBot
+                          ? "bg-white/30"
+                          : "bg-gray-100"
+                      )}
+                    >
+                      {getFileIconFromExtension(parsedMessage.fileExtension)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={cn(
+                          "font-semibold text-sm mb-1",
+                          isStaff
+                            ? "text-white"
+                            : isBot
+                            ? "text-white"
+                            : "text-gray-700"
+                        )}
+                      >
+                        {parsedMessage.fileName}
+                      </div>
+                      <div
+                        className={cn(
+                          "text-xs opacity-90 flex items-center gap-2",
+                          isStaff
+                            ? "text-blue-100"
+                            : isBot
+                            ? "text-yellow-100"
+                            : "text-gray-600"
+                        )}
+                      >
+                        <FileText className="h-3 w-3" />
+                        <span>File đính kèm</span>
+                        {parsedMessage.fileSize > 0 && (
+                          <span>• {formatFileSize(parsedMessage.fileSize)}</span>
+                        )}
+                      </div>
+                      {/* ✅ Hiển thị URL để debug */}
+                      <div
+                        className={cn(
+                          "text-xs opacity-70 font-mono mt-1",
+                          isStaff
+                            ? "text-blue-200"
+                            : isBot
+                            ? "text-yellow-200"
+                            : "text-gray-500"
+                        )}
+                      >
+                        {parsedMessage.fileUrl.length > 60 
+                          ? `${parsedMessage.fileUrl.substring(0, 60)}...` 
+                          : parsedMessage.fileUrl
+                        }
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "flex-shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded-full font-medium",
+                        isStaff
+                          ? "bg-white/20 text-white"
+                          : isBot
+                          ? "bg-white/20 text-white"
+                          : "bg-gray-200 text-gray-700"
+                      )}
+                    >
+                      <Download className="h-3 w-3" />
+                      <span>Tải xuống</span>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* File description if exists */}
                 {parsedMessage.description && (
                   <p className="text-xs text-gray-500 mt-1">
                     {parsedMessage.description}
@@ -862,7 +1027,7 @@ const ZaloChatConversationView = ({
         if (!isDuplicate) {
           messages.push({
             sender: historyMsg.sender,
-            content: historyMsg.content, // ✅ Giữ nguyên raw content, sẽ parse trong ZaloChatMessage
+            content: historyMsg.content,
             timestamp: historyMsg.timestamp,
             contentType: historyMsg.contentType || "TEXT",
           });
@@ -880,7 +1045,7 @@ const ZaloChatConversationView = ({
       if (!customerReplyExists) {
         messages.push({
           sender: "customer",
-          content: log.customer_reply_content, // ✅ Giữ nguyên raw content
+          content: log.customer_reply_content,
           timestamp: log.customer_replied_at,
           contentType: "TEXT",
         });
@@ -897,7 +1062,7 @@ const ZaloChatConversationView = ({
       if (!staffReplyExists) {
         messages.push({
           sender: "staff",
-          content: log.staff_reply_content, // ✅ Giữ nguyên raw content
+          content: log.staff_reply_content,
           timestamp: log.staff_handled_at,
           contentType: "TEXT",
         });
@@ -1148,7 +1313,7 @@ const ImageModal = ({
   );
 };
 
-// Main Component (giữ phần code còn lại như cũ)
+// Main Component (phần còn lại giữ nguyên như trong attachment)
 export const CustomerLogModal = ({
   isOpen,
   onClose,
