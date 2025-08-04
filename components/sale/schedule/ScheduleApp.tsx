@@ -212,7 +212,7 @@ const weekDays = [
 export default function CompleteScheduleApp() {
   // Permission check
   const { user, getAllUserRoles } = usePermission();
-  
+
   // Kiểm tra xem user có phải admin không
   const isAdmin = useMemo(() => {
     if (!user) return false;
@@ -516,18 +516,17 @@ export default function CompleteScheduleApp() {
   const handleTimeSlotMouseDown = useCallback(
     (dayIndex: number, time: string, e: React.MouseEvent) => {
       e.preventDefault();
-      
-      // Chỉ admin mới có quyền thao tác
+
       if (!isAdmin) {
         toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
         return;
       }
-
       if (!selectedDepartment) {
         toast.error("Vui lòng chọn phòng ban trước");
         return;
       }
 
+      // Xác định trạng thái chọn/hủy chọn dựa trên trạng thái của ô bắt đầu
       const currentSelections = getCurrentDepartmentSelections();
       const dayOfWeek = ((dayIndex + 1) % 7) + 1;
       const isCurrentlySelected = currentSelections.timeSlots.some(
@@ -538,6 +537,7 @@ export default function CompleteScheduleApp() {
         isDragging: true,
         startSlot: { day: dayIndex, time },
         currentSlot: { day: dayIndex, time },
+        // Nếu ô đầu tiên đã được chọn thì mặc định là hủy chọn, ngược lại là chọn
         isSelecting: !isCurrentlySelected,
       });
     },
@@ -564,29 +564,33 @@ export default function CompleteScheduleApp() {
 
     let newTimeSlots = [...currentSelections.timeSlots];
 
-    range.forEach(({ day, time }) => {
-      const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
-      const existingIndex = newTimeSlots.findIndex(
-        (slot) => slot.day_of_week === day + 1 && slot.start_time === time
-      );
-
-      if (dragState.isSelecting) {
-        if (existingIndex === -1) {
+    if (dragState.isSelecting) {
+      // Chọn thêm các ô chưa được chọn
+      range.forEach(({ day, time }) => {
+        const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
+        const dayOfWeek = ((day + 1) % 7) + 1;
+        const exists = newTimeSlots.some(
+          (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+        );
+        if (!exists) {
           newTimeSlots.push({
-            day_of_week: ((day + 1) % 7) + 1,
+            day_of_week: dayOfWeek,
             start_time: time,
             end_time: endTime,
             department_id: selectedDepartment,
           });
         }
-      } else {
-        if (existingIndex !== -1) {
-          newTimeSlots = newTimeSlots.filter(
-            (_, index) => index !== existingIndex
-          );
-        }
-      }
-    });
+      });
+    } else {
+      // Hủy chọn các ô đã được chọn
+      range.forEach(({ day, time }) => {
+        const dayOfWeek = ((day + 1) % 7) + 1;
+        newTimeSlots = newTimeSlots.filter(
+          (slot) =>
+            !(slot.day_of_week === dayOfWeek && slot.start_time === time)
+        );
+      });
+    }
 
     updateDepartmentSelections(selectedDepartment, {
       ...currentSelections,
@@ -961,13 +965,15 @@ export default function CompleteScheduleApp() {
                 onOpenChange={setIsCreateDialogOpen}
               >
                 <DialogTrigger asChild>
-                  <Button 
+                  <Button
                     disabled={!isAdmin}
                     className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="flex items-center gap-2">
                       <Plus className="w-4 h-4" />
-                      {isAdmin ? "Tạo lịch mới" : "Chỉ admin mới có quyền tạo lịch"}
+                      {isAdmin
+                        ? "Tạo lịch mới"
+                        : "Chỉ admin mới có quyền tạo lịch"}
                     </span>
                   </Button>
                 </DialogTrigger>
@@ -985,8 +991,9 @@ export default function CompleteScheduleApp() {
               <Alert className="border-yellow-200 bg-yellow-50">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription className="text-yellow-800">
-                  <strong>Chế độ chỉ xem:</strong> Bạn chỉ có quyền xem lịch hoạt động. 
-                  Chỉ Admin mới có thể tạo, chỉnh sửa và xóa lịch hoạt động.
+                  <strong>Chế độ chỉ xem:</strong> Bạn chỉ có quyền xem lịch
+                  hoạt động. Chỉ Admin mới có thể tạo, chỉnh sửa và xóa lịch
+                  hoạt động.
                 </AlertDescription>
               </Alert>
             </motion.div>
@@ -1062,7 +1069,9 @@ export default function CompleteScheduleApp() {
                         }`}
                         onClick={() => {
                           if (!isAdmin) {
-                            toast.error("Bạn không có quyền chọn phòng ban để thao tác");
+                            toast.error(
+                              "Bạn không có quyền chọn phòng ban để thao tác"
+                            );
                             return;
                           }
                           setSelectedDepartment(
@@ -1754,7 +1763,9 @@ export default function CompleteScheduleApp() {
                       <Button
                         onClick={() => {
                           if (!isAdmin) {
-                            toast.error("Bạn không có quyền lưu lịch hoạt động");
+                            toast.error(
+                              "Bạn không có quyền lưu lịch hoạt động"
+                            );
                             return;
                           }
                           setIsCreateDialogOpen(true);
@@ -1764,7 +1775,9 @@ export default function CompleteScheduleApp() {
                       >
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
-                          {isAdmin ? `Lưu lịch (${departmentSelections.size} phòng ban)` : "Chỉ admin mới có quyền lưu lịch"}
+                          {isAdmin
+                            ? `Lưu lịch (${departmentSelections.size} phòng ban)`
+                            : "Chỉ admin mới có quyền lưu lịch"}
                         </span>
                       </Button>
 
@@ -1929,7 +1942,9 @@ export default function CompleteScheduleApp() {
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           if (!isAdmin) {
-                                            toast.error("Bạn không có quyền chỉnh sửa lịch hoạt động");
+                                            toast.error(
+                                              "Bạn không có quyền chỉnh sửa lịch hoạt động"
+                                            );
                                             return;
                                           }
                                           setEditingSchedule(schedule);
@@ -2013,7 +2028,9 @@ export default function CompleteScheduleApp() {
                                         onClick={async (e) => {
                                           e.stopPropagation();
                                           if (!isAdmin) {
-                                            toast.error("Bạn không có quyền xóa lịch hoạt động");
+                                            toast.error(
+                                              "Bạn không có quyền xóa lịch hoạt động"
+                                            );
                                             return;
                                           }
                                           if (
