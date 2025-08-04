@@ -35,6 +35,7 @@ import {
   Users,
   Clock,
   Copy, // ✅ THÊM Copy icon
+  AlertTriangle, // ✅ THÊM warning icon
 } from "lucide-react";
 import { campaignAPI } from "@/lib/campaign-api";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ import CampaignCustomersModal from "./CampaignCustomersModal";
 import CampaignModal from "./CampaignModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { transformToCampaignWithDetails } from "@/utils/campaignUtils"; // ✅ Import helper
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"; // ✅ Import Tooltip
 
 interface CampaignManagementProps {
   campaigns: CampaignWithDetails[];
@@ -92,6 +94,12 @@ const STATUS_CONFIG = {
   },
 } as const;
 
+// ✅ HELPER FUNCTION: Kiểm tra cảnh báo lịch
+const hasScheduleWarning = (campaign: CampaignWithDetails): boolean => {
+  return campaign.status === CampaignStatus.SCHEDULED && 
+         (!campaign.start_date || !campaign.end_date);
+};
+
 const getValidStatusTransitions = (
   currentStatus: CampaignStatus
 ): CampaignStatus[] => {
@@ -112,15 +120,27 @@ const StatusDropdown = React.memo(
     status,
     onChange,
     loading,
+    campaign, // ✅ THÊM campaign prop để kiểm tra start_date/end_date
   }: {
     status: CampaignStatus;
     onChange: (newStatus: CampaignStatus) => void;
     loading: boolean;
+    campaign?: CampaignWithDetails; // ✅ THÊM campaign prop
   }) => {
     const config = STATUS_CONFIG[status] || STATUS_CONFIG[CampaignStatus.DRAFT];
     const validStatuses = getValidStatusTransitions(status);
 
+    // ✅ KIỂM TRA CẢNH BÁO CHO SCHEDULED STATUS
+    const hasWarningStatus = useMemo(() => {
+      return campaign ? hasScheduleWarning(campaign) : false;
+    }, [campaign]);
+
     const getStatusTooltip = (currentStatus: CampaignStatus) => {
+      // ✅ KHÔNG HIỆN TOOLTIP CHO STATUS NỮA (vì toàn bộ dòng có tooltip)
+      if (hasWarningStatus) {
+        return "";
+      }
+      
       switch (currentStatus) {
         case CampaignStatus.SCHEDULED:
           return "Bot Python sẽ tự động chuyển thành 'Đang chạy' khi đến thời gian";
@@ -131,18 +151,35 @@ const StatusDropdown = React.memo(
       }
     };
 
+    // ✅ DYNAMIC COLOR CHO WARNING STATE
+    const buttonColor = hasWarningStatus 
+      ? "bg-orange-100 text-orange-700 border-orange-200" 
+      : config.color;
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className={cn("h-6 gap-1 px-2 text-xs", config.color)}
+            className={cn("h-6 gap-1 px-2 text-xs min-w-[80px] justify-start", buttonColor)}
             disabled={loading}
             title={getStatusTooltip(status)}
           >
-            {config.icon}
-            {config.label}
+            {/* ✅ HIỂN THỊ WARNING ICON CHO SCHEDULED + NULL DATES */}
+            <div className="flex items-center gap-1">
+              {hasWarningStatus ? (
+                <>
+                  <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{config.label}</span>
+                </>
+              ) : (
+                <>
+                  {config.icon}
+                  <span className="truncate">{config.label}</span>
+                </>
+              )}
+            </div>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
@@ -254,6 +291,9 @@ const CampaignRow = React.memo(
     const canCreate = canAccess("chien-dich", "create"); // ✅ THÊM permission create cho copy
 
     const isArchived = campaign.status === CampaignStatus.ARCHIVED;
+    
+    // ✅ KIỂM TRA CẢNH BÁO LỊCH CHO TOÀN BỘ DÒNG
+    const hasWarning = hasScheduleWarning(campaign);
 
     const canToggleStatus = useMemo(
       () =>
@@ -294,10 +334,14 @@ const CampaignRow = React.memo(
       [campaign, onShowCustomers]
     );
 
-    return (
+    // ✅ MAIN TABLE ROW WITH CONDITIONAL TOOLTIP
+    const tableRowContent = (
       <TableRow
         className={cn(
-          "group transition-all duration-200 hover:bg-gray-50 cursor-pointer",
+          "group transition-all duration-200 cursor-pointer",
+          hasWarning 
+            ? "bg-orange-50 hover:bg-orange-100 border-l-4 border-l-orange-400" 
+            : "hover:bg-gray-50",
           isLoading && "opacity-50 pointer-events-none"
         )}
         onDoubleClick={handleDoubleClick}
@@ -347,6 +391,7 @@ const CampaignRow = React.memo(
           <StatusDropdown
             status={campaign.status}
             loading={isLoading}
+            campaign={campaign} // ✅ THÊM campaign prop
             onChange={(newStatus) =>
               onAction("change-status", {
                 id: campaign.id,
@@ -544,6 +589,20 @@ const CampaignRow = React.memo(
           </DropdownMenu>
         </TableCell>
       </TableRow>
+    );
+
+    // ✅ RETURN: Wrap với Tooltip nếu có warning
+    return hasWarning ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {tableRowContent}
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <p className="text-sm">Chiến dịch đã lên lịch nhưng thời gian cấu hình không hợp lệ theo quy định phòng ban</p>
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      tableRowContent
     );
   }
 );
@@ -829,26 +888,44 @@ export default function CampaignManagement({
               payload.status === CampaignStatus.RUNNING
                 ? CampaignStatus.PAUSED
                 : CampaignStatus.RUNNING;
-            await campaignAPI.updateStatus(payload.id, newStatus);
-            toast.success(
-              `Đã ${
-                newStatus === CampaignStatus.RUNNING ? "chạy" : "tạm dừng"
-              } chiến dịch`
-            );
+            const result = await campaignAPI.updateStatus(payload.id, newStatus);
+            
+            if (result.success) {
+              toast.success(
+                `Đã ${
+                  newStatus === CampaignStatus.RUNNING ? "chạy" : "tạm dừng"
+                } chiến dịch`
+              );
+            } else {
+              toast.error(result.error || "Có lỗi xảy ra khi thay đổi trạng thái");
+              return; // Không reload nếu có lỗi
+            }
             break;
           }
 
           case "archive": {
-            await campaignAPI.updateStatus(payload.id, CampaignStatus.ARCHIVED);
-            toast.success("Đã lưu trữ chiến dịch");
+            const result = await campaignAPI.archive(payload.id);
+            
+            if (result.success) {
+              toast.success("Đã lưu trữ chiến dịch");
+            } else {
+              toast.error(result.error || "Có lỗi xảy ra khi lưu trữ chiến dịch");
+              return; // Không reload nếu có lỗi
+            }
             break;
           }
 
           case "change-status": {
             if (!payload.newStatus || payload.newStatus === payload.status)
               return;
-            await campaignAPI.updateStatus(payload.id, payload.newStatus);
-            toast.success("Đã chuyển trạng thái chiến dịch");
+            const result = await campaignAPI.updateStatus(payload.id, payload.newStatus);
+            
+            if (result.success) {
+              toast.success("Đã chuyển trạng thái chiến dịch");
+            } else {
+              toast.error(result.error || "Có lỗi xảy ra khi chuyển trạng thái");
+              return; // Không reload nếu có lỗi
+            }
             break;
           }
 
@@ -900,7 +977,7 @@ export default function CampaignManagement({
   );
 
   return (
-    <>
+    <TooltipProvider>
       <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
         <Table>
           <TableHeader className="bg-gray-50">
@@ -1022,6 +1099,6 @@ export default function CampaignManagement({
         confirmText="Xóa chiến dịch"
         cancelText="Hủy bỏ"
       />
-    </>
+    </TooltipProvider>
   );
 }

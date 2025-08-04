@@ -518,28 +518,6 @@ export default function CampaignPage() {
               onDepartmentChange={handleDepartmentFilterChange} // Callback đặc biệt cho department
               loading={campaignsLoading || optionsLoading}
               // **Export functionality**
-              canExport={true}
-              getExportData={() => ({
-                headers: [
-                  "Tên chiến dịch",
-                  "Loại",
-                  "Trạng thái",
-                  "Ngày tạo",
-                  "Người tạo",
-                  "Phòng ban",
-                ],
-                data: campaigns.map((c) => [
-                  c.name,
-                  CAMPAIGN_TYPE_OPTIONS.find(
-                    (opt) => opt.value === c.campaign_type
-                  )?.label || c.campaign_type,
-                  STATUS_OPTIONS.find((opt) => opt.value === c.status)?.label ||
-                    c.status,
-                  new Date(c.created_at).toLocaleDateString("vi-VN"),
-                  c.created_by?.fullName || "",
-                  c.department?.name || "",
-                ]),
-              })}
             >
               <CampaignManagement
                 key={`campaign-mgmt-${totalCount}-${currentPage}`}

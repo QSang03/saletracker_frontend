@@ -10,6 +10,7 @@ import React, {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,7 @@ import {
   HourlySlotsConfig,
 } from "@/types/schedule";
 import { ScheduleService } from "@/lib/schedule-api";
+import { usePermission } from "@/hooks/usePermission";
 
 // Types
 interface Department {
@@ -208,6 +210,16 @@ const weekDays = [
 ];
 
 export default function CompleteScheduleApp() {
+  // Permission check
+  const { user, getAllUserRoles } = usePermission();
+  
+  // Kiểm tra xem user có phải admin không
+  const isAdmin = useMemo(() => {
+    if (!user) return false;
+    const userRoles = getAllUserRoles();
+    return userRoles.some((role) => role.name === "admin");
+  }, [user, getAllUserRoles]);
+
   // View state
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -454,6 +466,12 @@ export default function CompleteScheduleApp() {
   // Event handlers
   const handleDayClick = useCallback(
     (date: number, isCurrentMonth: boolean) => {
+      // Chỉ admin mới có quyền thao tác
+      if (!isAdmin) {
+        toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
+        return;
+      }
+
       if (!isCurrentMonth || !selectedDepartment) {
         if (!selectedDepartment) {
           toast.error("Vui lòng chọn phòng ban trước");
@@ -487,6 +505,7 @@ export default function CompleteScheduleApp() {
       });
     },
     [
+      isAdmin,
       selectedDepartment,
       currentMonth,
       getCurrentDepartmentSelections,
@@ -497,14 +516,22 @@ export default function CompleteScheduleApp() {
   const handleTimeSlotMouseDown = useCallback(
     (dayIndex: number, time: string, e: React.MouseEvent) => {
       e.preventDefault();
+      
+      // Chỉ admin mới có quyền thao tác
+      if (!isAdmin) {
+        toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
+        return;
+      }
+
       if (!selectedDepartment) {
         toast.error("Vui lòng chọn phòng ban trước");
         return;
       }
 
       const currentSelections = getCurrentDepartmentSelections();
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
       const isCurrentlySelected = currentSelections.timeSlots.some(
-        (slot) => slot.day_of_week === dayIndex + 1 && slot.start_time === time
+        (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
       );
 
       setDragState({
@@ -514,7 +541,7 @@ export default function CompleteScheduleApp() {
         isSelecting: !isCurrentlySelected,
       });
     },
-    [selectedDepartment, getCurrentDepartmentSelections]
+    [isAdmin, selectedDepartment, getCurrentDepartmentSelections]
   );
 
   const handleTimeSlotMouseEnter = useCallback(
@@ -546,7 +573,7 @@ export default function CompleteScheduleApp() {
       if (dragState.isSelecting) {
         if (existingIndex === -1) {
           newTimeSlots.push({
-            day_of_week: day + 1,
+            day_of_week: ((day + 1) % 7) + 1,
             start_time: time,
             end_time: endTime,
             department_id: selectedDepartment,
@@ -769,13 +796,14 @@ export default function CompleteScheduleApp() {
   // Helper functions
   const getSchedulesForSlot = useCallback(
     (dayIndex: number, time: string) => {
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
       return filteredSchedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.HOURLY_SLOTS) return false;
 
         const config = schedule.schedule_config as HourlySlotsConfig;
         return config.slots.some(
           (slot) =>
-            (slot.day_of_week === dayIndex + 1 || !slot.day_of_week) &&
+            (slot.day_of_week === dayOfWeek || !slot.day_of_week) &&
             slot.start_time <= time &&
             slot.end_time > time
         );
@@ -826,8 +854,9 @@ export default function CompleteScheduleApp() {
   const isTimeSlotSelected = useCallback(
     (dayIndex: number, time: string) => {
       const currentSelections = getCurrentDepartmentSelections();
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
       return currentSelections.timeSlots.some(
-        (slot) => slot.day_of_week === dayIndex + 1 && slot.start_time === time
+        (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
       );
     },
     [getCurrentDepartmentSelections]
@@ -852,11 +881,11 @@ export default function CompleteScheduleApp() {
 
   const isTimeSlotSelectedByAnyDept = useCallback(
     (dayIndex: number, time: string) => {
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
       for (const [deptId, selections] of departmentSelections) {
         if (
           selections.timeSlots.some(
-            (slot) =>
-              slot.day_of_week === dayIndex + 1 && slot.start_time === time
+            (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
           )
         ) {
           return { isSelected: true, departmentId: deptId };
@@ -887,7 +916,7 @@ export default function CompleteScheduleApp() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-full p-5 mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -932,16 +961,36 @@ export default function CompleteScheduleApp() {
                 onOpenChange={setIsCreateDialogOpen}
               >
                 <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all">
+                  <Button 
+                    disabled={!isAdmin}
+                    className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     <span className="flex items-center gap-2">
                       <Plus className="w-4 h-4" />
-                      Tạo lịch mới
+                      {isAdmin ? "Tạo lịch mới" : "Chỉ admin mới có quyền tạo lịch"}
                     </span>
                   </Button>
                 </DialogTrigger>
               </Dialog>
             </div>
           </div>
+
+          {/* Permission Notice */}
+          {!isAdmin && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6"
+            >
+              <Alert className="border-yellow-200 bg-yellow-50">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-yellow-800">
+                  <strong>Chế độ chỉ xem:</strong> Bạn chỉ có quyền xem lịch hoạt động. 
+                  Chỉ Admin mới có thể tạo, chỉnh sửa và xóa lịch hoạt động.
+                </AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
 
           {/* Department Legend & Controls */}
           <Card className="mb-6 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
@@ -1003,7 +1052,8 @@ export default function CompleteScheduleApp() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 ${
+                        disabled={!isAdmin}
+                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                           isSelected
                             ? `${color.light} ${color.border} ${color.text} border-2 ring-2 ring-blue-300 shadow-md`
                             : hasSelections
@@ -1011,6 +1061,10 @@ export default function CompleteScheduleApp() {
                             : "hover:bg-slate-50 hover:shadow-sm"
                         }`}
                         onClick={() => {
+                          if (!isAdmin) {
+                            toast.error("Bạn không có quyền chọn phòng ban để thao tác");
+                            return;
+                          }
                           setSelectedDepartment(
                             selectedDepartment === dept.id ? null : dept.id
                           );
@@ -1099,8 +1153,15 @@ export default function CompleteScheduleApp() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setSelectedDepartment(null)}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      disabled={!isAdmin}
+                      onClick={() => {
+                        if (!isAdmin) {
+                          toast.error("Bạn không có quyền thao tác");
+                          return;
+                        }
+                        setSelectedDepartment(null);
+                      }}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -1691,23 +1752,34 @@ export default function CompleteScheduleApp() {
                       </div>
 
                       <Button
-                        onClick={() => setIsCreateDialogOpen(true)}
-                        className="w-full bg-green-600 hover:bg-green-700 shadow-md"
-                        disabled={departmentSelections.size === 0}
+                        onClick={() => {
+                          if (!isAdmin) {
+                            toast.error("Bạn không có quyền lưu lịch hoạt động");
+                            return;
+                          }
+                          setIsCreateDialogOpen(true);
+                        }}
+                        className="w-full bg-green-600 hover:bg-green-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={departmentSelections.size === 0 || !isAdmin}
                       >
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
-                          Lưu lịch ({departmentSelections.size} phòng ban)
+                          {isAdmin ? `Lưu lịch (${departmentSelections.size} phòng ban)` : "Chỉ admin mới có quyền lưu lịch"}
                         </span>
                       </Button>
 
                       <Button
                         onClick={() => {
+                          if (!isAdmin) {
+                            toast.error("Bạn không có quyền xóa tất cả lịch");
+                            return;
+                          }
                           setDepartmentSelections(new Map());
                           setSelectedDepartment(null);
                         }}
                         variant="outline"
-                        className="w-full hover:bg-red-50 hover:border-red-200"
+                        disabled={!isAdmin}
+                        className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="flex items-center gap-2">
                           <X className="w-4 h-4" />
@@ -1791,7 +1863,7 @@ export default function CompleteScheduleApp() {
                                       variant={
                                         schedule.status ===
                                         ScheduleStatus.ACTIVE
-                                          ? "default"
+                                          ? "active"
                                           : schedule.status ===
                                             ScheduleStatus.EXPIRED
                                           ? "destructive"
@@ -1852,9 +1924,14 @@ export default function CompleteScheduleApp() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-6 w-6 p-0 hover:bg-blue-100"
+                                        disabled={!isAdmin}
+                                        className="h-6 w-6 p-0 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          if (!isAdmin) {
+                                            toast.error("Bạn không có quyền chỉnh sửa lịch hoạt động");
+                                            return;
+                                          }
                                           setEditingSchedule(schedule);
 
                                           // Load data for editing
@@ -1931,9 +2008,14 @@ export default function CompleteScheduleApp() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        disabled={!isAdmin}
+                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                         onClick={async (e) => {
                                           e.stopPropagation();
+                                          if (!isAdmin) {
+                                            toast.error("Bạn không có quyền xóa lịch hoạt động");
+                                            return;
+                                          }
                                           if (
                                             window.confirm(
                                               "Bạn có chắc chắn muốn xóa lịch này?"

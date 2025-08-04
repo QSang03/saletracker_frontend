@@ -202,13 +202,13 @@ export const campaignAPI = {
   updateStatus: async (
     id: string,
     status: CampaignStatus
-  ): Promise<Campaign> => {
+  ): Promise<{ success: boolean; error?: string; data?: Campaign }> => {
     const response = await api.patch(`/campaigns/${id}/status`, { status });
     return response.data;
   },
 
   // Archive campaign
-  archive: async (id: string): Promise<Campaign> => {
+  archive: async (id: string): Promise<{ success: boolean; error?: string; data?: Campaign }> => {
     const response = await api.patch(`/campaigns/${id}/archive`);
     return response.data;
   },
