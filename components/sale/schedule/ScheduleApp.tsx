@@ -108,6 +108,12 @@ interface DragState {
   currentSlot: { day: number; time: string } | null;
   isSelecting: boolean;
 }
+interface MontylyDragState {
+  isDragging: boolean;
+  startDay: { date: number; month: number; year: number } | null;
+  currentDay: { date: number; month: number; year: number } | null;
+  isSelecting: boolean;
+}
 
 // Constants
 const getDepartmentColor = (departmentId: number) => {
@@ -250,6 +256,12 @@ export default function CompleteScheduleApp() {
     currentSlot: null,
     isSelecting: false,
   });
+  const [monthlyDragState, setMonthlyDragState] = useState<MontylyDragState>({
+    isDragging: false,
+    startDay: null,
+    currentDay: null,
+    isSelecting: false,
+  });
 
   // Dialog state
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -265,6 +277,15 @@ export default function CompleteScheduleApp() {
   );
   const [typeFilter, setTypeFilter] = useState<ScheduleType | "all">("all");
 
+  // editor mode
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [originalSelections, setOriginalSelections] = useState<
+    Map<number, DepartmentSelections>
+  >(new Map());
+  const [editingDepartment, setEditingDepartment] = useState<number | null>(
+    null
+  );
+
   // Form state
   const [formData, setFormData] = useState({
     name: "",
@@ -273,76 +294,6 @@ export default function CompleteScheduleApp() {
     end_time: "",
   });
 
-  // Data fetching
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      try {
-        setIsLoadingDepartments(true);
-        const response = await api.get("departments/all-unrestricted");
-        const data = response.data;
-        setDepartments(data);
-        setVisibleDepartments(data.map((d: Department) => d.id));
-      } catch (error: any) {
-        console.error("Error fetching departments:", error);
-        toast.error("Không thể tải danh sách phòng ban");
-      } finally {
-        setIsLoadingDepartments(false);
-      }
-    };
-
-    fetchDepartments();
-  }, []);
-
-  useEffect(() => {
-    const fetchAllSchedules = async () => {
-      try {
-        setIsLoadingSchedules(true);
-        const data = await ScheduleService.findAll();
-        setSchedules(data.data);
-      } catch (error: any) {
-        console.error("Error fetching schedules:", error);
-        toast.error("Không thể tải lịch hoạt động");
-      } finally {
-        setIsLoadingSchedules(false);
-      }
-    };
-
-    fetchAllSchedules();
-  }, []);
-
-  // Drag handling
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (dragState.isDragging) {
-        setDragState({
-          isDragging: false,
-          startSlot: null,
-          currentSlot: null,
-          isSelecting: false,
-        });
-      }
-    };
-
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (dragState.isDragging) {
-        e.preventDefault();
-      }
-    };
-
-    if (dragState.isDragging) {
-      document.addEventListener("mouseup", handleGlobalMouseUp);
-      document.addEventListener("mousemove", handleGlobalMouseMove);
-      document.body.style.userSelect = "none";
-    }
-
-    return () => {
-      document.removeEventListener("mouseup", handleGlobalMouseUp);
-      document.removeEventListener("mousemove", handleGlobalMouseMove);
-      document.body.style.userSelect = "";
-    };
-  }, [dragState.isDragging]);
-
-  // Utility functions
   const getWeekDates = useCallback(() => {
     const start = new Date(currentWeek);
     const day = start.getDay();
@@ -414,53 +365,109 @@ export default function CompleteScheduleApp() {
     const allDays: SelectedDay[] = [];
     const allTimeSlots: TimeSlot[] = [];
 
-    departmentSelections.forEach((selections) => {
-      allDays.push(...selections.days);
-      allTimeSlots.push(...selections.timeSlots);
+    departmentSelections.forEach((selections, deptId) => {
+      // ✅ CHỈ TÍNH CÁC DEPARTMENT ĐANG VISIBLE
+      if (visibleDepartments.includes(deptId)) {
+        allDays.push(...selections.days);
+        allTimeSlots.push(...selections.timeSlots);
+      }
     });
 
     return { allDays, allTimeSlots };
-  }, [departmentSelections]);
+  }, [departmentSelections, visibleDepartments]);
 
-  // Drag utilities
-  const getDragSelectionRange = useCallback(() => {
-    if (!dragState.startSlot || !dragState.currentSlot) return [];
+  const isPastDay = useCallback((date: number, month: number, year: number) => {
+    const slotDate = new Date(year, month, date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    slotDate.setHours(0, 0, 0, 0);
+    return slotDate < today;
+  }, []);
 
-    const startDay = Math.min(
-      dragState.startSlot.day,
-      dragState.currentSlot.day
-    );
-    const endDay = Math.max(dragState.startSlot.day, dragState.currentSlot.day);
-    const startTimeIndex = Math.min(
-      timeSlots.indexOf(dragState.startSlot.time),
-      timeSlots.indexOf(dragState.currentSlot.time)
-    );
-    const endTimeIndex = Math.max(
-      timeSlots.indexOf(dragState.startSlot.time),
-      timeSlots.indexOf(dragState.currentSlot.time)
-    );
-
-    const range: { day: number; time: string }[] = [];
-    for (let day = startDay; day <= endDay; day++) {
-      for (
-        let timeIndex = startTimeIndex;
-        timeIndex <= endTimeIndex;
-        timeIndex++
-      ) {
-        range.push({ day, time: timeSlots[timeIndex] });
-      }
-    }
-
-    return range;
-  }, [dragState.startSlot, dragState.currentSlot]);
-
-  const isSlotInDragRange = useCallback(
+  const isPastTimeSlot = useCallback(
     (dayIndex: number, time: string) => {
-      if (!dragState.isDragging) return false;
-      const range = getDragSelectionRange();
-      return range.some((slot) => slot.day === dayIndex && slot.time === time);
+      const now = new Date();
+      const weekDates = getWeekDates();
+      const slotDate = weekDates[dayIndex];
+
+      const [hours, minutes] = time.split(":").map(Number);
+      const slotDateTime = new Date(slotDate);
+      slotDateTime.setHours(hours, minutes, 0, 0);
+
+      return slotDateTime < now;
     },
-    [dragState.isDragging, getDragSelectionRange]
+    [getWeekDates]
+  );
+
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter((schedule) => {
+      const matchesSearch =
+        schedule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        schedule.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus =
+        statusFilter === "all" || schedule.status === statusFilter;
+      const matchesType =
+        typeFilter === "all" || schedule.schedule_type === typeFilter;
+      const departmentId = schedule.department?.id;
+      const matchesDepartment =
+        typeof departmentId === "number" &&
+        visibleDepartments.includes(departmentId);
+
+      return matchesSearch && matchesStatus && matchesType && matchesDepartment;
+    });
+  }, [schedules, searchTerm, statusFilter, typeFilter, visibleDepartments]);
+
+  const getSchedulesForDay = useCallback(
+    (date: number, month: number, year: number) => {
+      return filteredSchedules.filter((schedule) => {
+        if (schedule.schedule_type !== ScheduleType.DAILY_DATES) return false;
+
+        const config = schedule.schedule_config as DailyDatesConfig;
+        return config.dates.some(
+          (d) =>
+            d.day_of_month === date &&
+            (d.month === month + 1 || !d.month) &&
+            (d.year === year || !d.year)
+        );
+      });
+    },
+    [filteredSchedules]
+  );
+
+  const isDayHasExistingSchedule = useCallback(
+    (date: number, month: number, year: number) => {
+      const daySchedules = getSchedulesForDay(date, month, year);
+      // Kiểm tra xem có schedule nào của chính phòng ban đang chọn không
+      // Nếu đang edit, loại trừ schedule đang edit
+      return daySchedules.some(
+        (schedule) =>
+          schedule.department &&
+          schedule.department.id === selectedDepartment &&
+          schedule.status === ScheduleStatus.ACTIVE &&
+          // ✅ THÊM: Loại trừ schedule đang edit
+          (!isEditMode ||
+            !editingSchedule ||
+            Number(schedule.id) !== Number(editingSchedule.id))
+      );
+    },
+    [getSchedulesForDay, selectedDepartment, isEditMode, editingSchedule]
+  );
+
+  const isDayConflicted = useCallback(
+    (date: number, month: number, year: number) => {
+      if (isPastDay(date, month, year)) {
+        return true;
+      }
+      const daySchedules = getSchedulesForDay(date, month, year);
+      // Nếu có schedule từ phòng ban khác (không phải phòng ban đang chọn)
+      return daySchedules.some(
+        (schedule) =>
+          schedule.department &&
+          schedule.department.id !== selectedDepartment &&
+          schedule.status === ScheduleStatus.ACTIVE
+      );
+    },
+    [getSchedulesForDay, selectedDepartment, isPastDay]
   );
 
   // Event handlers
@@ -481,6 +488,25 @@ export default function CompleteScheduleApp() {
 
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth();
+
+      if (isPastDay(date, month, year)) {
+        toast.error("Không thể chọn ngày đã qua");
+        return;
+      }
+
+      if (isDayConflicted(date, month, year)) {
+        toast.error(
+          "Không thể chọn ngày này vì đã có lịch hoạt động của phòng ban khác"
+        );
+        return;
+      }
+      if (isDayHasExistingSchedule(date, month, year)) {
+        toast.error(
+          "Ngày này đã có lịch hoạt động trong hệ thống, không thể chỉnh sửa"
+        );
+        return;
+      }
+
       const currentSelections = getCurrentDepartmentSelections();
 
       const existingIndex = currentSelections.days.findIndex(
@@ -508,115 +534,88 @@ export default function CompleteScheduleApp() {
       isAdmin,
       selectedDepartment,
       currentMonth,
+      isPastDay,
+      isDayConflicted,
+      isDayHasExistingSchedule,
       getCurrentDepartmentSelections,
       updateDepartmentSelections,
     ]
   );
 
-  const handleTimeSlotMouseDown = useCallback(
-    (dayIndex: number, time: string, e: React.MouseEvent) => {
-      e.preventDefault();
-
-      if (!isAdmin) {
-        toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
-        return;
-      }
-      if (!selectedDepartment) {
-        toast.error("Vui lòng chọn phòng ban trước");
-        return;
-      }
-
-      // Xác định trạng thái chọn/hủy chọn dựa trên trạng thái của ô bắt đầu
+  const isDaySelected = useCallback(
+    (date: number, month: number, year: number) => {
       const currentSelections = getCurrentDepartmentSelections();
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
-      const isCurrentlySelected = currentSelections.timeSlots.some(
-        (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+      return currentSelections.days.some(
+        (day) => day.date === date && day.month === month && day.year === year
       );
-
-      setDragState({
-        isDragging: true,
-        startSlot: { day: dayIndex, time },
-        currentSlot: { day: dayIndex, time },
-        // Nếu ô đầu tiên đã được chọn thì mặc định là hủy chọn, ngược lại là chọn
-        isSelecting: !isCurrentlySelected,
-      });
     },
-    [isAdmin, selectedDepartment, getCurrentDepartmentSelections]
+    [getCurrentDepartmentSelections]
   );
 
-  const handleTimeSlotMouseEnter = useCallback(
-    (dayIndex: number, time: string) => {
-      if (dragState.isDragging) {
-        setDragState((prev) => ({
-          ...prev,
-          currentSlot: { day: dayIndex, time },
-        }));
-      }
-    },
-    [dragState.isDragging]
-  );
-
-  const handleTimeSlotMouseUp = useCallback(() => {
-    if (!dragState.isDragging || !selectedDepartment) return;
+  // Handler cho mouse up
+  const handleDayMouseUp = useCallback(() => {
+    if (!monthlyDragState.isDragging || !selectedDepartment) return;
 
     const currentSelections = getCurrentDepartmentSelections();
-    const range = getDragSelectionRange();
+    const range = getMonthlyDragSelectionRange();
 
-    let newTimeSlots = [...currentSelections.timeSlots];
+    let newDays = [...currentSelections.days];
 
-    if (dragState.isSelecting) {
-      // Chọn thêm các ô chưa được chọn
-      range.forEach(({ day, time }) => {
-        const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
-        const dayOfWeek = ((day + 1) % 7) + 1;
-        const exists = newTimeSlots.some(
-          (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+    if (monthlyDragState.isSelecting) {
+      // Thêm các ngày chưa được chọn
+      range.forEach(({ date, month, year }) => {
+        const exists = newDays.some(
+          (day) => day.date === date && day.month === month && day.year === year
         );
         if (!exists) {
-          newTimeSlots.push({
-            day_of_week: dayOfWeek,
-            start_time: time,
-            end_time: endTime,
+          newDays.push({
+            date,
+            month,
+            year,
             department_id: selectedDepartment,
           });
         }
       });
     } else {
-      // Hủy chọn các ô đã được chọn
-      range.forEach(({ day, time }) => {
-        const dayOfWeek = ((day + 1) % 7) + 1;
-        newTimeSlots = newTimeSlots.filter(
-          (slot) =>
-            !(slot.day_of_week === dayOfWeek && slot.start_time === time)
+      // Hủy chọn các ngày đã chọn
+      range.forEach(({ date, month, year }) => {
+        newDays = newDays.filter(
+          (day) =>
+            !(day.date === date && day.month === month && day.year === year)
         );
       });
     }
 
     updateDepartmentSelections(selectedDepartment, {
       ...currentSelections,
-      timeSlots: newTimeSlots,
+      days: newDays,
     });
 
-    setDragState({
+    setMonthlyDragState({
       isDragging: false,
-      startSlot: null,
-      currentSlot: null,
+      startDay: null,
+      currentDay: null,
       isSelecting: false,
     });
   }, [
-    dragState,
+    monthlyDragState,
     selectedDepartment,
     getCurrentDepartmentSelections,
-    getDragSelectionRange,
     updateDepartmentSelections,
   ]);
 
   // Schedule operations
   const checkConflicts = useCallback(
-    (allDays: SelectedDay[], allTimeSlots: TimeSlot[]): ConflictInfo | null => {
+    (
+      allDays: SelectedDay[],
+      allTimeSlots: TimeSlot[],
+      excludeScheduleId?: number
+    ): ConflictInfo | null => {
       const conflictingSchedules: DepartmentSchedule[] = [];
 
       schedules.forEach((schedule) => {
+        if (excludeScheduleId && Number(schedule.id) === excludeScheduleId)
+          return;
         if (schedule.status !== ScheduleStatus.ACTIVE) return;
 
         if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
@@ -685,6 +684,23 @@ export default function CompleteScheduleApp() {
     [schedules, departments]
   );
 
+  const formatTimeRange = (startTime: string, endTime: string) => {
+    const formatTime12Hour = (time: string) => {
+      const [hours, minutes] = time.split(":").map(Number);
+      const period = hours < 12 ? "SA" : hours === 12 ? "TR" : "CH";
+      const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      return `${hour12}:${minutes.toString().padStart(2, "0")} ${period}`;
+    };
+
+    return `${formatTime12Hour(startTime)} - ${formatTime12Hour(endTime)}`;
+  };
+
+  // Sử dụng trong component
+  const getTimeSlotDisplay = (time: string, index: number) => {
+    const nextTime = timeSlots[index + 1] || "18:00";
+    return formatTimeRange(time, nextTime);
+  };
+
   const handleSaveSchedule = async () => {
     const { allDays, allTimeSlots } = getAllSelections();
 
@@ -693,7 +709,11 @@ export default function CompleteScheduleApp() {
       return;
     }
 
-    const conflicts = checkConflicts(allDays, allTimeSlots);
+    const conflicts = checkConflicts(
+      allDays,
+      allTimeSlots,
+      editingSchedule?.id ? Number(editingSchedule.id) : undefined
+    );
     if (conflicts) {
       setConflictInfo(conflicts);
       setIsConflictDialogOpen(true);
@@ -702,10 +722,134 @@ export default function CompleteScheduleApp() {
 
     await saveScheduleWithoutConflictCheck();
   };
+  // Cập nhật hàm edit schedule
+  const handleEditSchedule = useCallback(
+    (schedule: DepartmentSchedule) => {
+      if (!isAdmin) {
+        toast.error("Bạn không có quyền chỉnh sửa lịch hoạt động");
+        return;
+      }
+
+      setEditingSchedule(schedule);
+      setIsEditMode(true);
+
+      if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
+        setActiveView("month");
+        toast.info("Đã chuyển sang lịch tháng để chỉnh sửa ngày");
+      } else if (schedule.schedule_type === ScheduleType.HOURLY_SLOTS) {
+        setActiveView("week");
+        toast.info("Đã chuyển sang lịch tuần để chỉnh sửa khung giờ");
+      }
+
+      // Backup selections hiện tại
+      setOriginalSelections(new Map(departmentSelections));
+
+      // Load data cho editing
+      const newSelections = new Map();
+
+      if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
+        const config = schedule.schedule_config as DailyDatesConfig;
+        newSelections.set(schedule.department!.id, {
+          days: config.dates.map((date) => ({
+            date: date.day_of_month,
+            month: date.month ? date.month - 1 : currentMonth.getMonth(),
+            year: date.year || currentMonth.getFullYear(),
+            department_id: schedule.department!.id,
+          })),
+          timeSlots: [],
+        });
+        if (config.dates.length > 0) {
+          const firstDate = config.dates[0];
+          if (firstDate.month && firstDate.year) {
+            setCurrentMonth(new Date(firstDate.year, firstDate.month - 1));
+          }
+        }
+      } else {
+        const config = schedule.schedule_config as HourlySlotsConfig;
+        newSelections.set(schedule.department!.id, {
+          days: [],
+          timeSlots: config.slots.map((slot) => ({
+            day_of_week: slot.day_of_week,
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            department_id: schedule.department!.id,
+          })),
+        });
+      }
+
+      setDepartmentSelections(newSelections);
+      setSelectedDepartment(schedule.department!.id);
+      setEditingDepartment(schedule.department!.id);
+
+      setFormData({
+        name: schedule.name,
+        description: schedule.description || "",
+        start_time: "",
+        end_time: "",
+      });
+
+      setIsCreateDialogOpen(true);
+
+      toast.success(
+        "Đã vào chế độ chỉnh sửa. Bạn có thể thay đổi lịch trên calendar và thông tin trong form."
+      );
+    },
+    [isAdmin, departmentSelections, currentMonth]
+  );
+
+  // Thêm hàm để thay đổi department trong edit mode
+  const handleChangeDepartmentInEdit = useCallback(
+    (newDepartmentId: number) => {
+      if (!isEditMode || !editingSchedule) return;
+
+      const currentSelections = departmentSelections.get(editingDepartment!);
+      if (!currentSelections) return;
+
+      // Xóa selections cũ
+      const newDepartmentSelections = new Map(departmentSelections);
+      newDepartmentSelections.delete(editingDepartment!);
+
+      // Thêm selections mới với department mới
+      const updatedSelections = {
+        days: currentSelections.days.map((day) => ({
+          ...day,
+          department_id: newDepartmentId,
+        })),
+        timeSlots: currentSelections.timeSlots.map((slot) => ({
+          ...slot,
+          department_id: newDepartmentId,
+        })),
+      };
+
+      newDepartmentSelections.set(newDepartmentId, updatedSelections);
+      setDepartmentSelections(newDepartmentSelections);
+      setEditingDepartment(newDepartmentId);
+      setSelectedDepartment(newDepartmentId);
+
+      toast.success(
+        `Đã chuyển lịch sang phòng ban: ${
+          departments.find((d) => d.id === newDepartmentId)?.name
+        }`
+      );
+    },
+    [
+      isEditMode,
+      editingSchedule,
+      editingDepartment,
+      departmentSelections,
+      departments,
+    ]
+  );
 
   const saveScheduleWithoutConflictCheck = async () => {
     try {
       setIsSavingSchedule(true);
+
+      if (isEditMode && editingSchedule) {
+        // Update existing schedule
+        await ScheduleService.remove(editingSchedule.id);
+      }
+
       const promises: Promise<any>[] = [];
 
       departmentSelections.forEach((selections, departmentId) => {
@@ -715,6 +859,7 @@ export default function CompleteScheduleApp() {
         const department = departments.find((d) => d.id === departmentId);
         if (!department) return;
 
+        // Create new schedules (same logic as before)
         if (selections.timeSlots.length > 0) {
           const scheduleData: CreateDepartmentScheduleDto = {
             name: formData.name || `Lịch khung giờ - ${department.name}`,
@@ -762,40 +907,36 @@ export default function CompleteScheduleApp() {
 
       await Promise.all(promises);
 
+      // Reset states
       setDepartmentSelections(new Map());
       setSelectedDepartment(null);
+      setEditingSchedule(null);
+      setIsEditMode(false);
+      setEditingDepartment(null);
+      setOriginalSelections(new Map());
       setFormData({ name: "", description: "", start_time: "", end_time: "" });
       setIsCreateDialogOpen(false);
 
+      // Refresh data
       const data = await ScheduleService.findAll();
       setSchedules(data.data);
-      toast.success("Lưu lịch hoạt động thành công!");
+
+      toast.success(
+        isEditMode
+          ? "Cập nhật lịch hoạt động thành công!"
+          : "Lưu lịch hoạt động thành công!"
+      );
     } catch (error: any) {
       console.error("Error saving schedule:", error);
-      toast.error("Không thể lưu lịch hoạt động");
+      toast.error(
+        isEditMode
+          ? "Không thể cập nhật lịch hoạt động"
+          : "Không thể lưu lịch hoạt động"
+      );
     } finally {
       setIsSavingSchedule(false);
     }
   };
-
-  // Filter schedules
-  const filteredSchedules = useMemo(() => {
-    return schedules.filter((schedule) => {
-      const matchesSearch =
-        schedule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        schedule.description?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || schedule.status === statusFilter;
-      const matchesType =
-        typeFilter === "all" || schedule.schedule_type === typeFilter;
-      const departmentId = schedule.department?.id;
-      const matchesDepartment =
-        typeof departmentId === "number" &&
-        visibleDepartments.includes(departmentId);
-
-      return matchesSearch && matchesStatus && matchesType && matchesDepartment;
-    });
-  }, [schedules, searchTerm, statusFilter, typeFilter, visibleDepartments]);
 
   // Helper functions
   const getSchedulesForSlot = useCallback(
@@ -816,9 +957,89 @@ export default function CompleteScheduleApp() {
     [filteredSchedules]
   );
 
-  const getSchedulesForDay = useCallback(
+  const isSlotHasExistingSchedule = useCallback(
+    (dayIndex: number, time: string) => {
+      const slotSchedules = getSchedulesForSlot(dayIndex, time);
+      // Kiểm tra xem có schedule nào của chính phòng ban đang chọn không
+      // Nếu đang edit, loại trừ schedule đang edit
+      return slotSchedules.some(
+        (schedule) =>
+          schedule.department &&
+          schedule.department.id === selectedDepartment &&
+          schedule.status === ScheduleStatus.ACTIVE &&
+          // ✅ THÊM: Loại trừ schedule đang edit
+          (!isEditMode ||
+            !editingSchedule ||
+            Number(schedule.id) !== Number(editingSchedule.id))
+      );
+    },
+    [getSchedulesForSlot, selectedDepartment, isEditMode, editingSchedule]
+  );
+
+  const isSlotBlockedByHiddenDepartment = useCallback(
+    (dayIndex: number, time: string) => {
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+
+      // Kiểm tra selections từ phòng ban bị ẩn
+      for (const [deptId, selections] of departmentSelections) {
+        if (!visibleDepartments.includes(deptId)) {
+          const hasSelection = selections.timeSlots.some(
+            (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+          );
+          if (hasSelection) return { isBlocked: true, departmentId: deptId };
+        }
+      }
+
+      // ✅ SỬA LOGIC KIỂM TRA SCHEDULES
+      // Thay vì tìm bất kỳ hidden schedule nào,
+      // phải kiểm tra schedules cụ thể cho slot hiện tại
+      const allSchedulesForThisSlot = schedules.filter((schedule) => {
+        if (schedule.schedule_type !== ScheduleType.HOURLY_SLOTS) return false;
+
+        const config = schedule.schedule_config as HourlySlotsConfig;
+        return config.slots.some(
+          (slot) =>
+            (slot.day_of_week === dayOfWeek || !slot.day_of_week) &&
+            slot.start_time <= time &&
+            slot.end_time > time
+        );
+      });
+
+      // Kiểm tra xem có schedule nào của phòng ban bị ẩn không
+      const hiddenScheduleForThisSlot = allSchedulesForThisSlot.find(
+        (schedule) =>
+          schedule.department &&
+          !visibleDepartments.includes(schedule.department.id) &&
+          schedule.status === ScheduleStatus.ACTIVE
+      );
+
+      if (hiddenScheduleForThisSlot) {
+        return {
+          isBlocked: true,
+          departmentId: hiddenScheduleForThisSlot.department!.id,
+        };
+      }
+
+      return { isBlocked: false, departmentId: null };
+    },
+    [departmentSelections, visibleDepartments, schedules]
+  );
+
+  const isDayBlockedByHiddenDepartment = useCallback(
     (date: number, month: number, year: number) => {
-      return filteredSchedules.filter((schedule) => {
+      // Kiểm tra selections từ phòng ban bị ẩn
+      for (const [deptId, selections] of departmentSelections) {
+        if (!visibleDepartments.includes(deptId)) {
+          const hasSelection = selections.days.some(
+            (day) =>
+              day.date === date && day.month === month && day.year === year
+          );
+          if (hasSelection) return { isBlocked: true, departmentId: deptId };
+        }
+      }
+
+      // ✅ SỬA LOGIC KIỂM TRA SCHEDULES CHO NGÀY CỤ THỂ
+      const daySchedules = schedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.DAILY_DATES) return false;
 
         const config = schedule.schedule_config as DailyDatesConfig;
@@ -829,8 +1050,190 @@ export default function CompleteScheduleApp() {
             (d.year === year || !d.year)
         );
       });
+
+      const hiddenSchedule = daySchedules.find(
+        (schedule) =>
+          schedule.department &&
+          !visibleDepartments.includes(schedule.department.id) &&
+          schedule.status === ScheduleStatus.ACTIVE
+      );
+
+      if (hiddenSchedule) {
+        return { isBlocked: true, departmentId: hiddenSchedule.department!.id };
+      }
+
+      return { isBlocked: false, departmentId: null };
     },
-    [filteredSchedules]
+    [departmentSelections, visibleDepartments, schedules]
+  );
+
+  const handleDayMouseDown = useCallback(
+    (date: number, isCurrentMonth: boolean, e: React.MouseEvent) => {
+      e.preventDefault();
+
+      if (!isCurrentMonth || !selectedDepartment || !isAdmin) {
+        return;
+      }
+
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const currentDate = new Date(year, month, date);
+    const isSunday = currentDate.getDay() === 0;
+
+      const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
+        date,
+        month,
+        year
+      );
+
+      // Kiểm tra các điều kiện như cũ
+      if (
+        isPastDay(date, month, year) ||
+        isDayConflicted(date, month, year) ||
+        isDayHasExistingSchedule(date, month, year) ||
+        isBlockedByHidden ||
+        isSunday
+      ) {
+        return;
+      }
+
+      // Xác định trạng thái chọn/hủy chọn
+      const isCurrentlySelected = isDaySelected(date, month, year);
+
+      setMonthlyDragState({
+        isDragging: true,
+        startDay: { date, month, year },
+        currentDay: { date, month, year },
+        isSelecting: !isCurrentlySelected,
+      });
+    },
+    [
+      isAdmin,
+      selectedDepartment,
+      currentMonth,
+      isPastDay,
+      isDayConflicted,
+      isDayHasExistingSchedule,
+      isDayBlockedByHiddenDepartment,
+      isDaySelected,
+    ]
+  );
+
+  const handleDayMouseEnter = useCallback(
+    (date: number, isCurrentMonth: boolean) => {
+      // ✅ FIX: Chỉ xử lý drag cho ngày thuộc tháng hiện tại
+      if (!isCurrentMonth || !monthlyDragState.isDragging) {
+        return;
+      }
+
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+
+      const currentDate = new Date(year, month, date);
+    const isSunday = currentDate.getDay() === 0;
+
+      const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
+        date,
+        month,
+        year
+      );
+
+      if (
+        !isPastDay(date, month, year) &&
+        !isDayConflicted(date, month, year) &&
+        !isDayHasExistingSchedule(date, month, year) &&
+        !isBlockedByHidden &&
+        !isSunday
+      ) {
+        setMonthlyDragState((prev) => ({
+          ...prev,
+          currentDay: { date, month, year },
+        }));
+      }
+    },
+    [
+      monthlyDragState.isDragging,
+      currentMonth,
+      isPastDay,
+      isDayConflicted,
+      isDayHasExistingSchedule,
+      isDayBlockedByHiddenDepartment,
+    ]
+  );
+
+  const getMonthlyDragSelectionRange = useCallback(() => {
+    if (!monthlyDragState.startDay || !monthlyDragState.currentDay) return [];
+
+    const start = monthlyDragState.startDay;
+    const end = monthlyDragState.currentDay;
+
+    const startDate = new Date(start.year, start.month, start.date);
+    const endDate = new Date(end.year, end.month, end.date);
+
+    // Đảm bảo startDate <= endDate
+    const minDate = startDate <= endDate ? startDate : endDate;
+    const maxDate = startDate <= endDate ? endDate : startDate;
+
+    const range = [];
+    const currentDate = new Date(minDate);
+
+    while (currentDate <= maxDate) {
+      const date = currentDate.getDate();
+      const month = currentDate.getMonth();
+      const year = currentDate.getFullYear();
+
+      const isCurrentMonth =
+        month === currentMonth.getMonth() &&
+        year === currentMonth.getFullYear();
+        const isSunday = currentDate.getDay() === 0;
+
+      const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
+        date,
+        month,
+        year
+      );
+
+      if (
+        isCurrentMonth &&
+        !isPastDay(date, month, year) &&
+        !isDayConflicted(date, month, year) &&
+        !isDayHasExistingSchedule(date, month, year) &&
+        !isBlockedByHidden &&
+        !isSunday
+      ) {
+        range.push({ date, month, year });
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return range;
+  }, [
+    monthlyDragState.startDay,
+    monthlyDragState.currentDay,
+    currentMonth,
+    isPastDay,
+    isDayConflicted,
+    isDayHasExistingSchedule,
+    isDayBlockedByHiddenDepartment,
+  ]);
+
+  const isDayInMonthlyDragRange = useCallback(
+    (date: number, month: number, year: number) => {
+      if (!monthlyDragState.isDragging) return false;
+
+      // ✅ FIX: Chỉ check cho ngày thuộc tháng hiện tại
+      const isCurrentMonth =
+        month === currentMonth.getMonth() &&
+        year === currentMonth.getFullYear();
+      if (!isCurrentMonth) return false;
+
+      const range = getMonthlyDragSelectionRange();
+      return range.some(
+        (day) => day.date === date && day.month === month && day.year === year
+      );
+    },
+    [monthlyDragState.isDragging, currentMonth, getMonthlyDragSelectionRange] // ✅ Thêm currentMonth
   );
 
   const getSelectedDepartmentColor = useCallback(() => {
@@ -844,16 +1247,6 @@ export default function CompleteScheduleApp() {
       text: "text-slate-700",
     };
   }, [selectedDepartment]);
-
-  const isDaySelected = useCallback(
-    (date: number, month: number, year: number) => {
-      const currentSelections = getCurrentDepartmentSelections();
-      return currentSelections.days.some(
-        (day) => day.date === date && day.month === month && day.year === year
-      );
-    },
-    [getCurrentDepartmentSelections]
-  );
 
   const isTimeSlotSelected = useCallback(
     (dayIndex: number, time: string) => {
@@ -900,6 +1293,343 @@ export default function CompleteScheduleApp() {
     [departmentSelections]
   );
 
+  const isTimeSlotConflicted = useCallback(
+    (dayIndex: number, time: string) => {
+      if (isPastTimeSlot(dayIndex, time)) {
+        return true;
+      }
+      // Kiểm tra xung đột với lịch đã lưu từ phòng ban khác
+      const slotSchedules = getSchedulesForSlot(dayIndex, time);
+      const hasScheduleConflict = slotSchedules.some(
+        (schedule) =>
+          schedule.department &&
+          schedule.department.id !== selectedDepartment &&
+          schedule.status === ScheduleStatus.ACTIVE
+      );
+
+      if (hasScheduleConflict) return true;
+
+      // Kiểm tra xung đột với selections đang có của các phòng ban khác
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+      for (const [deptId, selections] of departmentSelections) {
+        if (deptId !== selectedDepartment) {
+          const hasSelectionConflict = selections.timeSlots.some(
+            (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+          );
+          if (hasSelectionConflict) return true;
+        }
+      }
+
+      return false;
+    },
+    [
+      getSchedulesForSlot,
+      selectedDepartment,
+      departmentSelections,
+      isPastTimeSlot,
+    ]
+  );
+
+  const handleTimeSlotMouseEnter = useCallback(
+    (dayIndex: number, time: string) => {
+      if (time >= "12:00" && time < "13:30") return;
+      if (isPastTimeSlot(dayIndex, time)) return;
+      if (isTimeSlotConflicted(dayIndex, time)) return;
+      if (isSlotHasExistingSchedule(dayIndex, time)) return;
+      const { isBlocked } = isSlotBlockedByHiddenDepartment(dayIndex, time);
+      if (isBlocked) return;
+      const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
+        isTimeSlotSelectedByAnyDept(dayIndex, time);
+      if (isSelectedByOther && otherDeptId !== selectedDepartment) return;
+      if (dragState.isDragging) {
+        setDragState((prev) => ({
+          ...prev,
+          currentSlot: { day: dayIndex, time },
+        }));
+      }
+    },
+    [
+      dragState.isDragging,
+      isTimeSlotConflicted,
+      isSlotHasExistingSchedule, // ✅ THÊM dependency
+      isPastTimeSlot,
+      isSlotBlockedByHiddenDepartment,
+      isTimeSlotSelectedByAnyDept,
+      selectedDepartment,
+    ]
+  );
+
+  const getDragSelectionRange = useCallback(() => {
+    if (!dragState.startSlot || !dragState.currentSlot) return [];
+
+    const startDay = Math.min(
+      dragState.startSlot.day,
+      dragState.currentSlot.day
+    );
+    const endDay = Math.max(dragState.startSlot.day, dragState.currentSlot.day);
+    const startTimeIndex = Math.min(
+      timeSlots.indexOf(dragState.startSlot.time),
+      timeSlots.indexOf(dragState.currentSlot.time)
+    );
+    const endTimeIndex = Math.max(
+      timeSlots.indexOf(dragState.startSlot.time),
+      timeSlots.indexOf(dragState.currentSlot.time)
+    );
+
+    const range: { day: number; time: string }[] = [];
+    for (let day = startDay; day <= endDay; day++) {
+      for (
+        let timeIndex = startTimeIndex;
+        timeIndex <= endTimeIndex;
+        timeIndex++
+      ) {
+        const time = timeSlots[timeIndex];
+
+        // **Bỏ qua giờ nghỉ trưa**
+        if (time >= "12:00" && time < "13:30") continue;
+        if (isPastTimeSlot(day, time)) continue;
+        if (isTimeSlotConflicted(day, time)) continue;
+        if (isSlotHasExistingSchedule(day, time)) continue;
+        const { isBlocked } = isSlotBlockedByHiddenDepartment(day, time);
+        if (isBlocked) continue;
+        const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
+          isTimeSlotSelectedByAnyDept(day, time);
+        if (isSelectedByOther && otherDeptId !== selectedDepartment) continue;
+
+        range.push({ day, time });
+      }
+    }
+
+    return range;
+  }, [
+    dragState.startSlot,
+    dragState.currentSlot,
+    isTimeSlotConflicted,
+    isSlotHasExistingSchedule, // ✅ THÊM dependency
+    isPastTimeSlot,
+    isSlotBlockedByHiddenDepartment,
+    isTimeSlotSelectedByAnyDept,
+    selectedDepartment,
+  ]);
+
+  const handleTimeSlotMouseDown = useCallback(
+    (dayIndex: number, time: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      if (time >= "12:00" && time < "13:30") {
+        toast.error("Không thể chọn giờ nghỉ trưa");
+        return;
+      }
+
+      if (isPastTimeSlot(dayIndex, time)) {
+        toast.error("Không thể chọn khung giờ đã qua");
+        return;
+      }
+
+      if (!isAdmin) {
+        toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
+        return;
+      }
+      if (!selectedDepartment) {
+        toast.error("Vui lòng chọn phòng ban trước");
+        return;
+      }
+
+      if (isSlotHasExistingSchedule(dayIndex, time)) {
+        toast.error(
+          "Ô này đã có lịch hoạt động trong hệ thống, không thể chỉnh sửa"
+        );
+        return;
+      }
+
+      if (isTimeSlotConflicted(dayIndex, time)) {
+        toast.error("Ô này đang được sử dụng bởi phòng ban khác");
+        return;
+      }
+
+      const { isBlocked, departmentId: blockedDeptId } =
+        isSlotBlockedByHiddenDepartment(dayIndex, time);
+      if (isBlocked) {
+        const blockedDeptName = departments.find(
+          (d) => d.id === blockedDeptId
+        )?.name;
+        toast.error(`Ô này đang được sử dụng bởi ${blockedDeptName} (đã ẩn)`);
+        return;
+      }
+
+      const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
+        isTimeSlotSelectedByAnyDept(dayIndex, time);
+      if (isSelectedByOther && otherDeptId !== selectedDepartment) {
+        const otherDeptName = departments.find(
+          (d) => d.id === otherDeptId
+        )?.name;
+        toast.error(`Ô này đang được chọn bởi ${otherDeptName}`);
+        return;
+      }
+
+      // Xác định trạng thái chọn/hủy chọn dựa trên trạng thái của ô bắt đầu
+      const currentSelections = getCurrentDepartmentSelections();
+      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+      const isCurrentlySelected = currentSelections.timeSlots.some(
+        (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+      );
+
+      setDragState({
+        isDragging: true,
+        startSlot: { day: dayIndex, time },
+        currentSlot: { day: dayIndex, time },
+        // Nếu ô đầu tiên đã được chọn thì mặc định là hủy chọn, ngược lại là chọn
+        isSelecting: !isCurrentlySelected,
+      });
+    },
+    [
+      isPastTimeSlot,
+      isAdmin,
+      selectedDepartment,
+      isSlotHasExistingSchedule, // ✅ THÊM dependency
+      isTimeSlotConflicted,
+      isSlotBlockedByHiddenDepartment,
+      isTimeSlotSelectedByAnyDept,
+      getCurrentDepartmentSelections,
+      departments,
+    ]
+  );
+
+  const isSlotInDragRange = useCallback(
+    (dayIndex: number, time: string) => {
+      if (!dragState.isDragging) return false;
+      const range = getDragSelectionRange();
+      return range.some((slot) => slot.day === dayIndex && slot.time === time);
+    },
+    [dragState.isDragging, getDragSelectionRange]
+  );
+
+  const handleTimeSlotMouseUp = useCallback(() => {
+    if (!dragState.isDragging || !selectedDepartment) return;
+
+    const currentSelections = getCurrentDepartmentSelections();
+    const range = getDragSelectionRange();
+
+    let newTimeSlots = [...currentSelections.timeSlots];
+
+    if (dragState.isSelecting) {
+      // Chọn thêm các ô chưa được chọn
+      range.forEach(({ day, time }) => {
+        const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
+        const dayOfWeek = ((day + 1) % 7) + 1;
+        const exists = newTimeSlots.some(
+          (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+        );
+        if (!exists) {
+          newTimeSlots.push({
+            day_of_week: dayOfWeek,
+            start_time: time,
+            end_time: endTime,
+            department_id: selectedDepartment,
+          });
+        }
+      });
+    } else {
+      // Hủy chọn các ô đã được chọn
+      range.forEach(({ day, time }) => {
+        const dayOfWeek = ((day + 1) % 7) + 1;
+        newTimeSlots = newTimeSlots.filter(
+          (slot) =>
+            !(slot.day_of_week === dayOfWeek && slot.start_time === time)
+        );
+      });
+    }
+
+    updateDepartmentSelections(selectedDepartment, {
+      ...currentSelections,
+      timeSlots: newTimeSlots,
+    });
+
+    setDragState({
+      isDragging: false,
+      startSlot: null,
+      currentSlot: null,
+      isSelecting: false,
+    });
+  }, [
+    dragState,
+    selectedDepartment,
+    getCurrentDepartmentSelections,
+    getDragSelectionRange,
+    updateDepartmentSelections,
+  ]);
+
+  // Data fetching
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        setIsLoadingDepartments(true);
+        const response = await api.get("departments/all-unrestricted");
+        const data = response.data;
+        setDepartments(data);
+        setVisibleDepartments(data.map((d: Department) => d.id));
+      } catch (error: any) {
+        console.error("Error fetching departments:", error);
+        toast.error("Không thể tải danh sách phòng ban");
+      } finally {
+        setIsLoadingDepartments(false);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
+
+  useEffect(() => {
+    const fetchAllSchedules = async () => {
+      try {
+        setIsLoadingSchedules(true);
+        const data = await ScheduleService.findAll();
+        setSchedules(data.data);
+      } catch (error: any) {
+        console.error("Error fetching schedules:", error);
+        toast.error("Không thể tải lịch hoạt động");
+      } finally {
+        setIsLoadingSchedules(false);
+      }
+    };
+
+    fetchAllSchedules();
+  }, []);
+
+  // Drag handling
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (dragState.isDragging) {
+        setDragState({
+          isDragging: false,
+          startSlot: null,
+          currentSlot: null,
+          isSelecting: false,
+        });
+      }
+      if (monthlyDragState.isDragging) {
+        handleDayMouseUp();
+      }
+    };
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (dragState.isDragging || monthlyDragState.isDragging) {
+        e.preventDefault();
+      }
+    };
+
+    if (dragState.isDragging || monthlyDragState.isDragging) {
+      document.addEventListener("mouseup", handleGlobalMouseUp);
+      document.addEventListener("mousemove", handleGlobalMouseMove);
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      document.removeEventListener("mouseup", handleGlobalMouseUp);
+      document.removeEventListener("mousemove", handleGlobalMouseMove);
+      document.body.style.userSelect = "";
+    };
+  }, [dragState.isDragging, monthlyDragState.isDragging, handleDayMouseUp]);
+
   if (isLoadingDepartments) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -934,8 +1664,7 @@ export default function CompleteScheduleApp() {
                 Quản lý lịch hoạt động
               </h1>
               <p className="text-slate-600">
-                Lên kế hoạch và quản lý lịch hoạt động cho tất cả phòng ban với
-                drag selection
+                Lên kế hoạch và quản lý lịch hoạt động cho tất cả phòng ban
               </p>
             </div>
 
@@ -959,25 +1688,6 @@ export default function CompleteScheduleApp() {
                   </span>
                 )}
               </Button>
-
-              <Dialog
-                open={isCreateDialogOpen}
-                onOpenChange={setIsCreateDialogOpen}
-              >
-                <DialogTrigger asChild>
-                  <Button
-                    disabled={!isAdmin}
-                    className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Plus className="w-4 h-4" />
-                      {isAdmin
-                        ? "Tạo lịch mới"
-                        : "Chỉ admin mới có quyền tạo lịch"}
-                    </span>
-                  </Button>
-                </DialogTrigger>
-              </Dialog>
             </div>
           </div>
 
@@ -1000,8 +1710,8 @@ export default function CompleteScheduleApp() {
           )}
 
           {/* Department Legend & Controls */}
-          <Card className="mb-6 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-            <CardHeader className="pb-4">
+          <Card className="mb-2 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Users className="w-5 h-5 text-blue-600" />
@@ -1044,7 +1754,7 @@ export default function CompleteScheduleApp() {
             </CardHeader>
 
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
                 {departments.map((dept) => {
                   const color = getDepartmentColor(dept.id);
                   const isVisible = visibleDepartments.includes(dept.id);
@@ -1155,8 +1865,9 @@ export default function CompleteScheduleApp() {
                       </p>
                       <p className="text-xs text-slate-600 mt-1 flex items-center gap-2">
                         <MousePointer className="w-3 h-3" />
-                        Click & kéo để chọn nhiều khung giờ, click ngày để chọn
-                        lịch theo ngày
+                        {activeView === "week"
+                          ? "Click & kéo để chọn nhiều khung giờ"
+                          : "Click & kéo để chọn nhiều ngày, click ngày để chọn lẻ"}
                       </p>
                     </div>
                     <Button
@@ -1178,6 +1889,7 @@ export default function CompleteScheduleApp() {
                 </motion.div>
               )}
 
+              {/* Tổng quan lịch đã chọn - SỬA PHẦN NÀY */}
               {departmentSelections.size > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -1189,8 +1901,9 @@ export default function CompleteScheduleApp() {
                     Tổng quan lịch đã chọn:
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {Array.from(departmentSelections.entries()).map(
-                      ([deptId, selections]) => {
+                    {Array.from(departmentSelections.entries())
+                      .filter(([deptId]) => visibleDepartments.includes(deptId)) // ✅ THÊM FILTER NÀY
+                      .map(([deptId, selections]) => {
                         if (
                           selections.days.length === 0 &&
                           selections.timeSlots.length === 0
@@ -1214,8 +1927,7 @@ export default function CompleteScheduleApp() {
                             </div>
                           </div>
                         );
-                      }
-                    )}
+                      })}
                   </div>
                 </motion.div>
               )}
@@ -1233,7 +1945,7 @@ export default function CompleteScheduleApp() {
                     {activeView === "week" ? (
                       <span className="flex items-center gap-2">
                         <Clock className="w-5 h-5 text-blue-600" />
-                        Lịch tuần - Khung giờ
+                        Lịch tuần - Khung giờ (Cho các chiến dịch tuần và 3 ngày)
                         {dragState.isDragging && (
                           <Badge
                             variant="default"
@@ -1247,7 +1959,7 @@ export default function CompleteScheduleApp() {
                     ) : (
                       <span className="flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-blue-600" />
-                        Lịch tháng - Theo ngày
+                        Lịch tháng - Theo ngày (Cho các chiến dịch theo giờ và ngày)
                       </span>
                     )}
                   </CardTitle>
@@ -1257,6 +1969,18 @@ export default function CompleteScheduleApp() {
                       const { allDays, allTimeSlots } = getAllSelections();
                       const totalSelections =
                         allDays.length + allTimeSlots.length;
+                      const visibleDepartmentCount = Array.from(
+                        departmentSelections.entries()
+                      )
+                        .filter(([deptId]) =>
+                          visibleDepartments.includes(deptId)
+                        )
+                        .filter(
+                          ([_, selections]) =>
+                            selections.days.length > 0 ||
+                            selections.timeSlots.length > 0
+                        ).length;
+
                       return (
                         totalSelections > 0 && (
                           <Badge
@@ -1266,7 +1990,7 @@ export default function CompleteScheduleApp() {
                             {activeView === "week"
                               ? `${allTimeSlots.length} khung giờ`
                               : `${allDays.length} ngày`}{" "}
-                            từ {departmentSelections.size} phòng ban
+                            từ {visibleDepartmentCount} phòng ban
                           </Badge>
                         )
                       );
@@ -1358,15 +2082,38 @@ export default function CompleteScheduleApp() {
                       </div>
 
                       {/* Time slots with drag selection */}
-                      <ScrollArea className="h-[600px]">
+                      <ScrollArea className="h-[800px]">
                         <div className="select-none">
                           {timeSlots.map((time, timeIndex) => (
                             <div
                               key={time}
                               className="grid grid-cols-8 border-b hover:bg-slate-25"
                             >
-                              <div className="p-2 text-center border-r font-mono text-sm bg-slate-50 font-medium">
-                                {time}
+                              <div
+                                className={`p-2 text-center border-r min-h-[50px] flex flex-col justify-center ${
+                                  time >= "12:00" && time < "13:30"
+                                    ? "bg-rose-100"
+                                    : "bg-slate-50"
+                                }`}
+                              >
+                                {/* Hiển thị range time với background màu */}
+                                <div
+                                  className={`rounded px-2 py-1 text-xs font-medium ${
+                                    time >= "12:00" && time < "13:30"
+                                      ? "bg-rose-200 text-rose-800"
+                                      : "bg-blue-100 text-blue-800"
+                                  }`}
+                                >
+                                  {formatTimeRange(
+                                    time,
+                                    timeSlots[timeIndex + 1] || "18:00"
+                                  )}
+                                  {time >= "12:00" && time < "13:30" && (
+                                    <div className="text-xs mt-1">
+                                      🍽️ Nghỉ trưa
+                                    </div>
+                                  )}
+                                </div>
                               </div>
 
                               {Array.from({ length: 7 }, (_, dayIndex) => {
@@ -1376,6 +2123,13 @@ export default function CompleteScheduleApp() {
                                   isSelected: isSelectedByAny,
                                   departmentId: selectedByDeptId,
                                 } = isTimeSlotSelectedByAnyDept(dayIndex, time);
+                                const {
+                                  isBlocked: isBlockedByHidden,
+                                  departmentId: blockedByDeptId,
+                                } = isSlotBlockedByHiddenDepartment(
+                                  dayIndex,
+                                  time
+                                );
                                 const slotSchedules = getSchedulesForSlot(
                                   dayIndex,
                                   time
@@ -1384,63 +2138,117 @@ export default function CompleteScheduleApp() {
                                   dayIndex,
                                   time
                                 );
+                                const isLunchBreak =
+                                  time >= "12:00" && time < "13:30";
+                                const isConflicted = isTimeSlotConflicted(
+                                  dayIndex,
+                                  time
+                                );
+                                const isPast = isPastTimeSlot(dayIndex, time);
+                                const hasExistingSchedule =
+                                  isSlotHasExistingSchedule(dayIndex, time);
+                                const canInteract =
+                                  !isLunchBreak &&
+                                  !isConflicted &&
+                                  !isPast &&
+                                  !isBlockedByHidden &&
+                                  !hasExistingSchedule &&
+                                  !(
+                                    isSelectedByAny &&
+                                    selectedByDeptId !== selectedDepartment
+                                  ) &&
+                                  selectedDepartment;
                                 const isPreviewSelection =
                                   isInDragRange &&
                                   dragState.isSelecting &&
-                                  !isSelectedByCurrentDept;
+                                  !isSelectedByCurrentDept &&
+                                  !isPast &&
+                                  !isBlockedByHidden &&
+                                  !isConflicted &&
+                                  !isLunchBreak;
                                 const isPreviewDeselection =
                                   isInDragRange &&
                                   !dragState.isSelecting &&
-                                  isSelectedByCurrentDept;
+                                  isSelectedByCurrentDept &&
+                                  !isPast &&
+                                  !isBlockedByHidden &&
+                                  !isConflicted &&
+                                  !isLunchBreak;
 
                                 return (
                                   <div
                                     key={dayIndex}
-                                    className={`p-1 border-r last:border-r-0 cursor-pointer transition-all min-h-[40px] relative
-                                      ${
-                                        isPreviewSelection
-                                          ? `${
-                                              getSelectedDepartmentColor().light
-                                            } ${
-                                              getSelectedDepartmentColor()
-                                                .border
-                                            } border-2 shadow-md opacity-70 scale-105`
-                                          : isPreviewDeselection
-                                          ? "bg-red-100 border-red-300 border-2 opacity-70 scale-95"
-                                          : isSelectedByCurrentDept &&
-                                            selectedDepartment
-                                          ? `${
-                                              getSelectedDepartmentColor().light
-                                            } ${
-                                              getSelectedDepartmentColor()
-                                                .border
-                                            } border-2 shadow-md transform hover:scale-105`
-                                          : isSelectedByAny && selectedByDeptId
-                                          ? `${
-                                              getDepartmentColor(
-                                                selectedByDeptId
-                                              ).light
-                                            } ${
-                                              getDepartmentColor(
-                                                selectedByDeptId
-                                              ).border
-                                            } border-2 shadow-sm`
-                                          : slotSchedules.length > 0
-                                          ? "bg-slate-100 hover:bg-slate-150"
-                                          : selectedDepartment
-                                          ? "hover:bg-blue-50 hover:border-blue-200 hover:shadow-sm"
-                                          : "hover:bg-slate-50"
-                                      }`}
+                                    className={`p-1 border-r last:border-r-0 min-h-[40px] relative
+                                    ${
+                                      isLunchBreak
+                                        ? "bg-slate-100 opacity-60 cursor-not-allowed"
+                                        : isPast // Thêm styling cho slot quá khứ
+                                        ? "bg-gray-100 opacity-50 cursor-not-allowed text-gray-400"
+                                        : isBlockedByHidden
+                                        ? "bg-slate-200 opacity-40 cursor-not-allowed border-dashed border-slate-400"
+                                        : isSelectedByAny &&
+                                          selectedByDeptId !==
+                                            selectedDepartment // **THÊM ĐIỀU KIỆN NÀY**
+                                        ? "bg-orange-100 opacity-60 cursor-not-allowed border-orange-200 border-2"
+                                        : isConflicted &&
+                                          !isLunchBreak &&
+                                          !isPast
+                                        ? "cursor-not-allowed opacity-90"
+                                        : canInteract
+                                        ? "cursor-pointer"
+                                        : "cursor-not-allowed"
+                                    }
+                                    ${
+                                      isPreviewSelection
+                                        ? `${
+                                            getSelectedDepartmentColor().light
+                                          } ${
+                                            getSelectedDepartmentColor().border
+                                          } border-2 shadow-md opacity-70 scale-105`
+                                        : isPreviewDeselection
+                                        ? "bg-red-100 border-red-300 border-2 opacity-70 scale-95"
+                                        : isSelectedByCurrentDept &&
+                                          selectedDepartment
+                                        ? `${
+                                            getSelectedDepartmentColor().light
+                                          } ${
+                                            getSelectedDepartmentColor().border
+                                          } border-2 shadow-md hover:scale-105`
+                                        : isSelectedByAny && selectedByDeptId
+                                        ? `${
+                                            getDepartmentColor(selectedByDeptId)
+                                              .light
+                                          } ${
+                                            getDepartmentColor(selectedByDeptId)
+                                              .border
+                                          } border-2 shadow-sm`
+                                        : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
+                                        ? `${
+                                            getDepartmentColor(blockedByDeptId)
+                                              .light
+                                          } opacity-30 border-dashed`
+                                        : slotSchedules.length > 0
+                                        ? "bg-slate-100"
+                                        : selectedDepartment && !isConflicted
+                                        ? "hover:bg-blue-50 hover:border-blue-200 hover:shadow-sm"
+                                        : "hover:bg-slate-50"
+                                    }`}
                                     onMouseDown={(e) =>
+                                      canInteract &&
                                       handleTimeSlotMouseDown(dayIndex, time, e)
                                     }
                                     onMouseEnter={() =>
+                                      canInteract &&
                                       handleTimeSlotMouseEnter(dayIndex, time)
                                     }
-                                    onMouseUp={handleTimeSlotMouseUp}
+                                    onMouseUp={
+                                      canInteract
+                                        ? handleTimeSlotMouseUp
+                                        : undefined
+                                    }
                                   >
                                     {/* Existing schedules */}
-                                    {slotSchedules.map((schedule, index) => {
+                                    {slotSchedules.map((schedule, idx) => {
                                       const color = getDepartmentColor(
                                         schedule.department!.id
                                       );
@@ -1448,7 +2256,7 @@ export default function CompleteScheduleApp() {
                                         <div
                                           key={schedule.id}
                                           className={`text-xs p-1 mb-1 rounded ${color.light} ${color.border} border shadow-sm`}
-                                          style={{ zIndex: index + 1 }}
+                                          style={{ zIndex: idx + 1 }}
                                         >
                                           <div
                                             className={`font-medium ${color.text}`}
@@ -1461,6 +2269,12 @@ export default function CompleteScheduleApp() {
                                         </div>
                                       );
                                     })}
+                                    {/* ✅ HIỂN THỊ CHO Ô BỊ BLOCK */}
+                                    {isBlockedByHidden && blockedByDeptId && (
+                                      <div className="absolute inset-0 bg-slate-300 bg-opacity-20 rounded flex items-center justify-center border border-slate-400 border-dashed">
+                                        <EyeOff className="w-4 h-4 text-slate-500 opacity-60" />
+                                      </div>
+                                    )}
 
                                     {/* Selection indicators */}
                                     {isSelectedByCurrentDept &&
@@ -1533,19 +2347,34 @@ export default function CompleteScheduleApp() {
                     {/* Calendar days */}
                     <div className="grid grid-cols-7 gap-0 border rounded-lg overflow-hidden shadow-sm">
                       {getMonthCalendar.map((day, index) => {
-                        const isSelectedByCurrentDept = isDaySelected(
-                          day.date,
-                          currentMonth.getMonth(),
-                          currentMonth.getFullYear()
-                        );
+                        const isSelectedByCurrentDept = day.isCurrentMonth
+                          ? isDaySelected(
+                              day.date,
+                              currentMonth.getMonth(),
+                              currentMonth.getFullYear()
+                            )
+                          : false;
                         const {
                           isSelected: isSelectedByAny,
                           departmentId: selectedByDeptId,
-                        } = isDaySelectedByAnyDept(
-                          day.date,
-                          currentMonth.getMonth(),
-                          currentMonth.getFullYear()
-                        );
+                        } = day.isCurrentMonth
+                          ? isDaySelectedByAnyDept(
+                              day.date,
+                              currentMonth.getMonth(),
+                              currentMonth.getFullYear()
+                            )
+                          : { isSelected: false, departmentId: null };
+
+                        const {
+                          isBlocked: isBlockedByHidden,
+                          departmentId: blockedByDeptId,
+                        } = day.isCurrentMonth
+                          ? isDayBlockedByHiddenDepartment(
+                              day.date,
+                              currentMonth.getMonth(),
+                              currentMonth.getFullYear()
+                            )
+                          : { isBlocked: false, departmentId: null };
                         const daySchedules = day.isCurrentMonth
                           ? getSchedulesForDay(
                               day.date,
@@ -1554,6 +2383,14 @@ export default function CompleteScheduleApp() {
                             )
                           : [];
 
+                        const hasExistingSchedule = day.isCurrentMonth
+                          ? isDayHasExistingSchedule(
+                              day.date,
+                              currentMonth.getMonth(),
+                              currentMonth.getFullYear()
+                            )
+                          : false;
+
                         const currentDate = new Date(
                           currentMonth.getFullYear(),
                           currentMonth.getMonth(),
@@ -1561,32 +2398,85 @@ export default function CompleteScheduleApp() {
                         );
                         const isSunday =
                           day.isCurrentMonth && currentDate.getDay() === 0;
+                        const isConflicted =
+                          day.isCurrentMonth &&
+                          isDayConflicted(
+                            day.date,
+                            currentMonth.getMonth(),
+                            currentMonth.getFullYear()
+                          );
+
+                        const isPast =
+                          day.isCurrentMonth &&
+                          isPastDay(
+                            day.date,
+                            currentMonth.getMonth(),
+                            currentMonth.getFullYear()
+                          );
+                        const canInteract =
+                          !isSunday &&
+                          !isConflicted &&
+                          !isPast &&
+                          !isBlockedByHidden &&
+                          !hasExistingSchedule;
 
                         return (
                           <div
                             key={index}
                             className={`min-h-[80px] p-2 border-r border-b transition-all relative hover:shadow-sm
-                            ${
-                              !day.isCurrentMonth
-                                ? "bg-slate-50 text-slate-400"
-                                : isSunday
-                                ? "bg-red-50 text-red-400 cursor-not-allowed opacity-60"
-                                : isSelectedByCurrentDept && selectedDepartment
-                                ? `${getSelectedDepartmentColor().light} ${
-                                    getSelectedDepartmentColor().border
-                                  } border-2 shadow-lg cursor-pointer transform hover:scale-105`
-                                : isSelectedByAny && selectedByDeptId
-                                ? `${
-                                    getDepartmentColor(selectedByDeptId).light
-                                  } ${
-                                    getDepartmentColor(selectedByDeptId).border
-                                  } border-2 cursor-pointer shadow-sm`
-                                : daySchedules.length > 0
-                                ? "bg-green-50 cursor-pointer hover:bg-green-100"
-                                : "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
-                            }`}
+                              ${
+                                !day.isCurrentMonth
+                                  ? "bg-slate-50 text-slate-400"
+                                  : isPast
+                                  ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50"
+                                  : isSunday
+                                  ? "bg-red-50 text-red-400 cursor-not-allowed opacity-60"
+                                  : isBlockedByHidden
+                                  ? "bg-slate-200 opacity-40 cursor-not-allowed border-dashed border-slate-400"
+                                  : isConflicted
+                                  ? "cursor-not-allowed opacity-90"
+                                  : isSelectedByCurrentDept &&
+                                    selectedDepartment
+                                  ? `${getSelectedDepartmentColor().light} ${
+                                      getSelectedDepartmentColor().border
+                                    } border-2 shadow-lg cursor-pointer transform hover:scale-105`
+                                  : isSelectedByAny && selectedByDeptId
+                                  ? `${
+                                      getDepartmentColor(selectedByDeptId).light
+                                    } ${
+                                      getDepartmentColor(selectedByDeptId)
+                                        .border
+                                    } border-2 cursor-pointer shadow-sm`
+                                  : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
+                                  ? `${
+                                      getDepartmentColor(blockedByDeptId).light
+                                    } opacity-30 border-dashed`
+                                  : daySchedules.length > 0
+                                  ? "bg-green-50 cursor-pointer hover:bg-green-100"
+                                  : "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
+                              }`}
+                            onMouseDown={(e) => {
+                              if (canInteract) {
+                                handleDayMouseDown(
+                                  day.date,
+                                  day.isCurrentMonth,
+                                  e
+                                );
+                              }
+                            }}
+                            onMouseEnter={() => {
+                              if (canInteract) {
+                                handleDayMouseEnter(
+                                  day.date,
+                                  day.isCurrentMonth
+                                );
+                              }
+                            }}
+                            onMouseUp={
+                              canInteract ? handleDayMouseUp : undefined
+                            }
                             onClick={() => {
-                              if (!isSunday) {
+                              if (canInteract) {
                                 handleDayClick(day.date, day.isCurrentMonth);
                               }
                             }}
@@ -1610,15 +2500,69 @@ export default function CompleteScheduleApp() {
                                       getSelectedDepartmentColor().text
                                     } font-bold`
                                   : isSunday
-                                  ? "text-red-400"
-                                  : ""
+                                  ? "w-6 h-6 text-red-400"
+                                  : "w-6 h-6"
                               }`}
                             >
                               {day.date}
+                              {(() => {
+                                if (!day.isCurrentMonth) return null;
+                                const isInDragRange = isDayInMonthlyDragRange(
+                                  day.date,
+                                  currentMonth.getMonth(),
+                                  currentMonth.getFullYear()
+                                );
+                                const isPreviewSelection =
+                                  isInDragRange &&
+                                  monthlyDragState.isSelecting &&
+                                  !isSelectedByCurrentDept &&
+                                  !isPast &&
+                                  !isSunday &&
+                                  !isConflicted;
+                                const isPreviewDeselection =
+                                  isInDragRange &&
+                                  !monthlyDragState.isSelecting &&
+                                  isSelectedByCurrentDept &&
+                                  !isPast &&
+                                  !isSunday &&
+                                  !isConflicted;
+
+                                if (isPreviewSelection) {
+                                  return (
+                                    <div
+                                      className={`absolute inset-0 ${
+                                        getSelectedDepartmentColor().light
+                                      } bg-opacity-50 rounded flex items-center justify-center border-2 ${
+                                        getSelectedDepartmentColor().border
+                                      } border-dashed animate-pulse`}
+                                    >
+                                      <Plus
+                                        className={`w-4 h-4 ${
+                                          getSelectedDepartmentColor().text
+                                        } opacity-70`}
+                                      />
+                                    </div>
+                                  );
+                                } else if (isPreviewDeselection) {
+                                  return (
+                                    <div className="absolute inset-0 bg-red-100 bg-opacity-50 rounded flex items-center justify-center border-2 border-red-300 border-dashed animate-pulse">
+                                      <X className="w-4 h-4 text-red-600 opacity-70" />
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
 
-                            {/* Day schedules */}
-                            {!isSunday && (
+                            {/* ✅ THÊM HIỂN THỊ CHO NGÀY BỊ BLOCK */}
+                            {isBlockedByHidden && blockedByDeptId && (
+                              <div className="absolute top-1 left-1 bg-slate-300 bg-opacity-20 rounded flex items-center justify-center border border-slate-400 border-dashed p-1">
+                                <EyeOff className="w-3 h-3 text-slate-500 opacity-60" />
+                              </div>
+                            )}
+
+                            {/* Day schedules - MỚI */}
+                            {!isSunday && day.isCurrentMonth && (
                               <div className="space-y-1">
                                 {daySchedules.slice(0, 2).map((schedule) => {
                                   const color = getDepartmentColor(
@@ -1627,16 +2571,25 @@ export default function CompleteScheduleApp() {
                                   return (
                                     <div
                                       key={schedule.id}
-                                      className={`text-xs p-1 rounded truncate ${color.light} ${color.text} shadow-sm`}
+                                      className={`text-xs p-1 mb-1 rounded ${color.light} ${color.border} border shadow-sm`}
                                     >
-                                      {schedule.name}
+                                      {/* Tên lịch */}
+                                      <div
+                                        className={`font-medium ${color.text} truncate`}
+                                      >
+                                        {schedule.name}
+                                      </div>
+                                      {/* Tên phòng ban */}
+                                      <div className="text-slate-600 truncate">
+                                        {schedule.department?.name}
+                                      </div>
                                     </div>
                                   );
                                 })}
 
                                 {daySchedules.length > 2 && (
                                   <div className="text-xs text-slate-500 font-medium">
-                                    +{daySchedules.length - 2} khác
+                                    +{daySchedules.length - 2} lịch khác
                                   </div>
                                 )}
                               </div>
@@ -1682,8 +2635,11 @@ export default function CompleteScheduleApp() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="max-h-40 overflow-y-auto space-y-2">
-                        {Array.from(departmentSelections.entries()).map(
-                          ([deptId, selections]) => {
+                        {Array.from(departmentSelections.entries())
+                          .filter(([deptId]) =>
+                            visibleDepartments.includes(deptId)
+                          )
+                          .map(([deptId, selections]) => {
                             if (
                               selections.days.length === 0 &&
                               selections.timeSlots.length === 0
@@ -1734,40 +2690,31 @@ export default function CompleteScheduleApp() {
                                 {selections.timeSlots.length > 0 && (
                                   <div>
                                     <p className="text-xs font-medium text-slate-700 mb-1">
-                                      {selections.timeSlots.length} khung giờ:
+                                      🕐 {selections.timeSlots.length} khung giờ
+                                      được chọn:
                                     </p>
-                                    <div className="text-xs text-slate-600">
-                                      {selections.timeSlots
-                                        .slice(0, 2)
-                                        .map((slot, idx) => (
-                                          <div key={idx}>
-                                            {weekDays[slot.day_of_week! - 1]}{" "}
-                                            {slot.start_time}
-                                          </div>
-                                        ))}
-                                      {selections.timeSlots.length > 2 && (
-                                        <div>
-                                          +{selections.timeSlots.length - 2}{" "}
-                                          khác
-                                        </div>
-                                      )}
+                                    <div className="flex flex-wrap gap-1">
+                                      {selections.timeSlots.map((slot, idx) => (
+                                        <Badge
+                                          key={idx}
+                                          variant="secondary"
+                                          className="text-xs font-medium"
+                                        >
+                                          {weekDays[slot.day_of_week! - 1]}:
+                                          <br />
+                                          {slot.start_time} - {slot.end_time}
+                                        </Badge>
+                                      ))}
                                     </div>
                                   </div>
                                 )}
                               </div>
                             );
-                          }
-                        )}
+                          })}
                       </div>
 
                       <Button
                         onClick={() => {
-                          if (!isAdmin) {
-                            toast.error(
-                              "Bạn không có quyền lưu lịch hoạt động"
-                            );
-                            return;
-                          }
                           setIsCreateDialogOpen(true);
                         }}
                         className="w-full bg-green-600 hover:bg-green-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1776,17 +2723,15 @@ export default function CompleteScheduleApp() {
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
                           {isAdmin
-                            ? `Lưu lịch (${departmentSelections.size} phòng ban)`
+                            ? isEditMode
+                              ? `Cập nhật lịch`
+                              : `Lưu lịch (${departmentSelections.size} phòng ban)`
                             : "Chỉ admin mới có quyền lưu lịch"}
                         </span>
                       </Button>
 
                       <Button
                         onClick={() => {
-                          if (!isAdmin) {
-                            toast.error("Bạn không có quyền xóa tất cả lịch");
-                            return;
-                          }
                           setDepartmentSelections(new Map());
                           setSelectedDepartment(null);
                         }}
@@ -1941,80 +2886,7 @@ export default function CompleteScheduleApp() {
                                         className="h-6 w-6 p-0 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          if (!isAdmin) {
-                                            toast.error(
-                                              "Bạn không có quyền chỉnh sửa lịch hoạt động"
-                                            );
-                                            return;
-                                          }
-                                          setEditingSchedule(schedule);
-
-                                          // Load data for editing
-                                          if (
-                                            schedule.schedule_type ===
-                                            ScheduleType.DAILY_DATES
-                                          ) {
-                                            const config =
-                                              schedule.schedule_config as DailyDatesConfig;
-                                            const newSelections = new Map();
-                                            newSelections.set(
-                                              schedule.department!.id,
-                                              {
-                                                days: config.dates.map(
-                                                  (date) => ({
-                                                    date: date.day_of_month,
-                                                    month: date.month
-                                                      ? date.month - 1
-                                                      : currentMonth.getMonth(),
-                                                    year:
-                                                      date.year ||
-                                                      currentMonth.getFullYear(),
-                                                    department_id:
-                                                      schedule.department!.id,
-                                                  })
-                                                ),
-                                                timeSlots: [],
-                                              }
-                                            );
-                                            setDepartmentSelections(
-                                              newSelections
-                                            );
-                                          } else {
-                                            const config =
-                                              schedule.schedule_config as HourlySlotsConfig;
-                                            const newSelections = new Map();
-                                            newSelections.set(
-                                              schedule.department!.id,
-                                              {
-                                                days: [],
-                                                timeSlots: config.slots.map(
-                                                  (slot) => ({
-                                                    day_of_week:
-                                                      slot.day_of_week,
-                                                    start_time: slot.start_time,
-                                                    end_time: slot.end_time,
-                                                    department_id:
-                                                      schedule.department!.id,
-                                                  })
-                                                ),
-                                              }
-                                            );
-                                            setDepartmentSelections(
-                                              newSelections
-                                            );
-                                          }
-
-                                          setSelectedDepartment(
-                                            schedule.department!.id
-                                          );
-                                          setFormData({
-                                            name: schedule.name,
-                                            description:
-                                              schedule.description || "",
-                                            start_time: "",
-                                            end_time: "",
-                                          });
-                                          setIsCreateDialogOpen(true);
+                                          handleEditSchedule(schedule);
                                         }}
                                       >
                                         <Edit className="w-3 h-3 text-blue-600" />
@@ -2077,14 +2949,38 @@ export default function CompleteScheduleApp() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-blue-600" />
-                {editingSchedule
-                  ? "Chỉnh sửa lịch hoạt động"
-                  : "Tạo lịch hoạt động mới"}
+                {isEditMode ? (
+                  <>
+                    <Edit className="w-5 h-5 text-orange-600" />
+                    Chỉnh sửa lịch hoạt động
+                    <Badge
+                      variant="secondary"
+                      className="bg-orange-100 text-orange-800"
+                    >
+                      Chế độ Edit
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5 text-blue-600" />
+                    Tạo lịch hoạt động mới
+                  </>
+                )}
               </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4">
+              {/* Edit Mode Notice */}
+              {isEditMode && (
+                <Alert className="border-orange-200 bg-orange-50">
+                  <Edit className="h-4 w-4 text-orange-600" />
+                  <AlertDescription className="text-orange-800">
+                    <strong>Chế độ chỉnh sửa:</strong> Bạn có thể thay đổi lịch
+                    trên calendar, đổi phòng ban, và cập nhật thông tin. Các
+                    thay đổi sẽ thay thế hoàn toàn lịch cũ.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="name">Tên lịch hoạt động *</Label>
@@ -2101,11 +2997,47 @@ export default function CompleteScheduleApp() {
 
                 <div>
                   <Label>Phạm vi tạo lịch</Label>
-                  <div className="mt-2">
-                    <Badge variant="outline" className="bg-blue-50">
-                      {departmentSelections.size} phòng ban
-                    </Badge>
-                  </div>
+                  {isEditMode && editingDepartment ? (
+                    <div className="mt-2 space-y-2">
+                      <Select
+                        value={editingDepartment.toString()}
+                        onValueChange={(value) =>
+                          handleChangeDepartmentInEdit(Number(value))
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Chọn phòng ban" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {departments.map((dept) => (
+                            <SelectItem
+                              key={dept.id}
+                              value={dept.id.toString()}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`w-3 h-3 rounded-full ${
+                                    getDepartmentColor(dept.id).bg
+                                  }`}
+                                />
+                                {dept.name}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-slate-500">
+                        💡 Thay đổi phòng ban sẽ chuyển toàn bộ lịch sang phòng
+                        ban mới
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <Badge variant="outline" className="bg-blue-50">
+                        {departmentSelections.size} phòng ban
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2202,22 +3134,56 @@ export default function CompleteScheduleApp() {
               </div>
 
               <div className="flex items-center justify-between pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsCreateDialogOpen(false);
-                    setEditingSchedule(null);
-                    setFormData({
-                      name: "",
-                      description: "",
-                      start_time: "",
-                      end_time: "",
-                    });
-                  }}
-                  className="hover:bg-slate-50"
-                >
-                  Hủy
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (isEditMode) {
+                        // Khôi phục selections ban đầu
+                        setDepartmentSelections(originalSelections);
+                        setSelectedDepartment(
+                          editingSchedule?.department?.id || null
+                        );
+                      }
+                      setIsCreateDialogOpen(false);
+                      setEditingSchedule(null);
+                      setIsEditMode(false);
+                      setEditingDepartment(null);
+                      setOriginalSelections(new Map());
+                      setFormData({
+                        name: "",
+                        description: "",
+                        start_time: "",
+                        end_time: "",
+                      });
+                    }}
+                    className="hover:bg-slate-50"
+                  >
+                    {isEditMode ? "Hủy thay đổi" : "Hủy"}
+                  </Button>
+
+                  {isEditMode && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setDepartmentSelections(originalSelections);
+                        setSelectedDepartment(
+                          editingSchedule?.department?.id || null
+                        );
+                        setEditingDepartment(
+                          editingSchedule?.department?.id || null
+                        );
+                        toast.success("Đã khôi phục lịch ban đầu");
+                      }}
+                      className="text-orange-600 hover:bg-orange-50"
+                    >
+                      <span className="flex items-center gap-2">
+                        <X className="w-4 h-4" />
+                        Khôi phục
+                      </span>
+                    </Button>
+                  )}
+                </div>
 
                 <Button
                   onClick={handleSaveSchedule}
@@ -2231,13 +3197,13 @@ export default function CompleteScheduleApp() {
                   {isSavingSchedule ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Đang lưu...
+                      {isEditMode ? "Đang cập nhật..." : "Đang lưu..."}
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <Save className="w-4 h-4" />
-                      {editingSchedule
-                        ? "Cập nhật"
+                      {isEditMode
+                        ? "Cập nhật lịch"
                         : `Tạo lịch (${departmentSelections.size} phòng ban)`}
                     </span>
                   )}

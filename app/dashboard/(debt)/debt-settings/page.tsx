@@ -49,6 +49,7 @@ export default function DebtSettingsPage() {
     singleDate: undefined,
     employees: [],
     sort: undefined,
+    warningLevels: [], // Add this line to match Filters type
   }));
 
   // Thêm state cho initialFilters riêng biệt
@@ -181,6 +182,7 @@ export default function DebtSettingsPage() {
       singleDate: undefined,
       employees: [],
       sort: undefined,
+      warningLevels: [],
     };
     setFilters(resetFilters);
     setInitialFilters(undefined);

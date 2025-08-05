@@ -295,6 +295,7 @@ export default function CampaignPage() {
           pagination.filters.employees?.map((e: any) => e as string | number) || [],
         dateRange: { from: undefined, to: undefined },
         singleDate: pagination.filters.singleDate || undefined,
+        warningLevels: [],
       };
 
       // ✅ UPDATE: Use handleFilterChange to ensure proper sync

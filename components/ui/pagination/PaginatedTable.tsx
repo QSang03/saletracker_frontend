@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/MultiSelectCombobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import type { DateRange } from "react-day-picker";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { CalendarDays } from "lucide-react";
+import { format } from "date-fns";
+import { vi } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
 import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
 
@@ -40,6 +46,12 @@ interface PaginatedTableProps {
     | { value: string; label: string }[]
     | readonly { readonly value: string; readonly label: string }[];
   availableBrands?: string[];
+  // Thêm props cho warning levels
+  enableWarningLevelFilter?: boolean;
+  availableWarningLevels?:
+    | string[]
+    | { value: string; label: string }[]
+    | readonly { readonly value: string; readonly label: string }[];
   dateRangeLabel?: string;
   singleDateLabel?: string;
   defaultPageSize?: number;
@@ -86,6 +98,7 @@ export type Filters = {
   zaloLinkStatuses?: (string | number)[];
   categories: (string | number)[];
   brands: (string | number)[];
+  warningLevels: (string | number)[]; // Thêm warning levels
   dateRange: DateRange;
   singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
@@ -108,6 +121,7 @@ export default function PaginatedTable({
     { value: 2, label: "Lỗi liên kết" },
   ],
   enableSingleDateFilter,
+  enableDateRangeFilter,
   singleDateLabel,
   enablePageSize,
   availableDepartments = [],
@@ -118,6 +132,9 @@ export default function PaginatedTable({
   ],
   availableCategories = [],
   availableBrands = [],
+  // Thêm props cho warning levels
+  enableWarningLevelFilter,
+  availableWarningLevels = [],
   defaultPageSize = 10,
   page,
   total,
@@ -247,6 +264,30 @@ export default function PaginatedTable({
     () => availableBrands.map((b) => ({ label: b, value: b })),
     [availableBrands]
   );
+  
+  // Thêm warningLevelOptions
+  const warningLevelOptions = useMemo(() => {
+    if (!availableWarningLevels || availableWarningLevels.length === 0) {
+      return [];
+    }
+
+    return availableWarningLevels.map((w) => {
+      if (typeof w === "string") {
+        return { label: w, value: w };
+      } else if (
+        typeof w === "object" &&
+        w !== null &&
+        "value" in w &&
+        "label" in w
+      ) {
+        const warningObj = w as { value: string; label: string };
+        return { label: warningObj.label, value: warningObj.value };
+      } else {
+        return { label: String(w), value: String(w) };
+      }
+    });
+  }, [availableWarningLevels]);
+  
   const employeeOptions = useMemo(
     () => availableEmployees.map((e) => ({ label: e.label, value: e.value })),
     [availableEmployees]
@@ -262,18 +303,21 @@ export default function PaginatedTable({
     [availableZaloLinkStatuses]
   );
 
-  const [filters, setFilters] = useState<Filters>(() => ({
-    search: initialFilters?.search || "",
-    departments: initialFilters?.departments || [],
-    roles: initialFilters?.roles || [],
-    statuses: initialFilters?.statuses || [],
-    zaloLinkStatuses: initialFilters?.zaloLinkStatuses || [],
-    categories: initialFilters?.categories || [],
-    brands: initialFilters?.brands || [],
-    dateRange: initialFilters?.dateRange || { from: undefined, to: undefined },
-    singleDate: initialFilters?.singleDate || undefined, // Không set mặc định
-    employees: initialFilters?.employees || [],
-  }));
+  const [filters, setFilters] = useState<Filters>(() => {
+    return {
+      search: initialFilters?.search || "",
+      departments: initialFilters?.departments || [],
+      roles: initialFilters?.roles || [],
+      statuses: initialFilters?.statuses || [],
+      zaloLinkStatuses: initialFilters?.zaloLinkStatuses || [],
+      categories: initialFilters?.categories || [],
+      brands: initialFilters?.brands || [],
+      warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
+      dateRange: initialFilters?.dateRange || { from: undefined, to: undefined },
+      singleDate: initialFilters?.singleDate || undefined, // Không set mặc định
+      employees: initialFilters?.employees || [],
+    };
+  });
 
   const isFiltersEmpty = useCallback((filters: Filters): boolean => {
     return (
@@ -284,6 +328,7 @@ export default function PaginatedTable({
       (filters.zaloLinkStatuses?.length || 0) === 0 &&
       filters.categories.length === 0 &&
       filters.brands.length === 0 &&
+      filters.warningLevels.length === 0 && // Thêm warning levels
       filters.employees.length === 0 &&
       !filters.dateRange.from &&
       !filters.dateRange.to &&
@@ -302,6 +347,7 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.zaloLinkStatuses),
       JSON.stringify(initialFilters?.categories),
       JSON.stringify(initialFilters?.brands),
+      JSON.stringify(initialFilters?.warningLevels), // Thêm warning levels
       JSON.stringify(initialFilters?.dateRange),
       initialFilters?.singleDate,
       JSON.stringify(initialFilters?.employees),
@@ -309,13 +355,33 @@ export default function PaginatedTable({
   );
 
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const userModifiedFieldsRef = useRef<Set<keyof Filters>>(new Set()); // Track which fields user modified
+  const previousInitialFiltersRef = useRef<Partial<Filters> | undefined>(undefined);
 
   useEffect(() => {
-    setHasUserInteracted(false);
-  }, [memoizedInitialFilters]);
-
-  useEffect(() => {
-    setHasUserInteracted(false);
+    // Only clear user modifications if initialFilters changed significantly
+    // AND it's not just due to API response differences
+    if (memoizedInitialFilters && previousInitialFiltersRef.current) {
+      const currentStringified = JSON.stringify(previousInitialFiltersRef.current);
+      const incomingStringified = JSON.stringify(memoizedInitialFilters);
+      
+      // More sophisticated comparison - ignore changes that look like API responses
+      const significant = currentStringified !== incomingStringified;
+      
+      if (significant) {
+        // Additional check: don't clear if the change is just about preserving user selections
+        const isPreservingUserSelections = userModifiedFieldsRef.current.size > 0;
+        
+        if (!isPreservingUserSelections) {
+          setHasUserInteracted(false);
+          userModifiedFieldsRef.current.clear();
+        } else {
+        }
+      }
+    } else if (memoizedInitialFilters && !previousInitialFiltersRef.current) {
+      setHasUserInteracted(false);
+    }
+    previousInitialFiltersRef.current = memoizedInitialFilters;
   }, [memoizedInitialFilters]);
 
   useEffect(() => {
@@ -336,56 +402,90 @@ export default function PaginatedTable({
     }
   }, []);
 
-  // ✅ IMPROVED: Simplified sync logic
+  // ✅ IMPROVED: Selective sync logic based on user modifications
   useEffect(() => {
-    if (memoizedInitialFilters && !hasUserInteracted && isInitializedRef.current) {
+    if (memoizedInitialFilters && isInitializedRef.current) {
       setFilters((prev) => {
-        const newFilters = {
-          search:
-            memoizedInitialFilters.search !== undefined
-              ? memoizedInitialFilters.search
-              : prev.search,
-          departments:
-            memoizedInitialFilters.departments !== undefined
-              ? memoizedInitialFilters.departments
-              : prev.departments,
-          roles:
-            memoizedInitialFilters.roles !== undefined
-              ? memoizedInitialFilters.roles
-              : prev.roles,
-          statuses:
-            memoizedInitialFilters.statuses !== undefined
-              ? memoizedInitialFilters.statuses
-              : prev.statuses,
-          zaloLinkStatuses:
-            memoizedInitialFilters.zaloLinkStatuses !== undefined
-              ? memoizedInitialFilters.zaloLinkStatuses
-              : prev.zaloLinkStatuses,
-          categories:
-            memoizedInitialFilters.categories !== undefined
-              ? memoizedInitialFilters.categories
-              : prev.categories,
-          brands:
-            memoizedInitialFilters.brands !== undefined
-              ? memoizedInitialFilters.brands
-              : prev.brands,
-          dateRange:
-            memoizedInitialFilters.dateRange !== undefined
-              ? memoizedInitialFilters.dateRange
-              : prev.dateRange,
-          singleDate:
-            memoizedInitialFilters.singleDate !== undefined
-              ? memoizedInitialFilters.singleDate
-              : prev.singleDate,
-          employees:
-            memoizedInitialFilters.employees !== undefined
-              ? memoizedInitialFilters.employees
-              : prev.employees,
-        };
+        if (!hasUserInteracted) {
+          // Sync tất cả nếu user chưa tương tác
+          const newFilters = {
+            search:
+              memoizedInitialFilters.search !== undefined
+                ? memoizedInitialFilters.search
+                : prev.search,
+            departments:
+              memoizedInitialFilters.departments !== undefined
+                ? memoizedInitialFilters.departments
+                : prev.departments,
+            roles:
+              memoizedInitialFilters.roles !== undefined
+                ? memoizedInitialFilters.roles
+                : prev.roles,
+            statuses:
+              memoizedInitialFilters.statuses !== undefined
+                ? memoizedInitialFilters.statuses
+                : prev.statuses,
+            zaloLinkStatuses:
+              memoizedInitialFilters.zaloLinkStatuses !== undefined
+                ? memoizedInitialFilters.zaloLinkStatuses
+                : prev.zaloLinkStatuses,
+            categories:
+              memoizedInitialFilters.categories !== undefined
+                ? memoizedInitialFilters.categories
+                : prev.categories,
+            brands:
+              memoizedInitialFilters.brands !== undefined
+                ? memoizedInitialFilters.brands
+                : prev.brands,
+            warningLevels:
+              memoizedInitialFilters.warningLevels !== undefined
+                ? memoizedInitialFilters.warningLevels
+                : prev.warningLevels,
+            dateRange:
+              memoizedInitialFilters.dateRange !== undefined
+                ? memoizedInitialFilters.dateRange
+                : prev.dateRange,
+            singleDate:
+              memoizedInitialFilters.singleDate !== undefined
+                ? memoizedInitialFilters.singleDate
+                : prev.singleDate,
+            employees:
+              memoizedInitialFilters.employees !== undefined
+                ? memoizedInitialFilters.employees
+                : prev.employees,
+          };
 
-        // Only update if actually different
-        const isEqual = JSON.stringify(prev) === JSON.stringify(newFilters);
-        return isEqual ? prev : newFilters;
+          // Only update if actually different
+          const isEqual = JSON.stringify(prev) === JSON.stringify(newFilters);
+          return isEqual ? prev : newFilters;
+        } else {
+          // Chỉ sync những field chưa bị user modify
+          const newFilters = { ...prev };
+          let hasChanges = false;
+
+          const fieldsToCheck = [
+            'search', 'departments', 'roles', 'statuses', 'zaloLinkStatuses',
+            'categories', 'brands', 'warningLevels', 'dateRange', 'singleDate', 'employees'
+          ] as (keyof Filters)[];
+
+          fieldsToCheck.forEach(field => {
+            if (!userModifiedFieldsRef.current.has(field) && 
+                memoizedInitialFilters[field] !== undefined) {
+              const currentValue = prev[field];
+              const incomingValue = memoizedInitialFilters[field];
+              
+              // More precise comparison
+              const isDifferent = JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
+              
+              if (isDifferent) {
+                newFilters[field] = incomingValue as any;
+                hasChanges = true;
+              }
+            } else if (userModifiedFieldsRef.current.has(field)) {
+            }
+          });
+          return hasChanges ? newFilters : prev;
+        }
       });
     }
   }, [memoizedInitialFilters, hasUserInteracted]);
@@ -428,6 +528,7 @@ export default function PaginatedTable({
       zaloLinkStatuses: [],
       categories: [],
       brands: [],
+      warningLevels: [], // Thêm warning levels
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
       employees: [],
@@ -461,17 +562,12 @@ export default function PaginatedTable({
     (newFilters: Filters) => {
       if (filterTimeout.current) clearTimeout(filterTimeout.current);
       filterTimeout.current = setTimeout(() => {
-        if (preventEmptyFilterCall && isFiltersEmpty(newFilters)) {
-          // ✅ SỬA: Không gọi handleResetFilter để tránh recursive call
-          // Chỉ đơn giản là không gọi onFilterChange
-          return;
-        }
         if (onFilterChange) {
           onFilterChange(newFilters);
         }
-      }, 300); // ✅ Increase debounce time for stability
+      }, 300);
     },
-    [onFilterChange, preventEmptyFilterCall, isFiltersEmpty] // ✅ Loại bỏ handleResetFilter khỏi deps
+    [onFilterChange, preventEmptyFilterCall, isFiltersEmpty]
   );
 
   useEffect(() => {
@@ -484,9 +580,12 @@ export default function PaginatedTable({
   const updateFilter = useCallback(
     <K extends keyof Filters>(key: K, value: Filters[K]) => {
       setHasUserInteracted(true); // Mark that user has interacted
+      userModifiedFieldsRef.current.add(key); // Track which field was modified
+      
       setFilters((prev) => {
         if (prev[key] === value) return prev;
         const next = { ...prev, [key]: value };
+        
         debouncedSetFilters(next);
         return next;
       });
@@ -495,12 +594,44 @@ export default function PaginatedTable({
   );
 
   // Memoized onChange handlers to prevent re-renders
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced search handler
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      updateFilter("search", e.target.value);
+      const value = e.target.value;
+      setSearchInput(value); // Update UI immediately
+      
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      
+      // Debounce the actual filter update - ALWAYS fire, even for empty values
+      searchTimeoutRef.current = setTimeout(() => {
+        updateFilter("search", value); // This will save to localStorage via debouncedSetFilters
+      }, 300);
     },
     [updateFilter]
   );
+
+  // Sync searchInput with filters.search when it changes externally
+  useEffect(() => {
+    setSearchInput(filters.search);
+  }, [filters.search]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (filterTimeout.current) {
+        clearTimeout(filterTimeout.current);
+      }
+    };
+  }, []);
 
   const handleEmployeesChange = useCallback(
     (vals: (string | number)[]) => {
@@ -588,6 +719,13 @@ export default function PaginatedTable({
     [updateFilter]
   );
 
+  const handleWarningLevelsChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("warningLevels", vals);
+    },
+    [updateFilter]
+  );
+
   // ...existing code...
 
   // State cho panel xuất CSV
@@ -657,7 +795,7 @@ export default function PaginatedTable({
             <Input
               className={`min-w-0 w-full ${filterClassNames.search ?? ""}`}
               placeholder="Tìm kiếm..."
-              value={filters.search}
+              value={searchInput}
               onChange={handleSearchChange}
             />
           )}
@@ -724,6 +862,15 @@ export default function PaginatedTable({
               onChange={handleBrandsChange}
             />
           )}
+          {enableWarningLevelFilter && warningLevelOptions.length > 0 && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full`}
+              placeholder="Mức độ cảnh báo"
+              value={filters.warningLevels}
+              options={warningLevelOptions}
+              onChange={handleWarningLevelsChange}
+            />
+          )}
           {enableSingleDateFilter && (
             <DatePicker
               value={
@@ -736,6 +883,48 @@ export default function PaginatedTable({
                 )
               }
             />
+          )}
+          {enableDateRangeFilter && (
+            <div className="min-w-0 w-full">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !filters.dateRange.from && "text-muted-foreground"
+                    )}
+                  >
+                    {/* <CalendarDays className="mr-2 h-4 w-4" /> */}
+                    {filters.dateRange.from ? (
+                      filters.dateRange.to ? (
+                        <>
+                          {format(filters.dateRange.from, "dd/MM/yyyy", { locale: vi })} -{" "}
+                          {format(filters.dateRange.to, "dd/MM/yyyy", { locale: vi })}
+                        </>
+                      ) : (
+                        format(filters.dateRange.from, "dd/MM/yyyy", { locale: vi })
+                      )
+                    ) : (
+                      <span>Chọn khoảng thời gian</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={filters.dateRange.from}
+                    selected={filters.dateRange}
+                    onSelect={(dateRange) => {
+                      updateFilter("dateRange", dateRange || { from: undefined, to: undefined });
+                    }}
+                    numberOfMonths={2}
+                    locale={vi}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           )}
           {/* Số dòng/trang nằm ngang hàng filter */}
           {enablePageSize && (

@@ -8,7 +8,12 @@ interface OrderFilters {
   search?: string;
   status?: string;
   date?: string;
+  dateRange?: { start: string; end: string };
   employee?: string;
+  employees?: string;
+  departments?: string;
+  products?: string;
+  warningLevel?: string;
 }
 
 interface OrdersResponse {
@@ -31,11 +36,17 @@ interface UseOrdersReturn {
   setSearch: (search: string) => void;
   setStatus: (status: string) => void;
   setDate: (date: string) => void;
+  setDateRange: (dateRange: { start: string; end: string } | undefined) => void;
   setEmployee: (employee: string) => void;
+  setEmployees: (employees: string) => void;
+  setDepartments: (departments: string) => void;
+  setProducts: (products: string) => void;
+  setWarningLevel: (warningLevel: string) => void;
   
   // Actions
   refetch: () => Promise<void>;
   resetFilters: () => void;
+  getFilterOptions: () => Promise<{ departments: any[], products: any[] }>;
   
   // CRUD methods
   createOrder: (orderData: Partial<Order>) => Promise<Order>;
@@ -95,22 +106,75 @@ const clearPageSizeFromStorage = (): void => {
   }
 };
 
+// ✅ Helper functions để save/load tất cả filters từ localStorage
+const saveFiltersToStorage = (filters: OrderFilters): void => {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    const filtersToSave = {
+      search: filters.search || '',
+      status: filters.status || '',
+      date: filters.date || '',
+      dateRange: filters.dateRange || null,
+      employee: filters.employee || '',
+      employees: filters.employees || '',
+      departments: filters.departments || '',
+      products: filters.products || '',
+      warningLevel: filters.warningLevel || '',
+    };
+    localStorage.setItem('orderFilters', JSON.stringify(filtersToSave));
+  } catch (error) {
+    console.warn('Error saving filters to localStorage:', error);
+  }
+};
+
+const getFiltersFromStorage = (): Partial<OrderFilters> => {
+  if (typeof window === 'undefined') return {};
+  
+  try {
+    const saved = localStorage.getItem('orderFilters');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    console.warn('Error reading filters from localStorage:', error);
+  }
+  return {};
+};
+
+const clearFiltersFromStorage = (): void => {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    localStorage.removeItem('orderFilters');
+  } catch (error) {
+    console.warn('Error clearing filters from localStorage:', error);
+  }
+};
+
 export const useOrders = (): UseOrdersReturn => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [total, setTotal] = useState(0);
   
-  // ✅ Khởi tạo filters với pageSize từ localStorage
+  // ✅ Khởi tạo filters với pageSize và filters từ localStorage
   const [filters, setFiltersState] = useState<OrderFilters>(() => {
     const initialPageSize = getPageSizeFromStorage(10);
+    const savedFilters = getFiltersFromStorage();
     
     return {
-      page: 1,
+      page: 1, // Page luôn bắt đầu từ 1
       pageSize: initialPageSize,
-      search: '',
-      status: '',
-      employee: '',
+      search: savedFilters.search || '',
+      status: savedFilters.status || '',
+      date: savedFilters.date || '',
+      dateRange: savedFilters.dateRange || undefined,
+      employee: savedFilters.employee || '',
+      employees: savedFilters.employees || '',
+      departments: savedFilters.departments || '',
+      products: savedFilters.products || '',
+      warningLevel: savedFilters.warningLevel || '',
     };
   });
 
@@ -156,8 +220,23 @@ export const useOrders = (): UseOrdersReturn => {
       if (currentFilters.date && currentFilters.date.trim()) {
         params.append('date', currentFilters.date.trim());
       }
+      if (currentFilters.dateRange) {
+        params.append('dateRange', JSON.stringify(currentFilters.dateRange));
+      }
       if (currentFilters.employee && currentFilters.employee.trim()) {
         params.append('employee', currentFilters.employee.trim());
+      }
+      if (currentFilters.employees && currentFilters.employees.trim()) {
+        params.append('employees', currentFilters.employees.trim());
+      }
+      if (currentFilters.departments && currentFilters.departments.trim()) {
+        params.append('departments', currentFilters.departments.trim());
+      }
+      if (currentFilters.products && currentFilters.products.trim()) {
+        params.append('products', currentFilters.products.trim());
+      }
+      if (currentFilters.warningLevel && currentFilters.warningLevel.trim()) {
+        params.append('warningLevel', currentFilters.warningLevel.trim());
       }
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`, {
@@ -184,7 +263,12 @@ export const useOrders = (): UseOrdersReturn => {
 
   // State setters
   const setFilters = useCallback((newFilters: Partial<OrderFilters>) => {
-    setFiltersState(prev => ({ ...prev, ...newFilters }));
+    setFiltersState(prev => {
+      const updated = { ...prev, ...newFilters };
+      // Save to localStorage
+      saveFiltersToStorage(updated);
+      return updated;
+    });
   }, []);
 
   const setPage = useCallback((page: number) => {
@@ -208,23 +292,79 @@ export const useOrders = (): UseOrdersReturn => {
   }, []);
 
   const setSearch = useCallback((search: string) => {
-    setFiltersState(prev => ({ ...prev, search, page: 1 }));
+    setFiltersState(prev => {
+      const updated = { ...prev, search, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
   }, []);
 
   const setStatus = useCallback((status: string) => {
-    setFiltersState(prev => ({ ...prev, status, page: 1 }));
+    setFiltersState(prev => {
+      const updated = { ...prev, status, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
   }, []);
 
   const setDate = useCallback((date: string) => {
-    setFiltersState(prev => ({ 
-      ...prev, 
-      date: date.trim() || undefined,
-      page: 1 
-    }));
+    setFiltersState(prev => {
+      const updated = { 
+        ...prev, 
+        date: date.trim() || undefined,
+        page: 1 
+      };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
   }, []);
 
   const setEmployee = useCallback((employee: string) => {
-    setFiltersState(prev => ({ ...prev, employee, page: 1 }));
+    setFiltersState(prev => {
+      const updated = { ...prev, employee, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const setDateRange = useCallback((dateRange: { start: string; end: string } | undefined) => {
+    setFiltersState(prev => {
+      const updated = { ...prev, dateRange, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const setEmployees = useCallback((employees: string) => {
+    setFiltersState(prev => {
+      const updated = { ...prev, employees, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const setDepartments = useCallback((departments: string) => {
+    setFiltersState(prev => {
+      const updated = { ...prev, departments, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const setProducts = useCallback((products: string) => {
+    setFiltersState(prev => {
+      const updated = { ...prev, products, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const setWarningLevel = useCallback((warningLevel: string) => {
+    setFiltersState(prev => {
+      const updated = { ...prev, warningLevel, page: 1 };
+      saveFiltersToStorage(updated);
+      return updated;
+    });
   }, []);
 
   // ✅ Cập nhật resetFilters để clear localStorage
@@ -234,6 +374,7 @@ export const useOrders = (): UseOrdersReturn => {
     
     // Clear localStorage
     clearPageSizeFromStorage();
+    clearFiltersFromStorage(); // Thêm clear filters
     
     // Reset state
     setFiltersState({
@@ -241,13 +382,30 @@ export const useOrders = (): UseOrdersReturn => {
       pageSize: defaultPageSize,
       search: '',
       status: '',
+      date: '',
+      dateRange: undefined,
       employee: '',
+      employees: '',
+      departments: '',
+      products: '',
+      warningLevel: '',
     });
   }, []);
 
   const refetch = useCallback(async () => {
     await fetchOrdersInternal(filters);
   }, [filters, fetchOrdersInternal]);
+
+  const getFilterOptions = useCallback(async (): Promise<{ departments: any[], products: any[] }> => {
+    return handleApiCall(async () => {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/filter-options`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!res.ok) throw new Error(`Failed to fetch filter options: ${res.status}`);
+      return res.json();
+    });
+  }, [handleApiCall, getAuthHeaders]);
 
   // Auto fetch when filters change
   useEffect(() => {
@@ -383,11 +541,17 @@ export const useOrders = (): UseOrdersReturn => {
     setSearch,
     setStatus,
     setDate,
+    setDateRange,
     setEmployee,
+    setEmployees,
+    setDepartments,
+    setProducts,
+    setWarningLevel,
     
     // Actions
     refetch,
     resetFilters, // ✅ Đã update để clear localStorage
+    getFilterOptions,
     
     // CRUD methods
     createOrder,
