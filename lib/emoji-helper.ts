@@ -45,16 +45,12 @@ export class EmojiHelper {
         // Tạo promise để load data
         singletonPromise = (async () => {
             try {
-                console.log('Loading emoji data...');
                 
                 // Sử dụng emoji-pos-all.json làm nguồn chính vì nó có đầy đủ shortcodes
                 const [emojiDataResponse, emojiPositionsResponse] = await Promise.all([
                     fetch('/emoji/emoji-data.json'),
                     fetch('/emoji/emoji-pos-all.json')
                 ]);
-
-                console.log('Data response status:', emojiDataResponse.status);
-                console.log('Positions response status:', emojiPositionsResponse.status);
 
                 if (!emojiDataResponse.ok || !emojiPositionsResponse.ok) {
                     console.error('Failed to fetch emoji data:', {
@@ -64,8 +60,6 @@ export class EmojiHelper {
                         positionsStatus: emojiPositionsResponse.status
                     });
                     
-                    // Fallback to simple data if main data fails
-                    console.log('Trying fallback to simple data...');
                     const [fallbackDataResponse, fallbackPositionsResponse] = await Promise.all([
                         fetch('/emoji/emoji-data-simple.json'),
                         fetch('/emoji/emoji-pos-simple.json')
@@ -77,7 +71,6 @@ export class EmojiHelper {
 
                     const emojiData = await fallbackDataResponse.json();
                     const emojiPositions = await fallbackPositionsResponse.json();
-                    console.log('Loaded fallback emoji data:', Object.keys(emojiData).length, 'emojis');
                     const instance = new EmojiHelper(emojiData, emojiPositions, finalConfig);
                     singletonInstance = instance;
                     return instance;
@@ -86,18 +79,11 @@ export class EmojiHelper {
                 const emojiData = await emojiDataResponse.json();
                 const emojiPositions = await emojiPositionsResponse.json();
 
-                console.log('Successfully loaded emoji data:', {
-                    dataCount: Object.keys(emojiData).length,
-                    positionsCount: Object.keys(emojiPositions).length,
-                    sampleShortcodes: Object.keys(emojiPositions).slice(0, 10)
-                });
-
                 const instance = new EmojiHelper(emojiData, emojiPositions, finalConfig);
                 singletonInstance = instance;
                 return instance;
             } catch (error) {
                 console.error('Error loading emoji data:', error);
-                console.log('Creating empty EmojiHelper as final fallback');
                 
                 // Tạo một helper cơ bản với một số emoji thông dụng
                 const basicEmojiData = {

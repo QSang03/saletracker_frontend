@@ -202,7 +202,6 @@ export function clearAccessToken() {
   localStorage.removeItem('access_token');
   // Xóa cookie access_token_short
   document.cookie = "access_token=; path=/; max-age=0";
-  console.log("🗑️ [ClearAccessToken] Cleared from localStorage and cookie");
 }
 
 export function clearRefreshToken() {
@@ -215,5 +214,4 @@ export function clearRefreshToken() {
 export function clearAllTokens() {
   clearAccessToken();
   clearRefreshToken();
-  console.log("🗑️ [ClearAllTokens] All tokens cleared from localStorage and cookies");
 }
