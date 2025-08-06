@@ -6,7 +6,14 @@ import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
-import { setAccessToken, clearAccessToken, setRefreshToken, clearAllTokens } from "@/lib/auth";
+import {
+  setAccessToken,
+  clearAccessToken,
+  setRefreshToken,
+  clearAllTokens,
+  getAccessToken,
+  getRefreshToken,
+} from "@/lib/auth";
 
 import { Input } from "@/components/ui/custom/input";
 import { Button } from "@/components/ui/buttons/LoginButton";
@@ -35,43 +42,175 @@ function LoginForm() {
 
   const handleLogin = async () => {
     setLoading(true);
+    const debugLogs: string[] = [];
+
     try {
+      debugLogs.push(
+        `🔄 [Login] Starting login request at ${new Date().toISOString()}`
+      );
+
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json; charset=utf-8",
+        },
         body: JSON.stringify({ username, password }),
+        credentials: "include",
       });
-      const data = await res.json();
 
-      // Kiểm tra nếu đăng nhập bằng mật khẩu mặc định
+      debugLogs.push(`📊 [Login] Response status: ${res.status}`);
+      debugLogs.push(
+        `📊 [Login] Response headers: ${JSON.stringify(
+          Object.fromEntries(res.headers.entries())
+        )}`
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        debugLogs.push(`❌ [Login] Login failed: ${JSON.stringify(errorData)}`);
+        throw new Error(errorData.message || "Login failed");
+      }
+
+      const data = await res.json();
+      debugLogs.push(
+        `✅ [Login] Response data received: ${JSON.stringify({
+          hasAccessToken: !!data.access_token,
+          hasRefreshToken: !!data.refresh_token,
+          hasUser: !!data.user,
+          userIsBlock: data.user?.isBlock,
+          accessTokenLength: data.access_token?.length,
+        })}`
+      );
+
+      // ... rest of validation logic
+
+      if (data.user && data.user.isBlock) {
+        debugLogs.push("⚠️ [Login] User is blocked");
+        localStorage.setItem("loginDebugLogs", JSON.stringify(debugLogs));
+        clearAllTokens();
+        toast.error(
+          "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!"
+        );
+        return;
+      }
+
+      if (!data.access_token || !data.refresh_token || !data.user) {
+        debugLogs.push(
+          `❌ [Login] Missing required data: ${JSON.stringify({
+            hasAccessToken: !!data.access_token,
+            hasRefreshToken: !!data.refresh_token,
+            hasUser: !!data.user,
+          })}`
+        );
+        localStorage.setItem("loginDebugLogs", JSON.stringify(debugLogs));
+        clearAllTokens();
+        toast.error("Đăng nhập thất bại", {
+          description: "Phản hồi từ server không đầy đủ",
+        });
+        return;
+      }
+
+      debugLogs.push("🔄 [Login] Setting tokens...");
+
+      const cleanAccessToken = data.access_token.trim();
+      const cleanRefreshToken = data.refresh_token.trim();
+
+      clearAllTokens();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      setAccessToken(cleanAccessToken);
+      setRefreshToken(cleanRefreshToken);
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const verifyAccess = getAccessToken();
+      const verifyRefresh = getRefreshToken();
+
+      const verificationResult = {
+        accessTokenSet: !!verifyAccess,
+        refreshTokenSet: !!verifyRefresh,
+        accessTokenMatches: verifyAccess === cleanAccessToken,
+        refreshTokenMatches: verifyRefresh === cleanRefreshToken,
+        accessTokenLength: verifyAccess?.length,
+        refreshTokenLength: verifyRefresh?.length,
+        domain: window.location.hostname,
+        protocol: window.location.protocol,
+      };
+
+      debugLogs.push(
+        `🔍 [Login] Token verification: ${JSON.stringify(verificationResult)}`
+      );
+
+      if (!verifyAccess || !verifyRefresh) {
+        debugLogs.push("❌ [Login] Failed to set tokens in cookies");
+        debugLogs.push(
+          `❌ [Login] Cookie verification failed: ${JSON.stringify({
+            expectedAccessToken: cleanAccessToken.substring(0, 50) + "...",
+            actualAccessToken: verifyAccess
+              ? verifyAccess.substring(0, 50) + "..."
+              : "null",
+            cookieString: document.cookie.substring(0, 200) + "...",
+          })}`
+        );
+
+        // Lưu debug logs trước khi return
+        localStorage.setItem("loginDebugLogs", JSON.stringify(debugLogs));
+
+        toast.error("Không thể lưu thông tin đăng nhập", {
+          description: "Vui lòng kiểm tra cài đặt trình duyệt và thử lại",
+        });
+        return;
+      }
+
+      debugLogs.push("✅ [Login] Login successful, tokens verified");
+
+      // Lưu debug logs TRƯỚC KHI redirect
+      localStorage.setItem("loginDebugLogs", JSON.stringify(debugLogs));
+      localStorage.setItem("loginSuccess", "true");
+      localStorage.setItem("loginTimestamp", new Date().toISOString());
+
+      toast.success("🎉 Đăng nhập thành công!");
+
       const passwordDefault = process.env.NEXT_PUBLIC_PASSWORD_DEFAULT;
       const isDefaultPassword = passwordDefault && password === passwordDefault;
 
-      if (res.ok && data.access_token && data.refresh_token && data.user && !data.user.isBlock) {
-        setAccessToken(data.access_token);
-        setRefreshToken(data.refresh_token);
-        toast.success("🎉 Đăng nhập thành công!");
-        // Lưu trạng thái vào localStorage để dashboard kiểm tra
-        if (isDefaultPassword) {
-          localStorage.setItem("requireChangePassword", "true");
-        } else {
-          localStorage.removeItem("requireChangePassword");
-        }
-        window.location.href = callbackUrl;
-      } else if (data.user && data.user.isBlock) {
-        clearAllTokens();
-        toast.error("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên!");
+      if (isDefaultPassword) {
+        localStorage.setItem("requireChangePassword", "true");
       } else {
-        clearAllTokens();
-        toast.error("Đăng nhập thất bại", {
-          description: data.message || "Sai tên đăng nhập hoặc mật khẩu",
-        });
+        localStorage.removeItem("requireChangePassword");
       }
-    } catch (err) {
+
+      // Redirect với delay
+      setTimeout(() => {
+        window.location.href = callbackUrl;
+      }, 300);
+    } catch (err: any) {
+      debugLogs.push(
+        `❌ [Login] Login process failed: ${JSON.stringify({
+          error: err.message,
+          stack: err.stack?.substring(0, 200),
+          response: err.response?.data,
+        })}`
+      );
+
+      // Lưu debug logs khi có lỗi
+      localStorage.setItem("loginDebugLogs", JSON.stringify(debugLogs));
+      localStorage.setItem(
+        "loginError",
+        JSON.stringify({
+          message: err.message,
+          timestamp: new Date().toISOString(),
+        })
+      );
+
       clearAllTokens();
-      toast.error("Lỗi hệ thống", { description: String(err) });
+      toast.error("Lỗi hệ thống", {
+        description: err.message || String(err),
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -177,7 +316,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><LoadingSpinner size={32} /></div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <LoadingSpinner size={32} />
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

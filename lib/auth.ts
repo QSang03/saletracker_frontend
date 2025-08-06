@@ -31,29 +31,29 @@ export function getRefreshToken(): string | null {
 }
 
 export function base64UrlDecode(str: string): string {
-  str = str.replace(/-/g, '+').replace(/_/g, '/');
-  while (str.length % 4) str += '=';
+  str = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (str.length % 4) str += "=";
   return atob(str);
 }
 
 export function getUserFromToken(token: string): any | null {
   try {
-    if (!token || typeof token !== 'string') {
+    if (!token || typeof token !== "string") {
       return null;
     }
-    
-    const parts = token.split('.');
+
+    const parts = token.split(".");
     if (parts.length !== 3) {
       return null;
     }
-    
+
     // Decode base64url (JWT uses base64url encoding, not base64)
-    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     // Pad with = if necessary
     while (base64.length % 4) {
-      base64 += '=';
+      base64 += "=";
     }
-    
+
     const payload = JSON.parse(base64UrlDecode(base64));
 
     // Kiểm tra token còn hạn
@@ -86,22 +86,22 @@ export function getUserFromToken(token: string): any | null {
 
 export function getUserRolesFromToken(token: string): string[] {
   try {
-    if (!token || typeof token !== 'string') {
+    if (!token || typeof token !== "string") {
       return [];
     }
-    
-    const parts = token.split('.');
+
+    const parts = token.split(".");
     if (parts.length !== 3) {
       return [];
     }
-    
+
     // Decode base64url (JWT uses base64url encoding, not base64)
-    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     // Pad with = if necessary
     while (base64.length % 4) {
-      base64 += '=';
+      base64 += "=";
     }
-    
+
     const payload = JSON.parse(base64UrlDecode(base64));
 
     // Kiểm tra token còn hạn
@@ -121,12 +121,52 @@ export function getUserRolesFromToken(token: string): string[] {
 }
 
 export function setAccessToken(token: string) {
-  if (typeof document !== "undefined") {
-    // Set cookie with 30 days expiry
+  if (typeof document === "undefined") return;
+
+  try {
+    // Clean và validate token
+    const cleanToken = token.trim();
+    if (!cleanToken) {
+      console.error("❌ [SetAccessToken] Empty token provided");
+      return;
+    }
+
+    // Set cookie với proper encoding
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
     const isHttps = window.location.protocol === "https:";
-    document.cookie = `access_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${isHttps ? " Secure" : ""}`;
+
+    const cookieString = `access_token=${encodeURIComponent(
+      cleanToken
+    )}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${
+      isHttps ? " Secure" : ""
+    }`;
+
+    console.log("🔄 [SetAccessToken] Setting cookie:", {
+      tokenLength: cleanToken.length,
+      tokenStart: cleanToken.substring(0, 50) + "...",
+      cookieLength: cookieString.length,
+      isHttps,
+      domain: window.location.hostname,
+    });
+
+    document.cookie = cookieString;
+
+    // Immediate verification
+    setTimeout(() => {
+      const verification = getAccessToken();
+      console.log("🔍 [SetAccessToken] Immediate verification:", {
+        success: !!verification,
+        matches: verification === cleanToken,
+        verificationLength: verification?.length,
+      });
+
+      if (!verification || verification !== cleanToken) {
+        console.error("❌ [SetAccessToken] Cookie verification failed");
+      }
+    }, 100);
+  } catch (error) {
+    console.error("❌ [SetAccessToken] Error setting token:", error);
   }
 }
 
@@ -136,7 +176,11 @@ export function setRefreshToken(token: string) {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
     const isHttps = window.location.protocol === "https:";
-    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${isHttps ? " Secure" : ""}`;
+    document.cookie = `refresh_token=${encodeURIComponent(
+      token
+    )}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${
+      isHttps ? " Secure" : ""
+    }`;
   }
 }
 
