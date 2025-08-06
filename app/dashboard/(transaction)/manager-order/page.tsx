@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { OrderDetail } from "@/types"; // ✅ Thay đổi từ Order thành OrderDetail
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useOrders } from "@/hooks/useOrders";
+import type { OrderFilters } from "@/hooks/useOrders"; // ✅ Import OrderFilters type
 import PaginatedTable, {
   Filters,
 } from "@/components/ui/pagination/PaginatedTable";
@@ -11,8 +12,10 @@ import OrderManagement from "@/components/order/manager-order/OrderManagement";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
+import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
 
-export default function ManagerOrderPage() {
+// Component that uses useSearchParams - needs to be wrapped in Suspense
+function ManagerOrderContent() {
   const [alert, setAlert] = useState<{
     type: "success" | "error";
     message: string;
@@ -44,6 +47,8 @@ export default function ManagerOrderPage() {
     setDepartments,
     setProducts,
     setWarningLevel,
+    setSortField,
+    setSortDirection,
     refetch,
     resetFilters,
     getFilterOptions,
@@ -51,6 +56,14 @@ export default function ManagerOrderPage() {
     deleteOrderDetail, // ✅ Thay đổi từ deleteOrder thành deleteOrderDetail
     isLoading,
     error,
+
+    // ✅ Customer search navigation
+    performCustomerSearch,
+    restorePreviousState,
+    isInCustomerSearchMode,
+    setIsInCustomerSearchMode,
+    canGoBack,
+    isRestoring,
   } = useOrders();
 
   const {
@@ -126,59 +139,48 @@ export default function ManagerOrderPage() {
   // Convert PaginatedTable filters to useOrders filters
   const handleFilterChange = useCallback(
     (paginatedFilters: Filters) => {
+      console.log(
+        "🔧 handleFilterChange called with isInCustomerSearchMode:",
+        isInCustomerSearchMode
+      );
+      console.log("🔧 Current search value:", paginatedFilters.search);
+      console.log("🔧 Current page in filters:", filters.page);
+      
+      const shouldResetPage = !isInCustomerSearchMode && !filters.search;
+      console.log("🔧 shouldResetPage:", shouldResetPage);
+
+      // ✅ Build new filters object với tất cả changes cùng lúc
       const searchValue = paginatedFilters.search || "";
-      setSearch(searchValue);
-
-      // Update status (take first status from array)
-      const statusValue =
-        paginatedFilters.statuses.length > 0
-          ? paginatedFilters.statuses[0].toString()
-          : "";
-      setStatus(statusValue);
-
-      // Update single date
+      const statusValue = paginatedFilters.statuses.length > 0 ? paginatedFilters.statuses[0].toString() : "";
+      
+      // Handle single date
+      let dateValue = "";
       if (paginatedFilters.singleDate) {
-        const dateStr =
-          paginatedFilters.singleDate instanceof Date
-            ? paginatedFilters.singleDate.toLocaleDateString("en-CA")
-            : paginatedFilters.singleDate.toString();
-        setDate(dateStr);
-      } else {
-        setDate("");
+        dateValue = paginatedFilters.singleDate instanceof Date
+          ? paginatedFilters.singleDate.toLocaleDateString("en-CA")
+          : paginatedFilters.singleDate.toString();
       }
 
-      // Update date range
+      // Handle date range
+      let dateRangeValue: { start: string; end: string } | undefined;
       if (paginatedFilters.dateRange?.from && paginatedFilters.dateRange?.to) {
-        const dateRange = {
+        dateRangeValue = {
           start: paginatedFilters.dateRange.from.toLocaleDateString("en-CA"),
           end: paginatedFilters.dateRange.to.toLocaleDateString("en-CA"),
         };
-        setDateRange(dateRange);
-      } else {
-        setDateRange(undefined);
       }
 
-      // Update employees
-      const employeesValue =
-        paginatedFilters.employees.length > 0
-          ? paginatedFilters.employees.join(",")
-          : "";
-      setEmployees(employeesValue);
-
-      // Update departments
-      const departmentsValue =
-        paginatedFilters.departments.length > 0
-          ? paginatedFilters.departments.join(",")
-          : "";
-      setDepartments(departmentsValue);
-
-      // Update products/categories (using categories for products)
-      const productsValue =
-        paginatedFilters.categories.length > 0
-          ? paginatedFilters.categories.join(",")
-          : "";
-      setProducts(productsValue);
-
+      // Handle employees
+      const employeesValue = paginatedFilters.employees.length > 0 ? paginatedFilters.employees.join(",") : "";
+      
+      // Handle departments
+      const departmentsValue = paginatedFilters.departments.length > 0 ? paginatedFilters.departments.join(",") : "";
+      
+      // Handle products/categories
+      const productsValue = paginatedFilters.categories.length > 0 ? paginatedFilters.categories.join(",") : "";
+      
+      // Handle warning levels
+      let warningLevelValue = "";
       if (paginatedFilters.warningLevels.length > 0) {
         const selectedWarningLevels = paginatedFilters.warningLevels.map(
           (warningLabel) => {
@@ -188,29 +190,39 @@ export default function ManagerOrderPage() {
             return foundOption ? foundOption.value : warningLabel;
           }
         );
-        const warningLevelValue = selectedWarningLevels.join(",");
-        setWarningLevel(warningLevelValue);
-      } else {
-        setWarningLevel(""); // ✅ Clear when empty
+        warningLevelValue = selectedWarningLevels.join(",");
       }
 
-      setPage(1);
+      // ✅ Build complete new filters object
+      const newFilters: Partial<OrderFilters> = {
+        search: searchValue,
+        status: statusValue,
+        date: dateValue,
+        dateRange: dateRangeValue,
+        employees: employeesValue,
+        departments: departmentsValue,
+        products: productsValue,
+        warningLevel: warningLevelValue,
+        page: shouldResetPage ? 1 : filters.page,
+      };
+
+      console.log("🔧 Applying all filters at once:", newFilters);
+      
+      // ✅ Apply tất cả filters chỉ với 1 lần gọi
+      setFilters(newFilters);
     },
     [
-      setSearch,
-      setStatus,
-      setDate,
-      setDateRange,
-      setEmployees,
-      setDepartments,
-      setProducts,
-      setWarningLevel,
-      setPage,
+      setFilters,
+      isInCustomerSearchMode,
+      filters.search,
+      filters.page,
+      warningLevelOptions,
     ]
   );
 
   const handlePageChange = useCallback(
     (newPage: number) => {
+      // Không cần clear customer search mode nữa vì browser history sẽ handle
       setPage(newPage);
     },
     [setPage]
@@ -272,6 +284,32 @@ export default function ManagerOrderPage() {
   const handleReload = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  // ✅ Handle search từ double-click tên khách hàng
+  const handleSearch = useCallback(
+    (searchTerm: string) => {
+      performCustomerSearch(searchTerm);
+    },
+    [performCustomerSearch]
+  );
+
+  // ✅ Handle restore previous state
+  const handleRestorePrevious = useCallback(async () => {
+    await restorePreviousState();
+  }, [restorePreviousState]);
+
+  // ✅ Handle sort từ OrderManagement
+  const handleSort = useCallback(
+    (
+      field: "quantity" | "unit_price" | null,
+      direction: "asc" | "desc" | null
+    ) => {
+      setSortField(field);
+      setSortDirection(direction);
+      setPage(1); // Reset về page 1 khi sort
+    },
+    [setSortField, setSortDirection, setPage]
+  );
 
   // Effects
   useEffect(() => {
@@ -343,6 +381,24 @@ export default function ManagerOrderPage() {
       return () => clearTimeout(timer);
     }
   }, [alert]);
+
+  // ✅ Handle browser back/forward navigation for customer search
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (isInCustomerSearchMode && canGoBack) {
+        // Prevent default browser back behavior
+        event.preventDefault();
+
+        // Restore previous state instead
+        handleRestorePrevious();
+      }
+    };
+
+    if (isInCustomerSearchMode) {
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
+    }
+  }, [isInCustomerSearchMode, canGoBack, handleRestorePrevious]);
 
   // Memoize initialFilters để tránh tạo object mới liên tục
   const memoizedInitialFilters = useMemo(() => {
@@ -429,6 +485,20 @@ export default function ManagerOrderPage() {
         </div>
       )}
 
+      {/* ✅ Customer Search Indicator */}
+      {isInCustomerSearchMode && filters.search && (
+        <CustomerSearchIndicator
+          customerName={filters.search}
+          onRestorePrevious={handleRestorePrevious}
+          onClearSearch={() => {
+            // Clear search and exit customer search mode
+            setSearch("");
+            handleRestorePrevious(); // Or just restore to previous state
+          }}
+          className="mb-4"
+        />
+      )}
+
       <Card className="w-full max-w-full">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-bold">
@@ -469,6 +539,7 @@ export default function ManagerOrderPage() {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
             onResetFilter={handleResetFilter}
+            isRestoring={isRestoring}
             loading={isLoading}
             canExport={
               canExportInDepartment &&
@@ -553,11 +624,42 @@ export default function ManagerOrderPage() {
               onReload={handleReload}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onSearch={handleSearch}
+              onSort={handleSort}
+              currentSortField={filters.sortField}
+              currentSortDirection={filters.sortDirection}
               loading={isLoading}
             />
           </PaginatedTable>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function ManagerOrderLoading() {
+  return (
+    <div className="container mx-auto p-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Quản lý đơn hàng</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <div className="text-gray-500">Đang tải...</div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function ManagerOrderPage() {
+  return (
+    <Suspense fallback={<ManagerOrderLoading />}>
+      <ManagerOrderContent />
+    </Suspense>
   );
 }

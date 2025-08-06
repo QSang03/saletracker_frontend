@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { OrderDetail } from "@/types";
 import {
   Table,
@@ -40,6 +40,8 @@ import {
   Star,
   TrendingUp,
   Eye,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
@@ -52,6 +54,10 @@ interface OrderManagementProps {
   onReload: () => void;
   onEdit?: (orderDetail: OrderDetail, data: any) => void;
   onDelete?: (orderDetail: OrderDetail, reason: string) => void;
+  onSearch?: (searchTerm: string) => void;
+  onSort?: (field: 'quantity' | 'unit_price' | null, direction: 'asc' | 'desc' | null) => void;
+  currentSortField?: 'quantity' | 'unit_price' | null;
+  currentSortDirection?: 'asc' | 'desc' | null;
   loading?: boolean;
 }
 
@@ -86,6 +92,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onReload,
   onEdit,
   onDelete,
+  onSearch,
+  onSort,
+  currentSortField,
+  currentSortDirection,
   loading = false,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
@@ -146,6 +156,50 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleViewCancel = () => {
     setIsViewModalOpen(false);
     setViewingDetail(null);
+  };
+
+  // ✅ Function để handle sort - 3 trạng thái: desc -> asc -> null
+  const handleSort = (field: 'quantity' | 'unit_price') => {
+    if (!onSort) return;
+    
+    if (currentSortField !== field) {
+      // Nếu click vào cột khác, bắt đầu với desc
+      onSort(field, 'desc');
+    } else {
+      // Nếu click vào cùng cột
+      if (currentSortDirection === 'desc') {
+        onSort(field, 'asc');
+      } else if (currentSortDirection === 'asc') {
+        onSort(null, null); // Reset về trạng thái ban đầu
+      } else {
+        onSort(field, 'desc');
+      }
+    }
+  };
+
+  // ✅ Function để handle click vào tên khách hàng
+  const handleCustomerNameClick = (customerName: string) => {
+    if (onSearch && customerName && customerName.trim() !== "N/A") {
+      onSearch(customerName.trim());
+    }
+  };
+
+  // ✅ Data được sort từ backend, không cần sort ở frontend nữa
+  const displayOrders = safeOrders;
+
+  // ✅ Function để render sort icon
+  const renderSortIcon = (field: 'quantity' | 'unit_price') => {
+    if (currentSortField !== field) {
+      return null; // Không hiển thị icon nếu không phải cột đang sort
+    }
+    
+    if (currentSortDirection === 'desc') {
+      return <ChevronDown className="w-4 h-4 inline ml-1" />;
+    } else if (currentSortDirection === 'asc') {
+      return <ChevronUp className="w-4 h-4 inline ml-1" />;
+    }
+    
+    return null;
   };
 
   const getStatusLabel = (status: string) => {
@@ -417,11 +471,19 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[430px] text-center">
                     🛍️ Mặt hàng
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[60px] text-center">
-                    🔢 SL
+                  <TableHead 
+                    className="font-bold text-slate-700 text-sm w-[60px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                    onDoubleClick={() => handleSort('quantity')}
+                    title="Double-click để sắp xếp"
+                  >
+                    🔢 SL{renderSortIcon('quantity')}
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-right">
-                    💰 Đơn giá
+                  <TableHead 
+                    className="font-bold text-slate-700 text-sm w-[100px] text-right cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                    onDoubleClick={() => handleSort('unit_price')}
+                    title="Double-click để sắp xếp"
+                  >
+                    💰 Đơn giá{renderSortIcon('unit_price')}
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     📊 Trạng thái
@@ -435,7 +497,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {safeOrders.length === 0 && (
+                {displayOrders.length === 0 && (
                   <TableRow className="border-l-4 border-gray-300 bg-gradient-to-r from-gray-50 to-white rounded-lg shadow-sm my-1">
                     <TableCell
                       colSpan={12}
@@ -452,8 +514,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 )}
 
                 {/* ✅ CHỈ hiển thị data thật có, KHÔNG tạo empty rows */}
-                {safeOrders.length > 0 &&
-                  safeOrders.map((orderDetail, index) => (
+                {displayOrders.length > 0 &&
+                  displayOrders.map((orderDetail, index) => (
                     <TableRow
                       key={orderDetail.id || index}
                       className={getRowClassName(orderDetail, index)}
@@ -523,11 +585,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         />
                       </TableCell>
                       <TableCell className="text-center font-medium text-green-700 text-sm">
-                        <TruncatedText
-                          text={orderDetail.customer_name || "N/A"}
-                          maxLength={15}
-                          className="text-truncate"
-                        />
+                        <div 
+                          className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors"
+                          onDoubleClick={() => handleCustomerNameClick(orderDetail.customer_name || "")}
+                          title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
+                        >
+                          <TruncatedText
+                            text={orderDetail.customer_name || "--"}
+                            maxLength={15}
+                            className="text-truncate"
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
                         <TruncatedText

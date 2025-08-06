@@ -31,7 +31,7 @@ export const navItems = [
     icon: "MessageCircle",
     items: [
       { title: "Cấu hình gửi tin nhắn", url: "/dashboard/campaigns", roles: ["admin", "manager-chien-dich", "user-chien-dich"] },
-      { title: "Lịch chiến dịch", url: "/dashboard/campaign-schedules", roles: ["admin", "manager-chien-dich", "user-chien-dich"] },
+      { title: "Lịch chiến dịch", url: "/dashboard/campaign-schedules", roles: ["admin", "manager-chien-dich", "user-chien-dich", "scheduler"] },
     ],
   },
   {

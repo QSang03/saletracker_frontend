@@ -33,17 +33,25 @@ export const usePermission = () => {
   }: PermissionCheckParams): boolean => {
     if (!user) return false;
 
-    // Kiểm tra user có role admin không
-    const isAdmin = user.roles?.some((role: Role) => role.name === "admin");
+    // Kiểm tra user có role admin hoặc scheduler không
+    const isAdminOrScheduler = user.roles?.some((role: Role) => 
+      role.name === "admin" || role.name === "scheduler"
+    );
 
-    if (isAdmin) return true;
+    if (isAdminOrScheduler) return true;
+
+    // Kiểm tra user có role manager của department này không
+    const isManagerOfDepartment = user.roles?.some((role: Role) => 
+      role.name === `manager-${departmentSlug}`
+    );
+
+    if (isManagerOfDepartment) return true;
 
     // Lấy tất cả roles của user
     const userRoles = user.roles?.map((role: Role) => role.name) || [];
 
     // Tạo role cần kiểm tra
     const requiredRoles = [
-      `manager-${departmentSlug}`,
       `user-${departmentSlug}`,
     ];
 
@@ -61,7 +69,11 @@ export const usePermission = () => {
         permission.name === departmentSlug && permission.action === action
     );
 
-    return hasPermission;
+    // Nếu là manager của department thì không cần kiểm tra permission
+    if (isManagerOfDepartment) return true;
+
+    // User thường cần có cả role và permission
+    return hasRole && hasPermission;
   };
 
   const canAccess = (departmentSlug: string, action: string): boolean => {

@@ -68,6 +68,8 @@ interface PaginatedTableProps {
   initialFilters?: Partial<Filters>;
   // Thêm flag để kiểm soát việc sync
   preserveFiltersOnEmpty?: boolean;
+  // Thêm flag để biết khi đang restore state
+  isRestoring?: boolean;
   filterClassNames?: {
     search?: string;
     departments?: string;
@@ -152,6 +154,7 @@ export default function PaginatedTable({
   onResetFilter,
   preventEmptyFilterCall = true,
   onDepartmentChange,
+  isRestoring = false,
 }: PaginatedTableProps) {
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
@@ -406,8 +409,10 @@ export default function PaginatedTable({
   useEffect(() => {
     if (memoizedInitialFilters && isInitializedRef.current) {
       setFilters((prev) => {
-        if (!hasUserInteracted) {
-          // Sync tất cả nếu user chưa tương tác
+        // ✅ Force sync nếu đang restore hoặc user chưa tương tác
+        if (!hasUserInteracted || isRestoring) {
+          console.log("🔄 Force syncing filters from initialFilters", { isRestoring, hasUserInteracted });
+          // Sync tất cả nếu user chưa tương tác hoặc đang restore
           const newFilters = {
             search:
               memoizedInitialFilters.search !== undefined
@@ -488,7 +493,7 @@ export default function PaginatedTable({
         }
       });
     }
-  }, [memoizedInitialFilters, hasUserInteracted]);
+  }, [memoizedInitialFilters, hasUserInteracted, isRestoring]);
 
   // Xác định chế độ phân trang: backend (có page, pageSize, total) hay frontend (không có)
   const isBackendPaging =
@@ -620,6 +625,18 @@ export default function PaginatedTable({
   useEffect(() => {
     setSearchInput(filters.search);
   }, [filters.search]);
+
+  // ✅ Sync internalPage with page prop when it changes externally (e.g., browser back)
+  useEffect(() => {
+    if (isBackendPaging && page !== undefined) {
+      // Convert 1-based page prop to 0-based internalPage
+      const expectedInternalPage = page - 1;
+      if (internalPage !== expectedInternalPage) {
+        console.log("🔄 Syncing internalPage from prop:", { page, expectedInternalPage, currentInternalPage: internalPage });
+        setInternalPage(expectedInternalPage);
+      }
+    }
+  }, [page, isBackendPaging, internalPage]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -775,9 +792,9 @@ export default function PaginatedTable({
     }
   }, [totalPages, currentPage, totalRows, goToPage]);
 
-  // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định
+  // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định (nhưng không khi đang restore)
   useEffect(() => {
-    if (pendingPageSize === "") {
+    if (pendingPageSize === "" && !isRestoring) {
       if (isBackendPaging && onPageSizeChange)
         onPageSizeChange(defaultPageSize);
       else setInternalPageSize(defaultPageSize);
@@ -785,7 +802,7 @@ export default function PaginatedTable({
       else setInternalPage(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPageSize]);
+  }, [pendingPageSize, isRestoring]);
 
   return (
     <div className="flex flex-col h-full min-h-[500px] space-y-4 w-full">

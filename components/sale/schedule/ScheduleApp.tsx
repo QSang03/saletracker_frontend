@@ -226,6 +226,26 @@ export default function CompleteScheduleApp() {
     return userRoles.some((role) => role.name === "admin");
   }, [user, getAllUserRoles]);
 
+  // Kiểm tra xem user có phải scheduler không
+  const isScheduler = useMemo(() => {
+    if (!user) return false;
+    const userRoles = getAllUserRoles();
+    return userRoles.some((role) => role.name === "scheduler");
+  }, [user, getAllUserRoles]);
+
+  // Lấy tất cả slug của các phòng ban mà user là manager
+  const userManagerDepartmentSlugs = useMemo(() => {
+    if (!user) return [];
+    const userRoles = getAllUserRoles();
+    const managerRoles = userRoles.filter((role) => role.name.startsWith("manager-"));
+    return managerRoles.map(role => role.name.replace("manager-", ""));
+  }, [user, getAllUserRoles]);
+
+  // Kiểm tra user có phải manager của ít nhất 1 phòng ban không
+  const isManager = useMemo(() => {
+    return userManagerDepartmentSlugs.length > 0;
+  }, [userManagerDepartmentSlugs]);
+
   // View state
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -237,6 +257,59 @@ export default function CompleteScheduleApp() {
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
+  // Lấy departments có thể truy cập dựa trên phân quyền
+  const accessibleDepartments = useMemo(() => {
+    if (!departments.length) return [];
+    
+    // Tất cả user đều có thể view tất cả departments có server_ip
+    return departments.filter(dept => dept.server_ip);
+  }, [departments]);
+
+  // Kiểm tra xem tất cả data cần thiết đã sẵn sàng chưa
+  const isDataReady = useMemo(() => {
+    return !isLoadingDepartments && user !== null && departments.length > 0;
+  }, [isLoadingDepartments, user, departments.length]);
+
+  // Kiểm tra xem department có thể được thao tác (chọn/chỉnh sửa) không
+  const isDepartmentEditable = useCallback((departmentId: number) => {
+    // Nếu data chưa sẵn sàng, không cho phép edit
+    if (!isDataReady) {
+      return false;
+    }
+
+    // Admin và scheduler có thể thao tác tất cả departments
+    if (isAdmin || isScheduler) {
+      return true;
+    }
+    
+    // Manager chỉ có thể thao tác department của mình
+    if (isManager && userManagerDepartmentSlugs.length > 0) {
+      const department = departments.find(dept => dept.id === departmentId);
+      const canEdit = department && userManagerDepartmentSlugs.includes(department.slug);
+      console.log(`[Permission Debug] isDepartmentEditable(${departmentId}):`, {
+        department,
+        userManagerDepartmentSlugs,
+        canEdit,
+        isDataReady
+      });
+      return canEdit || false;
+    }
+    
+    // User thường không thể thao tác
+    return false;
+  }, [isAdmin, isScheduler, isManager, userManagerDepartmentSlugs, departments, isDataReady]);
+
+  // Kiểm tra xem department có thể được chọn không (bao gồm cả view và edit)
+  const isDepartmentAccessible = useCallback((departmentId: number) => {
+    return accessibleDepartments.some(dept => dept.id === departmentId);
+  }, [accessibleDepartments]);
+
+  // Kiểm tra xem department có server_ip không
+  const isDepartmentEnabled = useCallback((departmentId: number) => {
+    const department = departments.find(dept => dept.id === departmentId);
+    return department?.server_ip ? true : false;
+  }, [departments]);
 
   // Visibility
   const [visibleDepartments, setVisibleDepartments] = useState<number[]>([]);
@@ -473,9 +546,13 @@ export default function CompleteScheduleApp() {
   // Event handlers
   const handleDayClick = useCallback(
     (date: number, isCurrentMonth: boolean) => {
-      // Chỉ admin mới có quyền thao tác
-      if (!isAdmin) {
-        toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
+      // Kiểm tra quyền thao tác
+      if (!selectedDepartment || !isDepartmentEditable(selectedDepartment)) {
+        if (!selectedDepartment) {
+          toast.error("Vui lòng chọn phòng ban trước");
+        } else {
+          toast.error("Bạn không có quyền thao tác phòng ban này");
+        }
         return;
       }
 
@@ -725,8 +802,25 @@ export default function CompleteScheduleApp() {
   // Cập nhật hàm edit schedule
   const handleEditSchedule = useCallback(
     (schedule: DepartmentSchedule) => {
-      if (!isAdmin) {
-        toast.error("Bạn không có quyền chỉnh sửa lịch hoạt động");
+      console.log(`[EditSchedule Debug] Attempting to edit schedule for department ${schedule.department!.id}:`, {
+        isDataReady,
+        isLoadingDepartments,
+        departmentsLength: departments.length,
+        user: user?.id,
+        isAdmin,
+        isScheduler,
+        isManager,
+        userManagerDepartmentSlugs,
+        isDepartmentEditable: isDepartmentEditable(schedule.department!.id)
+      });
+
+      if (!isDepartmentEditable(schedule.department!.id)) {
+        // Nếu data chưa sẵn sàng, cho user biết
+        if (!isDataReady) {
+          toast.error("Đang tải thông tin, vui lòng thử lại sau");
+        } else {
+          toast.error("Bạn không có quyền chỉnh sửa lịch hoạt động này");
+        }
         return;
       }
 
@@ -794,7 +888,7 @@ export default function CompleteScheduleApp() {
         "Đã vào chế độ chỉnh sửa. Bạn có thể thay đổi lịch trên calendar và thông tin trong form."
       );
     },
-    [isAdmin, departmentSelections, currentMonth]
+    [isDataReady, isDepartmentEditable, isAdmin, isScheduler, isManager, userManagerDepartmentSlugs, departments, user, isLoadingDepartments, departmentSelections, currentMonth]
   );
 
   // Thêm hàm để thay đổi department trong edit mode
@@ -879,6 +973,8 @@ export default function CompleteScheduleApp() {
               })),
             } as HourlySlotsConfig,
           };
+          
+          console.log('🔍 HOURLY SLOTS SCHEDULE DATA:', JSON.stringify(scheduleData, null, 2));
           promises.push(ScheduleService.create(scheduleData));
         }
 
@@ -901,6 +997,8 @@ export default function CompleteScheduleApp() {
               })),
             } as DailyDatesConfig,
           };
+          
+          console.log('🔍 DAILY DATES SCHEDULE DATA:', JSON.stringify(scheduleData, null, 2));
           promises.push(ScheduleService.create(scheduleData));
         }
       });
@@ -1071,7 +1169,7 @@ export default function CompleteScheduleApp() {
     (date: number, isCurrentMonth: boolean, e: React.MouseEvent) => {
       e.preventDefault();
 
-      if (!isCurrentMonth || !selectedDepartment || !isAdmin) {
+      if (!isCurrentMonth || !selectedDepartment || !isDepartmentEditable(selectedDepartment)) {
         return;
       }
 
@@ -1332,6 +1430,7 @@ export default function CompleteScheduleApp() {
 
   const handleTimeSlotMouseEnter = useCallback(
     (dayIndex: number, time: string) => {
+      if (dayIndex === 0) return; // Không cho phép tương tác với Chủ nhật
       if (time >= "12:00" && time < "13:30") return;
       if (isPastTimeSlot(dayIndex, time)) return;
       if (isTimeSlotConflicted(dayIndex, time)) return;
@@ -1378,6 +1477,7 @@ export default function CompleteScheduleApp() {
 
     const range: { day: number; time: string }[] = [];
     for (let day = startDay; day <= endDay; day++) {
+      if (day === 0) continue;
       for (
         let timeIndex = startTimeIndex;
         timeIndex <= endTimeIndex;
@@ -1415,6 +1515,12 @@ export default function CompleteScheduleApp() {
   const handleTimeSlotMouseDown = useCallback(
     (dayIndex: number, time: string, e: React.MouseEvent) => {
       e.preventDefault();
+      
+      if (dayIndex === 0) {
+        toast.error("Không thể chọn Chủ nhật");
+        return;
+      }
+      
       if (time >= "12:00" && time < "13:30") {
         toast.error("Không thể chọn giờ nghỉ trưa");
         return;
@@ -1425,12 +1531,12 @@ export default function CompleteScheduleApp() {
         return;
       }
 
-      if (!isAdmin) {
-        toast.error("Bạn không có quyền thao tác trên lịch hoạt động");
-        return;
-      }
-      if (!selectedDepartment) {
-        toast.error("Vui lòng chọn phòng ban trước");
+      if (!selectedDepartment || !isDepartmentEditable(selectedDepartment)) {
+        if (!selectedDepartment) {
+          toast.error("Vui lòng chọn phòng ban trước");
+        } else {
+          toast.error("Bạn không có quyền thao tác phòng ban này");
+        }
         return;
       }
 
@@ -1566,7 +1672,7 @@ export default function CompleteScheduleApp() {
         const response = await api.get("departments/all-unrestricted");
         const data = response.data;
         setDepartments(data);
-        setVisibleDepartments(data.map((d: Department) => d.id));
+        // Sẽ được cập nhật lại trong useEffect riêng cho accessibleDepartments
       } catch (error: any) {
         console.error("Error fetching departments:", error);
         toast.error("Không thể tải danh sách phòng ban");
@@ -1577,6 +1683,16 @@ export default function CompleteScheduleApp() {
 
     fetchDepartments();
   }, []);
+
+  // Cập nhật visible departments dựa trên quyền truy cập
+  useEffect(() => {
+    if (accessibleDepartments.length > 0) {
+      // Set visible cho tất cả departments có thể view (có server_ip)
+      setVisibleDepartments(accessibleDepartments.map(d => d.id));
+    } else {
+      setVisibleDepartments([]);
+    }
+  }, [accessibleDepartments]);
 
   useEffect(() => {
     const fetchAllSchedules = async () => {
@@ -1692,7 +1808,7 @@ export default function CompleteScheduleApp() {
           </div>
 
           {/* Permission Notice */}
-          {!isAdmin && (
+          {!isAdmin && !isScheduler && !isManager && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1702,7 +1818,7 @@ export default function CompleteScheduleApp() {
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription className="text-yellow-800">
                   <strong>Chế độ chỉ xem:</strong> Bạn chỉ có quyền xem lịch
-                  hoạt động. Chỉ Admin mới có thể tạo, chỉnh sửa và xóa lịch
+                  hoạt động. Chỉ Admin, Scheduler hoặc Manager mới có thể tạo, chỉnh sửa và xóa lịch
                   hoạt động.
                 </AlertDescription>
               </Alert>
@@ -1764,24 +1880,46 @@ export default function CompleteScheduleApp() {
                     (departmentSelections.get(dept.id)!.days.length > 0 ||
                       departmentSelections.get(dept.id)!.timeSlots.length > 0);
 
+                  // Kiểm tra quyền truy cập và trạng thái enable
+                  const isAccessible = isDepartmentAccessible(dept.id);
+                  const isEnabled = isDepartmentEnabled(dept.id);
+                  const canView = isAccessible && isEnabled;
+                  const canEdit = isDepartmentEditable(dept.id) && isEnabled;
+
                   return (
                     <div key={dept.id} className="flex items-center gap-3">
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!isAdmin}
-                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        disabled={!canEdit}
+                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 ${
+                          !canEdit 
+                            ? "opacity-50 cursor-not-allowed" 
+                            : ""
+                        } ${
+                          !canView 
+                            ? "grayscale opacity-30" 
+                            : ""
+                        } ${
                           isSelected
                             ? `${color.light} ${color.border} ${color.text} border-2 ring-2 ring-blue-300 shadow-md`
                             : hasSelections
                             ? `${color.light} ${color.border} border-2 shadow-sm`
-                            : "hover:bg-slate-50 hover:shadow-sm"
+                            : canEdit 
+                            ? "hover:bg-slate-50 hover:shadow-sm"
+                            : ""
                         }`}
                         onClick={() => {
-                          if (!isAdmin) {
-                            toast.error(
-                              "Bạn không có quyền chọn phòng ban để thao tác"
-                            );
+                          if (!canEdit) {
+                            if (!canView) {
+                              toast.error(
+                                "Phòng ban này chưa có cấu hình server IP"
+                              );
+                            } else {
+                              toast.error(
+                                "Bạn không có quyền thao tác với phòng ban này"
+                              );
+                            }
                             return;
                           }
                           setSelectedDepartment(
@@ -1791,13 +1929,25 @@ export default function CompleteScheduleApp() {
                       >
                         <div className="flex items-center gap-2">
                           <div
-                            className={`w-3 h-3 mr-2 rounded-full ${color.bg} shadow-sm`}
+                            className={`w-3 h-3 mr-2 rounded-full ${color.bg} shadow-sm ${
+                              !canView ? "grayscale" : ""
+                            }`}
                           />
-                          <span className="truncate text-sm">{dept.name}</span>
-                          {isSelected && (
+                          <span className={`truncate text-sm ${
+                            !canView ? "text-gray-400" : !canEdit ? "text-gray-600" : ""
+                          }`}>
+                            {dept.name}
+                            {!isEnabled && (
+                              <span className="text-xs text-red-500 ml-1">(No IP)</span>
+                            )}
+                            {canView && !canEdit && (
+                              <span className="text-xs text-blue-500 ml-1">(View only)</span>
+                            )}
+                          </span>
+                          {isSelected && canEdit && (
                             <CheckCircle className="w-4 h-4 text-blue-600 ml-auto" />
                           )}
-                          {hasSelections && !isSelected && (
+                          {hasSelections && !isSelected && canView && (
                             <Badge
                               variant="secondary"
                               className="ml-auto text-xs"
@@ -1819,8 +1969,19 @@ export default function CompleteScheduleApp() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="p-1 h-8 w-8 hover:bg-slate-100"
+                        disabled={!canView}
+                        className={`p-1 h-8 w-8 ${
+                          canView 
+                            ? "hover:bg-slate-100" 
+                            : "opacity-30 cursor-not-allowed grayscale"
+                        }`}
                         onClick={() => {
+                          if (!canView) {
+                            toast.error(
+                              "Phòng ban này chưa có cấu hình server IP"
+                            );
+                            return;
+                          }
                           setVisibleDepartments((prev) =>
                             prev.includes(dept.id)
                               ? prev.filter((id) => id !== dept.id)
@@ -1828,10 +1989,12 @@ export default function CompleteScheduleApp() {
                           );
                         }}
                       >
-                        {isVisible ? (
+                        {isVisible && canView ? (
                           <Eye className="w-4 h-4 text-green-600" />
                         ) : (
-                          <EyeOff className="w-4 h-4 text-slate-400" />
+                          <EyeOff className={`w-4 h-4 ${
+                            canView ? "text-slate-400" : "text-gray-300"
+                          }`} />
                         )}
                       </Button>
                     </div>
@@ -1866,17 +2029,18 @@ export default function CompleteScheduleApp() {
                       <p className="text-xs text-slate-600 mt-1 flex items-center gap-2">
                         <MousePointer className="w-3 h-3" />
                         {activeView === "week"
-                          ? "Click & kéo để chọn nhiều khung giờ"
-                          : "Click & kéo để chọn nhiều ngày, click ngày để chọn lẻ"}
+                          ? "Click & kéo để chọn nhiều khung giờ (trừ Chủ nhật)"
+                          : "Click & kéo để chọn nhiều ngày, click ngày để chọn lẻ (trừ Chủ nhật)"}
                       </p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={!isAdmin}
+                      disabled={selectedDepartment ? !isDepartmentEditable(selectedDepartment) : !(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)}
                       onClick={() => {
-                        if (!isAdmin) {
-                          toast.error("Bạn không có quyền thao tác");
+                        const canEdit = selectedDepartment ? isDepartmentEditable(selectedDepartment) : (isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0);
+                        if (!canEdit) {
+                          toast.error("Bạn không có quyền thao tác phòng ban này");
                           return;
                         }
                         setSelectedDepartment(null);
@@ -2070,9 +2234,11 @@ export default function CompleteScheduleApp() {
                         {weekDays.map((day, index) => (
                           <div
                             key={index}
-                            className="p-3 text-center border-r last:border-r-0"
+                            className={`p-3 text-center border-r last:border-r-0`}
                           >
-                            <div className="font-medium text-sm">{day}</div>
+                            <div className="font-medium text-sm">
+                              {day}
+                            </div>
                             <div className="text-xs text-slate-500 mt-1">
                               {weekDates[index].getDate()}/
                               {weekDates[index].getMonth() + 1}
@@ -2148,6 +2314,7 @@ export default function CompleteScheduleApp() {
                                 const hasExistingSchedule =
                                   isSlotHasExistingSchedule(dayIndex, time);
                                 const canInteract =
+                                  dayIndex !== 6 && // Không cho phép tương tác với Chủ nhật
                                   !isLunchBreak &&
                                   !isConflicted &&
                                   !isPast &&
@@ -2180,16 +2347,18 @@ export default function CompleteScheduleApp() {
                                     key={dayIndex}
                                     className={`p-1 border-r last:border-r-0 min-h-[40px] relative
                                     ${
-                                      isLunchBreak
-                                        ? "bg-slate-100 opacity-60 cursor-not-allowed"
+                                      dayIndex === 6 // Chủ nhật
+                                        ? "bg-gray-200 opacity-50 cursor-not-allowed"
+                                        : isLunchBreak
+                                        ? "bg-gray-200 opacity-50 cursor-not-allowed"
                                         : isPast // Thêm styling cho slot quá khứ
-                                        ? "bg-gray-100 opacity-50 cursor-not-allowed text-gray-400"
+                                        ? "bg-gray-200 opacity-50 cursor-not-allowed"
                                         : isBlockedByHidden
-                                        ? "bg-slate-200 opacity-40 cursor-not-allowed border-dashed border-slate-400"
+                                        ? "bg-gray-200 opacity-50 cursor-not-allowed border-dashed border-gray-400"
                                         : isSelectedByAny &&
                                           selectedByDeptId !==
                                             selectedDepartment // **THÊM ĐIỀU KIỆN NÀY**
-                                        ? "bg-orange-100 opacity-60 cursor-not-allowed border-orange-200 border-2"
+                                        ? "bg-orange-200 opacity-60 cursor-not-allowed border-orange-200 border-2"
                                         : isConflicted &&
                                           !isLunchBreak &&
                                           !isPast
@@ -2228,9 +2397,9 @@ export default function CompleteScheduleApp() {
                                               .light
                                           } opacity-30 border-dashed`
                                         : slotSchedules.length > 0
-                                        ? "bg-slate-100"
+                                        ? "bg-gray-100"
                                         : selectedDepartment && !isConflicted
-                                        ? "hover:bg-blue-50 hover:border-blue-200 hover:shadow-sm"
+                                        ? "hover:bg-gray-50 hover:border-blue-200 hover:shadow-sm"
                                         : "hover:bg-slate-50"
                                     }`}
                                     onMouseDown={(e) =>
@@ -2334,10 +2503,10 @@ export default function CompleteScheduleApp() {
                   <div className="p-4">
                     {/* Calendar header */}
                     <div className="grid grid-cols-7 mb-2">
-                      {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((day) => (
+                      {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((day, index) => (
                         <div
                           key={day}
-                          className="p-3 text-center font-medium text-slate-600 border-b bg-slate-50"
+                          className={`p-3 text-center font-medium border-b`}
                         >
                           {day}
                         </div>
@@ -2718,15 +2887,15 @@ export default function CompleteScheduleApp() {
                           setIsCreateDialogOpen(true);
                         }}
                         className="w-full bg-green-600 hover:bg-green-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={departmentSelections.size === 0 || !isAdmin}
+                        disabled={departmentSelections.size === 0 || !(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)}
                       >
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
-                          {isAdmin
+                          {(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)
                             ? isEditMode
                               ? `Cập nhật lịch`
                               : `Lưu lịch (${departmentSelections.size} phòng ban)`
-                            : "Chỉ admin mới có quyền lưu lịch"}
+                            : "Bạn không có quyền lưu lịch"}
                         </span>
                       </Button>
 
@@ -2736,7 +2905,7 @@ export default function CompleteScheduleApp() {
                           setSelectedDepartment(null);
                         }}
                         variant="outline"
-                        disabled={!isAdmin}
+                        disabled={!(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)}
                         className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="flex items-center gap-2">
@@ -2882,26 +3051,44 @@ export default function CompleteScheduleApp() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        disabled={!isAdmin}
+                                        disabled={!isDataReady || !isDepartmentEditable(schedule.department!.id)}
                                         className="h-6 w-6 p-0 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleEditSchedule(schedule);
                                         }}
+                                        title={
+                                          !isDataReady 
+                                            ? "Đang tải thông tin..." 
+                                            : isDepartmentEditable(schedule.department!.id) 
+                                              ? "Chỉnh sửa lịch" 
+                                              : "Bạn không có quyền chỉnh sửa lịch này"
+                                        }
                                       >
-                                        <Edit className="w-3 h-3 text-blue-600" />
+                                        {!isDataReady ? (
+                                          <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                                        ) : (
+                                          <Edit className="w-3 h-3 text-blue-600" />
+                                        )}
                                       </Button>
 
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        disabled={!isAdmin}
+                                        disabled={!isDataReady || !isDepartmentEditable(schedule.department!.id)}
                                         className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title={
+                                          !isDataReady 
+                                            ? "Đang tải thông tin..." 
+                                            : isDepartmentEditable(schedule.department!.id) 
+                                              ? "Xóa lịch" 
+                                              : "Bạn không có quyền xóa lịch này"
+                                        }
                                         onClick={async (e) => {
                                           e.stopPropagation();
-                                          if (!isAdmin) {
+                                          if (!isDepartmentEditable(schedule.department!.id)) {
                                             toast.error(
-                                              "Bạn không có quyền xóa lịch hoạt động"
+                                              "Bạn không có quyền xóa lịch hoạt động này"
                                             );
                                             return;
                                           }
@@ -2926,7 +3113,11 @@ export default function CompleteScheduleApp() {
                                           }
                                         }}
                                       >
-                                        <Trash2 className="w-3 h-3" />
+                                        {!isDataReady ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-3 h-3" />
+                                        )}
                                       </Button>
                                     </div>
                                   </div>
@@ -3009,21 +3200,36 @@ export default function CompleteScheduleApp() {
                           <SelectValue placeholder="Chọn phòng ban" />
                         </SelectTrigger>
                         <SelectContent>
-                          {departments.map((dept) => (
-                            <SelectItem
-                              key={dept.id}
-                              value={dept.id.toString()}
-                            >
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className={`w-3 h-3 rounded-full ${
-                                    getDepartmentColor(dept.id).bg
-                                  }`}
-                                />
-                                {dept.name}
-                              </div>
-                            </SelectItem>
-                          ))}
+                          {departments.map((dept) => {
+                            const canEdit = isDepartmentEditable(dept.id);
+                            const isEnabled = isDepartmentEnabled(dept.id);
+                            const canSelect = canEdit && isEnabled;
+                            
+                            return (
+                              <SelectItem
+                                key={dept.id}
+                                value={dept.id.toString()}
+                                disabled={!canSelect}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`w-3 h-3 rounded-full ${
+                                      getDepartmentColor(dept.id).bg
+                                    } ${!canSelect ? "grayscale" : ""}`}
+                                  />
+                                  <span className={!canSelect ? "text-gray-400" : ""}>
+                                    {dept.name}
+                                    {!isEnabled && (
+                                      <span className="text-xs text-red-500 ml-1">(No IP)</span>
+                                    )}
+                                    {isEnabled && !canEdit && (
+                                      <span className="text-xs text-blue-500 ml-1">(No permission)</span>
+                                    )}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-slate-500">
