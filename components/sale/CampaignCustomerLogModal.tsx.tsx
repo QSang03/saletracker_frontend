@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { CampaignSocket } from "@/components/socket/CampaignSocket";
+import { convertTextToIcons } from "@/utils/textToIcon";
 
 // Types (giữ nguyên)
 export enum LogStatus {
@@ -179,8 +180,8 @@ const parseMessageContent = (content: string, contentType?: string) => {
         type: "image",
         imageUrl: parsed.imageUrl,
         thumbnailUrl: parsed.thumbnailUrl || parsed.imageUrl,
-        caption: parsed.caption || "",
-        title: parsed.title || "",
+        caption: parsed.caption ? convertTextToIcons(parsed.caption) : "",
+        title: parsed.title ? convertTextToIcons(parsed.title) : "",
       };
     }
 
@@ -192,7 +193,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
         stickerId: parsed.stickerId,
         stickerUrl: stickerUrl,
         categoryId: parsed.categoryId || "",
-        description: parsed.description || "",
+        description: parsed.description ? convertTextToIcons(parsed.description) : "",
       };
     }
 
@@ -204,7 +205,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
         fileUrl: parsed.fileUrl,
         fileSize: parsed.fileSize || 0,
         fileExtension: parsed.fileExtension || "",
-        description: parsed.description || "",
+        description: parsed.description ? convertTextToIcons(parsed.description) : "",
       };
     }
 
@@ -213,13 +214,13 @@ const parseMessageContent = (content: string, contentType?: string) => {
     // Replace \n with actual line breaks
     return {
       type: "text",
-      text: text.replace(/\\n/g, "\n"),
+      text: convertTextToIcons(text.replace(/\\n/g, "\n")),
     };
   } catch {
     // If not JSON, just handle \n replacement
     return {
       type: "text",
-      text: content.replace(/\\n/g, "\n"),
+      text: convertTextToIcons(content.replace(/\\n/g, "\n")),
     };
   }
 };
@@ -502,7 +503,7 @@ const ZaloAttachmentRenderer = ({
                 isStaff ? "text-white" : isBot ? "text-white" : "text-gray-700"
               )}
             >
-              {fileName}
+              {convertTextToIcons(fileName)}
             </div>
             <div
               className={cn(

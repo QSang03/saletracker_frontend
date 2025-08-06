@@ -1937,12 +1937,6 @@ export default function CompleteScheduleApp() {
                             !canView ? "text-gray-400" : !canEdit ? "text-gray-600" : ""
                           }`}>
                             {dept.name}
-                            {!isEnabled && (
-                              <span className="text-xs text-red-500 ml-1">(No IP)</span>
-                            )}
-                            {canView && !canEdit && (
-                              <span className="text-xs text-blue-500 ml-1">(View only)</span>
-                            )}
                           </span>
                           {isSelected && canEdit && (
                             <CheckCircle className="w-4 h-4 text-blue-600 ml-auto" />

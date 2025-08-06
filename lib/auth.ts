@@ -6,7 +6,8 @@ export function getAccessToken(): string | null {
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
     if (name === "access_token") {
-      return decodeURIComponent(value);
+      const decodedValue = decodeURIComponent(value);
+      return decodedValue.trim(); // Trim whitespace from decoded value
     }
   }
 
@@ -21,7 +22,8 @@ export function getRefreshToken(): string | null {
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
     if (name === "refresh_token") {
-      return decodeURIComponent(value);
+      const decodedValue = decodeURIComponent(value);
+      return decodedValue.trim(); // Trim whitespace from decoded value
     }
   }
 

@@ -12,6 +12,12 @@ export async function refreshAccessToken(): Promise<string | null> {
       return null;
     }
     
+    // Clean the token (trim whitespace)
+    const cleanRefreshToken = refreshToken.trim();
+    console.log('🔍 [RefreshToken] Token length:', cleanRefreshToken.length);
+    console.log('🔍 [RefreshToken] Token preview (first 50):', cleanRefreshToken.substring(0, 50));
+    console.log('🔍 [RefreshToken] Token preview (last 20):', cleanRefreshToken.substring(-20));
+    
     // Tạo axios instance mới để tránh circular call với interceptor
     const { default: axios } = await import('axios');
     const refreshApi = axios.create({
@@ -21,27 +27,18 @@ export async function refreshAccessToken(): Promise<string | null> {
     
     console.log('🔍 [RefreshToken] Calling refresh API...');
     console.log('🔍 [RefreshToken] API URL:', process.env.NEXT_PUBLIC_API_URL);
-    console.log('🔍 [RefreshToken] Token preview:', refreshToken.substring(0, 50) + '...');
     
-    const res = await refreshApi.post('/auth/refresh', { refreshToken });
-    
-    console.log('✅ [RefreshToken] API call successful');
-    console.log('🔍 [RefreshToken] Response status:', res.status);
-    console.log('🔍 [RefreshToken] Response data keys:', Object.keys(res.data || {}));
+    const res = await refreshApi.post('/auth/refresh', { refreshToken: cleanRefreshToken });
     
     if (res.data?.access_token) {
-      console.log('✅ [RefreshToken] New access token received, length:', res.data.access_token.length);
-      console.log('🔍 [RefreshToken] Setting access token in cookies...');
       
       setAccessToken(res.data.access_token);
       
       // Verify token was set
       const verifyToken = getAccessToken();
-      console.log('🔍 [RefreshToken] Access token verification:', verifyToken ? 'FOUND' : 'NOT FOUND');
       
       // Cập nhật refresh token mới nếu có
       if (res.data?.refresh_token) {
-        console.log('✅ [RefreshToken] New refresh token received, updating...');
         setRefreshToken(res.data.refresh_token);
       }
       
