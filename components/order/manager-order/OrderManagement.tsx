@@ -61,6 +61,44 @@ interface OrderManagementProps {
   loading?: boolean;
 }
 
+// ✅ Function tính toán extended động - đã sửa lỗi TypeScript
+const calculateDynamicExtended = (createdAt: string | Date | undefined, originalExtended: number) => {
+  try {
+    // Xử lý trường hợp created_at undefined hoặc null
+    if (!createdAt) {
+      return originalExtended; // Fallback về giá trị gốc
+    }
+
+    // Lấy ngày hiện tại
+    const currentDate = new Date();
+    const currentDay = currentDate.getDate();
+    
+    // Xử lý created_at
+    let createdDate;
+    if (typeof createdAt === 'string') {
+      createdDate = new Date(createdAt);
+    } else {
+      createdDate = createdAt;
+    }
+
+    // Kiểm tra xem createdDate có hợp lệ không
+    if (isNaN(createdDate.getTime())) {
+      return originalExtended; // Fallback về giá trị gốc nếu ngày không hợp lệ
+    }
+
+    const createdDay = createdDate.getDate();
+    
+    // Áp dụng công thức: ngày_tạo + extended - ngày_hiện_tại
+    const result = createdDay + originalExtended - currentDay;
+    
+    // Trả về giá trị tuyệt đối nếu âm (dựa trên ví dụ của bạn)
+    return Math.abs(result);
+  } catch (error) {
+    console.error('Error calculating dynamic extended:', error);
+    return originalExtended; // Fallback về giá trị gốc
+  }
+};
+
 // ✅ Component để hiển thị text với tooltip khi cần thiết
 const TruncatedText: React.FC<{
   text: string;
@@ -207,9 +245,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       case "pending":
         return "Chờ xử lý";
       case "quoted":
-        return "Đã báo giá";
+        return "Chưa chốt";
       case "completed":
-        return "Đã hoàn thành";
+        return "Đã Chốt";
       case "demand":
         return "Nhu cầu";
       case "confirmed":
@@ -253,10 +291,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
+  // ✅ Sửa đổi getRowClassName để sử dụng extended động
   const getRowClassName = (orderDetail: OrderDetail, index: number) => {
-    const extended = orderDetail.extended || 0;
-
-    switch (extended) {
+    const dynamicExtended = calculateDynamicExtended(
+      orderDetail.created_at, 
+      orderDetail.extended || 0
+    );
+    
+    switch (dynamicExtended) {
       case 1:
         return "bg-gradient-to-r from-red-50 via-red-25 to-red-50 hover:from-red-100 hover:to-red-75 border-l-4 border-red-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
       case 2:
@@ -264,7 +306,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       case 3:
         return "bg-gradient-to-r from-emerald-50 via-emerald-25 to-emerald-50 hover:from-emerald-100 hover:to-emerald-75 border-l-4 border-emerald-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
       default:
-        if (extended >= 4) {
+        if (dynamicExtended >= 4) {
           return index % 2 === 0
             ? "bg-gradient-to-r from-slate-50 via-slate-25 to-slate-50 hover:from-slate-100 hover:to-slate-75 border-l-4 border-slate-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1"
             : "bg-gradient-to-r from-gray-50 via-gray-25 to-gray-50 hover:from-gray-100 hover:to-gray-75 border-l-4 border-gray-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
@@ -530,15 +572,23 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           #{orderDetail.id || "N/A"}
                         </div>
                       </TableCell>
+                      {/* ✅ Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
                       <TableCell className="text-center">
-                        <span
-                          className={`inline-flex items-center ${getExtendedBadgeStyle(
+                        {(() => {
+                          const dynamicExtended = calculateDynamicExtended(
+                            orderDetail.created_at, 
                             orderDetail.extended || 0
-                          )}`}
-                        >
-                          {getExtendedIcon(orderDetail.extended || 0)}
-                          {orderDetail.extended || 0}
-                        </span>
+                          );
+                          return (
+                            <span
+                              className={`inline-flex items-center ${getExtendedBadgeStyle(dynamicExtended)}`}
+                              title={`Công thức: ${orderDetail.created_at ? new Date(orderDetail.created_at).getDate() : 'N/A'} + ${orderDetail.extended || 0} - ${new Date().getDate()} = ${dynamicExtended}`}
+                            >
+                              {getExtendedIcon(dynamicExtended)}
+                              {dynamicExtended}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-center text-slate-600 text-sm">
                         <div className="flex flex-col">

@@ -81,6 +81,7 @@ interface TimeSlot {
   day_of_week?: number;
   start_time: string;
   end_time: string;
+  applicable_date?: string; // "YYYY-MM-DD", ngày áp dụng cụ thể, null = mọi ngày
   department_id: number;
 }
 
@@ -113,6 +114,14 @@ interface MontylyDragState {
   startDay: { date: number; month: number; year: number } | null;
   currentDay: { date: number; month: number; year: number } | null;
   isSelecting: boolean;
+}
+
+interface BulkScheduleConfig {
+  enabled: boolean;
+  type: "weeks" | "months";
+  count: number;
+  skipWeekends?: boolean;
+  skipConflicts?: boolean;
 }
 
 // Constants
@@ -237,8 +246,10 @@ export default function CompleteScheduleApp() {
   const userManagerDepartmentSlugs = useMemo(() => {
     if (!user) return [];
     const userRoles = getAllUserRoles();
-    const managerRoles = userRoles.filter((role) => role.name.startsWith("manager-"));
-    return managerRoles.map(role => role.name.replace("manager-", ""));
+    const managerRoles = userRoles.filter((role) =>
+      role.name.startsWith("manager-")
+    );
+    return managerRoles.map((role) => role.name.replace("manager-", ""));
   }, [user, getAllUserRoles]);
 
   // Kiểm tra user có phải manager của ít nhất 1 phòng ban không
@@ -257,13 +268,26 @@ export default function CompleteScheduleApp() {
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [bulkScheduleConfig, setBulkScheduleConfig] =
+    useState<BulkScheduleConfig>({
+      enabled: false,
+      type: "weeks",
+      count: 1,
+      skipWeekends: true,
+      skipConflicts: true,
+    });
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState<{
+    weeks: Date[];
+    months: Date[];
+  }>({ weeks: [], months: [] });
 
   // Lấy departments có thể truy cập dựa trên phân quyền
   const accessibleDepartments = useMemo(() => {
     if (!departments.length) return [];
-    
+
     // Tất cả user đều có thể view tất cả departments có server_ip
-    return departments.filter(dept => dept.server_ip);
+    return departments.filter((dept) => dept.server_ip);
   }, [departments]);
 
   // Kiểm tra xem tất cả data cần thiết đã sẵn sàng chưa
@@ -272,44 +296,64 @@ export default function CompleteScheduleApp() {
   }, [isLoadingDepartments, user, departments.length]);
 
   // Kiểm tra xem department có thể được thao tác (chọn/chỉnh sửa) không
-  const isDepartmentEditable = useCallback((departmentId: number) => {
-    // Nếu data chưa sẵn sàng, không cho phép edit
-    if (!isDataReady) {
-      return false;
-    }
+  const isDepartmentEditable = useCallback(
+    (departmentId: number) => {
+      // Nếu data chưa sẵn sàng, không cho phép edit
+      if (!isDataReady) {
+        return false;
+      }
 
-    // Admin và scheduler có thể thao tác tất cả departments
-    if (isAdmin || isScheduler) {
-      return true;
-    }
-    
-    // Manager chỉ có thể thao tác department của mình
-    if (isManager && userManagerDepartmentSlugs.length > 0) {
-      const department = departments.find(dept => dept.id === departmentId);
-      const canEdit = department && userManagerDepartmentSlugs.includes(department.slug);
-      console.log(`[Permission Debug] isDepartmentEditable(${departmentId}):`, {
-        department,
-        userManagerDepartmentSlugs,
-        canEdit,
-        isDataReady
-      });
-      return canEdit || false;
-    }
-    
-    // User thường không thể thao tác
-    return false;
-  }, [isAdmin, isScheduler, isManager, userManagerDepartmentSlugs, departments, isDataReady]);
+      // Admin và scheduler có thể thao tác tất cả departments
+      if (isAdmin || isScheduler) {
+        return true;
+      }
+
+      // Manager chỉ có thể thao tác department của mình
+      if (isManager && userManagerDepartmentSlugs.length > 0) {
+        const department = departments.find((dept) => dept.id === departmentId);
+        const canEdit =
+          department && userManagerDepartmentSlugs.includes(department.slug);
+        console.log(
+          `[Permission Debug] isDepartmentEditable(${departmentId}):`,
+          {
+            department,
+            userManagerDepartmentSlugs,
+            canEdit,
+            isDataReady,
+          }
+        );
+        return canEdit || false;
+      }
+
+      // User thường không thể thao tác
+      return false;
+    },
+    [
+      isAdmin,
+      isScheduler,
+      isManager,
+      userManagerDepartmentSlugs,
+      departments,
+      isDataReady,
+    ]
+  );
 
   // Kiểm tra xem department có thể được chọn không (bao gồm cả view và edit)
-  const isDepartmentAccessible = useCallback((departmentId: number) => {
-    return accessibleDepartments.some(dept => dept.id === departmentId);
-  }, [accessibleDepartments]);
+  const isDepartmentAccessible = useCallback(
+    (departmentId: number) => {
+      return accessibleDepartments.some((dept) => dept.id === departmentId);
+    },
+    [accessibleDepartments]
+  );
 
   // Kiểm tra xem department có server_ip không
-  const isDepartmentEnabled = useCallback((departmentId: number) => {
-    const department = departments.find(dept => dept.id === departmentId);
-    return department?.server_ip ? true : false;
-  }, [departments]);
+  const isDepartmentEnabled = useCallback(
+    (departmentId: number) => {
+      const department = departments.find((dept) => dept.id === departmentId);
+      return department?.server_ip ? true : false;
+    },
+    [departments]
+  );
 
   // Visibility
   const [visibleDepartments, setVisibleDepartments] = useState<number[]>([]);
@@ -379,6 +423,8 @@ export default function CompleteScheduleApp() {
       return date;
     });
   }, [currentWeek]);
+
+  const weekDates = getWeekDates();
 
   const getMonthCalendar = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -458,10 +504,16 @@ export default function CompleteScheduleApp() {
   }, []);
 
   const isPastTimeSlot = useCallback(
-    (dayIndex: number, time: string) => {
+    (dayIndex: number, time: string, specificDate: string) => {
       const now = new Date();
-      const weekDates = getWeekDates();
-      const slotDate = weekDates[dayIndex];
+      let slotDate: Date;
+
+      if (specificDate) {
+        slotDate = new Date(specificDate);
+      } else {
+        const weekDates = getWeekDates();
+        slotDate = weekDates[dayIndex];
+      }
 
       const [hours, minutes] = time.split(":").map(Number);
       const slotDateTime = new Date(slotDate);
@@ -726,9 +778,15 @@ export default function CompleteScheduleApp() {
                 slot.day_of_week === existingSlot.day_of_week ||
                 !existingSlot.day_of_week;
 
+              const dateMatch =
+                !existingSlot.applicable_date ||
+                !slot.applicable_date ||
+                existingSlot.applicable_date === slot.applicable_date;
+
               return (
                 timeOverlap &&
                 dayMatch &&
+                dateMatch &&
                 schedule.department &&
                 slot.department_id === schedule.department.id
               );
@@ -779,12 +837,22 @@ export default function CompleteScheduleApp() {
   };
 
   const handleSaveSchedule = async () => {
+    if (isBulkMode && bulkScheduleConfig.enabled) {
+      await handleGenerateBulkSchedule();
+    }
+
     const { allDays, allTimeSlots } = getAllSelections();
 
     if (allDays.length === 0 && allTimeSlots.length === 0) {
       toast.error("Vui lòng chọn ít nhất một ngày hoặc khung giờ");
       return;
     }
+
+    console.log("Final selections before save:", {
+      allDays: allDays.length,
+      allTimeSlots: allTimeSlots.length,
+      departmentSelections: Array.from(departmentSelections.entries()),
+    });
 
     const conflicts = checkConflicts(
       allDays,
@@ -802,17 +870,22 @@ export default function CompleteScheduleApp() {
   // Cập nhật hàm edit schedule
   const handleEditSchedule = useCallback(
     (schedule: DepartmentSchedule) => {
-      console.log(`[EditSchedule Debug] Attempting to edit schedule for department ${schedule.department!.id}:`, {
-        isDataReady,
-        isLoadingDepartments,
-        departmentsLength: departments.length,
-        user: user?.id,
-        isAdmin,
-        isScheduler,
-        isManager,
-        userManagerDepartmentSlugs,
-        isDepartmentEditable: isDepartmentEditable(schedule.department!.id)
-      });
+      console.log(
+        `[EditSchedule Debug] Attempting to edit schedule for department ${
+          schedule.department!.id
+        }:`,
+        {
+          isDataReady,
+          isLoadingDepartments,
+          departmentsLength: departments.length,
+          user: user?.id,
+          isAdmin,
+          isScheduler,
+          isManager,
+          userManagerDepartmentSlugs,
+          isDepartmentEditable: isDepartmentEditable(schedule.department!.id),
+        }
+      );
 
       if (!isDepartmentEditable(schedule.department!.id)) {
         // Nếu data chưa sẵn sàng, cho user biết
@@ -867,6 +940,7 @@ export default function CompleteScheduleApp() {
             start_time: slot.start_time,
             end_time: slot.end_time,
             department_id: schedule.department!.id,
+            applicable_date: slot.applicable_date,
           })),
         });
       }
@@ -888,7 +962,19 @@ export default function CompleteScheduleApp() {
         "Đã vào chế độ chỉnh sửa. Bạn có thể thay đổi lịch trên calendar và thông tin trong form."
       );
     },
-    [isDataReady, isDepartmentEditable, isAdmin, isScheduler, isManager, userManagerDepartmentSlugs, departments, user, isLoadingDepartments, departmentSelections, currentMonth]
+    [
+      isDataReady,
+      isDepartmentEditable,
+      isAdmin,
+      isScheduler,
+      isManager,
+      userManagerDepartmentSlugs,
+      departments,
+      user,
+      isLoadingDepartments,
+      departmentSelections,
+      currentMonth,
+    ]
   );
 
   // Thêm hàm để thay đổi department trong edit mode
@@ -945,6 +1031,7 @@ export default function CompleteScheduleApp() {
       }
 
       const promises: Promise<any>[] = [];
+      let totalSchedulesCreated = 0;
 
       departmentSelections.forEach((selections, departmentId) => {
         if (selections.days.length === 0 && selections.timeSlots.length === 0)
@@ -953,37 +1040,74 @@ export default function CompleteScheduleApp() {
         const department = departments.find((d) => d.id === departmentId);
         if (!department) return;
 
-        // Create new schedules (same logic as before)
+        // Group by applicable dates for bulk naming
         if (selections.timeSlots.length > 0) {
-          const scheduleData: CreateDepartmentScheduleDto = {
-            name: formData.name || `Lịch khung giờ - ${department.name}`,
-            description:
-              formData.description ||
-              `Lịch hoạt động khung giờ cho ${department.name}`,
-            department_id: departmentId,
-            status: ScheduleStatus.ACTIVE,
-            schedule_type: ScheduleType.HOURLY_SLOTS,
-            schedule_config: {
-              type: "hourly_slots",
-              slots: selections.timeSlots.map((slot) => ({
-                day_of_week: slot.day_of_week,
-                start_time: slot.start_time,
-                end_time: slot.end_time,
-                activity_description: formData.description,
-              })),
-            } as HourlySlotsConfig,
-          };
-          
-          console.log('🔍 HOURLY SLOTS SCHEDULE DATA:', JSON.stringify(scheduleData, null, 2));
-          promises.push(ScheduleService.create(scheduleData));
+          const groupedByDate = selections.timeSlots.reduce((acc, slot) => {
+            const dateKey = slot.applicable_date || "general";
+            if (!acc[dateKey]) acc[dateKey] = [];
+            acc[dateKey].push(slot);
+            return acc;
+          }, {} as Record<string, TimeSlot[]>);
+
+          Object.entries(groupedByDate).forEach(([dateKey, slots]) => {
+            const scheduleName = isBulkMode
+              ? `${formData.name || "Lịch hàng loạt"} - ${department.name} (${
+                  dateKey !== "general"
+                    ? new Date(dateKey).toLocaleDateString("vi-VN")
+                    : "Tổng quát"
+                })`
+              : `${formData.name || `Lịch khung giờ - ${department.name}`}`;
+
+            const scheduleData: CreateDepartmentScheduleDto = {
+              name: scheduleName,
+              description:
+                formData.description ||
+                `Lịch hoạt động khung giờ cho ${department.name}${
+                  isBulkMode ? " (Tạo hàng loạt)" : ""
+                }`,
+              department_id: departmentId,
+              status: ScheduleStatus.ACTIVE,
+              schedule_type: ScheduleType.HOURLY_SLOTS,
+              schedule_config: {
+                type: "hourly_slots",
+                slots: slots.map((slot) => ({
+                  day_of_week: slot.day_of_week,
+                  start_time: slot.start_time,
+                  end_time: slot.end_time,
+                  applicable_date:
+                    slot.applicable_date ||
+                    (() => {
+                      const weekDates = getWeekDates();
+                      const targetDayIndex =
+                        slot.day_of_week === 7 ? 0 : slot.day_of_week!;
+                      const applicableDate =
+                        weekDates[targetDayIndex] || new Date();
+                      return applicableDate.toISOString().split("T")[0];
+                    })(),
+                  activity_description: formData.description,
+                })),
+              } as HourlySlotsConfig,
+            };
+
+            promises.push(ScheduleService.create(scheduleData));
+            totalSchedulesCreated++;
+          });
         }
 
         if (selections.days.length > 0) {
+          const scheduleName = isBulkMode
+            ? `${formData.name || "Lịch hàng loạt"} - ${department.name} (${
+                selections.days.length
+              } ngày)`
+            : `${formData.name || `Lịch theo ngày - ${department.name}`}`;
+
           const scheduleData: CreateDepartmentScheduleDto = {
-            name: formData.name || `Lịch theo ngày - ${department.name}`,
+            name: scheduleName,
             description:
               formData.description ||
-              `Lịch hoạt động theo ngày cho ${department.name}`,
+              `Lịch hoạt động theo ngày cho ${department.name}${
+                isBulkMode ? " (Tạo hàng loạt)" : ""
+              }`,
             department_id: departmentId,
             status: ScheduleStatus.ACTIVE,
             schedule_type: ScheduleType.DAILY_DATES,
@@ -997,9 +1121,9 @@ export default function CompleteScheduleApp() {
               })),
             } as DailyDatesConfig,
           };
-          
-          console.log('🔍 DAILY DATES SCHEDULE DATA:', JSON.stringify(scheduleData, null, 2));
+
           promises.push(ScheduleService.create(scheduleData));
+          totalSchedulesCreated++;
         }
       });
 
@@ -1012,6 +1136,15 @@ export default function CompleteScheduleApp() {
       setIsEditMode(false);
       setEditingDepartment(null);
       setOriginalSelections(new Map());
+      setIsBulkMode(false);
+      setBulkScheduleConfig({
+        enabled: false,
+        type: "weeks",
+        count: 1,
+        skipWeekends: true,
+        skipConflicts: true,
+      });
+      setBulkPreview({ weeks: [], months: [] });
       setFormData({ name: "", description: "", start_time: "", end_time: "" });
       setIsCreateDialogOpen(false);
 
@@ -1020,14 +1153,18 @@ export default function CompleteScheduleApp() {
       setSchedules(data.data);
 
       toast.success(
-        isEditMode
+        isBulkMode
+          ? `Tạo thành công ${totalSchedulesCreated} lịch hàng loạt!`
+          : isEditMode
           ? "Cập nhật lịch hoạt động thành công!"
           : "Lưu lịch hoạt động thành công!"
       );
     } catch (error: any) {
       console.error("Error saving schedule:", error);
       toast.error(
-        isEditMode
+        isBulkMode
+          ? "Không thể tạo lịch hàng loạt"
+          : isEditMode
           ? "Không thể cập nhật lịch hoạt động"
           : "Không thể lưu lịch hoạt động"
       );
@@ -1038,26 +1175,31 @@ export default function CompleteScheduleApp() {
 
   // Helper functions
   const getSchedulesForSlot = useCallback(
-    (dayIndex: number, time: string) => {
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+    (dayIndex: number, time: string, specificDate: string) => {
+      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
       return filteredSchedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.HOURLY_SLOTS) return false;
 
         const config = schedule.schedule_config as HourlySlotsConfig;
-        return config.slots.some(
-          (slot) =>
-            (slot.day_of_week === dayOfWeek || !slot.day_of_week) &&
-            slot.start_time <= time &&
-            slot.end_time > time
-        );
+        return config.slots.some((slot) => {
+          const timeMatch = slot.start_time <= time && slot.end_time > time;
+          const dayMatch = slot.day_of_week === dayOfWeek || !slot.day_of_week;
+          // ✅ THÊM: Kiểm tra applicable_date
+          const dateMatch =
+            !slot.applicable_date ||
+            !specificDate ||
+            slot.applicable_date === specificDate;
+
+          return timeMatch && dayMatch && dateMatch;
+        });
       });
     },
     [filteredSchedules]
   );
 
   const isSlotHasExistingSchedule = useCallback(
-    (dayIndex: number, time: string) => {
-      const slotSchedules = getSchedulesForSlot(dayIndex, time);
+    (dayIndex: number, time: string, specificDate: string) => {
+      const slotSchedules = getSchedulesForSlot(dayIndex, time, specificDate);
       // Kiểm tra xem có schedule nào của chính phòng ban đang chọn không
       // Nếu đang edit, loại trừ schedule đang edit
       return slotSchedules.some(
@@ -1075,32 +1217,39 @@ export default function CompleteScheduleApp() {
   );
 
   const isSlotBlockedByHiddenDepartment = useCallback(
-    (dayIndex: number, time: string) => {
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+    (dayIndex: number, time: string, specificDate: string) => {
+      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
 
       // Kiểm tra selections từ phòng ban bị ẩn
       for (const [deptId, selections] of departmentSelections) {
         if (!visibleDepartments.includes(deptId)) {
           const hasSelection = selections.timeSlots.some(
-            (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+            (slot) =>
+              slot.day_of_week === dayOfWeek &&
+              slot.start_time === time &&
+              (!slot.applicable_date ||
+                !specificDate ||
+                slot.applicable_date === specificDate)
           );
           if (hasSelection) return { isBlocked: true, departmentId: deptId };
         }
       }
 
-      // ✅ SỬA LOGIC KIỂM TRA SCHEDULES
-      // Thay vì tìm bất kỳ hidden schedule nào,
-      // phải kiểm tra schedules cụ thể cho slot hiện tại
       const allSchedulesForThisSlot = schedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.HOURLY_SLOTS) return false;
 
         const config = schedule.schedule_config as HourlySlotsConfig;
-        return config.slots.some(
-          (slot) =>
-            (slot.day_of_week === dayOfWeek || !slot.day_of_week) &&
-            slot.start_time <= time &&
-            slot.end_time > time
-        );
+        return config.slots.some((slot) => {
+          const timeMatch = slot.start_time <= time && slot.end_time > time;
+          const dayMatch = slot.day_of_week === dayOfWeek || !slot.day_of_week;
+          // ✅ THÊM: Kiểm tra applicable_date
+          const dateMatch =
+            !slot.applicable_date ||
+            !specificDate ||
+            slot.applicable_date === specificDate;
+
+          return timeMatch && dayMatch && dateMatch;
+        });
       });
 
       // Kiểm tra xem có schedule nào của phòng ban bị ẩn không
@@ -1169,14 +1318,18 @@ export default function CompleteScheduleApp() {
     (date: number, isCurrentMonth: boolean, e: React.MouseEvent) => {
       e.preventDefault();
 
-      if (!isCurrentMonth || !selectedDepartment || !isDepartmentEditable(selectedDepartment)) {
+      if (
+        !isCurrentMonth ||
+        !selectedDepartment ||
+        !isDepartmentEditable(selectedDepartment)
+      ) {
         return;
       }
 
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth();
       const currentDate = new Date(year, month, date);
-    const isSunday = currentDate.getDay() === 0;
+      const isSunday = currentDate.getDay() === 6;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1228,7 +1381,7 @@ export default function CompleteScheduleApp() {
       const month = currentMonth.getMonth();
 
       const currentDate = new Date(year, month, date);
-    const isSunday = currentDate.getDay() === 0;
+      const isSunday = currentDate.getDay() === 6;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1283,7 +1436,7 @@ export default function CompleteScheduleApp() {
       const isCurrentMonth =
         month === currentMonth.getMonth() &&
         year === currentMonth.getFullYear();
-        const isSunday = currentDate.getDay() === 0;
+      const isSunday = currentDate.getDay() === 6;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1347,11 +1500,16 @@ export default function CompleteScheduleApp() {
   }, [selectedDepartment]);
 
   const isTimeSlotSelected = useCallback(
-    (dayIndex: number, time: string) => {
+    (dayIndex: number, time: string, specificDate: string) => {
       const currentSelections = getCurrentDepartmentSelections();
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
       return currentSelections.timeSlots.some(
-        (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+        (slot) =>
+          slot.day_of_week === dayOfWeek &&
+          slot.start_time === time &&
+          (!slot.applicable_date ||
+            !specificDate ||
+            slot.applicable_date === specificDate)
       );
     },
     [getCurrentDepartmentSelections]
@@ -1375,12 +1533,17 @@ export default function CompleteScheduleApp() {
   );
 
   const isTimeSlotSelectedByAnyDept = useCallback(
-    (dayIndex: number, time: string) => {
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+    (dayIndex: number, time: string, specificDate: string) => {
+      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
       for (const [deptId, selections] of departmentSelections) {
         if (
           selections.timeSlots.some(
-            (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+            (slot) =>
+              slot.day_of_week === dayOfWeek &&
+              slot.start_time === time &&
+              (!slot.applicable_date ||
+                !specificDate ||
+                slot.applicable_date === specificDate)
           )
         ) {
           return { isSelected: true, departmentId: deptId };
@@ -1392,12 +1555,12 @@ export default function CompleteScheduleApp() {
   );
 
   const isTimeSlotConflicted = useCallback(
-    (dayIndex: number, time: string) => {
-      if (isPastTimeSlot(dayIndex, time)) {
+    (dayIndex: number, time: string, specificDate: string) => {
+      if (isPastTimeSlot(dayIndex, time, specificDate)) {
         return true;
       }
       // Kiểm tra xung đột với lịch đã lưu từ phòng ban khác
-      const slotSchedules = getSchedulesForSlot(dayIndex, time);
+      const slotSchedules = getSchedulesForSlot(dayIndex, time, specificDate);
       const hasScheduleConflict = slotSchedules.some(
         (schedule) =>
           schedule.department &&
@@ -1408,11 +1571,16 @@ export default function CompleteScheduleApp() {
       if (hasScheduleConflict) return true;
 
       // Kiểm tra xung đột với selections đang có của các phòng ban khác
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
       for (const [deptId, selections] of departmentSelections) {
         if (deptId !== selectedDepartment) {
           const hasSelectionConflict = selections.timeSlots.some(
-            (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+            (slot) =>
+              slot.day_of_week === dayOfWeek &&
+              slot.start_time === time &&
+              (!slot.applicable_date ||
+                !specificDate ||
+                slot.applicable_date === specificDate)
           );
           if (hasSelectionConflict) return true;
         }
@@ -1429,17 +1597,30 @@ export default function CompleteScheduleApp() {
   );
 
   const handleTimeSlotMouseEnter = useCallback(
-    (dayIndex: number, time: string) => {
-      if (dayIndex === 0) return; // Không cho phép tương tác với Chủ nhật
+    (dayIndex: number, time: string, specificDate: string) => {
+      if (dayIndex === 6) {
+        return;
+      }
       if (time >= "12:00" && time < "13:30") return;
-      if (isPastTimeSlot(dayIndex, time)) return;
-      if (isTimeSlotConflicted(dayIndex, time)) return;
-      if (isSlotHasExistingSchedule(dayIndex, time)) return;
-      const { isBlocked } = isSlotBlockedByHiddenDepartment(dayIndex, time);
+      if (isPastTimeSlot(dayIndex, time, specificDate)) return;
+      if (isTimeSlotConflicted(dayIndex, time, specificDate)) return;
+      if (isSlotHasExistingSchedule(dayIndex, time, specificDate)) return;
+      const { isBlocked } = isSlotBlockedByHiddenDepartment(
+        dayIndex,
+        time,
+        specificDate
+      );
       if (isBlocked) return;
       const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
-        isTimeSlotSelectedByAnyDept(dayIndex, time);
+        isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
       if (isSelectedByOther && otherDeptId !== selectedDepartment) return;
+      if (dragState.isDragging && dragState.startSlot) {
+        const startDate = weekDates[dragState.startSlot.day]
+          .toISOString()
+          .split("T")[0];
+        const currentDate = weekDates[dayIndex].toISOString().split("T")[0];
+        if (startDate !== currentDate) return; // Không cho drag qua ngày khác
+      }
       if (dragState.isDragging) {
         setDragState((prev) => ({
           ...prev,
@@ -1455,6 +1636,7 @@ export default function CompleteScheduleApp() {
       isSlotBlockedByHiddenDepartment,
       isTimeSlotSelectedByAnyDept,
       selectedDepartment,
+      weekDates,
     ]
   );
 
@@ -1475,9 +1657,9 @@ export default function CompleteScheduleApp() {
       timeSlots.indexOf(dragState.currentSlot.time)
     );
 
-    const range: { day: number; time: string }[] = [];
+    const range: { day: number; time: string; applicable_date: string }[] = [];
     for (let day = startDay; day <= endDay; day++) {
-      if (day === 0) continue;
+      if (day === 6) continue;
       for (
         let timeIndex = startTimeIndex;
         timeIndex <= endTimeIndex;
@@ -1487,16 +1669,22 @@ export default function CompleteScheduleApp() {
 
         // **Bỏ qua giờ nghỉ trưa**
         if (time >= "12:00" && time < "13:30") continue;
-        if (isPastTimeSlot(day, time)) continue;
-        if (isTimeSlotConflicted(day, time)) continue;
-        if (isSlotHasExistingSchedule(day, time)) continue;
-        const { isBlocked } = isSlotBlockedByHiddenDepartment(day, time);
+        const weekDates = getWeekDates();
+        const specificDate = weekDates[day]?.toISOString().split("T")[0];
+        if (isPastTimeSlot(day, time, specificDate)) continue;
+        if (isTimeSlotConflicted(day, time, specificDate)) continue;
+        if (isSlotHasExistingSchedule(day, time, specificDate)) continue;
+        const { isBlocked } = isSlotBlockedByHiddenDepartment(
+          day,
+          time,
+          specificDate
+        );
         if (isBlocked) continue;
         const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
-          isTimeSlotSelectedByAnyDept(day, time);
+          isTimeSlotSelectedByAnyDept(day, time, specificDate);
         if (isSelectedByOther && otherDeptId !== selectedDepartment) continue;
 
-        range.push({ day, time });
+        range.push({ day, time, applicable_date: specificDate });
       }
     }
 
@@ -1505,7 +1693,7 @@ export default function CompleteScheduleApp() {
     dragState.startSlot,
     dragState.currentSlot,
     isTimeSlotConflicted,
-    isSlotHasExistingSchedule, // ✅ THÊM dependency
+    isSlotHasExistingSchedule,
     isPastTimeSlot,
     isSlotBlockedByHiddenDepartment,
     isTimeSlotSelectedByAnyDept,
@@ -1513,20 +1701,52 @@ export default function CompleteScheduleApp() {
   ]);
 
   const handleTimeSlotMouseDown = useCallback(
-    (dayIndex: number, time: string, e: React.MouseEvent) => {
+    (
+      dayIndex: number,
+      time: string,
+      specificDate: string,
+      e: React.MouseEvent
+    ) => {
+      console.log("handleTimeSlotMouseDown", {
+        dayIndex,
+        time,
+        specificDate,
+        selectedDepartment,
+        isPast: isPastTimeSlot(dayIndex, time, specificDate),
+        hasExistingSchedule: isSlotHasExistingSchedule(
+          dayIndex,
+          time,
+          specificDate
+        ),
+        isConflicted: isTimeSlotConflicted(
+          dayIndex,
+          time,
+          weekDates[dayIndex].toISOString().split("T")[0]
+        ),
+        isBlockedByHidden: isSlotBlockedByHiddenDepartment(
+          dayIndex,
+          time,
+          specificDate
+        ),
+        isSelectedByAnyDept: isTimeSlotSelectedByAnyDept(
+          dayIndex,
+          time,
+          specificDate
+        ),
+      });
       e.preventDefault();
-      
-      if (dayIndex === 0) {
+
+      if (dayIndex === 6) {
         toast.error("Không thể chọn Chủ nhật");
         return;
       }
-      
+
       if (time >= "12:00" && time < "13:30") {
         toast.error("Không thể chọn giờ nghỉ trưa");
         return;
       }
 
-      if (isPastTimeSlot(dayIndex, time)) {
+      if (isPastTimeSlot(dayIndex, time, specificDate)) {
         toast.error("Không thể chọn khung giờ đã qua");
         return;
       }
@@ -1540,20 +1760,26 @@ export default function CompleteScheduleApp() {
         return;
       }
 
-      if (isSlotHasExistingSchedule(dayIndex, time)) {
+      if (isSlotHasExistingSchedule(dayIndex, time, specificDate)) {
         toast.error(
           "Ô này đã có lịch hoạt động trong hệ thống, không thể chỉnh sửa"
         );
         return;
       }
 
-      if (isTimeSlotConflicted(dayIndex, time)) {
+      if (
+        isTimeSlotConflicted(
+          dayIndex,
+          time,
+          weekDates[dayIndex].toISOString().split("T")[0]
+        )
+      ) {
         toast.error("Ô này đang được sử dụng bởi phòng ban khác");
         return;
       }
 
       const { isBlocked, departmentId: blockedDeptId } =
-        isSlotBlockedByHiddenDepartment(dayIndex, time);
+        isSlotBlockedByHiddenDepartment(dayIndex, time, specificDate);
       if (isBlocked) {
         const blockedDeptName = departments.find(
           (d) => d.id === blockedDeptId
@@ -1563,7 +1789,7 @@ export default function CompleteScheduleApp() {
       }
 
       const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
-        isTimeSlotSelectedByAnyDept(dayIndex, time);
+        isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
       if (isSelectedByOther && otherDeptId !== selectedDepartment) {
         const otherDeptName = departments.find(
           (d) => d.id === otherDeptId
@@ -1574,9 +1800,14 @@ export default function CompleteScheduleApp() {
 
       // Xác định trạng thái chọn/hủy chọn dựa trên trạng thái của ô bắt đầu
       const currentSelections = getCurrentDepartmentSelections();
-      const dayOfWeek = ((dayIndex + 1) % 7) + 1;
+      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
       const isCurrentlySelected = currentSelections.timeSlots.some(
-        (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+        (slot) =>
+          slot.day_of_week === dayOfWeek &&
+          slot.start_time === time &&
+          (!slot.applicable_date ||
+            !specificDate ||
+            slot.applicable_date === specificDate)
       );
 
       setDragState({
@@ -1601,10 +1832,18 @@ export default function CompleteScheduleApp() {
   );
 
   const isSlotInDragRange = useCallback(
-    (dayIndex: number, time: string) => {
+    (dayIndex: number, time: string, specificDate: string) => {
       if (!dragState.isDragging) return false;
       const range = getDragSelectionRange();
-      return range.some((slot) => slot.day === dayIndex && slot.time === time);
+      // So sánh cả specificDate nếu có
+      return range.some(
+        (slot) =>
+          slot.day === dayIndex &&
+          slot.time === time &&
+          (!specificDate ||
+            !slot.applicable_date ||
+            slot.applicable_date === specificDate)
+      );
     },
     [dragState.isDragging, getDragSelectionRange]
   );
@@ -1621,23 +1860,26 @@ export default function CompleteScheduleApp() {
       // Chọn thêm các ô chưa được chọn
       range.forEach(({ day, time }) => {
         const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
-        const dayOfWeek = ((day + 1) % 7) + 1;
+        const dayOfWeek = day === 6 ? 1 : day + 2;
         const exists = newTimeSlots.some(
           (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
         );
         if (!exists) {
+          const weekDates = getWeekDates();
+          const applicableDate = weekDates[day].toISOString().split("T")[0];
           newTimeSlots.push({
             day_of_week: dayOfWeek,
             start_time: time,
             end_time: endTime,
             department_id: selectedDepartment,
+            applicable_date: applicableDate,
           });
         }
       });
     } else {
       // Hủy chọn các ô đã được chọn
       range.forEach(({ day, time }) => {
-        const dayOfWeek = ((day + 1) % 7) + 1;
+        const dayOfWeek = day === 6 ? 1 : day + 2;
         newTimeSlots = newTimeSlots.filter(
           (slot) =>
             !(slot.day_of_week === dayOfWeek && slot.start_time === time)
@@ -1688,7 +1930,7 @@ export default function CompleteScheduleApp() {
   useEffect(() => {
     if (accessibleDepartments.length > 0) {
       // Set visible cho tất cả departments có thể view (có server_ip)
-      setVisibleDepartments(accessibleDepartments.map(d => d.id));
+      setVisibleDepartments(accessibleDepartments.map((d) => d.id));
     } else {
       setVisibleDepartments([]);
     }
@@ -1746,6 +1988,271 @@ export default function CompleteScheduleApp() {
     };
   }, [dragState.isDragging, monthlyDragState.isDragging, handleDayMouseUp]);
 
+  const generateWeeklyBulkSelections = useCallback(
+    async (
+      targetWeek: Date,
+      templateSelections: DepartmentSelections,
+      targetMap: Map<number, DepartmentSelections>,
+      isCurrentPeriod: boolean = false // ✅ Thêm flag
+    ) => {
+      if (!selectedDepartment) return;
+
+      const currentDepartmentSelections = targetMap.get(selectedDepartment) || {
+        days: [],
+        timeSlots: [],
+      };
+
+      // ✅ Nếu là tuần hiện tại, giữ nguyên template slots
+      if (isCurrentPeriod) {
+        currentDepartmentSelections.timeSlots.push(
+          ...templateSelections.timeSlots
+        );
+        targetMap.set(selectedDepartment, currentDepartmentSelections);
+        return;
+      }
+
+      // ✅ Xử lý time slots cho tuần target
+      for (const templateSlot of templateSelections.timeSlots) {
+        const targetWeekDates = getWeekDatesForDate(targetWeek);
+        const dayIndex =
+          templateSlot.day_of_week === 1 ? 6 : templateSlot.day_of_week! - 2;
+        const targetDate = targetWeekDates[dayIndex];
+
+        if (!targetDate) continue;
+
+        const specificDate = targetDate.toISOString().split("T")[0];
+        const isPast = isPastTimeSlot(
+          dayIndex,
+          templateSlot.start_time,
+          specificDate
+        );
+        const hasConflict = isTimeSlotConflicted(
+          dayIndex,
+          templateSlot.start_time,
+          specificDate
+        );
+
+        if (bulkScheduleConfig.skipWeekends && dayIndex === 6) continue;
+        if (isPast && bulkScheduleConfig.skipConflicts) continue;
+        if (hasConflict && bulkScheduleConfig.skipConflicts) continue;
+
+        // ✅ Tạo slot mới với ngày cụ thể cho tuần target
+        const newSlot: TimeSlot = {
+          id: `${templateSlot.id}-${specificDate}`, // Unique ID
+          day_of_week: templateSlot.day_of_week,
+          start_time: templateSlot.start_time,
+          end_time: templateSlot.end_time,
+          applicable_date: specificDate, // ✅ Ngày cụ thể cho tuần target
+          department_id: selectedDepartment,
+        };
+
+        currentDepartmentSelections.timeSlots.push(newSlot);
+      }
+
+      targetMap.set(selectedDepartment, currentDepartmentSelections);
+    },
+    [
+      selectedDepartment,
+      bulkScheduleConfig,
+      isTimeSlotConflicted,
+      isPastTimeSlot,
+    ]
+  );
+
+  const generateMonthlyBulkSelections = useCallback(
+    async (
+      targetMonth: Date,
+      templateSelections: DepartmentSelections,
+      targetMap: Map<number, DepartmentSelections>,
+      isCurrentPeriod: boolean = false // ✅ THÊM flag này
+    ) => {
+      if (!selectedDepartment) return;
+
+      const currentDepartmentSelections = targetMap.get(selectedDepartment) || {
+        days: [],
+        timeSlots: [],
+      };
+
+      // ✅ Nếu là tháng hiện tại, giữ nguyên template days
+      if (isCurrentPeriod) {
+        currentDepartmentSelections.days.push(...templateSelections.days);
+        targetMap.set(selectedDepartment, currentDepartmentSelections);
+        return;
+      }
+
+      // ✅ Xử lý days cho tháng target
+      for (const templateDay of templateSelections.days) {
+        const targetDate = templateDay.date;
+        const targetMonthValue = targetMonth.getMonth();
+        const targetYear = targetMonth.getFullYear();
+
+        // Kiểm tra ngày có tồn tại trong tháng target không
+        const targetDateObj = new Date(
+          targetYear,
+          targetMonthValue,
+          targetDate
+        );
+        if (targetDateObj.getMonth() !== targetMonthValue) continue;
+
+        // ✅ SỬA: Kiểm tra Chủ nhật đúng cách
+        const isSunday = targetDateObj.getDay() === 6; // Chủ nhật
+
+        const isPast = isPastDay(targetDate, targetMonthValue, targetYear);
+        const hasConflict = isDayConflicted(
+          targetDate,
+          targetMonthValue,
+          targetYear
+        );
+
+        if (bulkScheduleConfig.skipWeekends && isSunday) continue;
+        if (isPast && bulkScheduleConfig.skipConflicts) continue;
+        if (hasConflict && bulkScheduleConfig.skipConflicts) continue;
+
+        // Thêm day mới
+        const newDay: SelectedDay = {
+          date: targetDate,
+          month: targetMonthValue,
+          year: targetYear,
+          department_id: selectedDepartment,
+        };
+
+        currentDepartmentSelections.days.push(newDay);
+      }
+
+      targetMap.set(selectedDepartment, currentDepartmentSelections);
+    },
+    [selectedDepartment, bulkScheduleConfig, isDayConflicted, isPastDay]
+  );
+
+  // Helper function
+  const getWeekDatesForDate = useCallback((date: Date) => {
+    const start = new Date(date);
+    const day = start.getDay();
+    const diff = start.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const weekDate = new Date(start);
+      weekDate.setDate(start.getDate() + i);
+      return weekDate;
+    });
+  }, []);
+
+  // Hàm tạo danh sách các tuần/tháng tiếp theo
+  const generateBulkPeriods = useCallback(() => {
+    const periods: Date[] = [];
+
+    if (bulkScheduleConfig.type === "weeks") {
+      // THÊM tuần hiện tại làm base (i = 0)
+      for (let i = 0; i < bulkScheduleConfig.count + 1; i++) {
+        // +1 để bao gồm tuần hiện tại
+        const weekStart = new Date(currentWeek);
+        weekStart.setDate(weekStart.getDate() + i * 7);
+        periods.push(weekStart);
+      }
+    } else {
+      // THÊM tháng hiện tại làm base (i = 0)
+      for (let i = 0; i < bulkScheduleConfig.count + 1; i++) {
+        // +1 để bao gồm tháng hiện tại
+        const monthStart = new Date(
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + i,
+          1
+        );
+        periods.push(monthStart);
+      }
+    }
+
+    return periods;
+  }, [bulkScheduleConfig, currentWeek, currentMonth]);
+
+  // Hàm áp dụng selections hiện tại cho tất cả periods
+  const handleGenerateBulkSchedule = useCallback(async () => {
+    if (!selectedDepartment || !isBulkMode) return;
+
+    const currentSelections = getCurrentDepartmentSelections();
+    if (
+      currentSelections.days.length === 0 &&
+      currentSelections.timeSlots.length === 0
+    ) {
+      toast.error("Vui lòng chọn ít nhất một ngày hoặc khung giờ để làm mẫu");
+      return;
+    }
+
+    // Tạo periods bao gồm CẢ tuần/tháng hiện tại
+    const periods: Date[] = [];
+
+    if (bulkScheduleConfig.type === "weeks") {
+      // Bắt đầu từ tuần hiện tại (i = 0), sau đó + thêm các tuần tiếp theo
+      for (let i = 0; i <= bulkScheduleConfig.count; i++) {
+        // <= để bao gồm tuần hiện tại
+        const weekStart = new Date(currentWeek);
+        weekStart.setDate(weekStart.getDate() + i * 7);
+        periods.push(weekStart);
+      }
+    } else {
+      // Bắt đầu từ tháng hiện tại (i = 0), sau đó + thêm các tháng tiếp theo
+      for (let i = 0; i <= bulkScheduleConfig.count; i++) {
+        // <= để bao gồm tháng hiện tại
+        const monthStart = new Date(
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + i,
+          1
+        );
+        periods.push(monthStart);
+      }
+    }
+
+    const newBulkSelections = new Map(departmentSelections);
+
+    // Clear selections cũ của department này trước khi tạo bulk
+    newBulkSelections.set(selectedDepartment, { days: [], timeSlots: [] });
+
+    // Tạo selections cho từng period
+    for (const [index, period] of periods.entries()) {
+      if (bulkScheduleConfig.type === "weeks") {
+        await generateWeeklyBulkSelections(
+          period,
+          currentSelections,
+          newBulkSelections,
+          index === 0
+        );
+      } else {
+        await generateMonthlyBulkSelections(
+          period,
+          currentSelections,
+          newBulkSelections,
+          index === 0
+        );
+      }
+    }
+
+    setDepartmentSelections(newBulkSelections);
+
+    toast.success(
+      `Đã tạo lịch hàng loạt: ${periods.length} ${
+        bulkScheduleConfig.type === "weeks" ? "tuần" : "tháng"
+      } x ${
+        currentSelections.timeSlots.length + currentSelections.days.length
+      } mục = ${
+        periods.length *
+        (currentSelections.timeSlots.length + currentSelections.days.length)
+      } items tổng cộng`
+    );
+  }, [
+    selectedDepartment,
+    isBulkMode,
+    getCurrentDepartmentSelections,
+    bulkScheduleConfig,
+    currentWeek,
+    currentMonth,
+    departmentSelections,
+    generateWeeklyBulkSelections,
+    generateMonthlyBulkSelections,
+    toast,
+    setDepartmentSelections,
+  ]);
+
   if (isLoadingDepartments) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -1761,8 +2268,6 @@ export default function CompleteScheduleApp() {
       </div>
     );
   }
-
-  const weekDates = getWeekDates();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
@@ -1818,8 +2323,8 @@ export default function CompleteScheduleApp() {
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription className="text-yellow-800">
                   <strong>Chế độ chỉ xem:</strong> Bạn chỉ có quyền xem lịch
-                  hoạt động. Chỉ Admin, Scheduler hoặc Manager mới có thể tạo, chỉnh sửa và xóa lịch
-                  hoạt động.
+                  hoạt động. Chỉ Admin, Scheduler hoặc Manager mới có thể tạo,
+                  chỉnh sửa và xóa lịch hoạt động.
                 </AlertDescription>
               </Alert>
             </motion.div>
@@ -1865,6 +2370,84 @@ export default function CompleteScheduleApp() {
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                  {/* Bulk Scheduling Controls */}
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant={isBulkMode ? "default" : "outline"}
+                      onClick={() => {
+                        setIsBulkMode(!isBulkMode);
+                        if (!isBulkMode) {
+                          setBulkScheduleConfig((prev) => ({
+                            ...prev,
+                            enabled: true,
+                          }));
+                        } else {
+                          setBulkScheduleConfig((prev) => ({
+                            ...prev,
+                            enabled: false,
+                          }));
+                          setBulkPreview({ weeks: [], months: [] });
+                        }
+                      }}
+                      className="flex items-center gap-2 hover:bg-blue-50"
+                      disabled={
+                        !selectedDepartment ||
+                        !isDepartmentEditable(selectedDepartment)
+                      }
+                    >
+                      <span className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        {isBulkMode
+                          ? "Thoát chế độ bulk"
+                          : "Sắp lịch hàng loạt"}
+                      </span>
+                    </Button>
+
+                    {isBulkMode && (
+                      <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border">
+                        <Select
+                          value={bulkScheduleConfig.type}
+                          onValueChange={(value: "weeks" | "months") =>
+                            setBulkScheduleConfig((prev) => ({
+                              ...prev,
+                              type: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="weeks">Tuần</SelectItem>
+                            <SelectItem value="months">Tháng</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Input
+                          type="number"
+                          min="1"
+                          max="12"
+                          value={bulkScheduleConfig.count}
+                          onChange={(e) =>
+                            setBulkScheduleConfig((prev) => ({
+                              ...prev,
+                              count: Math.max(
+                                1,
+                                Math.min(12, parseInt(e.target.value) || 1)
+                              ),
+                            }))
+                          }
+                          className="w-20"
+                        />
+
+                        <span className="text-sm text-slate-600">
+                          {bulkScheduleConfig.type === "weeks"
+                            ? "tuần tiếp theo"
+                            : "tháng tiếp theo"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -1893,19 +2476,13 @@ export default function CompleteScheduleApp() {
                         size="sm"
                         disabled={!canEdit}
                         className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 ${
-                          !canEdit 
-                            ? "opacity-50 cursor-not-allowed" 
-                            : ""
-                        } ${
-                          !canView 
-                            ? "grayscale opacity-30" 
-                            : ""
-                        } ${
+                          !canEdit ? "opacity-50 cursor-not-allowed" : ""
+                        } ${!canView ? "grayscale opacity-30" : ""} ${
                           isSelected
                             ? `${color.light} ${color.border} ${color.text} border-2 ring-2 ring-blue-300 shadow-md`
                             : hasSelections
                             ? `${color.light} ${color.border} border-2 shadow-sm`
-                            : canEdit 
+                            : canEdit
                             ? "hover:bg-slate-50 hover:shadow-sm"
                             : ""
                         }`}
@@ -1929,13 +2506,19 @@ export default function CompleteScheduleApp() {
                       >
                         <div className="flex items-center gap-2">
                           <div
-                            className={`w-3 h-3 mr-2 rounded-full ${color.bg} shadow-sm ${
-                              !canView ? "grayscale" : ""
-                            }`}
+                            className={`w-3 h-3 mr-2 rounded-full ${
+                              color.bg
+                            } shadow-sm ${!canView ? "grayscale" : ""}`}
                           />
-                          <span className={`truncate text-sm ${
-                            !canView ? "text-gray-400" : !canEdit ? "text-gray-600" : ""
-                          }`}>
+                          <span
+                            className={`truncate text-sm ${
+                              !canView
+                                ? "text-gray-400"
+                                : !canEdit
+                                ? "text-gray-600"
+                                : ""
+                            }`}
+                          >
                             {dept.name}
                           </span>
                           {isSelected && canEdit && (
@@ -1965,8 +2548,8 @@ export default function CompleteScheduleApp() {
                         size="sm"
                         disabled={!canView}
                         className={`p-1 h-8 w-8 ${
-                          canView 
-                            ? "hover:bg-slate-100" 
+                          canView
+                            ? "hover:bg-slate-100"
                             : "opacity-30 cursor-not-allowed grayscale"
                         }`}
                         onClick={() => {
@@ -1986,9 +2569,11 @@ export default function CompleteScheduleApp() {
                         {isVisible && canView ? (
                           <Eye className="w-4 h-4 text-green-600" />
                         ) : (
-                          <EyeOff className={`w-4 h-4 ${
-                            canView ? "text-slate-400" : "text-gray-300"
-                          }`} />
+                          <EyeOff
+                            className={`w-4 h-4 ${
+                              canView ? "text-slate-400" : "text-gray-300"
+                            }`}
+                          />
                         )}
                       </Button>
                     </div>
@@ -2030,11 +2615,25 @@ export default function CompleteScheduleApp() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={selectedDepartment ? !isDepartmentEditable(selectedDepartment) : !(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)}
+                      disabled={
+                        selectedDepartment
+                          ? !isDepartmentEditable(selectedDepartment)
+                          : !(
+                              isAdmin ||
+                              isScheduler ||
+                              userManagerDepartmentSlugs.length > 0
+                            )
+                      }
                       onClick={() => {
-                        const canEdit = selectedDepartment ? isDepartmentEditable(selectedDepartment) : (isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0);
+                        const canEdit = selectedDepartment
+                          ? isDepartmentEditable(selectedDepartment)
+                          : isAdmin ||
+                            isScheduler ||
+                            userManagerDepartmentSlugs.length > 0;
                         if (!canEdit) {
-                          toast.error("Bạn không có quyền thao tác phòng ban này");
+                          toast.error(
+                            "Bạn không có quyền thao tác phòng ban này"
+                          );
                           return;
                         }
                         setSelectedDepartment(null);
@@ -2103,7 +2702,8 @@ export default function CompleteScheduleApp() {
                     {activeView === "week" ? (
                       <span className="flex items-center gap-2">
                         <Clock className="w-5 h-5 text-blue-600" />
-                        Lịch tuần - Khung giờ (Cho các chiến dịch tuần và 3 ngày)
+                        Lịch tuần - Khung giờ (Cho các chiến dịch tuần và 3
+                        ngày)
                         {dragState.isDragging && (
                           <Badge
                             variant="default"
@@ -2117,7 +2717,8 @@ export default function CompleteScheduleApp() {
                     ) : (
                       <span className="flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-blue-600" />
-                        Lịch tháng - Theo ngày (Cho các chiến dịch theo giờ và ngày)
+                        Lịch tháng - Theo ngày (Cho các chiến dịch theo giờ và
+                        ngày)
                       </span>
                     )}
                   </CardTitle>
@@ -2230,9 +2831,7 @@ export default function CompleteScheduleApp() {
                             key={index}
                             className={`p-3 text-center border-r last:border-r-0`}
                           >
-                            <div className="font-medium text-sm">
-                              {day}
-                            </div>
+                            <div className="font-medium text-sm">{day}</div>
                             <div className="text-xs text-slate-500 mt-1">
                               {weekDates[index].getDate()}/
                               {weekDates[index].getMonth() + 1}
@@ -2277,38 +2876,60 @@ export default function CompleteScheduleApp() {
                               </div>
 
                               {Array.from({ length: 7 }, (_, dayIndex) => {
+                                const specificDate = weekDates[dayIndex]
+                                  .toISOString()
+                                  .split("T")[0];
                                 const isSelectedByCurrentDept =
-                                  isTimeSlotSelected(dayIndex, time);
+                                  isTimeSlotSelected(
+                                    dayIndex,
+                                    time,
+                                    specificDate
+                                  );
                                 const {
                                   isSelected: isSelectedByAny,
                                   departmentId: selectedByDeptId,
-                                } = isTimeSlotSelectedByAnyDept(dayIndex, time);
+                                } = isTimeSlotSelectedByAnyDept(
+                                  dayIndex,
+                                  time,
+                                  specificDate
+                                );
                                 const {
                                   isBlocked: isBlockedByHidden,
                                   departmentId: blockedByDeptId,
                                 } = isSlotBlockedByHiddenDepartment(
                                   dayIndex,
-                                  time
+                                  time,
+                                  specificDate
                                 );
                                 const slotSchedules = getSchedulesForSlot(
                                   dayIndex,
-                                  time
+                                  time,
+                                  specificDate
                                 );
                                 const isInDragRange = isSlotInDragRange(
                                   dayIndex,
-                                  time
+                                  time,
+                                  specificDate
                                 );
                                 const isLunchBreak =
                                   time >= "12:00" && time < "13:30";
                                 const isConflicted = isTimeSlotConflicted(
                                   dayIndex,
-                                  time
+                                  time,
+                                  specificDate
                                 );
-                                const isPast = isPastTimeSlot(dayIndex, time);
+                                const isPast = isPastTimeSlot(
+                                  dayIndex,
+                                  time,
+                                  specificDate
+                                );
                                 const hasExistingSchedule =
-                                  isSlotHasExistingSchedule(dayIndex, time);
+                                  isSlotHasExistingSchedule(
+                                    dayIndex,
+                                    time,
+                                    specificDate
+                                  );
                                 const canInteract =
-                                  dayIndex !== 6 && // Không cho phép tương tác với Chủ nhật
                                   !isLunchBreak &&
                                   !isConflicted &&
                                   !isPast &&
@@ -2398,11 +3019,20 @@ export default function CompleteScheduleApp() {
                                     }`}
                                     onMouseDown={(e) =>
                                       canInteract &&
-                                      handleTimeSlotMouseDown(dayIndex, time, e)
+                                      handleTimeSlotMouseDown(
+                                        dayIndex,
+                                        time,
+                                        specificDate,
+                                        e
+                                      )
                                     }
                                     onMouseEnter={() =>
                                       canInteract &&
-                                      handleTimeSlotMouseEnter(dayIndex, time)
+                                      handleTimeSlotMouseEnter(
+                                        dayIndex,
+                                        time,
+                                        specificDate
+                                      )
                                     }
                                     onMouseUp={
                                       canInteract
@@ -2497,14 +3127,16 @@ export default function CompleteScheduleApp() {
                   <div className="p-4">
                     {/* Calendar header */}
                     <div className="grid grid-cols-7 mb-2">
-                      {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((day, index) => (
-                        <div
-                          key={day}
-                          className={`p-3 text-center font-medium border-b`}
-                        >
-                          {day}
-                        </div>
-                      ))}
+                      {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map(
+                        (day, index) => (
+                          <div
+                            key={day}
+                            className={`p-3 text-center font-medium border-b`}
+                          >
+                            {day}
+                          </div>
+                        )
+                      )}
                     </div>
 
                     {/* Calendar days */}
@@ -2560,7 +3192,7 @@ export default function CompleteScheduleApp() {
                           day.date
                         );
                         const isSunday =
-                          day.isCurrentMonth && currentDate.getDay() === 0;
+                          day.isCurrentMonth && currentDate.getDay() === 6;
                         const isConflicted =
                           day.isCurrentMonth &&
                           isDayConflicted(
@@ -2610,7 +3242,7 @@ export default function CompleteScheduleApp() {
                                       getDepartmentColor(selectedByDeptId)
                                         .border
                                     } border-2 cursor-pointer shadow-sm`
-                                  : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
+                                  : isBlockedByHidden && blockedByDeptId
                                   ? `${
                                       getDepartmentColor(blockedByDeptId).light
                                     } opacity-30 border-dashed`
@@ -2863,13 +3495,81 @@ export default function CompleteScheduleApp() {
                                           variant="secondary"
                                           className="text-xs font-medium"
                                         >
-                                          {weekDays[slot.day_of_week! - 1]}:
-                                          <br />
-                                          {slot.start_time} - {slot.end_time}
+                                          <div>
+                                            {
+                                              weekDays[
+                                                slot.day_of_week === 1
+                                                  ? 6
+                                                  : slot.day_of_week! - 2
+                                              ]
+                                            }{" "}
+                                            {slot.start_time}-{slot.end_time}
+                                          </div>
+                                          {/* ✅ THÊM: Hiển thị applicable_date */}
+                                          {slot.applicable_date && (
+                                            <div className="text-xs text-blue-600 mt-1">
+                                              📅{" "}
+                                              {new Date(
+                                                slot.applicable_date
+                                              ).toLocaleDateString("vi-VN")}
+                                            </div>
+                                          )}
                                         </Badge>
                                       ))}
                                     </div>
                                   </div>
+                                )}
+                                {/* Bulk Schedule Preview */}
+                                {/* Thêm thông báo trong bulk mode */}
+                                {isBulkMode && bulkScheduleConfig.enabled && (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mt-4 p-3 bg-purple-50 rounded-lg border border-purple-200"
+                                  >
+                                    <h4 className="text-sm font-medium text-purple-800 mb-2 flex items-center gap-2">
+                                      <Sparkles className="w-4 h-4" />
+                                      Chế độ sắp lịch hàng loạt đang BẬT
+                                    </h4>
+                                    <div className="text-xs text-purple-700">
+                                      <p>
+                                        📅 Lịch sẽ được tự động nhân bản cho{" "}
+                                        <strong>
+                                          {bulkScheduleConfig.count + 1}
+                                        </strong>{" "}
+                                        {bulkScheduleConfig.type === "weeks"
+                                          ? "tuần"
+                                          : "tháng"}
+                                        (bao gồm{" "}
+                                        {bulkScheduleConfig.type === "weeks"
+                                          ? "tuần"
+                                          : "tháng"}{" "}
+                                        hiện tại + {bulkScheduleConfig.count}{" "}
+                                        {bulkScheduleConfig.type === "weeks"
+                                          ? "tuần"
+                                          : "tháng"}{" "}
+                                        tiếp theo)
+                                      </p>
+                                      <p className="mt-1">
+                                        🧮 <strong>Dự kiến:</strong>{" "}
+                                        {getCurrentDepartmentSelections()
+                                          .timeSlots.length +
+                                          getCurrentDepartmentSelections().days
+                                            .length}{" "}
+                                        items × {bulkScheduleConfig.count + 1}{" "}
+                                        {bulkScheduleConfig.type === "weeks"
+                                          ? "tuần"
+                                          : "tháng"}{" "}
+                                        ={" "}
+                                        {(getCurrentDepartmentSelections()
+                                          .timeSlots.length +
+                                          getCurrentDepartmentSelections().days
+                                            .length) *
+                                          (bulkScheduleConfig.count + 1)}{" "}
+                                        items tổng
+                                      </p>
+                                    </div>
+                                  </motion.div>
                                 )}
                               </div>
                             );
@@ -2881,13 +3581,30 @@ export default function CompleteScheduleApp() {
                           setIsCreateDialogOpen(true);
                         }}
                         className="w-full bg-green-600 hover:bg-green-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={departmentSelections.size === 0 || !(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)}
+                        disabled={
+                          departmentSelections.size === 0 ||
+                          !(
+                            isAdmin ||
+                            isScheduler ||
+                            userManagerDepartmentSlugs.length > 0
+                          )
+                        }
                       >
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
-                          {(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)
+                          {isAdmin ||
+                          isScheduler ||
+                          userManagerDepartmentSlugs.length > 0
                             ? isEditMode
                               ? `Cập nhật lịch`
+                              : isBulkMode
+                              ? `Lưu lịch hàng loạt (${
+                                  bulkScheduleConfig.count
+                                } ${
+                                  bulkScheduleConfig.type === "weeks"
+                                    ? "tuần"
+                                    : "tháng"
+                                })`
                               : `Lưu lịch (${departmentSelections.size} phòng ban)`
                             : "Bạn không có quyền lưu lịch"}
                         </span>
@@ -2899,7 +3616,13 @@ export default function CompleteScheduleApp() {
                           setSelectedDepartment(null);
                         }}
                         variant="outline"
-                        disabled={!(isAdmin || isScheduler || userManagerDepartmentSlugs.length > 0)}
+                        disabled={
+                          !(
+                            isAdmin ||
+                            isScheduler ||
+                            userManagerDepartmentSlugs.length > 0
+                          )
+                        }
                         className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="flex items-center gap-2">
@@ -3013,6 +3736,43 @@ export default function CompleteScheduleApp() {
                                             ).slots.length
                                           }{" "}
                                           khung giờ
+                                          {(() => {
+                                            const config =
+                                              schedule.schedule_config as HourlySlotsConfig;
+                                            const hasSpecificDates =
+                                              config.slots.some(
+                                                (slot) => slot.applicable_date
+                                              );
+                                            if (hasSpecificDates) {
+                                              const uniqueDates = [
+                                                ...new Set(
+                                                  config.slots
+                                                    .filter(
+                                                      (slot) =>
+                                                        slot.applicable_date
+                                                    )
+                                                    .map(
+                                                      (slot) =>
+                                                        slot.applicable_date
+                                                    )
+                                                ),
+                                              ];
+                                              return (
+                                                <span className="ml-1 text-blue-600">
+                                                  (
+                                                  {uniqueDates.length > 1
+                                                    ? `${uniqueDates.length} ngày cụ thể`
+                                                    : new Date(
+                                                        uniqueDates[0]!
+                                                      ).toLocaleDateString(
+                                                        "vi-VN"
+                                                      )}
+                                                  )
+                                                </span>
+                                              );
+                                            }
+                                            return null;
+                                          })()}
                                         </span>
                                       ) : (
                                         <span className="flex items-center gap-1">
@@ -3045,18 +3805,25 @@ export default function CompleteScheduleApp() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        disabled={!isDataReady || !isDepartmentEditable(schedule.department!.id)}
+                                        disabled={
+                                          !isDataReady ||
+                                          !isDepartmentEditable(
+                                            schedule.department!.id
+                                          )
+                                        }
                                         className="h-6 w-6 p-0 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleEditSchedule(schedule);
                                         }}
                                         title={
-                                          !isDataReady 
-                                            ? "Đang tải thông tin..." 
-                                            : isDepartmentEditable(schedule.department!.id) 
-                                              ? "Chỉnh sửa lịch" 
-                                              : "Bạn không có quyền chỉnh sửa lịch này"
+                                          !isDataReady
+                                            ? "Đang tải thông tin..."
+                                            : isDepartmentEditable(
+                                                schedule.department!.id
+                                              )
+                                            ? "Chỉnh sửa lịch"
+                                            : "Bạn không có quyền chỉnh sửa lịch này"
                                         }
                                       >
                                         {!isDataReady ? (
@@ -3069,18 +3836,29 @@ export default function CompleteScheduleApp() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        disabled={!isDataReady || !isDepartmentEditable(schedule.department!.id)}
+                                        disabled={
+                                          !isDataReady ||
+                                          !isDepartmentEditable(
+                                            schedule.department!.id
+                                          )
+                                        }
                                         className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title={
-                                          !isDataReady 
-                                            ? "Đang tải thông tin..." 
-                                            : isDepartmentEditable(schedule.department!.id) 
-                                              ? "Xóa lịch" 
-                                              : "Bạn không có quyền xóa lịch này"
+                                          !isDataReady
+                                            ? "Đang tải thông tin..."
+                                            : isDepartmentEditable(
+                                                schedule.department!.id
+                                              )
+                                            ? "Xóa lịch"
+                                            : "Bạn không có quyền xóa lịch này"
                                         }
                                         onClick={async (e) => {
                                           e.stopPropagation();
-                                          if (!isDepartmentEditable(schedule.department!.id)) {
+                                          if (
+                                            !isDepartmentEditable(
+                                              schedule.department!.id
+                                            )
+                                          ) {
                                             toast.error(
                                               "Bạn không có quyền xóa lịch hoạt động này"
                                             );
@@ -3198,7 +3976,7 @@ export default function CompleteScheduleApp() {
                             const canEdit = isDepartmentEditable(dept.id);
                             const isEnabled = isDepartmentEnabled(dept.id);
                             const canSelect = canEdit && isEnabled;
-                            
+
                             return (
                               <SelectItem
                                 key={dept.id}
@@ -3211,13 +3989,21 @@ export default function CompleteScheduleApp() {
                                       getDepartmentColor(dept.id).bg
                                     } ${!canSelect ? "grayscale" : ""}`}
                                   />
-                                  <span className={!canSelect ? "text-gray-400" : ""}>
+                                  <span
+                                    className={
+                                      !canSelect ? "text-gray-400" : ""
+                                    }
+                                  >
                                     {dept.name}
                                     {!isEnabled && (
-                                      <span className="text-xs text-red-500 ml-1">(No IP)</span>
+                                      <span className="text-xs text-red-500 ml-1">
+                                        (No IP)
+                                      </span>
                                     )}
                                     {isEnabled && !canEdit && (
-                                      <span className="text-xs text-blue-500 ml-1">(No permission)</span>
+                                      <span className="text-xs text-blue-500 ml-1">
+                                        (No permission)
+                                      </span>
                                     )}
                                   </span>
                                 </div>

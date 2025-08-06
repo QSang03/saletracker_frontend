@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import React from "react";
+import ExcelJS from 'exceljs'; // Thay đổi import
 
 interface CSVExportPanelProps {
   open: boolean;
@@ -25,7 +26,7 @@ interface CSVExportPanelProps {
   headers: string[];
   data: (string | number)[][];
   filtersDescription?: React.ReactNode;
-  defaultExportCount?: number; // thêm prop mới
+  defaultExportCount?: number;
 }
 
 export default function CSVExportPanel({
@@ -34,13 +35,11 @@ export default function CSVExportPanel({
   headers,
   data,
   filtersDescription,
-  defaultExportCount = 50, // mặc định 50 nếu không truyền
+  defaultExportCount = 50,
 }: CSVExportPanelProps) {
   const [mode, setMode] = useState<"rows" | "all">("rows");
   const [rowCount, setRowCount] = useState(defaultExportCount);
 
-  // Khi modal mở lại, reset rowCount về defaultExportCount
-  // Đảm bảo khi đổi số dòng/trang thì modal cũng cập nhật
   React.useEffect(() => {
     if (open)
       setRowCount(
@@ -50,105 +49,162 @@ export default function CSVExportPanel({
       );
   }, [open, defaultExportCount, data.length]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     let exportData: (string | number)[][] = [];
-
     if (mode === "rows") {
       exportData = data.slice(0, rowCount);
     } else {
       exportData = data;
     }
 
-    const csvContent = [
-      headers.join(","),
-      ...exportData.map((row) =>
-        row.map((cell) => {
-          // Convert everything to string safely, handle objects and arrays
-          let cellValue = "";
-          if (cell === null || cell === undefined) {
-            cellValue = "";
-          } else if (typeof cell === 'object') {
-            // For objects and arrays, convert to JSON string or extract meaningful values
-            if (Array.isArray(cell)) {
-              cellValue = (cell as any[]).join(', ');
-            } else {
-              cellValue = JSON.stringify(cell);
-            }
-          } else {
-            cellValue = String(cell);
-          }
-          // Escape quotes properly for CSV
-          return `"${cellValue.replace(/"/g, '""')}"`;
-        }).join(",")
-      ),
-    ].join("\n");
+    // Tạo workbook mới
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Your App Name';
+    workbook.lastModifiedBy = 'Your App Name';
+    workbook.created = new Date();
+    workbook.modified = new Date();
 
-    const blob = new Blob(["\uFEFF" + csvContent], {
-      type: "text/csv;charset=utf-8;",
+    // Tạo worksheet
+    const worksheet = workbook.addWorksheet('Data');
+
+    // Thêm headers với styling
+    const headerRow = worksheet.addRow(headers);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: '366092' }
+    };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Thêm dữ liệu
+    exportData.forEach(row => {
+      const processedRow = row.map(cell => {
+        if (cell === null || cell === undefined) {
+          return "";
+        } else if (typeof cell === 'object') {
+          if (Array.isArray(cell)) {
+            return (cell as any[]).join(', ');
+          } else {
+            return JSON.stringify(cell);
+          }
+        } else {
+          return cell;
+        }
+      });
+      worksheet.addRow(processedRow);
     });
 
+    // Tự động điều chỉnh độ rộng cột
+    worksheet.columns.forEach((column, index) => {
+      let maxWidth = headers[index]?.length || 10;
+      
+      exportData.forEach(row => {
+        const cellValue = row[index];
+        if (cellValue !== null && cellValue !== undefined) {
+          const cellLength = String(cellValue).length;
+          maxWidth = Math.max(maxWidth, cellLength);
+        }
+      });
+      
+      column.width = Math.min(maxWidth + 2, 50);
+    });
+
+    // Thêm border cho tất cả cells có dữ liệu
+    const borderStyle = {
+      top: { style: 'thin' as const },
+      left: { style: 'thin' as const },
+      bottom: { style: 'thin' as const },
+      right: { style: 'thin' as const }
+    };
+
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      row.eachCell((cell) => {
+        cell.border = borderStyle;
+      });
+    });
+
+    // Freeze header row
+    worksheet.views = [
+      { state: 'frozen', ySplit: 1 }
+    ];
+
+    // Xuất file Excel
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `export-${Date.now()}.csv`);
+    link.setAttribute("download", `export-${Date.now()}.xlsx`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
+    
     onClose();
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="space-y-4 max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Xuất dữ liệu CSV</DialogTitle>
+          <DialogTitle>Xuất dữ liệu Excel</DialogTitle>
         </DialogHeader>
 
-        {filtersDescription && (
-          <div className="text-sm text-muted-foreground">
-            {filtersDescription}
-          </div>
-        )}
+        <div className="space-y-4">
+          {filtersDescription && (
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              {filtersDescription}
+            </div>
+          )}
 
-        <div className="space-y-3">
-          <Label>Chế độ xuất</Label>
-          <Select value={mode} onValueChange={(val) => setMode(val as any)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="rows">Giới hạn số dòng</SelectItem>
-              <SelectItem value="all">Toàn bộ dữ liệu đã lọc</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {mode === "rows" && (
           <div className="space-y-2">
-            <Label>Số dòng muốn xuất (tối đa {data.length})</Label>
-            <Input
-              type="number"
-              min={1}
-              max={data.length}
-              value={rowCount}
-              onChange={(e) =>
-                setRowCount(
-                  Math.min(
-                    Math.max(1, Number(e.target.value)),
-                    data.length
-                  )
-                )
-              }
-            />
+            <Label htmlFor="mode">Chế độ xuất</Label>
+            <Select value={mode} onValueChange={(val) => setMode(val as any)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rows">Giới hạn số dòng</SelectItem>
+                <SelectItem value="all">Toàn bộ dữ liệu đã lọc</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
 
-        <div className="flex justify-end pt-2">
-          <Button onClick={handleExport}>Tải CSV</Button>
+          {mode === "rows" && (
+            <div className="space-y-2">
+              <Label htmlFor="rowCount">
+                Số dòng muốn xuất (tối đa {data.length})
+              </Label>
+              <Input
+                id="rowCount"
+                type="number"
+                min={1}
+                max={data.length}
+                value={rowCount}
+                onChange={(e) =>
+                  setRowCount(
+                    Math.min(
+                      Math.max(1, Number(e.target.value)),
+                      data.length
+                    )
+                  )
+                }
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} className="flex-1">
+              Hủy
+            </Button>
+            <Button onClick={handleExport} className="flex-1">
+              Tải Excel
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-
-

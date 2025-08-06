@@ -254,11 +254,13 @@ const LoadingSkeleton = ({
       <TableCell colSpan={9} className="bg-blue-50 border-b text-center py-3">
         <div className="flex items-center justify-center gap-3 text-blue-600">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm font-medium">Đang tải danh sách chiến dịch...</span>
+          <span className="text-sm font-medium">
+            Đang tải danh sách chiến dịch...
+          </span>
         </div>
       </TableCell>
     </TableRow>
-    
+
     {/* Skeleton Rows */}
     {Array.from({ length: expectedRowCount }).map((_, index) => (
       <TableRow key={`loading-${index}`} className="animate-pulse">
@@ -273,6 +275,9 @@ const LoadingSkeleton = ({
         </TableCell>
         <TableCell>
           <div className="h-4 w-20 bg-gray-200 rounded" />
+        </TableCell>
+        <TableCell className="text-center">
+          <div className="h-6 w-16 bg-gray-200 rounded mx-auto" />
         </TableCell>
         <TableCell className="text-center">
           <div className="h-6 w-16 bg-gray-200 rounded mx-auto" />
@@ -432,6 +437,10 @@ const CampaignRow = React.memo(
             <Clock className="h-3 w-3" />
             {formatDate(campaign.created_at)}
           </div>
+        </TableCell>
+
+        <TableCell className="text-center text-sm text-gray-700">
+          {campaign.created_by?.fullName || "-"}
         </TableCell>
 
         <TableCell className="text-center text-sm text-gray-500">
@@ -1038,17 +1047,23 @@ export default function CampaignManagement({
   );
 
   // ✅ Socket event handlers
-  const handleCampaignUpdate = useCallback((data: any) => {
-    console.log('Campaign updated via socket:', data);
-    // Auto reload when campaign status changes
-    onReload();
-  }, [onReload]);
+  const handleCampaignUpdate = useCallback(
+    (data: any) => {
+      console.log("Campaign updated via socket:", data);
+      // Auto reload when campaign status changes
+      onReload();
+    },
+    [onReload]
+  );
 
-  const handleCampaignScheduleUpdate = useCallback((data: any) => {
-    console.log('Campaign schedule updated via socket:', data);
-    // Auto reload when campaign schedule changes
-    onReload();
-  }, [onReload]);
+  const handleCampaignScheduleUpdate = useCallback(
+    (data: any) => {
+      console.log("Campaign schedule updated via socket:", data);
+      // Auto reload when campaign schedule changes
+      onReload();
+    },
+    [onReload]
+  );
 
   return (
     <TooltipProvider>
@@ -1057,7 +1072,7 @@ export default function CampaignManagement({
         onCampaignUpdate={handleCampaignUpdate}
         onCampaignScheduleUpdate={handleCampaignScheduleUpdate}
       />
-      
+
       <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
         <Table>
           <TableHeader className="bg-gray-50">
@@ -1084,6 +1099,9 @@ export default function CampaignManagement({
                 Ngày Tạo
               </TableHead>
               <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
+                Người Tạo Chiến Dịch
+              </TableHead>
+              <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
                 Lịch Bắt Đầu
               </TableHead>
               <TableHead className="text-center font-semibold min-w-[140px] max-w-[180px] h-14 align-middle">
@@ -1107,17 +1125,18 @@ export default function CampaignManagement({
             )}
 
             {/* ✅ CAMPAIGN ROWS - CHỈ hiển thị khi không loading */}
-            {!isLoading && campaigns.map((campaign, index) => (
-              <CampaignRow
-                key={campaign.id}
-                campaign={campaign}
-                index={index}
-                startIndex={startIndex}
-                isLoading={loadingItems.has(campaign.id)}
-                onAction={handleAction}
-                onShowCustomers={handleShowCustomers}
-              />
-            ))}
+            {!isLoading &&
+              campaigns.map((campaign, index) => (
+                <CampaignRow
+                  key={campaign.id}
+                  campaign={campaign}
+                  index={index}
+                  startIndex={startIndex}
+                  isLoading={loadingItems.has(campaign.id)}
+                  onAction={handleAction}
+                  onShowCustomers={handleShowCustomers}
+                />
+              ))}
 
             {/* ✅ EMPTY ROWS - CHỈ khi có campaigns */}
             {!isLoading && emptyRows > 0 && campaigns.length > 0 && (
@@ -1144,7 +1163,7 @@ export default function CampaignManagement({
                         <div className="text-5xl">🚀</div>
                       </div>
                       {/* ✅ Plus icon có thể click */}
-                      <div 
+                      <div
                         className="absolute -bottom-2 -right-2 w-8 h-8 bg-blue-500 hover:bg-blue-600 rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 transform hover:scale-110 shadow-lg hover:shadow-xl"
                         onClick={handleCreateCampaign}
                         title="Click để tạo chiến dịch mới"
@@ -1152,20 +1171,22 @@ export default function CampaignManagement({
                         <Plus className="w-4 h-4 text-white" />
                       </div>
                     </div>
-                    
+
                     {/* Nội dung mô tả */}
                     <div className="space-y-3 max-w-md">
                       <h3 className="text-xl font-semibold text-gray-800">
                         Chưa có chiến dịch nào
                       </h3>
                       <p className="text-gray-600 leading-relaxed">
-                        Tạo chiến dịch đầu tiên để bắt đầu gửi tin nhắn đến khách hàng của bạn
+                        Tạo chiến dịch đầu tiên để bắt đầu gửi tin nhắn đến
+                        khách hàng của bạn
                       </p>
                     </div>
-                    
+
                     {/* Hướng dẫn nhỏ */}
                     <div className="text-xs text-gray-400 mt-4">
-                      💡 Tip: Click vào dấu + hoặc nút "Thêm mới" ở phía trên để tạo chiến dịch
+                      💡 Tip: Click vào dấu + hoặc nút "Thêm mới" ở phía trên để
+                      tạo chiến dịch
                     </div>
                   </div>
                 </TableCell>

@@ -75,10 +75,10 @@ function ManagerOrderContent() {
   } = useOrderPermissions();
   // Available options for filters
   const statusOptions = [
-    { value: "completed", label: "Đã hoàn thành" },
+    { value: "completed", label: "Đã chốt" },
     { value: "pending", label: "Chờ xử lý" },
     { value: "demand", label: "Nhu cầu" },
-    { value: "quoted", label: "Đã báo giá" },
+    { value: "quoted", label: "Chưa chốt" },
   ];
 
   const warningLevelOptions = [
@@ -601,9 +601,9 @@ function ManagerOrderContent() {
                     case "pending":
                       return "Chờ xử lý";
                     case "quoted":
-                      return "Đã báo giá";
+                      return "Chưa chốt";
                     case "completed":
-                      return "Đã hoàn thành";
+                      return "Đã chốt";
                     case "demand":
                       return "Nhu cầu";
                     case "confirmed":

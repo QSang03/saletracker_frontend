@@ -29,10 +29,10 @@ interface EditOrderDetailModalProps {
 
 const statusOptions = [
   { value: "pending", label: "Chờ xử lý" },
-  { value: "completed", label: "Đã hoàn thành" },
+  { value: "completed", label: "Đã chốt" },
   { value: "cancelled", label: "Đã hủy" },
   { value: "demand", label: "Yêu cầu" },
-  { value: "quoted", label: "Đã báo giá" },
+  { value: "quoted", label: "Chưa chốt" },
   { value: "confirmed", label: "Đã phản hồi" },
 ];
 

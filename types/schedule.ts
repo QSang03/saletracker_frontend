@@ -25,6 +25,7 @@ export interface HourlySlotsConfig {
     day_of_week: number;
     start_time: string;
     end_time: string;
+    applicable_date?: string; // "YYYY-MM-DD", ngày áp dụng cụ thể, null = mọi ngày
   }>;
 }
 

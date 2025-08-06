@@ -983,7 +983,7 @@ export default function PaginatedTable({
                 onClick={() => setOpenExport(true)}
                 disabled={!getExportData}
               >
-                Xuất CSV
+                Xuất Excel
               </Button>
             )}
             <Button

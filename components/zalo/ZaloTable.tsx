@@ -14,6 +14,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Volume2, VolumeX, MessageSquare, MessageSquareOff } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 interface ZaloTableProps {
   users: User[];
@@ -36,11 +37,21 @@ export default React.memo(function ZaloTable({
   onRequestListeningConfirm,
   onRequestAutoMessageConfirm,
   listeningStates: listeningStatesProp = {},
-  autoMessageStates = {},
+  autoMessageStates = {}
 }: ZaloTableProps) {
   // State để trigger animation mỗi lần bật
   const [listeningAnim, setListeningAnim] = useState<Record<number, boolean>>({});
   const [autoMessageAnim, setAutoMessageAnim] = useState<Record<number, boolean>>({});
+
+  const { currentUser } = useCurrentUser();
+  const isAdmin = currentUser?.roles?.some(
+    (role: any) =>
+      typeof role === "string"
+        ? role.toLowerCase() === "admin"
+        : (role.code || role.name || "").toLowerCase() === "admin"
+  );
+  
+  
 
   // State để lưu trạng thái listening thực tế từ API
   const [listeningStates, setListeningStates] = useState<Record<number, boolean>>(listeningStatesProp);
@@ -263,51 +274,63 @@ export default React.memo(function ZaloTable({
                 </TableCell>
                 <TableCell className={cellLeftClass}>
                   <div className="flex items-center justify-center gap-3">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Toggle
-                          pressed={listeningStates[user.id] || false}
-                          onPressedChange={(pressed: boolean) => handleListeningToggleRequest(user, pressed)}
-                          variant="outline"
-                          size="sm"
-                          className={`toggle-btn h-8 w-8 p-0 relative${listeningAnim[user.id] ? ' toggle-activated-anim' : ''}${listeningStates[user.id] ? ' toggle-activated-anim' : ''}`}
-                          aria-label="Bật/tắt lắng nghe"
-                          disabled={user.zaloLinkStatus !== 1}
-                        >
-                          {listeningStates[user.id] ? (
-                            <Volume2 className="h-4 w-4 text-green-600 animate-bell-scale" />
-                          ) : (
-                            <VolumeX className="h-4 w-4 text-gray-400" />
-                          )}
-                        </Toggle>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{listeningStates[user.id] ? "Tắt lắng nghe" : "Bật lắng nghe"}</p>
-                      </TooltipContent>
-                    </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                    <Toggle
+                      pressed={listeningStates[user.id] || false}
+                      onPressedChange={(pressed: boolean) => handleListeningToggleRequest(user, pressed)}
+                      variant="outline"
+                      size="sm"
+                      className={`toggle-btn h-8 w-8 p-0 relative${listeningAnim[user.id] ? ' toggle-activated-anim' : ''}${listeningStates[user.id] ? ' toggle-activated-anim' : ''}`}
+                      aria-label="Bật/tắt lắng nghe"
+                      disabled={user.zaloLinkStatus !== 1 || !isAdmin}
+                    >
+                      {listeningStates[user.id] ? (
+                      <Volume2 className="h-4 w-4 text-green-600 animate-bell-scale" />
+                      ) : (
+                      <VolumeX className="h-4 w-4 text-gray-400" />
+                      )}
+                    </Toggle>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                    <p>
+                      {isAdmin
+                      ? listeningStates[user.id]
+                        ? "Tắt lắng nghe"
+                        : "Bật lắng nghe"
+                      : "Chỉ Admin mới thao tác"}
+                    </p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Toggle
-                          pressed={autoMessageStates[user.id] || false}
-                          onPressedChange={(pressed) => handleAutoMessageToggle(user, pressed)}
-                          variant="outline"
-                          size="sm"
-                          className={`toggle-btn h-8 w-8 p-0 relative${autoMessageAnim[user.id] ? ' toggle-activated-anim toggle-blue' : ''}${autoMessageStates[user.id] ? ' toggle-activated-anim toggle-blue' : ''}`}
-                          aria-label="Bật/tắt tự động nhắn tin"
-                          disabled={user.zaloLinkStatus !== 1}
-                        >
-                          {autoMessageStates[user.id] ? (
-                            <MessageSquare className="h-4 w-4 text-blue-600 animate-bell-scale" />
-                          ) : (
-                            <MessageSquareOff className="h-4 w-4 text-gray-400" />
-                          )}
-                        </Toggle>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{autoMessageStates[user.id] ? "Tắt tự động nhắn tin" : "Bật tự động nhắn tin"}</p>
-                      </TooltipContent>
-                    </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                    <Toggle
+                      pressed={autoMessageStates[user.id] || false}
+                      onPressedChange={(pressed) => handleAutoMessageToggle(user, pressed)}
+                      variant="outline"
+                      size="sm"
+                      className={`toggle-btn h-8 w-8 p-0 relative${autoMessageAnim[user.id] ? ' toggle-activated-anim toggle-blue' : ''}${autoMessageStates[user.id] ? ' toggle-activated-anim toggle-blue' : ''}`}
+                      aria-label="Bật/tắt tự động nhắn tin"
+                      disabled={user.zaloLinkStatus !== 1 || !isAdmin}
+                    >
+                      {autoMessageStates[user.id] ? (
+                      <MessageSquare className="h-4 w-4 text-blue-600 animate-bell-scale" />
+                      ) : (
+                      <MessageSquareOff className="h-4 w-4 text-gray-400" />
+                      )}
+                    </Toggle>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                    <p>
+                      {isAdmin
+                      ? autoMessageStates[user.id]
+                        ? "Tắt tự động nhắn tin"
+                        : "Bật tự động nhắn tin"
+                      : "Chỉ Admin mới thao tác"}
+                    </p>
+                    </TooltipContent>
+                  </Tooltip>
                   </div>
                 </TableCell>
               </TableRow>
