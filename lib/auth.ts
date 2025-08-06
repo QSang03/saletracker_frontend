@@ -134,7 +134,7 @@ export function setRefreshToken(token: string) {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
     const isHttps = window.location.protocol === "https:";
-    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax${isHttps ? " Secure" : ""}`;
+    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${isHttps ? " Secure" : ""}`;
   }
 }
 
