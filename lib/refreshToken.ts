@@ -6,7 +6,6 @@ let refreshPromise: Promise<string | null> | null = null;
 export async function refreshAccessToken(): Promise<string | null> {
   // Nếu đã có process đang chạy, return existing promise
   if (refreshPromise) {
-    console.log('🔄 [RefreshToken] Using existing refresh promise...');
     return refreshPromise;
   }
   
@@ -27,7 +26,6 @@ async function performRefresh(): Promise<string | null> {
     if (typeof document === 'undefined') return null;
     
     const refreshToken = getRefreshToken();
-    console.log('🔍 [RefreshToken] Found refresh token:', refreshToken ? 'YES' : 'NO');
     
     if (!refreshToken) {
       console.warn('❌ [RefreshToken] No refresh token found in cookies');
@@ -36,9 +34,6 @@ async function performRefresh(): Promise<string | null> {
     
     // Clean the token (trim whitespace)
     const cleanRefreshToken = refreshToken.trim();
-    console.log('🔍 [RefreshToken] Token length:', cleanRefreshToken.length);
-    console.log('🔍 [RefreshToken] Token preview (first 50):', cleanRefreshToken.substring(0, 50));
-    console.log('🔍 [RefreshToken] Token preview (last 20):', cleanRefreshToken.substring(-20));
     
     // Tạo axios instance mới để tránh circular call với interceptor
     const { default: axios } = await import('axios');
@@ -46,9 +41,6 @@ async function performRefresh(): Promise<string | null> {
       baseURL: process.env.NEXT_PUBLIC_API_URL,
       withCredentials: true,
     });
-    
-    console.log('🔍 [RefreshToken] Calling refresh API...');
-    console.log('🔍 [RefreshToken] API URL:', process.env.NEXT_PUBLIC_API_URL);
     
     const res = await refreshApi.post('/auth/refresh', { refreshToken: cleanRefreshToken });
     

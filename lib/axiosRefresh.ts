@@ -50,10 +50,7 @@ export function setupAxiosInterceptors(instance: AxiosInstance) {
         try {
           // Sử dụng global promise để tránh multiple calls
           if (!globalRefreshPromise) {
-            console.log('🔄 [AxiosInterceptor] Starting new refresh process...');
             globalRefreshPromise = refreshAccessToken();
-          } else {
-            console.log('🔄 [AxiosInterceptor] Using existing refresh promise...');
           }
           
           const newToken = await globalRefreshPromise;

@@ -1,5 +1,6 @@
 // utils/textToIcon.ts
-import { ReactionIconMap } from './reactionMapper';
+
+import { EmojiMap } from "./emojiMapper";
 
 export function convertTextToIcons(text: string): string {
   if (!text || typeof text !== 'string') {
@@ -9,7 +10,7 @@ export function convertTextToIcons(text: string): string {
   let convertedText = text;
   
   // Sort patterns by length (longest first) để tránh conflict
-  const sortedPatterns = Object.keys(ReactionIconMap)
+  const sortedPatterns = Object.keys(EmojiMap)
     .filter(pattern => pattern !== "") // Bỏ qua empty string
     .sort((a, b) => b.length - a.length);
   
@@ -17,7 +18,7 @@ export function convertTextToIcons(text: string): string {
   sortedPatterns.forEach(pattern => {
     if (convertedText.includes(pattern)) {
       // Sử dụng split và join để thay thế tất cả occurrences
-      convertedText = convertedText.split(pattern).join(ReactionIconMap[pattern]);
+      convertedText = convertedText.split(pattern).join(EmojiMap[pattern]);
     }
   });
   
@@ -32,7 +33,7 @@ export function convertTextToIconsRegex(text: string): string {
   
   let convertedText = text;
   
-  const sortedPatterns = Object.keys(ReactionIconMap)
+  const sortedPatterns = Object.keys(EmojiMap)
     .filter(pattern => pattern !== "")
     .sort((a, b) => b.length - a.length);
   
@@ -40,7 +41,7 @@ export function convertTextToIconsRegex(text: string): string {
     // Escape special regex characters
     const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedPattern, 'g');
-    convertedText = convertedText.replace(regex, ReactionIconMap[pattern]);
+    convertedText = convertedText.replace(regex, EmojiMap[pattern]);
   });
   
   return convertedText;
