@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   Dialog,
@@ -32,6 +32,7 @@ import { campaignAPI } from "@/lib/campaign-api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
+import { CampaignSocket } from "@/components/socket/CampaignSocket";
 
 // Types (giữ nguyên)
 export enum LogStatus {
@@ -179,7 +180,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
         imageUrl: parsed.imageUrl,
         thumbnailUrl: parsed.thumbnailUrl || parsed.imageUrl,
         caption: parsed.caption || "",
-        title: parsed.title || ""
+        title: parsed.title || "",
       };
     }
 
@@ -191,7 +192,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
         stickerId: parsed.stickerId,
         stickerUrl: stickerUrl,
         categoryId: parsed.categoryId || "",
-        description: parsed.description || ""
+        description: parsed.description || "",
       };
     }
 
@@ -203,7 +204,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
         fileUrl: parsed.fileUrl,
         fileSize: parsed.fileSize || 0,
         fileExtension: parsed.fileExtension || "",
-        description: parsed.description || ""
+        description: parsed.description || "",
       };
     }
 
@@ -212,13 +213,13 @@ const parseMessageContent = (content: string, contentType?: string) => {
     // Replace \n with actual line breaks
     return {
       type: "text",
-      text: text.replace(/\\n/g, "\n")
+      text: text.replace(/\\n/g, "\n"),
     };
   } catch {
     // If not JSON, just handle \n replacement
     return {
-      type: "text", 
-      text: content.replace(/\\n/g, "\n")
+      type: "text",
+      text: content.replace(/\\n/g, "\n"),
     };
   }
 };
@@ -295,12 +296,12 @@ const downloadFileFromUrl = (fileUrl: string, fileName: string) => {
     link.download = fileName;
     link.target = "_blank"; // Mở trong tab mới để tránh lỗi CORS
     link.rel = "noopener noreferrer";
-    
+
     // ✅ Thêm vào DOM, click và xóa
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     toast.success(`Đang tải xuống: ${fileName}`);
   } catch (error) {
     console.error("Error downloading file from URL:", error);
@@ -391,21 +392,13 @@ const ZaloAttachmentRenderer = ({
           <div
             className={cn(
               "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center",
-              isStaff
-                ? "bg-white/30"
-                : isBot
-                ? "bg-white/30"
-                : "bg-blue-100"
+              isStaff ? "bg-white/30" : isBot ? "bg-white/30" : "bg-blue-100"
             )}
           >
             <ExternalLink
               className={cn(
                 "h-5 w-5",
-                isStaff
-                  ? "text-white"
-                  : isBot
-                  ? "text-white"
-                  : "text-blue-600"
+                isStaff ? "text-white" : isBot ? "text-white" : "text-blue-600"
               )}
             />
           </div>
@@ -413,11 +406,7 @@ const ZaloAttachmentRenderer = ({
             <div
               className={cn(
                 "font-semibold text-sm mb-1",
-                isStaff
-                  ? "text-white"
-                  : isBot
-                  ? "text-white"
-                  : "text-blue-700"
+                isStaff ? "text-white" : isBot ? "text-white" : "text-blue-700"
               )}
             >
               Liên kết đính kèm
@@ -501,11 +490,7 @@ const ZaloAttachmentRenderer = ({
           <div
             className={cn(
               "flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl",
-              isStaff
-                ? "bg-white/30"
-                : isBot
-                ? "bg-white/30"
-                : "bg-gray-100"
+              isStaff ? "bg-white/30" : isBot ? "bg-white/30" : "bg-gray-100"
             )}
           >
             {getFileIcon()}
@@ -514,11 +499,7 @@ const ZaloAttachmentRenderer = ({
             <div
               className={cn(
                 "font-semibold text-sm mb-1",
-                isStaff
-                  ? "text-white"
-                  : isBot
-                  ? "text-white"
-                  : "text-gray-700"
+                isStaff ? "text-white" : isBot ? "text-white" : "text-gray-700"
               )}
             >
               {fileName}
@@ -574,21 +555,13 @@ const ZaloAttachmentRenderer = ({
         <AlertCircle
           className={cn(
             "h-4 w-4",
-            isStaff
-              ? "text-white"
-              : isBot
-              ? "text-white"
-              : "text-gray-500"
+            isStaff ? "text-white" : isBot ? "text-white" : "text-gray-500"
           )}
         />
         <span
           className={cn(
             "font-semibold text-sm",
-            isStaff
-              ? "text-white"
-              : isBot
-              ? "text-white"
-              : "text-gray-700"
+            isStaff ? "text-white" : isBot ? "text-white" : "text-gray-700"
           )}
         >
           Đính kèm:
@@ -627,7 +600,10 @@ const ZaloChatMessage = ({
   const isCustomer = message.sender === "customer";
 
   // ✅ Parse message content với xử lý ảnh, sticker và file
-  const parsedMessage = parseMessageContent(message.content, message.contentType);
+  const parsedMessage = parseMessageContent(
+    message.content,
+    message.contentType
+  );
 
   // ✅ Helper function để get file icon từ extension
   const getFileIconFromExtension = (extension: string) => {
@@ -803,7 +779,12 @@ const ZaloChatMessage = ({
                       ? "bg-white/20 border-white/30 hover:bg-white/30"
                       : "bg-gray-50 border-gray-200 hover:bg-gray-100"
                   )}
-                  onClick={() => downloadFileFromUrl(parsedMessage.fileUrl, parsedMessage.fileName)}
+                  onClick={() =>
+                    downloadFileFromUrl(
+                      parsedMessage.fileUrl,
+                      parsedMessage.fileName
+                    )
+                  }
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -844,7 +825,9 @@ const ZaloChatMessage = ({
                         <FileText className="h-3 w-3" />
                         <span>File đính kèm</span>
                         {parsedMessage.fileSize > 0 && (
-                          <span>• {formatFileSize(parsedMessage.fileSize)}</span>
+                          <span>
+                            • {formatFileSize(parsedMessage.fileSize)}
+                          </span>
                         )}
                       </div>
                       {/* ✅ Hiển thị URL để debug */}
@@ -858,10 +841,9 @@ const ZaloChatMessage = ({
                             : "text-gray-500"
                         )}
                       >
-                        {parsedMessage.fileUrl.length > 60 
-                          ? `${parsedMessage.fileUrl.substring(0, 60)}...` 
-                          : parsedMessage.fileUrl
-                        }
+                        {parsedMessage.fileUrl.length > 60
+                          ? `${parsedMessage.fileUrl.substring(0, 60)}...`
+                          : parsedMessage.fileUrl}
                       </div>
                     </div>
                     <div
@@ -1039,7 +1021,8 @@ const ZaloChatConversationView = ({
     if (log.customer_reply_content && log.customer_replied_at) {
       const customerReplyExists = messages.some(
         (msg) =>
-          msg.sender === "customer" && msg.content === log.customer_reply_content
+          msg.sender === "customer" &&
+          msg.content === log.customer_reply_content
       );
 
       if (!customerReplyExists) {
@@ -1079,10 +1062,8 @@ const ZaloChatConversationView = ({
   const conversationMessages = buildConversationTimeline();
 
   // Lấy staff avatar URL
-  const staffAvatarUrl = 
-    log.staff_handler_avatar_zalo || 
-    log.staff_handler?.avatarZalo || 
-    undefined;
+  const staffAvatarUrl =
+    log.staff_handler_avatar_zalo || log.staff_handler?.avatarZalo || undefined;
 
   return (
     <div className="space-y-1">
@@ -1354,7 +1335,7 @@ export const CustomerLogModal = ({
     setShowImageModal(true);
   };
 
-  const fetchCustomerLogs = async () => {
+  const fetchCustomerLogs = useCallback(async () => {
     if (!customer || !campaignId) return;
     try {
       setLoading(true);
@@ -1371,7 +1352,25 @@ export const CustomerLogModal = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [customer, campaignId]);
+
+  const handleCampaignInteractionLogUpdate = useCallback(
+    (data: any) => {
+      console.log(
+        "Campaign interaction log updated via socket (log modal):",
+        data
+      );
+      // Refresh logs when interaction logs change for this campaign and customer
+      if (
+        customer &&
+        data.campaignId === campaignId &&
+        data.customerId === customer.id
+      ) {
+        fetchCustomerLogs();
+      }
+    },
+    [customer, campaignId, fetchCustomerLogs]
+  );
 
   useEffect(() => {
     if (isOpen && customer) {
@@ -1428,331 +1427,338 @@ export const CustomerLogModal = ({
   if (!customer) return null;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <Dialog
-          open={isOpen}
-          onOpenChange={handleMainModalClose}
-          modal={true}
-        >
-          <DialogContent
-            className="p-0 gap-0 flex flex-col overflow-hidden"
-            style={{
-              maxWidth: "85vw",
-              width: "85vw",
-              height: "92vh",
-              maxHeight: "92vh",
-              background: "transparent",
-              border: "none",
-              boxShadow: "none",
-            }}
-            onPointerDownOutside={(e) => {
-              if (showImageModal) {
-                e.preventDefault();
-              }
-            }}
-            onEscapeKeyDown={(e) => {
-              if (showImageModal) {
-                e.preventDefault();
-              }
-            }}
+    <>
+      {/* ✅ Socket integration for real-time updates */}
+      <CampaignSocket
+        onCampaignInteractionLogUpdate={handleCampaignInteractionLogUpdate}
+      />
+
+      <AnimatePresence>
+        {isOpen && (
+          <Dialog
+            open={isOpen}
+            onOpenChange={handleMainModalClose}
+            modal={true}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{
-                duration: 0.4,
-                type: "spring",
-                stiffness: 300,
-                damping: 30,
-              }}
-              className="flex flex-col h-full relative overflow-hidden"
+            <DialogContent
+              className="p-0 gap-0 flex flex-col overflow-hidden"
               style={{
-                background:
-                  "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, #f8fafc 30%, #e2e8f0 100%)",
-                borderRadius: "1.5rem",
-                boxShadow:
-                  "0 32px 64px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(148,163,184,0.1)",
-                border: "1px solid rgba(148,163,184,0.2)",
-                backdropFilter: "blur(20px)",
+                maxWidth: "85vw",
+                width: "85vw",
+                height: "92vh",
+                maxHeight: "92vh",
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+              }}
+              onPointerDownOutside={(e) => {
+                if (showImageModal) {
+                  e.preventDefault();
+                }
+              }}
+              onEscapeKeyDown={(e) => {
+                if (showImageModal) {
+                  e.preventDefault();
+                }
               }}
             >
-              {/* Decorative header bar */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
-
-              <div className="absolute top-4 right-4 opacity-5">
-                <motion.div
-                  animate={{
-                    rotate: [0, 360],
-                    scale: [1, 1.1, 1],
-                  }}
-                  transition={{
-                    duration: 20,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                >
-                  <Sparkles className="h-12 w-12 text-blue-500" />
-                </motion.div>
-              </div>
-
-              {/* Enhanced Header */}
-              <div className="flex-shrink-0 pb-6 border-b border-gray-200/60 px-8 pt-8 relative">
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-4 text-2xl font-black text-gray-800">
-                      <motion.div
-                        animate={{
-                          rotate: [0, 10, -10, 0],
-                          scale: [1, 1.05, 1],
-                        }}
-                        transition={{
-                          duration: 4,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
-                        className="relative"
-                      >
-                        <div className="absolute -inset-2 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full opacity-20 blur-lg"></div>
-                        <div className="relative bg-gradient-to-br from-blue-500 to-blue-600 rounded-full p-3 shadow-lg">
-                          <MessageCircle className="h-6 w-6 text-white" />
-                        </div>
-                      </motion.div>
-
-                      <span className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 bg-clip-text text-transparent">
-                        Lịch sử tương tác
-                      </span>
-
-                      <motion.div
-                        animate={{
-                          opacity: [0.5, 1, 0.5],
-                          scale: [0.8, 1, 0.8],
-                        }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
-                      >
-                        <div className="bg-gradient-to-r from-amber-400 to-orange-400 rounded-full p-2 shadow-lg">
-                          <Sparkles className="h-4 w-4 text-white" />
-                        </div>
-                      </motion.div>
-                    </DialogTitle>
-                  </DialogHeader>
-
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="text-base text-gray-600 mt-4 select-text"
-                  >
-                    <div className="flex items-center gap-6 flex-wrap">
-                      <div className="flex items-center gap-3 bg-white/60 px-4 py-2 rounded-full shadow-sm border border-gray-200">
-                        <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
-                          <User className="h-4 w-4 text-white" />
-                        </div>
-                        <div>
-                          <div className="font-semibold text-gray-900 text-sm">
-                            {customer.full_name}
-                          </div>
-                          <div className="text-xs text-gray-500 font-mono">
-                            📞 {customer.phone_number}
-                          </div>
-                        </div>
-                      </div>
-
-                      {logs.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.5 }}
-                          className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-full shadow-sm border border-blue-200"
-                        >
-                          <MessageCircle className="h-4 w-4 text-blue-600" />
-                          <span className="text-sm font-semibold text-blue-700">
-                            {logs.length} cuộc hội thoại
-                          </span>
-                        </motion.div>
-                      )}
-                    </div>
-                  </motion.div>
-                </motion.div>
-              </div>
-
-              {/* Chat Content */}
-              <div
-                className="flex-1 px-6 py-4 overflow-y-auto bg-gradient-to-b from-gray-50/50 to-white/50"
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{
+                  duration: 0.4,
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 30,
+                }}
+                className="flex flex-col h-full relative overflow-hidden"
                 style={{
-                  minHeight: 0,
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "#cbd5e1 #f8fafc",
+                  background:
+                    "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, #f8fafc 30%, #e2e8f0 100%)",
+                  borderRadius: "1.5rem",
+                  boxShadow:
+                    "0 32px 64px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(148,163,184,0.1)",
+                  border: "1px solid rgba(148,163,184,0.2)",
+                  backdropFilter: "blur(20px)",
                 }}
               >
-                <AnimatePresence mode="wait">
-                  {loading ? (
-                    <motion.div
-                      key="loading"
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      className="flex flex-col items-center justify-center h-60 space-y-6"
-                    >
-                      <motion.div className="relative">
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{
-                            duration: 1.5,
-                            repeat: Infinity,
-                            ease: "linear",
-                          }}
-                          className="p-6 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 shadow-xl"
-                        >
-                          <RefreshCw className="h-10 w-10 text-blue-600" />
-                        </motion.div>
+                {/* Decorative header bar */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+
+                <div className="absolute top-4 right-4 opacity-5">
+                  <motion.div
+                    animate={{
+                      rotate: [0, 360],
+                      scale: [1, 1.1, 1],
+                    }}
+                    transition={{
+                      duration: 20,
+                      repeat: Infinity,
+                      ease: "linear",
+                    }}
+                  >
+                    <Sparkles className="h-12 w-12 text-blue-500" />
+                  </motion.div>
+                </div>
+
+                {/* Enhanced Header */}
+                <div className="flex-shrink-0 pb-6 border-b border-gray-200/60 px-8 pt-8 relative">
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-4 text-2xl font-black text-gray-800">
                         <motion.div
                           animate={{
-                            scale: [1, 1.3, 1],
-                            opacity: [0.3, 0.6, 0.3],
+                            rotate: [0, 10, -10, 0],
+                            scale: [1, 1.05, 1],
+                          }}
+                          transition={{
+                            duration: 4,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                          }}
+                          className="relative"
+                        >
+                          <div className="absolute -inset-2 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full opacity-20 blur-lg"></div>
+                          <div className="relative bg-gradient-to-br from-blue-500 to-blue-600 rounded-full p-3 shadow-lg">
+                            <MessageCircle className="h-6 w-6 text-white" />
+                          </div>
+                        </motion.div>
+
+                        <span className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 bg-clip-text text-transparent">
+                          Lịch sử tương tác
+                        </span>
+
+                        <motion.div
+                          animate={{
+                            opacity: [0.5, 1, 0.5],
+                            scale: [0.8, 1, 0.8],
                           }}
                           transition={{
                             duration: 2,
                             repeat: Infinity,
                             ease: "easeInOut",
                           }}
-                          className="absolute -inset-4 bg-blue-400 rounded-full opacity-20 blur-xl"
-                        ></motion.div>
-                      </motion.div>
+                        >
+                          <div className="bg-gradient-to-r from-amber-400 to-orange-400 rounded-full p-2 shadow-lg">
+                            <Sparkles className="h-4 w-4 text-white" />
+                          </div>
+                        </motion.div>
+                      </DialogTitle>
+                    </DialogHeader>
 
-                      <motion.div
-                        animate={{ opacity: [0.7, 1, 0.7] }}
-                        transition={{
-                          duration: 1.5,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
-                        className="text-center"
-                      >
-                        <h3 className="text-blue-600 font-bold text-xl mb-2">
-                          Đang tải cuộc hội thoại...
-                        </h3>
-                        <p className="text-gray-500 text-sm">
-                          Vui lòng chờ trong giây lát
-                        </p>
-                      </motion.div>
-                    </motion.div>
-                  ) : logs.length > 0 ? (
                     <motion.div
-                      key="chats"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="pb-6"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="text-base text-gray-600 mt-4 select-text"
                     >
-                      <div className="max-w-5xl mx-auto space-y-6">
-                        <AnimatePresence>
-                          {logs.map((log, idx) => (
-                            <motion.div
-                              key={log.id}
-                              initial={{
-                                opacity: 0,
-                                y: 40,
-                                scale: 0.95,
-                              }}
-                              animate={{
-                                opacity: 1,
-                                y: 0,
-                                scale: 1,
-                              }}
-                              exit={{
-                                opacity: 0,
-                                y: -40,
-                                scale: 0.95,
-                              }}
-                              transition={{
-                                delay: idx * 0.15,
-                                duration: 0.6,
-                                type: "spring",
-                                stiffness: 200,
-                                damping: 25,
-                              }}
-                              className="bg-white/70 backdrop-blur-sm rounded-3xl border border-gray-200/80 shadow-lg hover:shadow-xl transition-all duration-500 p-6"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%)",
-                              }}
-                            >
-                              <ZaloChatConversationView
-                                log={log}
-                                onImageClick={handleImageClick}
-                              />
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
+                      <div className="flex items-center gap-6 flex-wrap">
+                        <div className="flex items-center gap-3 bg-white/60 px-4 py-2 rounded-full shadow-sm border border-gray-200">
+                          <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                            <User className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <div className="font-semibold text-gray-900 text-sm">
+                              {customer.full_name}
+                            </div>
+                            <div className="text-xs text-gray-500 font-mono">
+                              📞 {customer.phone_number}
+                            </div>
+                          </div>
+                        </div>
+
+                        {logs.length > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-full shadow-sm border border-blue-200"
+                          >
+                            <MessageCircle className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-semibold text-blue-700">
+                              {logs.length} cuộc hội thoại
+                            </span>
+                          </motion.div>
+                        )}
                       </div>
                     </motion.div>
-                  ) : (
-                    <motion.div
-                      key="empty"
-                      initial={{ opacity: 0, scale: 0.8, y: 30 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.8, y: 30 }}
-                      className="flex flex-col items-center justify-center h-60 text-gray-400 select-none"
-                    >
-                      <motion.div
-                        animate={{
-                          y: [0, -12, 0],
-                          rotate: [0, 8, -8, 0],
-                          scale: [1, 1.05, 1],
-                        }}
-                        transition={{
-                          duration: 4,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                        }}
-                        className="relative mb-8"
-                      >
-                        <div className="absolute -inset-6 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full opacity-40 blur-2xl"></div>
-                        <MessageCircle className="h-20 w-20 text-gray-300 relative z-10" />
-                      </motion.div>
+                  </motion.div>
+                </div>
 
+                {/* Chat Content */}
+                <div
+                  className="flex-1 px-6 py-4 overflow-y-auto bg-gradient-to-b from-gray-50/50 to-white/50"
+                  style={{
+                    minHeight: 0,
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "#cbd5e1 #f8fafc",
+                  }}
+                >
+                  <AnimatePresence mode="wait">
+                    {loading ? (
                       <motion.div
-                        initial={{ opacity: 0, y: 15 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4 }}
-                        className="text-center"
+                        key="loading"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="flex flex-col items-center justify-center h-60 space-y-6"
                       >
-                        <h3 className="font-bold text-2xl mb-3 text-gray-600">
-                          Chưa có cuộc hội thoại
-                        </h3>
-                        <p className="text-gray-500 max-w-md text-center leading-relaxed">
-                          Khách hàng này chưa có tin nhắn nào được gửi. <br />
-                          Hãy bắt đầu cuộc hội thoại đầu tiên! 💬
-                        </p>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </motion.div>
+                        <motion.div className="relative">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 1.5,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                            className="p-6 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 shadow-xl"
+                          >
+                            <RefreshCw className="h-10 w-10 text-blue-600" />
+                          </motion.div>
+                          <motion.div
+                            animate={{
+                              scale: [1, 1.3, 1],
+                              opacity: [0.3, 0.6, 0.3],
+                            }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }}
+                            className="absolute -inset-4 bg-blue-400 rounded-full opacity-20 blur-xl"
+                          ></motion.div>
+                        </motion.div>
 
-            {/* ImageModal */}
-            {showImageModal && (
-              <ImageModal
-                isOpen={showImageModal}
-                imageSrc={selectedImage}
-                onClose={handleCloseImageModal}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-      )}
-    </AnimatePresence>
+                        <motion.div
+                          animate={{ opacity: [0.7, 1, 0.7] }}
+                          transition={{
+                            duration: 1.5,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                          }}
+                          className="text-center"
+                        >
+                          <h3 className="text-blue-600 font-bold text-xl mb-2">
+                            Đang tải cuộc hội thoại...
+                          </h3>
+                          <p className="text-gray-500 text-sm">
+                            Vui lòng chờ trong giây lát
+                          </p>
+                        </motion.div>
+                      </motion.div>
+                    ) : logs.length > 0 ? (
+                      <motion.div
+                        key="chats"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="pb-6"
+                      >
+                        <div className="max-w-5xl mx-auto space-y-6">
+                          <AnimatePresence>
+                            {logs.map((log, idx) => (
+                              <motion.div
+                                key={log.id}
+                                initial={{
+                                  opacity: 0,
+                                  y: 40,
+                                  scale: 0.95,
+                                }}
+                                animate={{
+                                  opacity: 1,
+                                  y: 0,
+                                  scale: 1,
+                                }}
+                                exit={{
+                                  opacity: 0,
+                                  y: -40,
+                                  scale: 0.95,
+                                }}
+                                transition={{
+                                  delay: idx * 0.15,
+                                  duration: 0.6,
+                                  type: "spring",
+                                  stiffness: 200,
+                                  damping: 25,
+                                }}
+                                className="bg-white/70 backdrop-blur-sm rounded-3xl border border-gray-200/80 shadow-lg hover:shadow-xl transition-all duration-500 p-6"
+                                style={{
+                                  background:
+                                    "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.8) 100%)",
+                                }}
+                              >
+                                <ZaloChatConversationView
+                                  log={log}
+                                  onImageClick={handleImageClick}
+                                />
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="empty"
+                        initial={{ opacity: 0, scale: 0.8, y: 30 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.8, y: 30 }}
+                        className="flex flex-col items-center justify-center h-60 text-gray-400 select-none"
+                      >
+                        <motion.div
+                          animate={{
+                            y: [0, -12, 0],
+                            rotate: [0, 8, -8, 0],
+                            scale: [1, 1.05, 1],
+                          }}
+                          transition={{
+                            duration: 4,
+                            repeat: Infinity,
+                            ease: "easeInOut",
+                          }}
+                          className="relative mb-8"
+                        >
+                          <div className="absolute -inset-6 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-full opacity-40 blur-2xl"></div>
+                          <MessageCircle className="h-20 w-20 text-gray-300 relative z-10" />
+                        </motion.div>
+
+                        <motion.div
+                          initial={{ opacity: 0, y: 15 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.4 }}
+                          className="text-center"
+                        >
+                          <h3 className="font-bold text-2xl mb-3 text-gray-600">
+                            Chưa có cuộc hội thoại
+                          </h3>
+                          <p className="text-gray-500 max-w-md text-center leading-relaxed">
+                            Khách hàng này chưa có tin nhắn nào được gửi. <br />
+                            Hãy bắt đầu cuộc hội thoại đầu tiên! 💬
+                          </p>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+
+              {/* ImageModal */}
+              {showImageModal && (
+                <ImageModal
+                  isOpen={showImageModal}
+                  imageSrc={selectedImage}
+                  onClose={handleCloseImageModal}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 

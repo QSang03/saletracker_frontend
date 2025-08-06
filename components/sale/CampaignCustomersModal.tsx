@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import CustomerLogModal, { LogStatus } from "./CampaignCustomerLogModal.tsx";
 import EditCustomerModal from "./EditCustomerModal"; // ✅ THÊM MỚI: Import EditCustomerModal
+import { CampaignSocket } from "@/components/socket/CampaignSocket";
 
 interface CampaignCustomer {
   id: string;
@@ -237,7 +238,7 @@ export default function CampaignCustomersModal({
 
   const pageSize = 1000000;
 
-  const fetchCustomers = async (searchQuery = "", status = "all") => {
+  const fetchCustomers = useCallback(async (searchQuery = "", status = "all") => {
     if (!campaign) return;
 
     try {
@@ -260,7 +261,15 @@ export default function CampaignCustomersModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [campaign]);
+
+  const handleCampaignInteractionLogUpdate = useCallback((data: any) => {
+    console.log('Campaign interaction log updated via socket (customers modal):', data);
+    // Refresh customers when interaction logs change
+    if (campaign && data.campaignId === campaign.id) {
+      fetchCustomers(searchTerm, statusFilter);
+    }
+  }, [campaign, searchTerm, statusFilter, fetchCustomers]);
 
   useEffect(() => {
     let filtered = customers;
@@ -454,6 +463,11 @@ export default function CampaignCustomersModal({
 
   return (
     <>
+      {/* ✅ Socket integration for real-time updates */}
+      <CampaignSocket
+        onCampaignInteractionLogUpdate={handleCampaignInteractionLogUpdate}
+      />
+
       <AnimatePresence>
         {isOpen && (
           <Dialog open={isOpen} onOpenChange={onClose}>

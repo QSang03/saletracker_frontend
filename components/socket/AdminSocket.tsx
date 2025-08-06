@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { useWSHandler } from '@/hooks/useWSHandler';
 
 export const AdminSocket = memo(function AdminSocket({
@@ -12,6 +12,9 @@ export const AdminSocket = memo(function AdminSocket({
   onDebtConfigCreate,
   onDebtConfigUpdate,
   onDebtUpdate,
+  onCampaignUpdate,
+  onCampaignInteractionLogUpdate,
+  onCampaignScheduleUpdate,
 }: {
   onUserLogin?: (userId: number, status: string, lastLogin: string) => void;
   onUserLogout?: (userId: number, status: string) => void;
@@ -20,7 +23,10 @@ export const AdminSocket = memo(function AdminSocket({
   onDebtLogUpdate?: (data: any) => void;
   onDebtConfigCreate?: (data: any) => void;
   onDebtConfigUpdate?: (data: any) => void;
-  onDebtUpdate?: (data:any) => void;
+  onDebtUpdate?: (data: any) => void;
+  onCampaignUpdate?: (data: any) => void;
+  onCampaignInteractionLogUpdate?: (data: any) => void;
+  onCampaignScheduleUpdate?: (data: any) => void;
 }) {
   useWSHandler('user_login', (data: any) => {
     onUserLogin?.(data.userId, data.status, data.last_login);
@@ -52,6 +58,18 @@ export const AdminSocket = memo(function AdminSocket({
 
   useWSHandler('debt_realtime_updated', (data: any) => {
     onDebtUpdate?.(data);
+  });
+
+  useWSHandler('campaign_realtime_updated', (data: any) => {
+    onCampaignUpdate?.(data);
+  });
+
+  useWSHandler('campaign_interaction_log_realtime_updated', (data: any) => {
+    onCampaignInteractionLogUpdate?.(data);
+  });
+
+  useWSHandler('campaign_schedule_realtime_updated', (data: any) => {
+    onCampaignScheduleUpdate?.(data);
   });
 
   return null;

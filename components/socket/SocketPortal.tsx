@@ -64,6 +64,25 @@ export function SocketPortal() {
     );
   }, []);
 
+  // New handlers
+  const handleCampaignUpdate = useCallback((data: any) => {
+    window.dispatchEvent(
+      new CustomEvent("ws_campaign_realtime_updated", { detail: data })
+    );
+  }, []);
+
+  const handleCampaignInteractionLogUpdate = useCallback((data: any) => {
+    window.dispatchEvent(
+      new CustomEvent("ws_campaign_interaction_log_realtime_updated", { detail: data })
+    );
+  }, []);
+
+  const handleCampaignScheduleRealtimeUpdate = useCallback((data: any) => {
+    window.dispatchEvent(
+      new CustomEvent("ws_campaign_schedule_realtime_updated", { detail: data })
+    );
+  }, []);
+
   return (
     <AdminSocket
       onUserLogin={handleUserLogin}
@@ -74,6 +93,9 @@ export function SocketPortal() {
       onDebtConfigCreate={handleDebtConfigCreate}
       onDebtConfigUpdate={handleDebtConfigUpdate}
       onDebtUpdate={handleDebtRealtimeUpdate}
+      onCampaignUpdate={handleCampaignUpdate}
+      onCampaignInteractionLogUpdate={handleCampaignInteractionLogUpdate}
+      onCampaignScheduleUpdate={handleCampaignScheduleRealtimeUpdate}
     />
   );
 }

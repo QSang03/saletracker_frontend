@@ -7,6 +7,7 @@ import {
   CampaignStatus,
   CampaignWithDetails,
 } from "@/types";
+import { CampaignSocket } from "@/components/socket/CampaignSocket";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -1036,8 +1037,27 @@ export default function CampaignManagement({
     [expectedRowCount, campaigns.length]
   );
 
+  // ✅ Socket event handlers
+  const handleCampaignUpdate = useCallback((data: any) => {
+    console.log('Campaign updated via socket:', data);
+    // Auto reload when campaign status changes
+    onReload();
+  }, [onReload]);
+
+  const handleCampaignScheduleUpdate = useCallback((data: any) => {
+    console.log('Campaign schedule updated via socket:', data);
+    // Auto reload when campaign schedule changes
+    onReload();
+  }, [onReload]);
+
   return (
     <TooltipProvider>
+      {/* ✅ Socket integration for real-time updates */}
+      <CampaignSocket
+        onCampaignUpdate={handleCampaignUpdate}
+        onCampaignScheduleUpdate={handleCampaignScheduleUpdate}
+      />
+      
       <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
         <Table>
           <TableHeader className="bg-gray-50">
