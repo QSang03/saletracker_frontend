@@ -142,7 +142,7 @@ export default function ZaloManager() {
       if (!token) return;
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/departments`,
+          `${process.env.NEXT_PUBLIC_API_URL}/departments?pageSize=10000`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }

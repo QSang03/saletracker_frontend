@@ -53,7 +53,7 @@ export default function RolesPage() {
           Authorization: `Bearer ${token}`,
         },
       }).then(res => res.ok ? res.json() : { main: [], sub: [] }),
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/departments`, {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/departments?pageSize=10000`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
