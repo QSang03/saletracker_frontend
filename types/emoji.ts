@@ -7,8 +7,9 @@ export interface EmojiPosition {
 }
 
 export interface EmojiConfig {
-    size: 16 | 24 | 26 | 32 | 40 | 64;
-    basePath: string;
+    spriteSize: 16 | 24 | 26 | 32 | 40 | 64;
+    spriteSheetPath: string;
+    enableFallback?: boolean;
 }
 
 export interface EmojiSpriteInfo {

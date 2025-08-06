@@ -12,6 +12,7 @@ export default function HomePage() {
 
   useEffect(() => {
     const token = getAccessToken();
+    console.log("Access token:", token);
     
     if (token) {
       const user = getUserFromToken(token);

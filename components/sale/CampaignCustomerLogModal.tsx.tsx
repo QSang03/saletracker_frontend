@@ -33,8 +33,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { CampaignSocket } from "@/components/socket/CampaignSocket";
-import { convertTextToIcons } from "@/utils/textToIcon";
-import { EmojiText } from "@/components/common/Emoji";
+import { EmojiRenderer } from "@/components/common/EmojiRenderer";
 
 // Types (giữ nguyên)
 export enum LogStatus {
@@ -513,15 +512,12 @@ const ZaloAttachmentRenderer = ({
                                 isStaff ? "text-white" : isBot ? "text-white" : "text-gray-700"
                             )}
                         >
-                            <EmojiText
-                                emojiProps={{
-                                    size: 14,
-                                    renderMode: 'unicode',
-                                    className: 'inline-block align-middle mx-0.5'
-                                }}
-                            >
-                                {processTextWithEmoji(fileName)}
-                            </EmojiText>
+                            <EmojiRenderer 
+                                text={processTextWithEmoji(fileName)}
+                                renderMode="image"
+                                className="inline-block"
+                                style={{ fontSize: '14px' }}
+                            />
                         </div>
                         <div
                             className={cn(
@@ -747,16 +743,11 @@ const ZaloChatMessage = ({
                                 {/* Caption if exists with emoji support */}
                                 {parsedMessage.caption && (
                                     <div className="mt-2">
-                                        <EmojiText
+                                        <EmojiRenderer
+                                            text={parsedMessage.caption}
                                             className="text-sm leading-relaxed break-words select-text whitespace-pre-wrap"
-                                            emojiProps={{
-                                                size: 16,
-                                                renderMode: 'unicode',
-                                                className: 'inline-block align-middle mx-0.5'
-                                            }}
-                                        >
-                                            {parsedMessage.caption}
-                                        </EmojiText>
+                                            renderMode="image"
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -788,16 +779,11 @@ const ZaloChatMessage = ({
                                 {/* Sticker description if exists with emoji support */}
                                 {parsedMessage.description && (
                                     <div className="mt-1">
-                                        <EmojiText
+                                        <EmojiRenderer
+                                            text={parsedMessage.description}
                                             className="text-xs text-gray-500"
-                                            emojiProps={{
-                                                size: 14,
-                                                renderMode: 'unicode',
-                                                className: 'inline-block align-middle mx-0.5'
-                                            }}
-                                        >
-                                            {parsedMessage.description}
-                                        </EmojiText>
+                                            renderMode="image"
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -902,16 +888,11 @@ const ZaloChatMessage = ({
                                 {/* File description if exists with emoji support */}
                                 {parsedMessage.description && (
                                     <div className="mt-1">
-                                        <EmojiText
+                                        <EmojiRenderer
+                                            text={parsedMessage.description}
                                             className="text-xs text-gray-500"
-                                            emojiProps={{
-                                                size: 14,
-                                                renderMode: 'unicode',
-                                                className: 'inline-block align-middle mx-0.5'
-                                            }}
-                                        >
-                                            {parsedMessage.description}
-                                        </EmojiText>
+                                            renderMode="image"
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -919,22 +900,11 @@ const ZaloChatMessage = ({
                             // ✅ Display regular text message with emoji support
                             parsedMessage.text && (
                                 <div className="mb-3">
-                                    {parsedMessage.hasEmoji ? (
-                                        <EmojiText
-                                            className="text-sm leading-relaxed break-words select-text whitespace-pre-wrap"
-                                            emojiProps={{
-                                                size: 18,
-                                                renderMode: 'unicode',
-                                                className: 'inline-block align-middle mx-0.5'
-                                            }}
-                                        >
-                                            {parsedMessage.text}
-                                        </EmojiText>
-                                    ) : (
-                                        <p className="text-sm leading-relaxed break-words select-text whitespace-pre-wrap">
-                                            {parsedMessage.text}
-                                        </p>
-                                    )}
+                                    <EmojiRenderer
+                                        text={parsedMessage.text}
+                                        className="text-sm leading-relaxed break-words select-text whitespace-pre-wrap"
+                                        renderMode="image"
+                                    />
                                 </div>
                             )
                         )}

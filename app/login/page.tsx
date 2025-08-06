@@ -83,8 +83,6 @@ function LoginForm() {
         })}`
       );
 
-      // ... rest of validation logic
-
       if (data.user && data.user.isBlock) {
         debugLogs.push("⚠️ [Login] User is blocked");
         localStorage.setItem("loginDebugLogs", JSON.stringify(debugLogs));

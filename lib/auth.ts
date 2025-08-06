@@ -1,13 +1,32 @@
 // lib/auth.ts
+
 export function getAccessToken(): string | null {
+  if (typeof document === "undefined") return null;
+  
+  try {
+    const tokenData = localStorage.getItem('access_token');
+    if (!tokenData) {
+      return null;
+    }
+
+    const parsed = JSON.parse(tokenData);
+    
+    return parsed;
+  } catch (error) {
+    console.error('❌ [GetAccessToken] Error parsing localStorage token:', error);
+    localStorage.removeItem('access_token');
+    return null;
+  }
+}
+
+export function getAccessTokenShort(): string | null {
   if (typeof document === "undefined") return null;
 
   const cookies = document.cookie.split(";");
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
     if (name === "access_token") {
-      const decodedValue = decodeURIComponent(value);
-      return decodedValue.trim(); // Trim whitespace from decoded value
+      return decodeURIComponent(value);
     }
   }
 
@@ -22,8 +41,7 @@ export function getRefreshToken(): string | null {
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
     if (name === "refresh_token") {
-      const decodedValue = decodeURIComponent(value);
-      return decodedValue.trim(); // Trim whitespace from decoded value
+      return decodeURIComponent(value);
     }
   }
 
@@ -124,47 +142,46 @@ export function setAccessToken(token: string) {
   if (typeof document === "undefined") return;
 
   try {
-    // Clean và validate token
     const cleanToken = token.trim();
     if (!cleanToken) {
       console.error("❌ [SetAccessToken] Empty token provided");
       return;
     }
 
-    // Set cookie với proper encoding
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 30);
-    const isHttps = window.location.protocol === "https:";
-
-    const cookieString = `access_token=${encodeURIComponent(
-      cleanToken
-    )}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${
-      isHttps ? " Secure" : ""
-    }`;
-
-    console.log("🔄 [SetAccessToken] Setting cookie:", {
-      tokenLength: cleanToken.length,
-      tokenStart: cleanToken.substring(0, 50) + "...",
-      cookieLength: cookieString.length,
-      isHttps,
-      domain: window.location.hostname,
-    });
-
-    document.cookie = cookieString;
-
-    // Immediate verification
-    setTimeout(() => {
-      const verification = getAccessToken();
-      console.log("🔍 [SetAccessToken] Immediate verification:", {
-        success: !!verification,
-        matches: verification === cleanToken,
-        verificationLength: verification?.length,
-      });
-
-      if (!verification || verification !== cleanToken) {
-        console.error("❌ [SetAccessToken] Cookie verification failed");
+    // Lưu token đầy đủ vào localStorage trước khi xử lý shortToken
+    localStorage.setItem('access_token', JSON.stringify(cleanToken));
+    // Parse token payload to remove permissions before storing short version in cookie
+    let shortToken = "";
+    try {
+      const parts = cleanToken.split(".");
+      if (parts.length === 3) {
+        // JWT: header.payload.signature
+        let base64 = parts[1];
+        const payload = JSON.parse(base64UrlDecode(base64));
+        // Remove permissions field
+        const { permissions, ...shortPayload } = payload;
+        // Encode short payload back to base64url
+        const shortPayloadStr = JSON.stringify(shortPayload);
+        let shortPayloadBase64 = btoa(shortPayloadStr)
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+        // Rebuild short token (header.shortPayload.signature)
+        shortToken = [parts[0], shortPayloadBase64, parts[2]].join(".");
+      } else {
+        // Fallback: just use first 10 chars
+        shortToken = cleanToken.substring(0, 10);
       }
-    }, 100);
+    } catch (e) {
+      console.error("❌ [SetAccessToken] Error building short token:", e);
+      shortToken = cleanToken.substring(0, 10);
+    }
+
+    // Save full token to localStorage (with expiry if needed)
+    localStorage.setItem('access_token', JSON.stringify(cleanToken));
+
+    // Save short token to cookie
+    document.cookie = `access_token=${shortToken}; path=/; max-age=${2147483647}`;
   } catch (error) {
     console.error("❌ [SetAccessToken] Error setting token:", error);
   }
@@ -176,19 +193,16 @@ export function setRefreshToken(token: string) {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
     const isHttps = window.location.protocol === "https:";
-    document.cookie = `refresh_token=${encodeURIComponent(
-      token
-    )}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax;${
-      isHttps ? " Secure" : ""
-    }`;
+    document.cookie = `refresh_token=${encodeURIComponent(token)}; expires=${expiryDate.toUTCString()}; path=/; SameSite=Lax${isHttps ? " Secure" : ""}`;
   }
 }
 
 export function clearAccessToken() {
-  if (typeof document !== "undefined") {
-    document.cookie =
-      "access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";
-  }
+  if (typeof document === "undefined") return;
+  localStorage.removeItem('access_token');
+  // Xóa cookie access_token_short
+  document.cookie = "access_token=; path=/; max-age=0";
+  console.log("🗑️ [ClearAccessToken] Cleared from localStorage and cookie");
 }
 
 export function clearRefreshToken() {
@@ -201,4 +215,5 @@ export function clearRefreshToken() {
 export function clearAllTokens() {
   clearAccessToken();
   clearRefreshToken();
+  console.log("🗑️ [ClearAllTokens] All tokens cleared from localStorage and cookies");
 }

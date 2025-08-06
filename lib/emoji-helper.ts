@@ -1,5 +1,9 @@
 import { EmojiData, EmojiPosition, EmojiConfig, EmojiInfo, EmojiSpriteInfo } from '@/types/emoji';
 
+// Singleton instance để tránh load data nhiều lần
+let singletonInstance: EmojiHelper | null = null;
+let singletonPromise: Promise<EmojiHelper> | null = null;
+
 export class EmojiHelper {
     private emojiData: EmojiData;
     private emojiPositions: EmojiPosition;
@@ -14,6 +18,110 @@ export class EmojiHelper {
         this.emojiData = emojiData;
         this.emojiPositions = emojiPositions;
         this.config = config;
+    }
+
+    /**
+     * Tạo EmojiHelper với singleton pattern để tránh load data nhiều lần
+     */
+    static async createWithAllPositions(config?: EmojiConfig): Promise<EmojiHelper> {
+        // Sử dụng singleton instance nếu đã có
+        if (singletonInstance) {
+            return singletonInstance;
+        }
+
+        // Nếu đang trong quá trình loading, đợi promise đó
+        if (singletonPromise) {
+            return singletonPromise;
+        }
+
+        const defaultConfig: EmojiConfig = {
+            spriteSize: 32,
+            spriteSheetPath: '/emoji/emoji-32',
+            enableFallback: true,
+        };
+
+        const finalConfig = { ...defaultConfig, ...(config || {}) };
+
+        // Tạo promise để load data
+        singletonPromise = (async () => {
+            try {
+                console.log('Loading emoji data...');
+                
+                // Sử dụng emoji-pos-all.json làm nguồn chính vì nó có đầy đủ shortcodes
+                const [emojiDataResponse, emojiPositionsResponse] = await Promise.all([
+                    fetch('/emoji/emoji-data.json'),
+                    fetch('/emoji/emoji-pos-all.json')
+                ]);
+
+                console.log('Data response status:', emojiDataResponse.status);
+                console.log('Positions response status:', emojiPositionsResponse.status);
+
+                if (!emojiDataResponse.ok || !emojiPositionsResponse.ok) {
+                    console.error('Failed to fetch emoji data:', {
+                        dataOk: emojiDataResponse.ok,
+                        dataStatus: emojiDataResponse.status,
+                        positionsOk: emojiPositionsResponse.ok,
+                        positionsStatus: emojiPositionsResponse.status
+                    });
+                    
+                    // Fallback to simple data if main data fails
+                    console.log('Trying fallback to simple data...');
+                    const [fallbackDataResponse, fallbackPositionsResponse] = await Promise.all([
+                        fetch('/emoji/emoji-data-simple.json'),
+                        fetch('/emoji/emoji-pos-simple.json')
+                    ]);
+                    
+                    if (!fallbackDataResponse.ok || !fallbackPositionsResponse.ok) {
+                        throw new Error(`Failed to fetch fallback emoji data: ${fallbackDataResponse.status}, ${fallbackPositionsResponse.status}`);
+                    }
+
+                    const emojiData = await fallbackDataResponse.json();
+                    const emojiPositions = await fallbackPositionsResponse.json();
+                    console.log('Loaded fallback emoji data:', Object.keys(emojiData).length, 'emojis');
+                    const instance = new EmojiHelper(emojiData, emojiPositions, finalConfig);
+                    singletonInstance = instance;
+                    return instance;
+                }
+
+                const emojiData = await emojiDataResponse.json();
+                const emojiPositions = await emojiPositionsResponse.json();
+
+                console.log('Successfully loaded emoji data:', {
+                    dataCount: Object.keys(emojiData).length,
+                    positionsCount: Object.keys(emojiPositions).length,
+                    sampleShortcodes: Object.keys(emojiPositions).slice(0, 10)
+                });
+
+                const instance = new EmojiHelper(emojiData, emojiPositions, finalConfig);
+                singletonInstance = instance;
+                return instance;
+            } catch (error) {
+                console.error('Error loading emoji data:', error);
+                console.log('Creating empty EmojiHelper as final fallback');
+                
+                // Tạo một helper cơ bản với một số emoji thông dụng
+                const basicEmojiData = {
+                    ':)': '😊',
+                    ':d': '😄', 
+                    ':D': '😄',
+                    ':(': '😢',
+                    ':p': '😛',
+                    ':P': '😛',
+                    ':o': '😮',
+                    ':O': '😮'
+                };
+                
+                const basicPositions = {};
+                const instance = new EmojiHelper(basicEmojiData, basicPositions, finalConfig);
+                singletonInstance = instance;
+                return instance;
+            } finally {
+                // Clear promise after completion
+                singletonPromise = null;
+            }
+        })();
+
+        return singletonPromise;
     }
 
     /**
@@ -48,9 +156,12 @@ export class EmojiHelper {
         const y = parseFloat(yPercent.replace('%', ''));
 
         // Tính toán row và column dựa vào phần trăm
-        // Giả sử có 51 columns và khoảng 41 rows (dựa vào cấu trúc file)
-        const column = Math.round((x / 100) * 50) + 1; // 1-based
-        const row = Math.round((y / 100) * 40) + 1; // 1-based
+        // Dựa vào cấu trúc file: có 51 columns (0-50) và 41 rows (1-41)
+        // x% tương ứng với column: x / 2 (do 100% / 50 columns = 2% per column)
+        // y% tương ứng với row: (y / 2.5) + 1 (do 100% / 40 rows = 2.5% per row, và rows bắt đầu từ 1)
+        
+        const column = Math.round(x / 2) + 1; // 1-based, từ 1 đến 51
+        const row = Math.round(y / 2.5) + 1; // 1-based, từ 1 đến 41
 
         return {
             row,
@@ -65,7 +176,7 @@ export class EmojiHelper {
      */
     private getImagePath(spriteInfo: EmojiSpriteInfo): string {
         const { row, column } = spriteInfo;
-        return `${this.config.basePath}/emoji-${this.config.size}/row-${row}-column-${column}.png`;
+        return `${this.config.spriteSheetPath}/row-${row}-column-${column}.png`;
     }
 
     /**
@@ -86,24 +197,80 @@ export class EmojiHelper {
         if (!info) return null;
 
         return {
-            backgroundImage: `url(${this.config.basePath}/emoji-sprite-${this.config.size}.png)`,
+            backgroundImage: `url(${this.config.spriteSheetPath}/emoji-sprite-${this.config.spriteSize}.png)`,
             backgroundPosition: `${info.position.x} ${info.position.y}`,
             backgroundSize: '100% auto',
-            width: `${this.config.size}px`,
-            height: `${this.config.size}px`,
+            width: `${this.config.spriteSize}px`,
+            height: `${this.config.spriteSize}px`,
             display: 'inline-block'
         };
     }
 
     /**
-     * Convert text có emoji shortcode thành HTML
+     * Tìm shortcode từ unicode emoji
+     */
+    findShortcodeByUnicode(unicode: string): string | null {
+        for (const [shortcode, emojiUnicode] of Object.entries(this.emojiData)) {
+            if (emojiUnicode === unicode) {
+                return shortcode;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Convert text có emoji shortcode và unicode thành HTML với ảnh emoji
      */
     parseText(text: string): string {
-        const emojiRegex = /:([a-zA-Z0-9_+-]+):/g;
+        // Regex for shortcode patterns - expanded to catch ALL Zalo shortcodes
+        const shortcodeRegex = /:([a-zA-Z0-9_+-]+):|:\'\)|:b|:~|(<3|<\/3|:\)|:-\)|8-\)|:-\(\(|:\$|:3|:z|:\(\(|&-\(|:-h|:p|:d|:o|:\(|;\-\)|--b|:\)\)|:-\*|;p|;\-d|\/-showlove|;d|;o|;g|\|-\)|:!|:l|:>|:;|;f|:v|:wipe|:-dig|:handclap|b-\)|:-r|:-<|:-o|;\-s|;\?|;\-x|:-f|8\*\)|;!|;\-!|;xx|:-bye|>-\||p-\(|:--\||:q|x-\)|:\*|;\-a|8\*|:\||:x|:t|;\-\/|:-l|\$-\)|\/-beer|\/-coffee|\/-rose|\/-fade|\/-bd|\/-bome|\/-cake|\/-heart|\/-break|\/-shit|\/-li|\/-flag|\/-strong|\/-weak|\/-ok|\/-v|\/-thanks|\/-punch|\/-share|_\(\)_|\/-no|\/-bad|\/-loveu)/gi;
+        
+        // Regex for unicode emoji - includes flag emoji (regional indicators) and comprehensive emoji ranges
+        const unicodeEmojiRegex = /(?:[\u{1f1e6}-\u{1f1ff}][\u{1f1e6}-\u{1f1ff}])|[\u{1f600}-\u{1f64f}]|[\u{1f300}-\u{1f5ff}]|[\u{1f680}-\u{1f6ff}]|[\u{1f1e0}-\u{1f1ff}]|[\u{2600}-\u{26ff}]|[\u{2700}-\u{27bf}]|[\u{1f900}-\u{1f9ff}]|[\u{1f018}-\u{1f270}]|[\u{238c}-\u{2454}]|[\u{20d0}-\u{20ff}]|[\u{fe0f}]|[\u{200d}]|[\u{3030}]|[\u{303d}]|[\u{3297}]|[\u{3299}]|[\u{1f004}]|[\u{1f0cf}]|[\u{1f170}-\u{1f189}]|[\u{1f18e}]|[\u{1f191}-\u{1f19a}]|[\u{1f1e6}-\u{1f1ff}]|[\u{1f201}-\u{1f202}]|[\u{1f21a}]|[\u{1f22f}]|[\u{1f232}-\u{1f23a}]|[\u{1f250}-\u{1f251}]|[\u{00a9}]|[\u{00ae}]|[\u{203c}]|[\u{2049}]|[\u{2122}]|[\u{2139}]|[\u{2194}-\u{2199}]|[\u{21a9}-\u{21aa}]|[\u{231a}-\u{231b}]|[\u{2328}]|[\u{23cf}]|[\u{23e9}-\u{23f3}]|[\u{23f8}-\u{23fa}]|[\u{24c2}]|[\u{25aa}-\u{25ab}]|[\u{25b6}]|[\u{25c0}]|[\u{25fb}-\u{25fe}]|[\u{2600}-\u{2604}]|[\u{260e}]|[\u{2611}]|[\u{2614}-\u{2615}]|[\u{2618}]|[\u{261d}]|[\u{2620}]|[\u{2622}-\u{2623}]|[\u{2626}]|[\u{262a}]|[\u{262e}-\u{262f}]|[\u{2638}-\u{263a}]|[\u{2640}]|[\u{2642}]|[\u{2648}-\u{2653}]|[\u{2660}]|[\u{2663}]|[\u{2665}-\u{2666}]|[\u{2668}]|[\u{267b}]|[\u{267f}]|[\u{2692}-\u{2697}]|[\u{2699}]|[\u{269b}-\u{269c}]|[\u{26a0}-\u{26a1}]|[\u{26aa}-\u{26ab}]|[\u{26b0}-\u{26b1}]|[\u{26bd}-\u{26be}]|[\u{26c4}-\u{26c5}]|[\u{26c8}]|[\u{26ce}-\u{26cf}]|[\u{26d1}]|[\u{26d3}-\u{26d4}]|[\u{26e9}-\u{26ea}]|[\u{26f0}-\u{26f5}]|[\u{26f7}-\u{26fa}]|[\u{26fd}]|[\u{2702}]|[\u{2705}]|[\u{2708}-\u{270d}]|[\u{270f}]|[\u{2712}]|[\u{2714}]|[\u{2716}]|[\u{271d}]|[\u{2721}]|[\u{2728}]|[\u{2733}-\u{2734}]|[\u{2744}]|[\u{2747}]|[\u{274c}]|[\u{274e}]|[\u{2753}-\u{2755}]|[\u{2757}]|[\u{2763}-\u{2764}]|[\u{2795}-\u{2797}]|[\u{27a1}]|[\u{27b0}]|[\u{27bf}]|[\u{2934}-\u{2935}]|[\u{2b05}-\u{2b07}]|[\u{2b1b}-\u{2b1c}]|[\u{2b50}]|[\u{2b55}]|[\u{3030}]|[\u{303d}]|[\u{3297}]|[\u{3299}]/gu;
 
-        return text.replace(emojiRegex, (match, shortcode) => {
-            const info = this.getEmojiInfo(shortcode);
+        let result = text;
+
+        // First, replace shortcode patterns
+        result = result.replace(shortcodeRegex, (match) => {
+            // Normalize match để tìm trong data
+            const normalizedMatch = match.toLowerCase();
+            
+            const info = this.getEmojiInfo(normalizedMatch);
             if (info) {
+                const imagePath = info.imagePath;
+                return `<img src="${imagePath}" alt="${info.unicode || match}" title="${match}" class="emoji-image" style="width: ${this.config.spriteSize}px; height: ${this.config.spriteSize}px; vertical-align: middle; display: inline-block;" onError="this.style.display='none'; this.nextSibling.style.display='inline';" /><span class="emoji-fallback" style="display: none;">${info.unicode || match}</span>`;
+            }
+            return match;
+        });
+
+        // Then, replace unicode emoji
+        result = result.replace(unicodeEmojiRegex, (match) => {
+            // Tìm shortcode từ unicode
+            const shortcode = this.findShortcodeByUnicode(match);
+            if (shortcode) {
+                const info = this.getEmojiInfo(shortcode);
+                if (info) {
+                    const imagePath = info.imagePath;
+                    return `<img src="${imagePath}" alt="${match}" title="${shortcode}" class="emoji-image" style="width: ${this.config.spriteSize}px; height: ${this.config.spriteSize}px; vertical-align: middle; display: inline-block;" onError="this.style.display='none'; this.nextSibling.style.display='inline';" /><span class="emoji-fallback" style="display: none;">${match}</span>`;
+                }
+            }
+            return match;
+        });
+
+        return result;
+    }
+
+    /**
+     * Convert text có emoji shortcode thành text với Unicode emoji
+     */
+    parseTextToUnicode(text: string): string {
+        // Regex để match cả :shortcode: và các shortcode đặc biệt
+        const emojiRegex = /:([a-zA-Z0-9_+-]+):|(<3|<\/3|:\)|:-\)|:\(|:-\(|:D|:-D|:P|:-P|;\)|;-\)|:o|:-o|:\||:-\||:\/|:-\/|[:;][\-~]?[\(\)\[\]{}<>@#$%^&*+=|\\/]|[:;][a-zA-Z0-9]|[-=][\(\)]|[_()]|\/-[a-zA-Z]+|:b|:~|:d)/gi;
+
+        return text.replace(emojiRegex, (match) => {
+            const normalizedMatch = match.toLowerCase();
+            const info = this.getEmojiInfo(normalizedMatch);
+            if (info && info.unicode) {
                 return info.unicode;
             }
             return match; // Giữ nguyên nếu không tìm thấy
@@ -158,26 +325,18 @@ export class EmojiHelper {
         if (!info) return null;
 
         const classAttr = className ? ` class="${className}"` : '';
-        return `<img src="${info.imagePath}" alt="${shortcode}" title="${shortcode}"${classAttr} width="${this.config.size}" height="${this.config.size}" />`;
+        return `<img src="${info.imagePath}" alt="${shortcode}" title="${shortcode}"${classAttr} width="${this.config.spriteSize}" height="${this.config.spriteSize}" />`;
     }
 }
 
-// Factory function để tạo EmojiHelper
+// Factory function để tạo EmojiHelper với singleton pattern
 export async function createEmojiHelper(
-    config: EmojiConfig,
+    config?: EmojiConfig,
     dataPath: string = '/emoji'
 ): Promise<EmojiHelper> {
     try {
-        // Load emoji data và positions
-        const [emojiDataResponse, emojiPositionsResponse] = await Promise.all([
-            fetch(`${dataPath}/emoji-data.json`),
-            fetch(`${dataPath}/emoji-pos.json`)
-        ]);
-
-        const emojiData: EmojiData = await emojiDataResponse.json();
-        const emojiPositions: EmojiPosition = await emojiPositionsResponse.json();
-
-        return new EmojiHelper(emojiData, emojiPositions, config);
+        // Sử dụng singleton method để tránh load data nhiều lần
+        return await EmojiHelper.createWithAllPositions(config);
     } catch (error) {
         console.error('Failed to create EmojiHelper:', error);
         throw error;
@@ -186,6 +345,7 @@ export async function createEmojiHelper(
 
 // Default config
 export const defaultEmojiConfig: EmojiConfig = {
-    size: 24,
-    basePath: '/emoji'
+    spriteSize: 24,
+    spriteSheetPath: '/emoji/emoji-24',
+    enableFallback: true,
 };

@@ -55,6 +55,7 @@ export async function middleware(request: NextRequest) {
       if (typeof payload.zaloLinkStatus === 'number') {
         zaloLinkStatus = payload.zaloLinkStatus;
       }
+
     } catch (error) {
       console.error('Token decode error:', error);
     }
@@ -103,12 +104,13 @@ export async function middleware(request: NextRequest) {
           if (data.access_token) {
             const response = NextResponse.next();
             // Set new access token
-            response.cookies.set('access_token', data.access_token, {
-              httpOnly: false,
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              maxAge: 30 * 24 * 60 * 60, // 30 days
-            });
+            // TODO: Đổi cơ chế lưu access token từ cookies sang localStorage
+            // response.cookies.set('access_token', data.access_token, {
+            //   httpOnly: false,
+            //   secure: process.env.NODE_ENV === 'production',
+            //   sameSite: 'lax',
+            //   maxAge: 30 * 24 * 60 * 60, // 30 days
+            // });
             // Set new refresh token if provided
             if (data.refresh_token) {
               response.cookies.set('refresh_token', data.refresh_token, {
