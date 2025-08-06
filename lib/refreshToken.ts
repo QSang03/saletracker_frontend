@@ -1,6 +1,28 @@
 import { setAccessToken, getRefreshToken, setRefreshToken, clearAllTokens, getAccessToken } from './auth';
 
+// Global singleton để tránh multiple refresh calls
+let refreshPromise: Promise<string | null> | null = null;
+
 export async function refreshAccessToken(): Promise<string | null> {
+  // Nếu đã có process đang chạy, return existing promise
+  if (refreshPromise) {
+    console.log('🔄 [RefreshToken] Using existing refresh promise...');
+    return refreshPromise;
+  }
+  
+  // Tạo new promise và cache nó
+  refreshPromise = performRefresh();
+  
+  try {
+    const result = await refreshPromise;
+    return result;
+  } finally {
+    // Clear promise sau khi hoàn thành (thành công hoặc thất bại)
+    refreshPromise = null;
+  }
+}
+
+async function performRefresh(): Promise<string | null> {
   try {
     if (typeof document === 'undefined') return null;
     

@@ -1,22 +1,24 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { refreshAccessToken } from './refreshToken';
 
+// Global state để tránh multiple refresh cùng lúc
+let globalIsRefreshing = false;
+let globalRefreshPromise: Promise<string | null> | null = null;
+let globalFailedQueue: { resolve: (token: string) => void; reject: (err: any) => void }[] = [];
+
 export function setupAxiosInterceptors(instance: AxiosInstance) {
   // Chỉ setup nếu ở client-side
   if (typeof window === 'undefined') return;
-  
-  let isRefreshing = false;
-  let failedQueue: { resolve: (token: string) => void; reject: (err: any) => void }[] = [];
 
   const processQueue = (error: any, token: string | null = null) => {
-    failedQueue.forEach(prom => {
+    globalFailedQueue.forEach((prom: { resolve: (token: string) => void; reject: (err: any) => void }) => {
       if (token) {
         prom.resolve(token);
       } else {
         prom.reject(error);
       }
     });
-    failedQueue = [];
+    globalFailedQueue = [];
   };
 
   instance.interceptors.response.use(
@@ -29,23 +31,33 @@ export function setupAxiosInterceptors(instance: AxiosInstance) {
           !originalRequest._retry && 
           !originalRequest.url?.includes('/auth/refresh')) {
         
-        if (isRefreshing) {
+        if (globalIsRefreshing) {
+          // Nếu đang refresh, thêm vào queue và chờ
           return new Promise((resolve, reject) => {
-            failedQueue.push({
+            globalFailedQueue.push({
               resolve: (token: string) => {
                 if (originalRequest.headers) originalRequest.headers['Authorization'] = 'Bearer ' + token;
                 resolve(instance(originalRequest));
               },
-              reject: (err) => reject(err),
+              reject: (err: any) => reject(err),
             });
           });
         }
         
         originalRequest._retry = true;
-        isRefreshing = true;
+        globalIsRefreshing = true;
         
         try {
-          const newToken = await refreshAccessToken();
+          // Sử dụng global promise để tránh multiple calls
+          if (!globalRefreshPromise) {
+            console.log('🔄 [AxiosInterceptor] Starting new refresh process...');
+            globalRefreshPromise = refreshAccessToken();
+          } else {
+            console.log('🔄 [AxiosInterceptor] Using existing refresh promise...');
+          }
+          
+          const newToken = await globalRefreshPromise;
+          
           if (newToken) {
             processQueue(null, newToken);
             if (originalRequest.headers) {
@@ -65,7 +77,8 @@ export function setupAxiosInterceptors(instance: AxiosInstance) {
           processQueue(err, null);
           return Promise.reject(err);
         } finally {
-          isRefreshing = false;
+          globalIsRefreshing = false;
+          globalRefreshPromise = null;
         }
       }
       return Promise.reject(error);
