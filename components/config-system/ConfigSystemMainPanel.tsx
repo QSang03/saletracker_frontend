@@ -10,7 +10,7 @@ const SECTION_TITLES: Record<string, string> = {
   debt: "CÔNG NỢ",
   holiday: "LỊCH NGHỈ",
   transaction: "GIAO DỊCH",
-  campaign: "CHIẾN DỊCH KINH DOANH",
+  campaign: "CHIẾN DỊCH KINH DOANH"
   // Thêm các section khác nếu cần
 };
 

@@ -203,8 +203,6 @@ function ManagerOrderContent() {
         warningLevel: warningLevelValue,
         page: shouldResetPage ? 1 : filters.page,
       };
-
-      console.log("🔧 Applying all filters at once:", newFilters);
       
       // ✅ Apply tất cả filters chỉ với 1 lần gọi
       setFilters(newFilters);
@@ -331,7 +329,7 @@ function ManagerOrderContent() {
   const handleEditCustomerName = useCallback(
     async (orderDetail: OrderDetail, newCustomerName: string) => {
       try {
-        await updateOrderDetailCustomerName(Number(orderDetail.id), newCustomerName);
+        await updateOrderDetailCustomerName(Number(orderDetail.id), newCustomerName, orderDetail);
         setAlert({ type: "success", message: "Đã cập nhật tên khách hàng thành công!" });
         refetch();
       } catch (err) {

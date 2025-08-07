@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { OrderDetail } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,30 @@ const EditCustomerNameModal: React.FC<EditCustomerNameModalProps> = ({
 }) => {
   const [customerName, setCustomerName] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // ✅ Check if this order detail has customer_id in metadata for bulk update warning
+  const hasCustomerId = useMemo(() => {
+    if (!orderDetail?.metadata) return false;
+    try {
+      const metadata = orderDetail.metadata;
+      return !!metadata.customer_id;
+    } catch (error) {
+      return false;
+    }
+  }, [orderDetail?.metadata]);
+
+  const getCustomerInfo = useMemo(() => {
+    if (!orderDetail?.metadata) return null;
+    try {
+      const metadata = orderDetail.metadata;
+      return {
+        customerId: metadata.customer_id,
+        conversationType: metadata.conversation_type,
+      };
+    } catch (error) {
+      return null;
+    }
+  }, [orderDetail?.metadata]);
 
   useEffect(() => {
     if (orderDetail) {
@@ -114,8 +138,8 @@ const EditCustomerNameModal: React.FC<EditCustomerNameModalProps> = ({
           </div>
 
           {/* Main modal container with stunning effects */}
-          <div className="relative p-1 bg-gradient-to-r from-purple-500 via-violet-500 via-indigo-500 to-blue-500 rounded-3xl animate-gradient-shift">
-            <div className="relative bg-gradient-to-br from-white via-purple-50 via-violet-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl">
+          <div className="relative p-1 bg-gradient-to-r from-purple-500 via-violet-500 to-blue-500 rounded-3xl animate-gradient-shift">
+            <div className="relative bg-gradient-to-br from-white via-purple-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl">
               {/* Header with enhanced design */}
               <DialogHeader className="relative p-8 pb-4">
                 {/* Floating sparkles in header */}
@@ -222,6 +246,45 @@ const EditCustomerNameModal: React.FC<EditCustomerNameModalProps> = ({
                                 <span className="text-gray-700 font-semibold">
                                   {customerName}
                                 </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ✅ Warning about bulk update */}
+                    {hasChanged && hasCustomerId && getCustomerInfo && (
+                      <div className="animate-fadeIn mt-3">
+                        <div className="relative group">
+                          <div className="absolute inset-0 bg-gradient-to-r from-yellow-200 to-orange-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
+                          <div className="relative bg-gradient-to-br from-yellow-50 via-orange-50 to-red-50 p-4 rounded-xl border-2 border-yellow-300 shadow-inner">
+                            <div className="flex items-start gap-3">
+                              <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center border border-yellow-300 mt-0.5">
+                                <span className="text-yellow-600 text-sm font-bold">
+                                  !
+                                </span>
+                              </div>
+                              <div className="flex-1">
+                                <div className="text-sm font-semibold text-gray-700 mb-1">
+                                  🔄 Cập nhật hàng loạt
+                                </div>
+                                <div className="text-xs text-gray-600 leading-relaxed">
+                                  Hệ thống sẽ tự động cập nhật tên khách hàng
+                                  cho <strong>tất cả đơn hàng</strong> có cùng
+                                  Customer ID:
+                                  <span className="font-mono text-blue-600 bg-blue-50 px-1 rounded ml-1">
+                                    {getCustomerInfo.customerId}
+                                  </span>
+                                  <br />
+                                  Loại:{" "}
+                                  <span className="font-semibold text-purple-600">
+                                    {getCustomerInfo.conversationType ===
+                                    "private"
+                                      ? "👤 Chat riêng"
+                                      : "👥 Nhóm chat"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -363,6 +426,47 @@ const EditCustomerNameModal: React.FC<EditCustomerNameModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* ✅ Bulk update warning in confirmation dialog */}
+            {hasCustomerId && getCustomerInfo && (
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-xl blur opacity-30"></div>
+                <div className="relative bg-gradient-to-br from-yellow-50 via-orange-50 to-red-50 p-4 rounded-xl border-2 border-yellow-300 shadow-inner">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center border border-yellow-300">
+                      <span className="text-yellow-600 text-lg font-bold">
+                        ⚠️
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-gray-700 mb-2">
+                        🔄 Cập nhật hàng loạt
+                      </div>
+                      <div className="text-sm text-gray-600 leading-relaxed space-y-1">
+                        <div>
+                          Hệ thống sẽ tự động cập nhật tên cho{" "}
+                          <strong>tất cả đơn hàng</strong> có cùng Customer ID.
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono">
+                            ID: {getCustomerInfo.customerId}
+                          </span>
+                          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                            {getCustomerInfo.conversationType === "private"
+                              ? "👤 Chat riêng"
+                              : "👥 Nhóm chat"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-orange-600 font-medium mt-2">
+                          ℹ️ Thay đổi này sẽ ảnh hưởng đến nhiều đơn hàng cùng
+                          lúc.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         }
         confirmText="🚀 Xác nhận"

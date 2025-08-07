@@ -514,7 +514,7 @@ export default function PaginatedTable({
   const totalPages = Math.max(1, Math.ceil(totalRows / currentPageSize));
 
   // State tạm cho input pageSize (chỉ áp dụng cho input nhập số dòng/trang)
-  const [pendingPageSize, setPendingPageSize] = useState<number | "">(
+  const [pendingPageSize, setPendingPageSize] = useState<number | "10">(
     currentPageSize
   );
   useEffect(() => {
@@ -554,7 +554,7 @@ export default function PaginatedTable({
     if (onPageChange) onPageChange(1);
     else setInternalPage(0);
 
-    setPendingPageSize("");
+    setPendingPageSize("10");
 
     // Gọi callback reset filter ở trang cha nếu có
     if (typeof onResetFilter === "function") {
@@ -794,7 +794,7 @@ export default function PaginatedTable({
 
   // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định (nhưng không khi đang restore)
   useEffect(() => {
-    if (pendingPageSize === "" && !isRestoring) {
+    if (pendingPageSize === "10" && !isRestoring) {
       if (isBackendPaging && onPageSizeChange)
         onPageSizeChange(defaultPageSize);
       else setInternalPageSize(defaultPageSize);
@@ -954,7 +954,7 @@ export default function PaginatedTable({
               onChange={(e) => {
                 const val = Number(e.target.value);
                 setPendingPageSize(
-                  e.target.value === "" ? "" : val > 0 ? val : ""
+                  e.target.value === "" ? "10" : val > 0 ? val : "10"
                 );
               }}
               onKeyDown={(e) => {

@@ -650,7 +650,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
                   {/* ✅ Checkbox column */}
-                  <TableHead className="font-bold text-slate-700 text-sm w-[40px] text-center sticky left-0 bg-slate-100 z-10">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[40px] text-center left-0 bg-slate-100">
                     <Checkbox
                       checked={isAllSelected}
                       onCheckedChange={handleSelectAll}
@@ -662,7 +662,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       }
                     />
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-[40px] bg-slate-100 z-10">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center left-[40px] bg-slate-100">
                     #
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-center">
@@ -674,10 +674,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     📅 Thời gian
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">
                     👤 Nhân viên
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">
                     🏪 Khách hàng
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[300px] text-center">
@@ -733,7 +733,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       className={getRowClassName(orderDetail, index)}
                     >
                       {/* ✅ Checkbox cell */}
-                      <TableCell className="text-center sticky left-0 bg-inherit z-10">
+                      <TableCell className="text-center left-0 bg-inherit">
                         <Checkbox
                           checked={selectedOrderIds.has(orderDetail.id)}
                           onCheckedChange={() =>
@@ -742,7 +742,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           aria-label={`Chọn đơn hàng #${orderDetail.id}`}
                         />
                       </TableCell>
-                      <TableCell className="text-center sticky left-[40px] bg-inherit z-10">
+                      <TableCell className="text-center left-[40px] bg-inherit">
                         <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
                           {startIndex + index + 1}
                         </div>
@@ -846,7 +846,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-6 w-6 p-0 hover:bg-green-100"
+                            className="h-6 w-6 p-0 hover:bg-green-100 mr-5"
                             onClick={() => handleCustomerNameEdit(orderDetail)}
                             title="Sửa tên khách hàng"
                           >

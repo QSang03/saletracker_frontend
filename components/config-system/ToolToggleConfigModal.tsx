@@ -14,6 +14,7 @@ const TOOLS = [
   { key: "system_processOrder", label: "Xử lý giao dịch" },
   { key: "system_scheduleHoliday", label: "Lịch nghỉ" },
   { key: "system_processCampaign", label: "Xử lý chiến dịch" },
+  { key: "zalo_conversation_name_updater_enabled", label: "Cập nhật tên trò chuyện Zalo" },
   // ...thêm tool khác nếu có
 ];
 
