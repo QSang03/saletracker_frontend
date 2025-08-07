@@ -66,6 +66,7 @@ export const navItems = [
     items: [
       { title: "Cấu hình hệ thống", url: "/dashboard/config-system", roles: ["admin"] },
       { title: "Cấu hình server", url: "/dashboard/service-monitor", roles: ["admin"] },
+      { title: "Chat GPT OSS", url: "/dashboard/gpt-oss", roles: ["admin"] },
     ],
   },
 ];

@@ -13,11 +13,12 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
 import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
+import { ServerResponseAlert, type AlertType } from "@/components/ui/loading/ServerResponseAlert";
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function ManagerOrderContent() {
   const [alert, setAlert] = useState<{
-    type: "success" | "error";
+    type: AlertType;
     message: string;
   } | null>(null);
 
@@ -53,7 +54,11 @@ function ManagerOrderContent() {
     resetFilters,
     getFilterOptions,
     updateOrderDetail,
+    updateOrderDetailCustomerName,
     deleteOrderDetail, // ✅ Thay đổi từ deleteOrder thành deleteOrderDetail
+    bulkDeleteOrderDetails,
+    bulkExtendOrderDetails,
+    bulkAddNotesOrderDetails,
     isLoading,
     error,
 
@@ -139,15 +144,8 @@ function ManagerOrderContent() {
   // Convert PaginatedTable filters to useOrders filters
   const handleFilterChange = useCallback(
     (paginatedFilters: Filters) => {
-      console.log(
-        "🔧 handleFilterChange called with isInCustomerSearchMode:",
-        isInCustomerSearchMode
-      );
-      console.log("🔧 Current search value:", paginatedFilters.search);
-      console.log("🔧 Current page in filters:", filters.page);
       
       const shouldResetPage = !isInCustomerSearchMode && !filters.search;
-      console.log("🔧 shouldResetPage:", shouldResetPage);
 
       // ✅ Build new filters object với tất cả changes cùng lúc
       const searchValue = paginatedFilters.search || "";
@@ -280,6 +278,69 @@ function ManagerOrderContent() {
     },
     [deleteOrderDetail, refetch]
   ); // ✅ Thay đổi dependency
+
+  // ✅ Handle bulk delete
+  const handleBulkDelete = useCallback(
+    async (orderDetails: OrderDetail[], reason: string) => {
+      try {
+        const ids = orderDetails.map(od => Number(od.id));
+        await bulkDeleteOrderDetails(ids, reason);
+        setAlert({ type: "success", message: `Đã xóa ${orderDetails.length} đơn hàng thành công!` });
+        refetch();
+      } catch (err) {
+        console.error("Error bulk deleting order details:", err);
+        setAlert({ type: "error", message: "Lỗi khi xóa nhiều đơn hàng!" });
+      }
+    },
+    [bulkDeleteOrderDetails, refetch]
+  );
+
+  // ✅ Handle bulk extend
+  const handleBulkExtend = useCallback(
+    async (orderDetails: OrderDetail[]) => {
+      try {
+        const ids = orderDetails.map(od => Number(od.id));
+        await bulkExtendOrderDetails(ids);
+        setAlert({ type: "success", message: `Đã gia hạn ${orderDetails.length} đơn hàng thành công!` });
+        refetch();
+      } catch (err) {
+        console.error("Error bulk extending order details:", err);
+        setAlert({ type: "error", message: "Lỗi khi gia hạn nhiều đơn hàng!" });
+      }
+    },
+    [bulkExtendOrderDetails, refetch]
+  );
+
+  // ✅ Handle bulk notes
+  const handleBulkNotes = useCallback(
+    async (orderDetails: OrderDetail[], notes: string) => {
+      try {
+        const ids = orderDetails.map(od => Number(od.id));
+        await bulkAddNotesOrderDetails(ids, notes);
+        setAlert({ type: "success", message: `Đã cập nhật ghi chú cho ${orderDetails.length} đơn hàng thành công!` });
+        refetch();
+      } catch (err) {
+        console.error("Error bulk adding notes to order details:", err);
+        setAlert({ type: "error", message: "Lỗi khi cập nhật ghi chú nhiều đơn hàng!" });
+      }
+    },
+    [bulkAddNotesOrderDetails, refetch]
+  );
+
+  // ✅ Handle edit customer name
+  const handleEditCustomerName = useCallback(
+    async (orderDetail: OrderDetail, newCustomerName: string) => {
+      try {
+        await updateOrderDetailCustomerName(Number(orderDetail.id), newCustomerName);
+        setAlert({ type: "success", message: "Đã cập nhật tên khách hàng thành công!" });
+        refetch();
+      } catch (err) {
+        console.error("Error updating customer name:", err);
+        setAlert({ type: "error", message: "Lỗi khi cập nhật tên khách hàng!" });
+      }
+    },
+    [updateOrderDetailCustomerName, refetch]
+  );
 
   const handleReload = useCallback(() => {
     refetch();
@@ -624,6 +685,10 @@ function ManagerOrderContent() {
               onReload={handleReload}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onEditCustomerName={handleEditCustomerName}
+              onBulkDelete={handleBulkDelete}
+              onBulkExtend={handleBulkExtend}
+              onBulkNotes={handleBulkNotes}
               onSearch={handleSearch}
               onSort={handleSort}
               currentSortField={filters.sortField}
@@ -633,6 +698,15 @@ function ManagerOrderContent() {
           </PaginatedTable>
         </CardContent>
       </Card>
+
+      {/* ✅ Alert notifications */}
+      {alert && (
+        <ServerResponseAlert
+          type={alert.type}
+          message={alert.message}
+          onClose={() => setAlert(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,4 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, X } from 'lucide-react';
 
 interface CustomerSearchIndicatorProps {
   customerName: string;
@@ -10,8 +8,6 @@ interface CustomerSearchIndicatorProps {
 }
 export const CustomerSearchIndicator: React.FC<CustomerSearchIndicatorProps> = ({
   customerName,
-  onRestorePrevious,
-  onClearSearch,
   className = ""
 }) => {
   return (
@@ -22,30 +18,6 @@ export const CustomerSearchIndicator: React.FC<CustomerSearchIndicatorProps> = (
           Đang xem đơn hàng của khách hàng: 
           <span className="font-bold text-blue-900 ml-1">"{customerName}"</span>
         </span>
-      </div>
-      
-      <div className="flex items-center space-x-1">
-        <Button
-          onClick={onRestorePrevious}
-          variant="outline"
-          size="sm"
-          className="text-blue-700 hover:text-blue-800 hover:bg-blue-100 border-blue-300"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Quay lại
-        </Button>
-        
-        <Button
-          onClick={() => {
-            // Clear search bằng cách navigate về trang chủ không có search
-            window.history.back();
-          }}
-          variant="outline"
-          size="sm"
-          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300"
-        >
-          <X className="w-4 h-4" />
-        </Button>
       </div>
     </div>
   );

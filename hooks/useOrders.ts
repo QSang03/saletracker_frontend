@@ -92,8 +92,18 @@ interface UseOrdersReturn {
     id: number,
     orderDetailData: Partial<OrderDetail>
   ) => Promise<OrderDetail>;
+  updateOrderDetailCustomerName: (
+    id: number,
+    customerName: string
+  ) => Promise<OrderDetail>;
   deleteOrderDetail: (id: number) => Promise<void>;
   getOrderDetailById: (id: number) => Promise<OrderDetail>;
+
+  // Bulk operations
+  bulkDeleteOrderDetails: (ids: number[], reason: string) => Promise<void>;
+  bulkUpdateOrderDetails: (ids: number[], updates: Partial<OrderDetail>) => Promise<void>;
+  bulkExtendOrderDetails: (ids: number[]) => Promise<void>;
+  bulkAddNotesOrderDetails: (ids: number[], notes: string) => Promise<void>;
 
   // Loading states
   isLoading: boolean;
@@ -976,6 +986,29 @@ export const useOrders = (): UseOrdersReturn => {
     [handleApiCall, getAuthHeaders]
   );
 
+  const updateOrderDetailCustomerName = useCallback(
+    async (
+      id: number,
+      customerName: string
+    ): Promise<OrderDetail> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/${id}/customer-name`,
+          {
+            method: "PUT",
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ customer_name: customerName }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to update customer name: ${res.status}`);
+        return res.json();
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
   const deleteOrderDetail = useCallback(
     async (id: number): Promise<void> => {
       return handleApiCall(async () => {
@@ -1007,6 +1040,95 @@ export const useOrders = (): UseOrdersReturn => {
         if (!res.ok)
           throw new Error(`Failed to fetch order detail: ${res.status}`);
         return res.json();
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
+  // Bulk operations
+  const bulkDeleteOrderDetails = useCallback(
+    async (ids: number[], reason: string): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-delete`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids, reason }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to bulk delete order details: ${res.status}`);
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
+  const bulkUpdateOrderDetails = useCallback(
+    async (ids: number[], updates: Partial<OrderDetail>): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-update`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids, updates }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to bulk update order details: ${res.status}`);
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
+  const bulkExtendOrderDetails = useCallback(
+    async (ids: number[]): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-extend`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to bulk extend order details: ${res.status}`);
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
+  const bulkAddNotesOrderDetails = useCallback(
+    async (ids: number[], notes: string): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-notes`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids, notes }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to bulk add notes to order details: ${res.status}`);
       });
     },
     [handleApiCall, getAuthHeaders]
@@ -1284,8 +1406,15 @@ export const useOrders = (): UseOrdersReturn => {
     fetchOrderDetails,
     createOrderDetail,
     updateOrderDetail,
+    updateOrderDetailCustomerName,
     deleteOrderDetail,
     getOrderDetailById,
+
+    // Bulk operations
+    bulkDeleteOrderDetails,
+    bulkUpdateOrderDetails,
+    bulkExtendOrderDetails,
+    bulkAddNotesOrderDetails,
 
     // Loading states
     isLoading,

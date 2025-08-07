@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -42,10 +43,21 @@ import {
   Eye,
   ChevronUp,
   ChevronDown,
+  Sparkles,
+  MessageCircle,
+  Hash,
+  User,
+  X,
 } from "lucide-react";
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
+import EditCustomerNameModal from "./EditCustomerNameModal";
+import BulkActions from "./BulkActions";
+import BulkDeleteModal from "./BulkDeleteModal";
+import BulkExtendModal from "./BulkExtendModal";
+import BulkNotesModal from "./BulkNotesModal";
 import { POrderDynamic } from "../POrderDynamic";
+import EmojiRenderer from "@/components/common/EmojiRenderer";
 
 interface OrderManagementProps {
   orders: OrderDetail[];
@@ -54,20 +66,34 @@ interface OrderManagementProps {
   onReload: () => void;
   onEdit?: (orderDetail: OrderDetail, data: any) => void;
   onDelete?: (orderDetail: OrderDetail, reason: string) => void;
+  onEditCustomerName?: (
+    orderDetail: OrderDetail,
+    newCustomerName: string
+  ) => void;
+  onBulkDelete?: (orderDetails: OrderDetail[], reason: string) => void;
+  onBulkExtend?: (orderDetails: OrderDetail[]) => void;
+  onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
   onSearch?: (searchTerm: string) => void;
-  onSort?: (field: 'quantity' | 'unit_price' | null, direction: 'asc' | 'desc' | null) => void;
-  currentSortField?: 'quantity' | 'unit_price' | null;
-  currentSortDirection?: 'asc' | 'desc' | null;
+  onSort?: (
+    field: "quantity" | "unit_price" | null,
+    direction: "asc" | "desc" | null
+  ) => void;
+  currentSortField?: "quantity" | "unit_price" | null;
+  currentSortDirection?: "asc" | "desc" | null;
   loading?: boolean;
 }
 
 // ✅ Function tính toán extended động - đã sửa lỗi TypeScript
-const calculateDynamicExtended = (createdAt: string | Date | undefined, originalExtended: number) => {
+const calculateDynamicExtended = (
+  createdAt: string | Date | undefined,
+  originalExtended: number
+) => {
   try {
     if (!createdAt) return originalExtended;
 
     // Parse ngày tạo
-    const createdDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+    const createdDate =
+      typeof createdAt === "string" ? new Date(createdAt) : createdAt;
     if (isNaN(createdDate.getTime())) return originalExtended;
 
     // Ngày hết hạn = ngày tạo + extended (theo ngày thực tế)
@@ -85,7 +111,7 @@ const calculateDynamicExtended = (createdAt: string | Date | undefined, original
 
     return diffDays;
   } catch (error) {
-    console.error('Error calculating dynamic extended:', error);
+    console.error("Error calculating dynamic extended:", error);
     return originalExtended;
   }
 };
@@ -121,6 +147,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onReload,
   onEdit,
   onDelete,
+  onEditCustomerName,
+  onBulkDelete,
+  onBulkExtend,
+  onBulkNotes,
   onSearch,
   onSort,
   currentSortField,
@@ -132,6 +162,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // ✅ Tính toán số dòng hiển thị thực tế
   const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
 
+  // Existing states
   const [editingDetail, setEditingDetail] = useState<OrderDetail | null>(null);
   const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(
     null
@@ -140,6 +171,108 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+
+  // ✅ Customer name edit states
+  const [editingCustomerName, setEditingCustomerName] =
+    useState<OrderDetail | null>(null);
+  const [isEditCustomerNameModalOpen, setIsEditCustomerNameModalOpen] =
+    useState(false);
+
+  // ✅ Bulk selection states
+  const [selectedOrderIds, setSelectedOrderIds] = useState<
+    Set<number | string>
+  >(new Set());
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkExtendModalOpen, setIsBulkExtendModalOpen] = useState(false);
+  const [isBulkNotesModalOpen, setIsBulkNotesModalOpen] = useState(false);
+
+  // ✅ Get selected orders
+  const selectedOrders = useMemo(() => {
+    return safeOrders.filter((order) => selectedOrderIds.has(order.id));
+  }, [safeOrders, selectedOrderIds]);
+
+  // ✅ Check if all orders on current page are selected
+  const isAllSelected = useMemo(() => {
+    if (safeOrders.length === 0) return false;
+    return safeOrders.every((order) => selectedOrderIds.has(order.id));
+  }, [safeOrders, selectedOrderIds]);
+
+  // ✅ Check if some orders are selected (for indeterminate state)
+  const isSomeSelected = useMemo(() => {
+    if (safeOrders.length === 0) return false;
+    return (
+      safeOrders.some((order) => selectedOrderIds.has(order.id)) &&
+      !isAllSelected
+    );
+  }, [safeOrders, selectedOrderIds, isAllSelected]);
+
+  // ✅ Clear selection when orders change (e.g., page change)
+  useEffect(() => {
+    setSelectedOrderIds(new Set());
+  }, [orders]);
+
+  // ✅ Handle select all/deselect all
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      // Deselect all on current page
+      const newSelected = new Set(selectedOrderIds);
+      safeOrders.forEach((order) => newSelected.delete(order.id));
+      setSelectedOrderIds(newSelected);
+    } else {
+      // Select all on current page
+      const newSelected = new Set(selectedOrderIds);
+      safeOrders.forEach((order) => newSelected.add(order.id));
+      setSelectedOrderIds(newSelected);
+    }
+  };
+
+  // ✅ Handle individual selection
+  const handleSelectOrder = (orderId: number | string) => {
+    const newSelected = new Set(selectedOrderIds);
+    if (newSelected.has(orderId)) {
+      newSelected.delete(orderId);
+    } else {
+      newSelected.add(orderId);
+    }
+    setSelectedOrderIds(newSelected);
+  };
+
+  // ✅ Bulk action handlers
+  const handleBulkDelete = () => {
+    setIsBulkDeleteModalOpen(true);
+  };
+
+  const handleBulkExtend = () => {
+    setIsBulkExtendModalOpen(true);
+  };
+
+  const handleBulkNotes = () => {
+    setIsBulkNotesModalOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = (reason: string) => {
+    if (onBulkDelete && selectedOrders.length > 0) {
+      onBulkDelete(selectedOrders, reason);
+      setSelectedOrderIds(new Set());
+      setIsBulkDeleteModalOpen(false);
+    }
+  };
+
+  const handleBulkExtendConfirm = () => {
+    if (onBulkExtend && selectedOrders.length > 0) {
+      onBulkExtend(selectedOrders);
+      setSelectedOrderIds(new Set());
+      setIsBulkExtendModalOpen(false);
+    }
+  };
+
+  const handleBulkNotesConfirm = (notes: string) => {
+    if (onBulkNotes && selectedOrders.length > 0) {
+      onBulkNotes(selectedOrders, notes);
+      setSelectedOrderIds(new Set());
+      setIsBulkNotesModalOpen(false);
+    }
+  };
 
   const handleEditClick = (orderDetail: OrderDetail) => {
     setEditingDetail(orderDetail);
@@ -188,46 +321,70 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   // ✅ Function để handle sort - 3 trạng thái: desc -> asc -> null
-  const handleSort = (field: 'quantity' | 'unit_price') => {
+  const handleSort = (field: "quantity" | "unit_price") => {
     if (!onSort) return;
-    
+
     if (currentSortField !== field) {
       // Nếu click vào cột khác, bắt đầu với desc
-      onSort(field, 'desc');
+      onSort(field, "desc");
     } else {
       // Nếu click vào cùng cột
-      if (currentSortDirection === 'desc') {
-        onSort(field, 'asc');
-      } else if (currentSortDirection === 'asc') {
+      if (currentSortDirection === "desc") {
+        onSort(field, "asc");
+      } else if (currentSortDirection === "asc") {
         onSort(null, null); // Reset về trạng thái ban đầu
       } else {
-        onSort(field, 'desc');
+        onSort(field, "desc");
       }
     }
   };
 
-  // ✅ Function để handle click vào tên khách hàng
+  // ✅ Function để handle click vào tên khách hàng (double click = search)
   const handleCustomerNameClick = (customerName: string) => {
     if (onSearch && customerName && customerName.trim() !== "N/A") {
       onSearch(customerName.trim());
     }
   };
 
+  // ✅ Function để handle single click tên khách hàng (edit)
+  const handleCustomerNameEdit = (orderDetail: OrderDetail) => {
+    setEditingCustomerName(orderDetail);
+    setIsEditCustomerNameModalOpen(true);
+  };
+
+  // ✅ Function để handle save customer name
+  const handleCustomerNameSave = (
+    orderDetail: OrderDetail,
+    newCustomerName: string
+  ) => {
+    if (onEditCustomerName) {
+      onEditCustomerName(orderDetail, newCustomerName);
+      setIsEditCustomerNameModalOpen(false);
+      setEditingCustomerName(null);
+    }
+  };
+
+  // ✅ Function để handle cancel customer name edit
+  const handleCustomerNameCancel = () => {
+    setIsEditCustomerNameModalOpen(false);
+    setEditingCustomerName(null);
+  };
+
   // ✅ Data được sort từ backend, không cần sort ở frontend nữa
   const displayOrders = safeOrders;
 
   // ✅ Function để render sort icon
-  const renderSortIcon = (field: 'quantity' | 'unit_price') => {
+  const renderSortIcon = (field: "quantity" | "unit_price") => {
     if (currentSortField !== field) {
       return null; // Không hiển thị icon nếu không phải cột đang sort
     }
-    
-    if (currentSortDirection === 'desc') {
+
+    if (currentSortDirection === "desc") {
       return <ChevronDown className="w-4 h-4 inline ml-1" />;
-    } else if (currentSortDirection === 'asc') {
+    } else if (currentSortDirection === "asc") {
       return <ChevronUp className="w-4 h-4 inline ml-1" />;
     }
-    
+
     return null;
   };
 
@@ -285,10 +442,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // ✅ Sửa đổi getRowClassName để sử dụng extended động
   const getRowClassName = (orderDetail: OrderDetail, index: number) => {
     const dynamicExtended = calculateDynamicExtended(
-      orderDetail.created_at, 
+      orderDetail.created_at,
       orderDetail.extended || 0
     );
-    
+
     switch (dynamicExtended) {
       case 1:
         return "bg-gradient-to-r from-red-50 via-red-25 to-red-50 hover:from-red-100 hover:to-red-75 border-l-4 border-red-400 shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg my-1";
@@ -478,12 +635,34 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       `}</style>
 
       <div className="space-y-2">
+        {/* ✅ Bulk Actions */}
+        <BulkActions
+          selectedOrders={selectedOrders}
+          onBulkDelete={handleBulkDelete}
+          onBulkExtend={handleBulkExtend}
+          onBulkNotes={handleBulkNotes}
+          loading={loading}
+        />
+
         <div className="relative">
           <div className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200">
-            <Table className="min-w-[1750px] table-fixed bg-white">
+            <Table className="min-w-[1800px] table-fixed bg-white">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
-                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-0 bg-slate-100 z-10">
+                  {/* ✅ Checkbox column */}
+                  <TableHead className="font-bold text-slate-700 text-sm w-[40px] text-center sticky left-0 bg-slate-100 z-10">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Chọn tất cả đơn hàng"
+                      className={
+                        isSomeSelected
+                          ? "data-[state=indeterminate]:bg-primary"
+                          : ""
+                      }
+                    />
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[50px] text-center sticky left-[40px] bg-slate-100 z-10">
                     #
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[100px] text-center">
@@ -501,22 +680,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     🏪 Khách hàng
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[430px] text-center">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[300px] text-center">
                     🛍️ Mặt hàng
                   </TableHead>
-                  <TableHead 
+                  <TableHead
                     className="font-bold text-slate-700 text-sm w-[60px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
-                    onDoubleClick={() => handleSort('quantity')}
+                    onDoubleClick={() => handleSort("quantity")}
                     title="Double-click để sắp xếp"
                   >
-                    🔢 SL{renderSortIcon('quantity')}
+                    🔢 SL{renderSortIcon("quantity")}
                   </TableHead>
-                  <TableHead 
+                  <TableHead
                     className="font-bold text-slate-700 text-sm w-[100px] text-right cursor-pointer hover:bg-slate-200 transition-colors select-none"
-                    onDoubleClick={() => handleSort('unit_price')}
+                    onDoubleClick={() => handleSort("unit_price")}
                     title="Double-click để sắp xếp"
                   >
-                    💰 Đơn giá{renderSortIcon('unit_price')}
+                    💰 Đơn giá{renderSortIcon("unit_price")}
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     📊 Trạng thái
@@ -553,7 +732,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       key={orderDetail.id || index}
                       className={getRowClassName(orderDetail, index)}
                     >
+                      {/* ✅ Checkbox cell */}
                       <TableCell className="text-center sticky left-0 bg-inherit z-10">
+                        <Checkbox
+                          checked={selectedOrderIds.has(orderDetail.id)}
+                          onCheckedChange={() =>
+                            handleSelectOrder(orderDetail.id)
+                          }
+                          aria-label={`Chọn đơn hàng #${orderDetail.id}`}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center sticky left-[40px] bg-inherit z-10">
                         <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
                           {startIndex + index + 1}
                         </div>
@@ -567,13 +756,21 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       <TableCell className="text-center">
                         {(() => {
                           const dynamicExtended = calculateDynamicExtended(
-                            orderDetail.created_at, 
+                            orderDetail.created_at,
                             orderDetail.extended || 0
                           );
                           return (
                             <span
-                              className={`inline-flex items-center ${getExtendedBadgeStyle(dynamicExtended)}`}
-                              title={`Công thức: ${orderDetail.created_at ? new Date(orderDetail.created_at).getDate() : 'N/A'} + ${orderDetail.extended || 0} - ${new Date().getDate()} = ${dynamicExtended}`}
+                              className={`inline-flex items-center ${getExtendedBadgeStyle(
+                                dynamicExtended
+                              )}`}
+                              title={`Công thức: ${
+                                orderDetail.created_at
+                                  ? new Date(orderDetail.created_at).getDate()
+                                  : "N/A"
+                              } + ${
+                                orderDetail.extended || 0
+                              } - ${new Date().getDate()} = ${dynamicExtended}`}
                             >
                               {getExtendedIcon(dynamicExtended)}
                               {dynamicExtended}
@@ -587,12 +784,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             typeof orderDetail.created_at === "string" ? (
                               <>
                                 <div className="font-medium text-blue-600">
-                                  {orderDetail.created_at.includes(" ") 
+                                  {orderDetail.created_at.includes(" ")
                                     ? orderDetail.created_at.split(" ")[1] || ""
                                     : ""}
                                 </div>
                                 <div className="text-xs text-slate-500">
-                                  {orderDetail.created_at.includes(" ") 
+                                  {orderDetail.created_at.includes(" ")
                                     ? orderDetail.created_at.split(" ")[0] || ""
                                     : orderDetail.created_at}
                                 </div>
@@ -600,10 +797,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             ) : orderDetail.created_at instanceof Date ? (
                               <>
                                 <div className="font-medium text-blue-600">
-                                  {orderDetail.created_at.toLocaleTimeString("vi-VN")}
+                                  {orderDetail.created_at.toLocaleTimeString(
+                                    "vi-VN"
+                                  )}
                                 </div>
                                 <div className="text-xs text-slate-500">
-                                  {orderDetail.created_at.toLocaleDateString("vi-VN")}
+                                  {orderDetail.created_at.toLocaleDateString(
+                                    "vi-VN"
+                                  )}
                                 </div>
                               </>
                             ) : (
@@ -626,16 +827,31 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         />
                       </TableCell>
                       <TableCell className="text-center font-medium text-green-700 text-sm">
-                        <div 
-                          className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors"
-                          onDoubleClick={() => handleCustomerNameClick(orderDetail.customer_name || "")}
-                          title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
-                        >
-                          <TruncatedText
-                            text={orderDetail.customer_name || "--"}
-                            maxLength={15}
-                            className="text-truncate"
-                          />
+                        <div className="flex items-center justify-center gap-1">
+                          <div
+                            className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
+                            onDoubleClick={() =>
+                              handleCustomerNameClick(
+                                orderDetail.customer_name || ""
+                              )
+                            }
+                            title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
+                          >
+                            <TruncatedText
+                              text={orderDetail.customer_name || "--"}
+                              maxLength={12}
+                              className="text-truncate"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 hover:bg-green-100"
+                            onClick={() => handleCustomerNameEdit(orderDetail)}
+                            title="Sửa tên khách hàng"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
                         </div>
                       </TableCell>
                       <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
@@ -696,7 +912,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               </TooltipContent>
                             </Tooltip>
                           </POrderDynamic>
-                          
+
                           <POrderDynamic action="update">
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -746,7 +962,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Blacklist (Tính năng sẽ có trong tương lai)</p>
+                                <p>
+                                  Blacklist (Tính năng sẽ có trong tương lai)
+                                </p>
                               </TooltipContent>
                             </Tooltip>
                           </POrderDynamic>
@@ -785,202 +1003,445 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       {/* Messages Modal */}
       {viewingDetail && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-semibold text-slate-800">
-                💬 Tin nhắn đơn hàng #{viewingDetail.id}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col h-[60vh] bg-gray-50 rounded-lg border">
-              {/* Chat Header */}
-              <div className="p-4 bg-blue-600 text-white rounded-t-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-bold">
-                        {viewingDetail.customer_name?.charAt(0) || "K"}
-                      </span>
-                    </div>
-                    <div>
-                      <h3 className="font-medium">{viewingDetail.customer_name || "Khách hàng"}</h3>
-                      <p className="text-sm opacity-90">Mã đơn: {viewingDetail.id}</p>
-                    </div>
-                  </div>
-                  <div className="text-right text-sm opacity-90">
-                    <p>Sale: {viewingDetail.order?.sale_by?.fullName || viewingDetail.order?.sale_by?.username || "N/A"}</p>
-                  </div>
-                </div>
+          <DialogContent className="max-w-5xl max-h-[85vh] p-0 overflow-hidden border-0 bg-transparent">
+            {/* Floating background particles */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+              <div className="absolute top-6 left-8 text-blue-300 animate-pulse">
+                <Star className="w-3 h-3 opacity-60" />
               </div>
+              <div
+                className="absolute top-12 right-12 text-cyan-300 animate-bounce"
+                style={{ animationDelay: "0.5s" }}
+              >
+                <Zap className="w-4 h-4 opacity-40" />
+              </div>
+              <div
+                className="absolute bottom-8 left-16 text-indigo-300 animate-ping"
+                style={{ animationDelay: "1s" }}
+              >
+                <Star className="w-3 h-3 opacity-30" />
+              </div>
+              <div
+                className="absolute bottom-16 right-8 text-blue-200 animate-pulse"
+                style={{ animationDelay: "1.5s" }}
+              >
+                <Sparkles className="w-4 h-4 opacity-50" />
+              </div>
+              <div
+                className="absolute top-1/2 left-4 text-cyan-200 animate-bounce"
+                style={{ animationDelay: "2s" }}
+              >
+                <MessageCircle className="w-3 h-3 opacity-40" />
+              </div>
+            </div>
 
-              {/* Messages Container */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gradient-to-b from-gray-50 to-gray-100">
-                {(() => {
-                  try {
-                    // Parse content_lq from metadata
-                    const metadata = viewingDetail.metadata || {};
-                    const contentLq = metadata.content_lq || "";
-                    
-                    if (!contentLq) {
-                      return (
-                        <div className="flex justify-center items-center h-full">
-                          <div className="text-center text-gray-500">
-                            <div className="text-4xl mb-2">💬</div>
-                            <div>Không có tin nhắn nào</div>
+            {/* Main modal container with stunning effects */}
+            <div className="relative p-1 bg-gradient-to-r from-blue-500 via-cyan-500 via-indigo-500 to-purple-500 rounded-3xl animate-gradient-shift z-10">
+              <div className="relative bg-gradient-to-br from-white via-blue-50 via-cyan-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden">
+                {/* Enhanced Header */}
+                <DialogHeader className="relative p-0 m-0">
+                  <div className="relative p-6 bg-gradient-to-br from-blue-600 via-cyan-600 to-indigo-600 text-white overflow-hidden">
+                    {/* Header background effects */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-indigo-500/20 animate-pulse"></div>
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 to-blue-400 animate-shimmer"></div>
+
+                    {/* Floating sparkles in header */}
+                    <div className="absolute top-4 right-6 text-cyan-300 animate-bounce">
+                      <Sparkles className="w-5 h-5 drop-shadow-lg" />
+                    </div>
+
+                    <DialogTitle></DialogTitle>
+
+                    {/* Enhanced customer info */}
+                    <div className="relative flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        {/* Enhanced avatar */}
+                        <div className="relative group">
+                          <div className="absolute inset-0 bg-white rounded-full animate-ping opacity-20"></div>
+                          <div className="relative w-14 h-14 bg-gradient-to-br from-white/30 to-white/10 rounded-full flex items-center justify-center backdrop-blur-sm border-3 border-white/50 shadow-2xl group-hover:scale-110 transition-transform duration-300">
+                            <span className="text-lg font-bold text-white drop-shadow-lg">
+                              {viewingDetail.customer_name?.charAt(0) || "K"}
+                            </span>
                           </div>
+                          {/* Online indicator */}
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-400 rounded-full border-2 border-white animate-pulse"></div>
                         </div>
-                      );
-                    }
 
-                    // Split messages by [CUSTOMER] and [SALE] tags
-                    interface Message {
-                      type: 'customer' | 'sale';
-                      text: string;
-                      time: string;
-                      index: number;
-                    }
-                    
-                    const messages: Message[] = [];
-                    const lines = contentLq.split('\n');
-                    
-                    lines.forEach((line: string, index: number) => {
-                      const customerMatch = line.match(/\[CUSTOMER\]\s*(.+?)\s*\((\d+:\d+)\)/);
-                      const saleMatch = line.match(/\[SALE\]\s*(.+?)\s*\((\d+:\d+)\)/);
-                      
-                      if (customerMatch) {
-                        try {
-                          const messageData = JSON.parse(customerMatch[1]);
-                          messages.push({
-                            type: 'customer',
-                            text: messageData.text || '',
-                            time: customerMatch[2] || '',
-                            index: index
-                          });
-                        } catch (e) {
-                          // If JSON parsing fails, use raw text
-                          messages.push({
-                            type: 'customer',
-                            text: customerMatch[1] || '',
-                            time: customerMatch[2] || '',
-                            index: index
-                          });
-                        }
-                      } else if (saleMatch) {
-                        try {
-                          const messageData = JSON.parse(saleMatch[1]);
-                          messages.push({
-                            type: 'sale',
-                            text: messageData.text || '',
-                            time: saleMatch[2] || '',
-                            index: index
-                          });
-                        } catch (e) {
-                          // If JSON parsing fails, use raw text
-                          messages.push({
-                            type: 'sale',
-                            text: saleMatch[1] || '',
-                            time: saleMatch[2] || '',
-                            index: index
-                          });
-                        }
-                      }
-                    });
-
-                    if (messages.length === 0) {
-                      return (
-                        <div className="flex justify-center items-center h-full">
-                          <div className="text-center text-gray-500">
-                            <div className="text-4xl mb-2">💬</div>
-                            <div>Không thể tải tin nhắn</div>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return messages.map((message: Message, index: number) => {
-                      if (message.type === 'customer') {
-                        return (
-                          <div key={`customer-${index}`} className="flex items-start space-x-3">
-                            <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs text-white font-bold">
-                                {viewingDetail.customer_name?.charAt(0) || "K"}
-                              </span>
-                            </div>
-                            <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
-                              <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border">
-                                <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                                  {message.text.replace(/\\n/g, '\n')}
-                                </p>
-                              </div>
-                              <span className="text-xs text-gray-500 ml-3">
-                                {message.time}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div key={`sale-${index}`} className="flex items-start space-x-3 justify-end">
-                            <div className="flex flex-col space-y-1 max-w-xs lg:max-w-md">
-                              <div className="bg-blue-500 text-white p-3 rounded-2xl rounded-tr-sm shadow-sm">
-                                <p className="text-sm whitespace-pre-wrap">
-                                  {message.text.replace(/\\n/g, '\n')}
-                                </p>
-                              </div>
-                              <span className="text-xs text-gray-500 mr-3 text-right">
-                                {message.time}
-                              </span>
-                            </div>
-                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs text-white font-bold">
-                                {viewingDetail.order?.sale_by?.fullName?.charAt(0) || 
-                                 viewingDetail.order?.sale_by?.username?.charAt(0) || "S"}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      }
-                    });
-                  } catch (error) {
-                    return (
-                      <div className="flex justify-center items-center h-full">
-                        <div className="text-center text-red-500">
-                          <div className="text-4xl mb-2">⚠️</div>
-                          <div>Lỗi khi tải tin nhắn</div>
+                        <div className="space-y-1">
+                          <h3 className="font-bold text-lg text-white drop-shadow-md">
+                            {viewingDetail.customer_name || "Khách hàng"}
+                          </h3>
+                          <p className="text-sm text-cyan-100 font-medium flex items-center gap-2">
+                            <Hash className="w-4 h-4" />
+                            Mã đơn: {viewingDetail.id}
+                          </p>
                         </div>
                       </div>
-                    );
-                  }
-                })()}
-              </div>
 
-              {/* Chat Footer with Order Status */}
-              <div className="p-4 bg-white border-t rounded-b-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">Trạng thái:</span>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        viewingDetail.status || ""
-                      )}`}
-                    >
-                      {getStatusIcon(viewingDetail.status || "")}
-                      {getStatusLabel(viewingDetail.status || "")}
-                    </span>
+                      <div className="text-right space-y-1">
+                        <div className="flex items-center gap-2 justify-end">
+                          <User className="w-4 h-4 text-cyan-200" />
+                          <p className="text-sm text-cyan-100 font-medium">
+                            Sale:{" "}
+                            {viewingDetail.order?.sale_by?.fullName ||
+                              viewingDetail.order?.sale_by?.username ||
+                              "N/A"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 justify-end">
+                          <Clock className="w-4 h-4 text-cyan-200" />
+                          <p className="text-xs text-cyan-200">Online now</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <Button
-                    onClick={handleViewCancel}
-                    variant="outline"
-                    size="sm"
-                    className="text-gray-600 hover:text-gray-800"
-                  >
-                    Đóng
-                  </Button>
+                </DialogHeader>
+
+                {/* Enhanced Messages Container */}
+                <div className="relative flex flex-col h-[65vh] bg-gradient-to-br from-gray-50 via-blue-50/30 to-cyan-50/30 overflow-hidden">
+                  {/* Background pattern */}
+                  <div className="absolute inset-0 opacity-5">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-cyan-100"></div>
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        backgroundImage: `radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), 
+                               radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.1) 0%, transparent 50%)`,
+                      }}
+                    ></div>
+                  </div>
+
+                  {/* Messages Area */}
+                  <div className="flex-1 p-6 overflow-y-auto space-y-6 relative z-10 scrollbar-hide hover:scrollbar-show">
+                    {(() => {
+                      try {
+                        // Parse content_lq from metadata
+                        const metadata = viewingDetail.metadata || {};
+                        const contentLq = metadata.content_lq || "";
+
+                        if (!contentLq) {
+                          return (
+                            <div className="flex justify-center items-center h-full">
+                              <div className="text-center">
+                                {/* Enhanced empty state */}
+                                <div className="relative mb-6">
+                                  <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-full flex items-center justify-center mx-auto shadow-2xl">
+                                    <div className="relative">
+                                      <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-20"></div>
+                                      <MessageCircle className="relative w-12 h-12 text-blue-500 animate-pulse" />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-xl font-semibold text-gray-600 mb-2">
+                                  Không có tin nhắn nào
+                                </div>
+                                <div className="text-sm text-gray-400">
+                                  Cuộc trò chuyện sẽ hiển thị tại đây
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Split messages by [CUSTOMER] and [SALE] tags
+                        interface Message {
+                          type: "customer" | "sale";
+                          text: string;
+                          time: string;
+                          index: number;
+                        }
+
+                        const messages: Message[] = [];
+                        const lines = contentLq.split("\n");
+
+                        lines.forEach((line: string, index: number) => {
+                          const customerMatch = line.match(
+                            /\[CUSTOMER\]\s*(.+?)\s*\((\d+:\d+)\)/
+                          );
+                          const saleMatch = line.match(
+                            /\[SALE\]\s*(.+?)\s*\((\d+:\d+)\)/
+                          );
+
+                          if (customerMatch) {
+                            try {
+                              const messageData = JSON.parse(customerMatch[1]);
+                              messages.push({
+                                type: "customer",
+                                text: messageData.text || "",
+                                time: customerMatch[2] || "",
+                                index: index,
+                              });
+                            } catch (e) {
+                              messages.push({
+                                type: "customer",
+                                text: customerMatch[1] || "",
+                                time: customerMatch[2] || "",
+                                index: index,
+                              });
+                            }
+                          } else if (saleMatch) {
+                            try {
+                              const messageData = JSON.parse(saleMatch[1]);
+                              messages.push({
+                                type: "sale",
+                                text: messageData.text || "",
+                                time: saleMatch[2] || "",
+                                index: index,
+                              });
+                            } catch (e) {
+                              messages.push({
+                                type: "sale",
+                                text: saleMatch[1] || "",
+                                time: saleMatch[2] || "",
+                                index: index,
+                              });
+                            }
+                          }
+                        });
+
+                        if (messages.length === 0) {
+                          return (
+                            <div className="flex justify-center items-center h-full">
+                              <div className="text-center">
+                                <div className="relative mb-6">
+                                  <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-pink-100 rounded-full flex items-center justify-center mx-auto shadow-xl">
+                                    <AlertTriangle className="w-10 h-10 text-red-500 animate-bounce" />
+                                  </div>
+                                </div>
+                                <div className="text-lg font-medium text-red-600">
+                                  Không thể tải tin nhắn
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return messages.map(
+                          (message: Message, index: number) => {
+                            if (message.type === "customer") {
+                              return (
+                                <div
+                                  key={`customer-${index}`}
+                                  className="flex items-start space-x-4 animate-fadeInLeft group"
+                                  style={{ animationDelay: `${index * 0.1}s` }}
+                                >
+                                  {/* Enhanced customer avatar */}
+                                  <div className="relative flex-shrink-0">
+                                    <div className="absolute inset-0 bg-gray-400 rounded-full animate-pulse opacity-20"></div>
+                                    <div className="relative w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-500 rounded-full flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-110">
+                                      <span className="text-xs text-white font-bold">
+                                        {viewingDetail.customer_name?.charAt(
+                                          0
+                                        ) || "K"}
+                                      </span>
+                                    </div>
+                                    {/* Message indicator */}
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-400 rounded-full border-2 border-white animate-bounce opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                  </div>
+
+                                  <div className="flex flex-col space-y-2 max-w-md lg:max-w-lg">
+                                    {/* Enhanced message bubble */}
+                                    <div className="relative group/message">
+                                      <div className="absolute inset-0 bg-gradient-to-br from-white to-blue-50 rounded-2xl blur opacity-30 group-hover/message:opacity-50 transition-opacity duration-300"></div>
+                                      <div className="relative bg-white/90 backdrop-blur-sm p-4 rounded-2xl rounded-tl-md shadow-lg border border-white/50 group-hover/message:shadow-xl group-hover/message:scale-[1.02] transition-all duration-300">
+                                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                          <EmojiRenderer
+                                            text={message.text.replace(
+                                              /\\n/g,
+                                              "\n"
+                                            )}
+                                            renderMode="image"
+                                          />
+                                        </p>
+                                        {/* Message tail */}
+                                        <div className="absolute -left-2 top-4 w-4 h-4 bg-white/90 transform rotate-45 border-l border-t border-white/50"></div>
+                                      </div>
+                                    </div>
+
+                                    {/* Enhanced timestamp */}
+                                    <div className="flex items-center gap-2 ml-4">
+                                      <Clock className="w-3 h-3 text-gray-400" />
+                                      <span className="text-xs text-gray-500 font-medium">
+                                        {message.time}
+                                      </span>
+                                      <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse"></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div
+                                  key={`sale-${index}`}
+                                  className="flex items-start space-x-4 justify-end animate-fadeInRight group"
+                                  style={{ animationDelay: `${index * 0.1}s` }}
+                                >
+                                  <div className="flex flex-col space-y-2 max-w-md lg:max-w-lg">
+                                    {/* Enhanced sale message bubble */}
+                                    <div className="relative group/message">
+                                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl blur opacity-30 group-hover/message:opacity-50 transition-opacity duration-300"></div>
+                                      <div className="relative bg-gradient-to-br from-blue-500 to-cyan-600 text-white p-4 rounded-2xl rounded-tr-md shadow-lg group-hover/message:shadow-xl group-hover/message:scale-[1.02] transition-all duration-300">
+                                        <p className="text-sm whitespace-pre-wrap leading-relaxed font-medium">
+                                          <EmojiRenderer
+                                            text={message.text.replace(
+                                              /\\n/g,
+                                              "\n"
+                                            )}
+                                            renderMode="image"
+                                          />
+                                        </p>
+                                        {/* Message tail */}
+                                        <div className="absolute -right-2 top-4 w-4 h-4 bg-gradient-to-br from-blue-500 to-cyan-600 transform rotate-45"></div>
+
+                                        {/* Shimmer effect - ĐÃ SỬA LỖI */}
+                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/message:translate-x-full transition-transform duration-1000 rounded-2xl"></div>
+                                      </div>
+                                    </div>
+
+                                    {/* Enhanced timestamp */}
+                                    <div className="flex items-center gap-2 mr-4 justify-end">
+                                      <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
+                                      <span className="text-xs text-gray-500 font-medium">
+                                        {message.time}
+                                      </span>
+                                      <CheckCircle className="w-3 h-3 text-blue-500" />
+                                    </div>
+                                  </div>
+
+                                  {/* Enhanced sale avatar */}
+                                  <div className="relative flex-shrink-0">
+                                    <div className="absolute inset-0 bg-blue-500 rounded-full animate-pulse opacity-20"></div>
+                                    <div className="relative w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-110">
+                                      <span className="text-xs text-white font-bold">
+                                        {viewingDetail.order?.sale_by?.fullName?.charAt(
+                                          0
+                                        ) ||
+                                          viewingDetail.order?.sale_by?.username?.charAt(
+                                            0
+                                          ) ||
+                                          "S"}
+                                      </span>
+                                    </div>
+                                    {/* Message indicator */}
+                                    <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white animate-bounce opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                          }
+                        );
+                      } catch (error) {
+                        return (
+                          <div className="flex justify-center items-center h-full">
+                            <div className="text-center">
+                              <div className="relative mb-6">
+                                <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-pink-100 rounded-full flex items-center justify-center mx-auto shadow-xl">
+                                  <AlertTriangle className="w-10 h-10 text-red-500 animate-pulse" />
+                                </div>
+                              </div>
+                              <div className="text-lg font-medium text-red-600">
+                                Lỗi khi tải tin nhắn
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+
+                  {/* Enhanced Chat Footer */}
+                  <div className="relative p-6 bg-white/80 backdrop-blur-sm border-t border-blue-200 shadow-inner">
+                    {/* Footer background effects */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-50/50 to-cyan-50/50"></div>
+
+                    <div className="relative flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                          <span className="text-sm font-medium text-gray-600">
+                            Trạng thái:
+                          </span>
+                        </div>
+
+                        {/* Enhanced status badge */}
+                        <div className="relative group">
+                          <div
+                            className="absolute inset-0 rounded-full blur opacity-30 group-hover:opacity-50 transition-opacity duration-300"
+                            style={{
+                              background: getStatusColor(
+                                viewingDetail.status || ""
+                              ),
+                            }}
+                          ></div>
+                          <span
+                            className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 backdrop-blur-sm border border-white/50 ${getStatusColor(
+                              viewingDetail.status || ""
+                            )}`}
+                          >
+                            <span className="animate-pulse">
+                              {getStatusIcon(viewingDetail.status || "")}
+                            </span>
+                            {getStatusLabel(viewingDetail.status || "")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Enhanced close button */}
+                      <Button
+                        onClick={handleViewCancel}
+                        variant="outline"
+                        size="sm"
+                        className="group relative overflow-hidden flex items-center gap-2 px-4 py-2 text-base font-medium border-2 border-gray-300 hover:border-red-400 bg-white/80 hover:bg-red-50 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 ease-out backdrop-blur-sm"
+                      >
+                        {/* Shimmer effect - ĐÃ SỬA LỖI */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-100/50 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+                        <span className="flex items-center gap-2">
+                          <X className="w-4 h-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+                          <span className="relative z-10">Đóng</span>
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ✅ Bulk Action Modals */}
+      <BulkDeleteModal
+        selectedOrders={selectedOrders}
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={handleBulkDeleteConfirm}
+        loading={loading}
+      />
+
+      <BulkExtendModal
+        selectedOrders={selectedOrders}
+        isOpen={isBulkExtendModalOpen}
+        onClose={() => setIsBulkExtendModalOpen(false)}
+        onConfirm={handleBulkExtendConfirm}
+        loading={loading}
+      />
+
+      <BulkNotesModal
+        selectedOrders={selectedOrders}
+        isOpen={isBulkNotesModalOpen}
+        onClose={() => setIsBulkNotesModalOpen(false)}
+        onConfirm={handleBulkNotesConfirm}
+        loading={loading}
+      />
+
+      {/* ✅ Customer name edit modal */}
+      <EditCustomerNameModal
+        orderDetail={editingCustomerName}
+        isOpen={isEditCustomerNameModalOpen}
+        onClose={handleCustomerNameCancel}
+        onSave={handleCustomerNameSave}
+        loading={loading}
+      />
     </TooltipProvider>
   );
 };
