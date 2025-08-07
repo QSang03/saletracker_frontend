@@ -64,38 +64,29 @@ interface OrderManagementProps {
 // ✅ Function tính toán extended động - đã sửa lỗi TypeScript
 const calculateDynamicExtended = (createdAt: string | Date | undefined, originalExtended: number) => {
   try {
-    // Xử lý trường hợp created_at undefined hoặc null
-    if (!createdAt) {
-      return originalExtended; // Fallback về giá trị gốc
-    }
+    if (!createdAt) return originalExtended;
 
-    // Lấy ngày hiện tại
-    const currentDate = new Date();
-    const currentDay = currentDate.getDate();
-    
-    // Xử lý created_at
-    let createdDate;
-    if (typeof createdAt === 'string') {
-      createdDate = new Date(createdAt);
-    } else {
-      createdDate = createdAt;
-    }
+    // Parse ngày tạo
+    const createdDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+    if (isNaN(createdDate.getTime())) return originalExtended;
 
-    // Kiểm tra xem createdDate có hợp lệ không
-    if (isNaN(createdDate.getTime())) {
-      return originalExtended; // Fallback về giá trị gốc nếu ngày không hợp lệ
-    }
+    // Ngày hết hạn = ngày tạo + extended (theo ngày thực tế)
+    const expiredDate = new Date(createdDate);
+    expiredDate.setHours(0, 0, 0, 0);
+    expiredDate.setDate(expiredDate.getDate() + originalExtended);
 
-    const createdDay = createdDate.getDate();
-    
-    // Áp dụng công thức: ngày_tạo + extended - ngày_hiện_tại
-    const result = createdDay + originalExtended - currentDay;
-    
-    // Trả về giá trị tuyệt đối nếu âm (dựa trên ví dụ của bạn)
-    return Math.abs(result);
+    // Ngày hiện tại (bỏ giờ)
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    // Số ngày còn lại (có thể âm nếu đã hết hạn)
+    const diffMs = expiredDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    return diffDays;
   } catch (error) {
     console.error('Error calculating dynamic extended:', error);
-    return originalExtended; // Fallback về giá trị gốc
+    return originalExtended;
   }
 };
 
