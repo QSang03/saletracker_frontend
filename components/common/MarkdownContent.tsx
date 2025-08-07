@@ -2,9 +2,8 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github.css'; // CSS cho syntax highlighting
+import 'highlight.js/styles/github.css';
 
-// Component để render markdown
 interface MarkdownContentProps {
   content: string;
   isStreaming?: boolean;
@@ -17,32 +16,29 @@ export const MarkdownContent = ({ content, isStreaming }: MarkdownContentProps) 
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
-          // Custom components cho styling
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold text-gray-800 mt-6 mb-4 flex items-center">
-              <span className="w-4 h-4 bg-indigo-700 rounded-full mr-3"></span>
+            <h1 className="text-2xl font-bold text-slate-800 mt-6 mb-4 flex items-center border-b border-slate-200 pb-2">
+              <span className="w-1 h-6 bg-slate-700 rounded-full mr-3"></span>
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-bold text-gray-800 mt-6 mb-3 flex items-center">
-              <span className="w-3 h-3 bg-indigo-600 rounded-full mr-2"></span>
+            <h2 className="text-xl font-semibold text-slate-700 mt-6 mb-3 flex items-center">
+              <span className="w-1 h-5 bg-slate-600 rounded-full mr-3"></span>
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-bold text-gray-800 mt-6 mb-3 flex items-center">
-              <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
+            <h3 className="text-lg font-medium text-slate-700 mt-5 mb-3 flex items-center">
+              <span className="w-1 h-4 bg-slate-500 rounded-full mr-3"></span>
               {children}
             </h3>
           ),
           code: (props) => {
-            // Use the correct type for props to access 'inline'
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { inline, className, children, ...rest } = props as any;
             if (inline) {
               return (
-                <code className="bg-gray-100 px-2 py-1 rounded text-sm text-red-600 font-mono" {...rest}>
+                <code className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md text-sm font-mono border border-slate-200" {...rest}>
                   {children}
                 </code>
               );
@@ -54,58 +50,59 @@ export const MarkdownContent = ({ content, isStreaming }: MarkdownContentProps) 
             );
           },
           pre: ({ children }) => (
-            <div className="my-3">
-              <pre className="bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto font-mono text-sm border-l-4 border-indigo-500">
+            <div className="my-4">
+              <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto font-mono text-sm border border-slate-700 shadow-sm">
                 {children}
               </pre>
             </div>
           ),
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-indigo-400 bg-indigo-50 pl-4 py-2 italic text-gray-700 my-3 rounded-r-lg">
-              💡 {children}
+            <blockquote className="border-l-4 border-slate-300 bg-slate-50 pl-4 py-3 my-4 rounded-r-lg text-slate-700 italic">
+              <span className="text-slate-500 text-lg mr-2">💭</span>
+              {children}
             </blockquote>
           ),
           strong: ({ children }) => (
-            <strong className="font-bold text-gray-900 bg-yellow-100 px-1 rounded">
+            <strong className="font-semibold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded">
               {children}
             </strong>
           ),
           em: ({ children }) => (
-            <em className="italic text-indigo-600">{children}</em>
+            <em className="italic text-slate-600 font-medium">{children}</em>
           ),
           a: ({ href, children }) => (
             <a 
               href={href}
-              className="text-indigo-600 hover:text-indigo-800 underline decoration-2 underline-offset-2 hover:bg-indigo-50 px-1 rounded transition-all"
+              className="text-slate-700 hover:text-slate-900 underline decoration-2 underline-offset-2 decoration-slate-300 hover:decoration-slate-600 transition-all duration-200"
               target="_blank" 
               rel="noopener noreferrer"
             >
-              🔗 {children}
+              {children}
             </a>
           ),
           ul: ({ children }) => (
-            <ul className="space-y-2">{children}</ul>
+            <ul className="space-y-2 my-4">{children}</ul>
           ),
           li: ({ children }) => (
             <li className="flex items-start">
-              <span className="text-indigo-500 mr-2 mt-1">•</span>
-              <span>{children}</span>
+              <span className="text-slate-400 mr-3 mt-1.5 text-xs">●</span>
+              <span className="text-slate-700">{children}</span>
             </li>
           ),
           table: ({ children }) => (
-            <div className="overflow-x-auto my-4">
-              <table className="min-w-full border-collapse border border-gray-300">
+            <div className="overflow-x-auto my-6 rounded-lg border border-slate-200">
+              <table className="min-w-full border-collapse">
                 {children}
               </table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border border-gray-300 px-4 py-2 bg-gray-100 font-semibold text-left">
+            <th className="border-b border-slate-200 px-4 py-3 bg-slate-50 font-semibold text-left text-slate-800 text-sm">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-gray-300 px-4 py-2">
+            <td className="border-b border-slate-100 px-4 py-3 text-slate-700 text-sm">
               {children}
             </td>
           )
@@ -114,23 +111,8 @@ export const MarkdownContent = ({ content, isStreaming }: MarkdownContentProps) 
         {content}
       </ReactMarkdown>
       {isStreaming && (
-        <span className="inline-block w-2 h-5 bg-indigo-500 animate-pulse ml-1">|</span>
+        <span className="inline-block w-0.5 h-5 bg-slate-600 animate-pulse ml-1 rounded-full"></span>
       )}
     </div>
   );
 };
-
-// Thay thế phần render trong component chính:
-// Từ:
-// <div
-//   className="prose prose-sm max-w-none"
-//   dangerouslySetInnerHTML={{
-//     __html: parseMarkdown(message.content) + (message.isStreaming ? '<span class="inline-block w-2 h-5 bg-indigo-500 animate-pulse ml-1">|</span>' : '')
-//   }}
-// />
-
-// Thành:
-// <MarkdownContent 
-//   content={message.content} 
-//   isStreaming={message.isStreaming} 
-// />

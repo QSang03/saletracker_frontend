@@ -15,6 +15,7 @@ import {
   Brain,
   ChevronDown,
   ChevronUp,
+  Circle,
 } from "lucide-react";
 import { MarkdownContent } from "@/components/common/MarkdownContent";
 
@@ -35,29 +36,29 @@ const ChatPage = () => {
     {
       id: 1,
       role: "assistant",
-      content: `# Xin chào! 👋 
+      content: `# Chào mừng đến với AI Assistant ✨
 
-Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì bạn muốn!
+Tôi là **trợ lý AI cao cấp** của bạn với giao diện **tân cổ điển** sang trọng.
 
-## ✨ Tôi có thể:
-- Trả lời câu hỏi với **markdown formatting** đẹp mắt
-- Stream response theo *thời gian thực*
-- Hiển thị **quá trình suy nghĩ** như AI thật
-- Hỗ trợ nhiều định dạng khác nhau
+## 🌟 Khả năng đặc biệt:
+- **Streaming real-time** với hiệu ứng mượt mà
+- **Thinking process** như con người thật  
+- **Markdown formatting** đẳng cấp hoàng gia
+- **Animation** tinh tế và sang trọng
 
-> **Tip**: Hãy thử hỏi tôi về bất kỳ chủ đề nào! Tôi sẽ cho bạn thấy cách tôi suy nghĩ và phân tích vấn đề.
+> **💎 Tip Cao Cấp**: Hãy trải nghiệm sự mượt mà trong từng tương tác!
 
 ---
 
-🚀 **Sẵn sàng bắt đầu cuộc trò chuyện!**`,
+🎭 **Sẵn sàng cho cuộc đối thoại đẳng cấp?**`,
       timestamp: new Date(),
     },
   ]);
+
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(
-    null
-  );
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -69,6 +70,15 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    setIsTyping(e.target.value.length > 0);
+    
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
+  };
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -83,9 +93,13 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
     setMessages((prev) => [...prev, userMessage]);
     const currentInput = input;
     setInput("");
+    setIsTyping(false);
     setIsLoading(true);
 
-    // Create streaming message
+    if (inputRef.current) {
+      (inputRef.current as HTMLTextAreaElement).style.height = 'auto';
+    }
+
     const streamingMessage = {
       id: Date.now() + 1,
       role: "assistant",
@@ -99,8 +113,6 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
 
     setMessages((prev) => [...prev, streamingMessage]);
     setStreamingMessageId(streamingMessage.id);
-
-    // Create abort controller for this request
     abortControllerRef.current = new AbortController();
 
     try {
@@ -130,27 +142,24 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
       const decoder = new TextDecoder();
       let accumulatedContent = "";
       let accumulatedThinking = "";
-      let buffer = ""; // Buffer for incomplete JSON
+      let buffer = "";
 
       if (reader) {
         while (true) {
           const { value, done } = await reader.read();
-
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
           buffer += chunk;
           
-          // Split by lines and process complete lines
           const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.startsWith("data: ")) {
               try {
                 const jsonStr = line.slice(6).trim();
                 if (jsonStr === "[DONE]") {
-                  // Thinking phase is done, start showing content
                   setMessages((prev) =>
                     prev.map((msg) =>
                       msg.id === streamingMessage.id
@@ -161,19 +170,14 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                   break;
                 }
 
-                // Skip empty or malformed JSON
                 if (!jsonStr || jsonStr === "") continue;
-
                 const data = JSON.parse(jsonStr);
 
-                // Handle OpenAI-style streaming format
                 if (data.choices && data.choices[0]) {
                   const delta = data.choices[0].delta;
 
-                  // Handle thinking content (reasoning)
                   if (delta.reasoning_content) {
                     accumulatedThinking += delta.reasoning_content;
-                    
                     setMessages((prev) =>
                       prev.map((msg) =>
                         msg.id === streamingMessage.id
@@ -183,10 +187,8 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                     );
                   }
 
-                  // Handle main content
                   if (delta.content) {
                     accumulatedContent += delta.content;
-                    
                     setMessages((prev) =>
                       prev.map((msg) =>
                         msg.id === streamingMessage.id
@@ -199,11 +201,8 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                       )
                     );
                   }
-                }
-                // Fallback for custom format
-                else if (data.response) {
+                } else if (data.response) {
                   accumulatedContent += data.response;
-
                   setMessages((prev) =>
                     prev.map((msg) =>
                       msg.id === streamingMessage.id
@@ -217,7 +216,6 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                   );
                 }
               } catch (e) {
-                // Skip invalid JSON lines - this is normal for streaming
                 console.warn("Skipping malformed JSON in stream:", line.slice(0, 100) + "...");
                 continue;
               }
@@ -225,7 +223,6 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
           }
         }
       } else {
-        // Fallback to regular response if streaming is not supported
         const data = await response.json();
         accumulatedContent =
           data.response ||
@@ -233,7 +230,6 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
           "Không có phản hồi từ AI";
       }
 
-      // Finalize the message
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === streamingMessage.id
@@ -253,7 +249,6 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
         "name" in error &&
         (error as any).name === "AbortError"
       ) {
-        // Request was cancelled
         setMessages((prev) =>
           prev.filter((msg) => msg.id !== streamingMessage.id)
         );
@@ -261,8 +256,7 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
         const errorMessage = {
           id: streamingMessage.id,
           role: "assistant",
-          content:
-            "Xin lỗi! Đã có lỗi xảy ra khi kết nối với AI. Vui lòng thử lại sau.",
+          content: "Xin lỗi! Đã có lỗi xảy ra khi kết nối với AI. Vui lòng thử lại sau.",
           timestamp: new Date(),
           isError: true,
           isStreaming: false,
@@ -309,64 +303,89 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-50 to-stone-50 relative">
+      {/* Subtle background pattern */}
+      <div className="absolute inset-0 opacity-[0.02]">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, #64748b 1px, transparent 0)`,
+          backgroundSize: '24px 24px'
+        }}></div>
+      </div>
+
       {/* Header */}
-      <div className="border-b bg-white/80 backdrop-blur-lg shadow-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                <Bot className="w-6 h-6 text-white" />
+      <div className="border-b border-slate-200/60 bg-white/80 backdrop-blur-xl shadow-sm sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="relative group">
+                <div className="w-11 h-11 bg-slate-800 rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 group-hover:shadow-xl group-hover:scale-105">
+                  <Bot className="w-6 h-6 text-white" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></div>
               </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white animate-pulse"></div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-800">
+                  AI Assistant
+                </h1>
+                <div className="flex items-center space-x-3 text-sm text-slate-600">
+                  <div className="flex items-center space-x-1">
+                    <Circle className="w-2 h-2 text-emerald-500 fill-current" />
+                    <span>Trực tuyến</span>
+                  </div>
+                  <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
+                  <span>GPT-4</span>
+                  <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
+                  <span>Streaming</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                AI Assistant Pro
-              </h1>
-              <p className="text-sm text-gray-500">
-                Thinking • Markdown • Streaming • Real-time
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>Online</span>
+            
+            <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium border border-emerald-200">
+              <div className="flex items-center space-x-1.5">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                <span>Sẵn sàng</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Chat Messages */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 h-[calc(100vh-160px)]">
         <div className="max-w-4xl mx-auto h-full flex flex-col">
-          <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-            {messages.map((message) => (
+          <div className="flex-1 overflow-y-auto px-6 py-8 space-y-6">
+            {messages.map((message, index) => (
               <div
                 key={message.id}
-                className={`flex items-start space-x-3 animate-in slide-in-from-bottom duration-500 ${
+                className={`flex items-start space-x-4 ${
                   message.role === "user"
                     ? "flex-row-reverse space-x-reverse"
                     : ""
                 }`}
+                style={{ 
+                  animation: `slideInUp 0.4s ease-out ${index * 50}ms both`
+                }}
               >
-                <div
-                  className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.role === "user"
-                      ? "bg-gradient-to-r from-blue-500 to-indigo-600"
-                      : message.isError
-                      ? "bg-gradient-to-r from-red-500 to-pink-600"
-                      : "bg-gradient-to-r from-indigo-500 to-purple-600"
-                  }`}
-                >
-                  {message.role === "user" ? (
-                    <User className="w-4 h-4 text-white" />
-                  ) : (
-                    <Bot className="w-4 h-4 text-white" />
-                  )}
+                {/* Avatar */}
+                <div className="flex-shrink-0">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm transition-all duration-200 hover:shadow-md ${
+                      message.role === "user"
+                        ? "bg-slate-700 text-white"
+                        : message.isError
+                        ? "bg-red-100 text-red-600 border border-red-200"
+                        : "bg-white text-slate-600 border border-slate-200"
+                    }`}
+                  >
+                    {message.role === "user" ? (
+                      <User className="w-5 h-5" />
+                    ) : (
+                      <Bot className="w-5 h-5" />
+                    )}
+                  </div>
                 </div>
 
+                {/* Message Content */}
                 <div
                   className={`group max-w-3xl ${
                     message.role === "user" ? "ml-auto" : "mr-auto"
@@ -376,14 +395,14 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                   {message.role === "assistant" && 
                    !message.isError && 
                    (message.thinking || message.isThinking) && (
-                    <div className="mb-2">
+                    <div className="mb-4">
                       <button
                         onClick={() => toggleThinking(message.id)}
-                        className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700 transition-colors mb-2"
+                        className="flex items-center space-x-2 text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/50"
                       >
                         <Brain className="w-4 h-4" />
-                        <span>
-                          {message.isThinking ? "Đang suy nghĩ..." : "Quá trình suy nghĩ"}
+                        <span className="font-medium">
+                          {message.isThinking ? "Đang phân tích..." : "Quá trình tư duy"}
                         </span>
                         {!message.isThinking && (
                           message.showThinking ? 
@@ -393,8 +412,8 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                       </button>
                       
                       {(message.showThinking || message.isThinking) && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
-                          <div className="text-xs text-gray-600 font-mono leading-relaxed">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
+                          <div className="text-sm text-slate-600 font-mono leading-relaxed">
                             {message.thinking && (
                               <div className="whitespace-pre-wrap">
                                 {message.thinking}
@@ -402,8 +421,12 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                             )}
                             {message.isThinking && (
                               <div className="flex items-center space-x-2 mt-2">
-                                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-                                <span className="text-indigo-600">Đang phân tích...</span>
+                                <div className="flex space-x-1">
+                                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
+                                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                </div>
+                                <span className="text-slate-600">Đang suy nghĩ...</span>
                               </div>
                             )}
                           </div>
@@ -412,24 +435,16 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                     </div>
                   )}
 
+                  {/* Message Bubble */}
                   <div
-                    className={`px-4 py-3 rounded-2xl shadow-sm relative ${
+                    className={`px-4 py-3 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md ${
                       message.role === "user"
-                        ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white"
+                        ? "bg-slate-800 text-white ml-auto"
                         : message.isError
                         ? "bg-red-50 border border-red-200 text-red-700"
-                        : "bg-white border border-gray-200 text-gray-800"
+                        : "bg-white border border-slate-200 text-slate-800"
                     }`}
                   >
-                    {message.role === "assistant" && !message.isError && (
-                      <div className="flex items-center space-x-1">
-                        {message.isStreaming && (
-                          <Eye className="w-3 h-3 text-indigo-400 animate-pulse" />
-                        )}
-                        <Sparkles className="w-4 h-4 text-indigo-400 absolute -top-2 -left-1 animate-pulse" />
-                      </div>
-                    )}
-
                     <div className="text-sm leading-relaxed">
                       {message.role === "assistant" && !message.isError ? (
                         <MarkdownContent
@@ -448,28 +463,30 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                         <div className="flex items-center justify-end space-x-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => copyMessage(message.content)}
-                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
-                            title="Copy message"
+                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                            title="Sao chép"
                           >
-                            <Copy className="w-3 h-3" />
+                            <Copy className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-green-600"
-                            title="Like"
+                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-emerald-600 transition-colors"
+                            title="Thích"
                           >
-                            <ThumbsUp className="w-3 h-3" />
+                            <ThumbsUp className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"
-                            title="Dislike"
+                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+                            title="Không thích"
                           >
-                            <ThumbsDown className="w-3 h-3" />
+                            <ThumbsDown className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       )}
                   </div>
+
+                  {/* Timestamp */}
                   <div
-                    className={`text-xs text-gray-400 mt-1 px-1 ${
+                    className={`text-xs text-slate-400 mt-1.5 px-1 ${
                       message.role === "user" ? "text-right" : "text-left"
                     }`}
                   >
@@ -478,8 +495,8 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                       minute: "2-digit",
                     })}
                     {message.isStreaming && (
-                      <span className="ml-2 text-indigo-400 animate-pulse">
-                        Đang trả lời...
+                      <span className="ml-2 text-slate-500 animate-pulse">
+                        • Đang trả lời...
                       </span>
                     )}
                   </div>
@@ -493,26 +510,31 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
       </div>
 
       {/* Input Area */}
-      <div className="border-t bg-white/80 backdrop-blur-lg">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+      <div className="border-t border-slate-200/60 bg-white/80 backdrop-blur-xl">
+        <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-end space-x-3">
             <div className="flex-1 relative">
-              <div className="relative">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Nhập tin nhắn của bạn... (hỗ trợ **markdown**)"
-                  className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-all min-h-[50px] max-h-32"
-                  rows={1}
-                  style={{ height: "auto" }}
-                  disabled={isLoading}
-                />
-                <div className="absolute right-3 bottom-3 flex items-center space-x-2">
-                  <div className="text-xs text-gray-400">
-                    {input.length}/1000
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                placeholder="Nhập tin nhắn của bạn..."
+                className="w-full px-4 py-3 pr-12 bg-white border border-slate-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent shadow-sm transition-all min-h-[50px] max-h-32 text-slate-800 placeholder-slate-500"
+                rows={1}
+                disabled={isLoading}
+              />
+              
+              <div className="absolute right-3 bottom-3 flex items-center space-x-2">
+                {isTyping && (
+                  <div className="flex space-x-0.5">
+                    <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"></div>
+                    <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
+                )}
+                <div className="text-xs text-slate-400">
+                  {input.length}/1000
                 </div>
               </div>
             </div>
@@ -520,10 +542,10 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
             {streamingMessageId ? (
               <button
                 onClick={stopGeneration}
-                className="p-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-                title="Dừng phản hồi"
+                className="p-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white shadow-sm hover:shadow-md transform hover:scale-105 transition-all duration-200"
+                title="Dừng"
               >
-                <div className="w-5 h-5 bg-white rounded-sm"></div>
+                <div className="w-4 h-4 bg-white rounded-sm"></div>
               </button>
             ) : (
               <button
@@ -531,10 +553,10 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
                 disabled={!input.trim() || isLoading}
                 className={`p-3 rounded-2xl transition-all duration-200 ${
                   input.trim() && !isLoading
-                    ? "bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105"
-                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    ? "bg-slate-800 hover:bg-slate-900 text-white shadow-sm hover:shadow-md transform hover:scale-105"
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed"
                 }`}
-                title="Gửi tin nhắn"
+                title="Gửi"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -545,26 +567,40 @@ Tôi là **AI Assistant** của bạn. Hãy hỏi tôi bất cứ điều gì b�
             )}
           </div>
 
-          <div className="flex items-center justify-center mt-3 space-x-4 text-xs text-gray-500">
+          {/* Status Icons */}
+          <div className="flex items-center justify-center mt-3 space-x-6 text-xs text-slate-500">
             <div className="flex items-center space-x-1">
-              <Brain className="w-3 h-3 text-purple-500" />
+              <Brain className="w-3 h-3" />
               <span>AI Thinking</span>
             </div>
             <div className="flex items-center space-x-1">
-              <Zap className="w-3 h-3 text-yellow-500" />
-              <span>Stream Response</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <MessageCircle className="w-3 h-3 text-blue-500" />
-              <span>Markdown Support</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <Eye className="w-3 h-3 text-green-500" />
+              <Zap className="w-3 h-3" />
               <span>Real-time</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <MessageCircle className="w-3 h-3" />
+              <span>Markdown</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <Eye className="w-3 h-3" />
+              <span>Streaming</span>
             </div>
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes slideInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 };

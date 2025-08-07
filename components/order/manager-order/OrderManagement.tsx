@@ -1003,7 +1003,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       {/* Messages Modal */}
       {viewingDetail && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-          <DialogContent className="max-w-5xl max-h-[85vh] p-0 overflow-hidden border-0 bg-transparent">
+            <DialogContent
+            className="max-w-7xl max-h-[90vh] p-0 overflow-hidden border-0 bg-transparent"
+            style={{ width: "90vw", minWidth: 1000 }}
+            >
             {/* Floating background particles */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
               <div className="absolute top-6 left-8 text-blue-300 animate-pulse">
