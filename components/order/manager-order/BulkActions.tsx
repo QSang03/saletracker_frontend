@@ -44,8 +44,8 @@ const BulkActions: React.FC<BulkActionsProps> = ({
       </div>
 
       {/* Animated container with enhanced gradient border */}
-      <div className="relative p-1 bg-gradient-to-r from-blue-500 via-purple-500 via-pink-500 to-yellow-500 rounded-2xl animate-gradient-shift">
-        <div className="relative bg-gradient-to-br from-white via-blue-50 via-indigo-50 to-purple-50 backdrop-blur-xl border-0 rounded-2xl p-6 shadow-2xl">
+      <div className="relative p-1 bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-500 rounded-2xl animate-gradient-shift">
+        <div className="relative bg-gradient-to-br from-white via-blue-50 to-purple-50 backdrop-blur-xl border-0 rounded-2xl p-6 shadow-2xl">
           {/* Enhanced floating sparkles */}
           <div className="absolute top-3 right-3 text-purple-400 animate-bounce">
             <Sparkles className="w-5 h-5 drop-shadow-lg" />
@@ -231,7 +231,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
           {/* Super animated progress bar when loading */}
           {loading && (
             <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-gray-200 to-gray-300 overflow-hidden rounded-b-2xl">
-              <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 via-pink-500 to-yellow-500 animate-gradient-slide"></div>
+              <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-yellow-500 animate-gradient-slide"></div>
               <div className="absolute h-full w-1/4 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-shimmer"></div>
             </div>
           )}

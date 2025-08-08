@@ -59,6 +59,7 @@ function ManagerOrderContent() {
     bulkDeleteOrderDetails,
     bulkExtendOrderDetails,
     bulkAddNotesOrderDetails,
+    addToBlacklist,
     isLoading,
     error,
 
@@ -338,6 +339,21 @@ function ManagerOrderContent() {
       }
     },
     [updateOrderDetailCustomerName, refetch]
+  );
+
+  // ✅ Handle add to blacklist
+  const handleAddToBlacklist = useCallback(
+    async (orderDetail: OrderDetail, reason?: string) => {
+      try {
+        await addToBlacklist(Number(orderDetail.id), reason);
+        setAlert({ type: "success", message: "Đã thêm vào blacklist thành công!" });
+        refetch();
+      } catch (err) {
+        console.error("Error adding to blacklist:", err);
+        setAlert({ type: "error", message: "Lỗi khi thêm vào blacklist!" });
+      }
+    },
+    [addToBlacklist, refetch]
   );
 
   const handleReload = useCallback(() => {
@@ -684,6 +700,7 @@ function ManagerOrderContent() {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onEditCustomerName={handleEditCustomerName}
+              onAddToBlacklist={handleAddToBlacklist}
               onBulkDelete={handleBulkDelete}
               onBulkExtend={handleBulkExtend}
               onBulkNotes={handleBulkNotes}

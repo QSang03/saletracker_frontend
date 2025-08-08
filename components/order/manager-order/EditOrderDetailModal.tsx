@@ -154,8 +154,8 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
         </div>
 
         {/* Main modal container with stunning effects */}
-        <div className="relative p-1 bg-gradient-to-r from-orange-500 via-amber-500 via-yellow-500 to-red-500 rounded-3xl animate-gradient-shift">
-          <div className="relative bg-gradient-to-br from-white via-orange-50 via-amber-50 to-yellow-50 backdrop-blur-xl rounded-3xl shadow-2xl">
+        <div className="relative p-1 bg-gradient-to-r from-orange-500 via-amber-500 to-red-500 rounded-3xl animate-gradient-shift">
+          <div className="relative bg-gradient-to-br from-white via-orange-50 to-yellow-50 backdrop-blur-xl rounded-3xl shadow-2xl">
             {/* Header with enhanced design */}
             <DialogHeader className="relative p-8 pb-4">
               {/* Floating sparkles in header */}

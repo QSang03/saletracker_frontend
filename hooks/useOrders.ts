@@ -109,6 +109,9 @@ interface UseOrdersReturn {
   bulkExtendOrderDetails: (ids: number[]) => Promise<void>;
   bulkAddNotesOrderDetails: (ids: number[], notes: string) => Promise<void>;
 
+  // Blacklist operations
+  addToBlacklist: (orderDetailId: number, reason?: string) => Promise<void>;
+
   // Loading states
   isLoading: boolean;
   error: string | null;
@@ -1171,6 +1174,33 @@ export const useOrders = (): UseOrdersReturn => {
     [handleApiCall, getAuthHeaders]
   );
 
+  // Add to blacklist
+  const addToBlacklist = useCallback(
+    async (orderDetailId: number, reason?: string): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetailId}/add-to-blacklist`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ reason }),
+          }
+        );
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Failed to add to blacklist: ${res.status} - ${errorText}`);
+        }
+        
+        return res.json();
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
   // ✅ Customer search function
   const performCustomerSearch = useCallback(
     (customerName: string) => {
@@ -1468,6 +1498,9 @@ export const useOrders = (): UseOrdersReturn => {
     bulkUpdateOrderDetails,
     bulkExtendOrderDetails,
     bulkAddNotesOrderDetails,
+
+    // Blacklist operations
+    addToBlacklist,
 
     // Loading states
     isLoading,

@@ -52,6 +52,7 @@ import {
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
 import EditCustomerNameModal from "./EditCustomerNameModal";
+import AddToBlacklistModal from "./AddToBlacklistModal";
 import BulkActions from "./BulkActions";
 import BulkDeleteModal from "./BulkDeleteModal";
 import BulkExtendModal from "./BulkExtendModal";
@@ -73,6 +74,7 @@ interface OrderManagementProps {
   onBulkDelete?: (orderDetails: OrderDetail[], reason: string) => void;
   onBulkExtend?: (orderDetails: OrderDetail[]) => void;
   onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
+  onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
   onSearch?: (searchTerm: string) => void;
   onSort?: (
     field: "quantity" | "unit_price" | null,
@@ -151,6 +153,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onBulkDelete,
   onBulkExtend,
   onBulkNotes,
+  onAddToBlacklist,
   onSearch,
   onSort,
   currentSortField,
@@ -177,6 +180,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     useState<OrderDetail | null>(null);
   const [isEditCustomerNameModalOpen, setIsEditCustomerNameModalOpen] =
     useState(false);
+
+  // ✅ Blacklist states
+  const [addingToBlacklist, setAddingToBlacklist] = useState<OrderDetail | null>(null);
+  const [isAddToBlacklistModalOpen, setIsAddToBlacklistModalOpen] = useState(false);
 
   // ✅ Bulk selection states
   const [selectedOrderIds, setSelectedOrderIds] = useState<
@@ -368,6 +375,25 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleCustomerNameCancel = () => {
     setIsEditCustomerNameModalOpen(false);
     setEditingCustomerName(null);
+  };
+
+  // ✅ Blacklist handlers
+  const handleAddToBlacklistClick = (orderDetail: OrderDetail) => {
+    setAddingToBlacklist(orderDetail);
+    setIsAddToBlacklistModalOpen(true);
+  };
+
+  const handleAddToBlacklistConfirm = (reason?: string) => {
+    if (addingToBlacklist && onAddToBlacklist) {
+      onAddToBlacklist(addingToBlacklist, reason);
+      setIsAddToBlacklistModalOpen(false);
+      setAddingToBlacklist(null);
+    }
+  };
+
+  const handleAddToBlacklistCancel = () => {
+    setIsAddToBlacklistModalOpen(false);
+    setAddingToBlacklist(null);
   };
 
   // ✅ Data được sort từ backend, không cần sort ở frontend nữa
@@ -953,18 +979,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
+                                  onClick={() => handleAddToBlacklistClick(orderDetail)}
                                   variant="outline"
                                   size="sm"
                                   className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
-                                  disabled
                                 >
                                   <Shield className="h-3 w-3" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>
-                                  Blacklist (Tính năng sẽ có trong tương lai)
-                                </p>
+                                <p>Thêm vào blacklist</p>
                               </TooltipContent>
                             </Tooltip>
                           </POrderDynamic>
@@ -1039,8 +1063,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
             </div>
 
             {/* Main modal container with stunning effects */}
-            <div className="relative p-1 bg-gradient-to-r from-blue-500 via-cyan-500 via-indigo-500 to-purple-500 rounded-3xl animate-gradient-shift z-10">
-              <div className="relative bg-gradient-to-br from-white via-blue-50 via-cyan-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="relative p-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-purple-500 rounded-3xl animate-gradient-shift z-10">
+              <div className="relative bg-gradient-to-br from-white via-blue-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden">
                 {/* Enhanced Header */}
                 <DialogHeader className="relative p-0 m-0">
                   <div className="relative p-6 bg-gradient-to-br from-blue-600 via-cyan-600 to-indigo-600 text-white overflow-hidden">
@@ -1443,6 +1467,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         isOpen={isEditCustomerNameModalOpen}
         onClose={handleCustomerNameCancel}
         onSave={handleCustomerNameSave}
+        loading={loading}
+      />
+
+      {/* ✅ Add to Blacklist modal */}
+      <AddToBlacklistModal
+        orderDetail={addingToBlacklist}
+        isOpen={isAddToBlacklistModalOpen}
+        onClose={handleAddToBlacklistCancel}
+        onConfirm={handleAddToBlacklistConfirm}
         loading={loading}
       />
     </TooltipProvider>

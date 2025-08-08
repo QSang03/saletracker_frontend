@@ -141,8 +141,8 @@ const DeleteOrderDetailModal: React.FC<DeleteOrderDetailModalProps> = ({
         </div>
 
         {/* Main modal container with stunning effects */}
-        <div className="relative p-1 bg-gradient-to-r from-red-500 via-pink-500 via-orange-500 to-yellow-500 rounded-3xl animate-gradient-shift">
-          <div className="relative bg-gradient-to-br from-white via-red-50 via-pink-50 to-orange-50 backdrop-blur-xl rounded-3xl shadow-2xl">
+        <div className="relative p-1 bg-gradient-to-r from-red-500 via-pink-500 to-yellow-500 rounded-3xl animate-gradient-shift">
+          <div className="relative bg-gradient-to-br from-white via-red-50 to-orange-50 backdrop-blur-xl rounded-3xl shadow-2xl">
             {/* Enhanced Header */}
             <DialogHeader className="relative p-8 pb-4">
               {/* Floating sparkles in header */}

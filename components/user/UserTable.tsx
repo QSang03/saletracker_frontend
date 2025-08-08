@@ -46,6 +46,7 @@ export default React.memo(function UserTable({
   onResetPassword,
 }: UserTableProps) {
   const headers = [
+    "User ID",
     "Mã NV",
     "Tên đăng nhập",
     "Tên đầy đủ",
@@ -128,6 +129,9 @@ export default React.memo(function UserTable({
               >
                 <TableCell className={cellCenterClass}>
                   {startIndex + index + 1}
+                </TableCell>
+                <TableCell className={cellCenterClass}>
+                  {user.id}
                 </TableCell>
                 <TableCell
                   className={cellLeftClass}

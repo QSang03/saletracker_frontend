@@ -92,8 +92,8 @@ const BulkNotesModal: React.FC<BulkNotesModalProps> = ({
         </div>
 
         {/* Main modal container with stunning effects */}
-        <div className="relative p-1 bg-gradient-to-r from-green-500 via-emerald-500 via-teal-500 to-cyan-500 rounded-3xl animate-gradient-shift">
-          <div className="relative bg-gradient-to-br from-white via-green-50 via-emerald-50 to-teal-50 backdrop-blur-xl rounded-3xl shadow-2xl">
+        <div className="relative p-1 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 rounded-3xl animate-gradient-shift">
+          <div className="relative bg-gradient-to-br from-white via-green-50 to-teal-50 backdrop-blur-xl rounded-3xl shadow-2xl">
             {/* Header with enhanced design */}
             <DialogHeader className="relative p-8 pb-4">
               {/* Floating sparkles in header */}

@@ -83,8 +83,8 @@ const BulkExtendModal: React.FC<BulkExtendModalProps> = ({
           </div>
 
           {/* Main modal container with stunning effects */}
-          <div className="relative p-1 bg-gradient-to-r from-blue-500 via-cyan-500 via-indigo-500 to-purple-500 rounded-3xl animate-gradient-shift">
-            <div className="relative bg-gradient-to-br from-white via-blue-50 via-cyan-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl">
+          <div className="relative p-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-purple-500 rounded-3xl animate-gradient-shift">
+            <div className="relative bg-gradient-to-br from-white via-blue-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl">
               {/* Header with enhanced design */}
               <DialogHeader className="relative p-8 pb-4">
                 {/* Floating sparkles in header */}
