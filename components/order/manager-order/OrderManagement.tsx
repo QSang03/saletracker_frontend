@@ -59,6 +59,7 @@ import BulkExtendModal from "./BulkExtendModal";
 import BulkNotesModal from "./BulkNotesModal";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 interface OrderManagementProps {
   orders: OrderDetail[];
@@ -161,6 +162,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   loading = false,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
+  const { currentUser } = useCurrentUser();
+  const isOwner = React.useCallback((od: OrderDetail) => {
+    return !!(
+      od?.order?.sale_by?.id &&
+      currentUser?.id &&
+      od.order!.sale_by!.id === currentUser.id
+    );
+  }, [currentUser?.id]);
 
   // ✅ Tính toán số dòng hiển thị thực tế
   const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
@@ -623,6 +632,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     );
   }
 
+  const canBulkAct = useMemo(() => {
+    if (selectedOrders.length === 0) return false;
+    return selectedOrders.every(isOwner);
+  }, [selectedOrders, isOwner]);
+
   return (
     <TooltipProvider>
       <style jsx>{`
@@ -668,6 +682,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           onBulkExtend={handleBulkExtend}
           onBulkNotes={handleBulkNotes}
           loading={loading}
+          canAct={canBulkAct}
         />
 
         <div className="relative">
@@ -758,242 +773,253 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       key={orderDetail.id || index}
                       className={getRowClassName(orderDetail, index)}
                     >
-                      {/* ✅ Checkbox cell */}
-                      <TableCell className="text-center left-0 bg-inherit">
-                        <Checkbox
-                          checked={selectedOrderIds.has(orderDetail.id)}
-                          onCheckedChange={() =>
-                            handleSelectOrder(orderDetail.id)
-                          }
-                          aria-label={`Chọn đơn hàng #${orderDetail.id}`}
-                        />
-                      </TableCell>
-                      <TableCell className="text-center left-[40px] bg-inherit">
-                        <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
-                          {startIndex + index + 1}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-blue-700">
-                        <div className="text-truncate">
-                          #{orderDetail.id || "N/A"}
-                        </div>
-                      </TableCell>
-                      {/* ✅ Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
-                      <TableCell className="text-center">
-                        {(() => {
-                          const dynamicExtended = calculateDynamicExtended(
-                            orderDetail.created_at,
-                            orderDetail.extended || 0
-                          );
-                          return (
-                            <span
-                              className={`inline-flex items-center ${getExtendedBadgeStyle(
-                                dynamicExtended
-                              )}`}
-                              title={`Công thức: ${
-                                orderDetail.created_at
-                                  ? new Date(orderDetail.created_at).getDate()
-                                  : "N/A"
-                              } + ${
-                                orderDetail.extended || 0
-                              } - ${new Date().getDate()} = ${dynamicExtended}`}
-                            >
-                              {getExtendedIcon(dynamicExtended)}
-                              {dynamicExtended}
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-center text-slate-600 text-sm">
-                        <div className="flex flex-col">
-                          {orderDetail.created_at ? (
-                            typeof orderDetail.created_at === "string" ? (
-                              <>
-                                <div className="font-medium text-blue-600">
-                                  {orderDetail.created_at.includes(" ")
-                                    ? orderDetail.created_at.split(" ")[1] || ""
-                                    : ""}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {orderDetail.created_at.includes(" ")
-                                    ? orderDetail.created_at.split(" ")[0] || ""
-                                    : orderDetail.created_at}
-                                </div>
-                              </>
-                            ) : orderDetail.created_at instanceof Date ? (
-                              <>
-                                <div className="font-medium text-blue-600">
-                                  {orderDetail.created_at.toLocaleTimeString(
-                                    "vi-VN"
-                                  )}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {orderDetail.created_at.toLocaleDateString(
-                                    "vi-VN"
-                                  )}
-                                </div>
-                              </>
+                      {(() => { const owner = isOwner(orderDetail); return (
+                        <>
+                        {/* ✅ Checkbox cell */}
+                        <TableCell className="text-center left-0 bg-inherit">
+                          <Checkbox
+                            checked={selectedOrderIds.has(orderDetail.id)}
+                            onCheckedChange={() =>
+                              handleSelectOrder(orderDetail.id)
+                            }
+                            aria-label={`Chọn đơn hàng #${orderDetail.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-center left-[40px] bg-inherit">
+                          <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
+                            {startIndex + index + 1}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-blue-700">
+                          <div className="text-truncate">
+                            #{orderDetail.id || "N/A"}
+                          </div>
+                        </TableCell>
+                        {/* ✅ Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
+                        <TableCell className="text-center">
+                          {(() => {
+                            const dynamicExtended = calculateDynamicExtended(
+                              orderDetail.created_at,
+                              orderDetail.extended || 0
+                            );
+                            return (
+                              <span
+                                className={`inline-flex items-center ${getExtendedBadgeStyle(
+                                  dynamicExtended
+                                )}`}
+                                title={`Công thức: ${
+                                  orderDetail.created_at
+                                    ? new Date(orderDetail.created_at).getDate()
+                                    : "N/A"
+                                } + ${
+                                  orderDetail.extended || 0
+                                } - ${new Date().getDate()} = ${dynamicExtended}`}
+                              >
+                                {getExtendedIcon(dynamicExtended)}
+                                {dynamicExtended}
+                              </span>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="text-center text-slate-600 text-sm">
+                          <div className="flex flex-col">
+                            {orderDetail.created_at ? (
+                              typeof orderDetail.created_at === "string" ? (
+                                <>
+                                  <div className="font-medium text-blue-600">
+                                    {orderDetail.created_at.includes(" ")
+                                      ? orderDetail.created_at.split(" ")[1] || ""
+                                      : ""}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {orderDetail.created_at.includes(" ")
+                                      ? orderDetail.created_at.split(" ")[0] || ""
+                                      : orderDetail.created_at}
+                                  </div>
+                                </>
+                              ) : orderDetail.created_at instanceof Date ? (
+                                <>
+                                  <div className="font-medium text-blue-600">
+                                    {orderDetail.created_at.toLocaleTimeString(
+                                      "vi-VN"
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {orderDetail.created_at.toLocaleDateString(
+                                      "vi-VN"
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div>""</div>
+                              )
                             ) : (
                               <div>""</div>
-                            )
-                          ) : (
-                            <div>""</div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-purple-700 text-sm">
-                        <TruncatedText
-                          text={
-                            orderDetail.order?.sale_by?.fullName ||
-                            orderDetail.order?.sale_by?.username ||
-                            "N/A"
-                          }
-                          maxLength={15}
-                          className="text-truncate"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-green-700 text-sm">
-                        <div className="flex items-center justify-center gap-1">
-                          <div
-                            className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
-                            onDoubleClick={() =>
-                              handleCustomerNameClick(
-                                orderDetail.customer_name || ""
-                              )
-                            }
-                            title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
-                          >
-                            <TruncatedText
-                              text={orderDetail.customer_name || "--"}
-                              maxLength={12}
-                              className="text-truncate"
-                            />
+                            )}
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 hover:bg-green-100 mr-5"
-                            onClick={() => handleCustomerNameEdit(orderDetail)}
-                            title="Sửa tên khách hàng"
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-purple-700 text-sm">
+                          <TruncatedText
+                            text={
+                              orderDetail.order?.sale_by?.fullName ||
+                              orderDetail.order?.sale_by?.username ||
+                              "N/A"
+                            }
+                            maxLength={15}
+                            className="text-truncate"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center font-medium text-green-700 text-sm">
+                          <div className="flex items-center justify-center gap-1">
+                            <div
+                              className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
+                              onDoubleClick={() =>
+                                handleCustomerNameClick(
+                                  orderDetail.customer_name || ""
+                                )
+                              }
+                              title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
+                            >
+                              <TruncatedText
+                                text={orderDetail.customer_name || "--"}
+                                maxLength={12}
+                                className="text-truncate"
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 hover:bg-green-100 mr-5"
+                              onClick={() => owner && handleCustomerNameEdit(orderDetail)}
+                              title={owner ? "Sửa tên khách hàng" : "Chỉ chủ sở hữu đơn hàng mới được sửa tên khách hàng"}
+                              disabled={!owner}
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
+                          <TruncatedText
+                            text={orderDetail.raw_item || "N/A"}
+                            maxLength={55}
+                            className="text-wrap leading-relaxed"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center font-semibold text-indigo-600">
+                          <div className="text-truncate">
+                            {orderDetail.quantity || 0}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-green-600 text-sm">
+                          <div className="text-truncate">
+                            {orderDetail.unit_price
+                              ? Number(orderDetail.unit_price).toLocaleString() +
+                                "₫"
+                              : "0₫"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                              orderDetail.status || ""
+                            )}`}
                           >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
-                        <TruncatedText
-                          text={orderDetail.raw_item || "N/A"}
-                          maxLength={55}
-                          className="text-wrap leading-relaxed"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center font-semibold text-indigo-600">
-                        <div className="text-truncate">
-                          {orderDetail.quantity || 0}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-green-600 text-sm">
-                        <div className="text-truncate">
-                          {orderDetail.unit_price
-                            ? Number(orderDetail.unit_price).toLocaleString() +
-                              "₫"
-                            : "0₫"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span
-                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            orderDetail.status || ""
-                          )}`}
-                        >
-                          {getStatusIcon(orderDetail.status || "")}
-                          <span className="text-truncate max-w-[80px]">
-                            {getStatusLabel(orderDetail.status || "")}
+                            {getStatusIcon(orderDetail.status || "")}
+                            <span className="text-truncate max-w-[80px]">
+                              {getStatusLabel(orderDetail.status || "")}
+                            </span>
                           </span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
-                        <TruncatedText
-                          text={orderDetail.notes || "—"}
-                          maxLength={18}
-                          className="text-wrap leading-relaxed"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center space-x-1">
-                          <POrderDynamic action="read">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() => handleViewClick(orderDetail)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
-                                >
-                                  <Eye className="h-3 w-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Xem tin nhắn</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </POrderDynamic>
+                        </TableCell>
+                        <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
+                          <TruncatedText
+                            text={orderDetail.notes || "—"}
+                            maxLength={18}
+                            className="text-wrap leading-relaxed"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center space-x-1">
+                            <POrderDynamic action="read">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    onClick={() => handleViewClick(orderDetail)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Xem tin nhắn</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </POrderDynamic>
 
-                          <POrderDynamic action="update">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() => handleEditClick(orderDetail)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Sửa</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </POrderDynamic>
+                            <POrderDynamic action="update">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    onClick={() => owner && handleEditClick(orderDetail)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+                                    disabled={!owner}
+                                    title={owner ? "Sửa" : "Chỉ chủ sở hữu được sửa"}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{owner ? "Sửa" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </POrderDynamic>
 
-                          <POrderDynamic action="delete">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() => handleDeleteClick(orderDetail)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Xóa</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </POrderDynamic>
+                            <POrderDynamic action="delete">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    onClick={() => owner && handleDeleteClick(orderDetail)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors"
+                                    disabled={!owner}
+                                    title={owner ? "Xóa" : "Chỉ chủ sở hữu được xóa"}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{owner ? "Xóa" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </POrderDynamic>
 
-                          <POrderDynamic action="update">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() => handleAddToBlacklistClick(orderDetail)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
-                                >
-                                  <Shield className="h-3 w-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Thêm vào blacklist</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </POrderDynamic>
-                        </div>
-                      </TableCell>
+                            <POrderDynamic action="update">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    onClick={() => owner && handleAddToBlacklistClick(orderDetail)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
+                                    disabled={!owner}
+                                    title={owner ? "Thêm vào blacklist" : "Chỉ chủ sở hữu được thao tác"}
+                                  >
+                                    <Shield className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{owner ? "Thêm vào blacklist" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </POrderDynamic>
+                          </div>
+                        </TableCell>
+                        </>
+                      ); })()}
                     </TableRow>
                   ))}
 

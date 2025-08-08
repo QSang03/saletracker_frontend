@@ -1452,6 +1452,63 @@ export const useOrders = (): UseOrdersReturn => {
   //   setCanGoBack(hasNavigationHistory());
   // }, [filters]);
 
+  const fetchTrashedOrders = useCallback(
+    async (currentFilters: Partial<OrderFilters>): Promise<OrdersResponse> => {
+      return handleApiCall(async () => {
+        const params = new URLSearchParams();
+        const page = currentFilters.page ?? filters.page;
+        const pageSize = currentFilters.pageSize ?? filters.pageSize;
+        params.append('page', String(page));
+        params.append('pageSize', String(pageSize));
+
+        if (currentFilters.search && currentFilters.search.trim()) {
+          params.append('search', currentFilters.search.trim());
+        }
+        if (currentFilters.employees && currentFilters.employees.trim()) {
+          params.append('employees', currentFilters.employees.trim());
+        }
+        if (currentFilters.departments && currentFilters.departments.trim()) {
+          params.append('departments', currentFilters.departments.trim());
+        }
+        if (currentFilters.products && currentFilters.products.trim()) {
+          params.append('products', currentFilters.products.trim());
+        }
+        if (currentFilters.sortField) {
+          params.append('sortField', currentFilters.sortField);
+        }
+        if (currentFilters.sortDirection) {
+          params.append('sortDirection', currentFilters.sortDirection);
+        }
+
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/trashed?${params.toString()}`,
+          { headers: getAuthHeaders() }
+        );
+        if (!res.ok) throw new Error(`Failed to fetch trashed orders: ${res.status}`);
+        const json = await res.json();
+        return json as OrdersResponse;
+      });
+    },
+    [handleApiCall, getAuthHeaders, filters.page, filters.pageSize]
+  );
+
+  const bulkRestoreOrderDetails = useCallback(
+    async (ids: number[]): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-restore`,
+          {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+          }
+        );
+        if (!res.ok) throw new Error(`Failed to bulk restore order details: ${res.status}`);
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
   return {
     // State
     orders,
@@ -1516,6 +1573,14 @@ export const useOrders = (): UseOrdersReturn => {
 
     // ✅ Debug functions
     forceResetRestoration,
+
+    // ✅ Trashed orders API
+    // Note: these don't affect the main `orders` state, they return data directly
+    fetchTrashedOrders,
+    bulkRestoreOrderDetails,
+  } as unknown as UseOrdersReturn & {
+    fetchTrashedOrders: typeof fetchTrashedOrders;
+    bulkRestoreOrderDetails: typeof bulkRestoreOrderDetails;
   };
 };
 

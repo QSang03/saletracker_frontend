@@ -264,7 +264,7 @@ function ManagerOrderContent() {
   // ✅ Cập nhật handleDelete - chỉ nhận OrderDetail và reason
   const handleDelete = useCallback(
     async (orderDetail: OrderDetail, reason: string) => {
-      if (!confirm("Bạn có chắc chắn muốn xóa order detail này?")) return;
+      // if (!confirm("Bạn có chắc chắn muốn xóa order detail này?")) return;
 
       try {
         await deleteOrderDetail(Number(orderDetail.id));

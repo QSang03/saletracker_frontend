@@ -24,9 +24,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           {children}
           <Toaster position="top-center" richColors />
-          <div className="fixed z-50 bottom-10 right-6">
-            <ThemeToggle />
-          </div>
         </Providers>
       </body>
     </html>

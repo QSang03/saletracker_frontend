@@ -4,7 +4,7 @@ export const navItems = [
     title: "Thống kê",
     icon: "FileBarChart2",
     items: [
-      { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin"] },
+      { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin", "analysis"] },
       { title: "Thống kê công nợ", url: "/dashboard/debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
     ],
   },
@@ -14,8 +14,7 @@ export const navItems = [
   items: [
     { title: "Quản lý đơn hàng", url: "/dashboard/manager-order", roles: ["admin", "analysis"] },
     { title: "Quản lý Blacklist", url: "/dashboard/order-blacklist", roles: ["admin", "analysis"] },
-    // { title: "Thùng rác đơn hàng", url: "/dashboard/order-trashed", roles: ["admin", "analysis"] },
-    // { title: "Cấu hình đơn hàng", url: "/dashboard/order-settings", roles: ["admin", "analysis"] },
+    { title: "Quản lý Đơn hàng đã xóa", url: "/dashboard/order-trashed", roles: ["admin", "analysis"] },
   ],
   },
   {
@@ -23,7 +22,6 @@ export const navItems = [
     icon: "Briefcase",
     items: [
       { title: "Quản lý công nợ", url: "/dashboard/manager-debt", roles: ["admin", "manager-cong-no", "user-cong-no"] },
-      // { title: "Công nợ đã xóa", url: "/dashboard/debt-trashed", roles: ["admin", "manager-cong-no", "user-cong-no"] },
       { title: "Cấu hình nhắc nợ", url: "/dashboard/debt-settings", roles: ["admin", "manager-cong-no", "user-cong-no"] },
     ],
   },

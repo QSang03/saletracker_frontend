@@ -9,6 +9,7 @@ interface BulkActionsProps {
   onBulkExtend: () => void;
   onBulkNotes: () => void;
   loading?: boolean;
+  canAct?: boolean; // when false, disable bulk actions due to ownership
 }
 
 const BulkActions: React.FC<BulkActionsProps> = ({
@@ -17,6 +18,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
   onBulkExtend,
   onBulkNotes,
   loading = false,
+  canAct = true,
 }) => {
   if (selectedOrders.length === 0) {
     return null;
@@ -95,7 +97,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                 variant="destructive"
                 size="lg"
                 onClick={onBulkDelete}
-                disabled={loading}
+                disabled={loading || !canAct}
                 className="group relative overflow-hidden flex items-center justify-center gap-3 
                          whitespace-nowrap min-w-[160px] px-6 py-4 text-base font-semibold
                          bg-gradient-to-r from-red-500 via-red-600 to-pink-600 
@@ -104,6 +106,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                          transform hover:scale-110 hover:-translate-y-1
                          transition-all duration-500 ease-out rounded-2xl text-white
                          active:scale-95 active:translate-y-0"
+                title={!canAct ? "Chỉ thao tác với đơn hàng do bạn sở hữu" : undefined}
               >
                 {/* Shimmer effect */}
                 <div
@@ -140,7 +143,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                 variant="default"
                 size="lg"
                 onClick={onBulkExtend}
-                disabled={loading}
+                disabled={loading || !canAct}
                 className="group relative overflow-hidden flex items-center justify-center gap-3 
                          whitespace-nowrap min-w-[180px] px-6 py-4 text-base font-semibold
                          bg-gradient-to-r from-blue-500 via-blue-600 to-cyan-600 
@@ -149,6 +152,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                          transform hover:scale-110 hover:-translate-y-1
                          transition-all duration-500 ease-out rounded-2xl text-white
                          active:scale-95 active:translate-y-0"
+                title={!canAct ? "Chỉ thao tác với đơn hàng do bạn sở hữu" : undefined}
               >
                 {/* Shimmer effect */}
                 <div
@@ -185,7 +189,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                 variant="default"
                 size="lg"
                 onClick={onBulkNotes}
-                disabled={loading}
+                disabled={loading || !canAct}
                 className="group relative overflow-hidden flex items-center justify-center gap-3 
                          whitespace-nowrap min-w-[140px] px-6 py-4 text-base font-semibold
                          bg-gradient-to-r from-green-500 via-green-600 to-emerald-600 
@@ -194,6 +198,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                          transform hover:scale-110 hover:-translate-y-1
                          transition-all duration-500 ease-out rounded-2xl text-white
                          active:scale-95 active:translate-y-0"
+                title={!canAct ? "Chỉ thao tác với đơn hàng do bạn sở hữu" : undefined}
               >
                 {/* Shimmer effect */}
                 <div
