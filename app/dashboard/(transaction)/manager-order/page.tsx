@@ -267,7 +267,7 @@ function ManagerOrderContent() {
       // if (!confirm("Bạn có chắc chắn muốn xóa order detail này?")) return;
 
       try {
-        await deleteOrderDetail(Number(orderDetail.id));
+        await deleteOrderDetail(Number(orderDetail.id), reason);
         setAlert({ type: "success", message: "Xóa order detail thành công!" });
         refetch();
       } catch (err) {

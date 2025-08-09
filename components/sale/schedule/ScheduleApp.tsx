@@ -224,9 +224,13 @@ const weekDays = [
   "Chủ nhật",
 ];
 
+const LAST_SLOT_END = "17:45";
+
 export default function CompleteScheduleApp() {
   // Permission check
   const { user, getAllUserRoles } = usePermission();
+  const uiToDow = (dayIndex: number) => ((dayIndex + 1) % 7) + 1;
+  const dowToUi = (dow: number) => (dow === 1 ? 6 : dow - 2);
 
   // Kiểm tra xem user có phải admin không
   const isAdmin = useMemo(() => {
@@ -432,11 +436,12 @@ export default function CompleteScheduleApp() {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startDay = firstDay.getDay();
+    let startDay = firstDay.getDay();
+    startDay = (startDay + 6) % 7;
     const calendar: any[] = [];
 
     // Previous month days
-    const prevMonth = new Date(year, month - 1, 0);
+    const prevMonth = new Date(year, month, 0); // ngày cuối tháng trước
     for (let i = startDay - 1; i >= 0; i--) {
       const day = prevMonth.getDate() - i;
       calendar.push({ date: day, isCurrentMonth: false, isPrevMonth: true });
@@ -479,6 +484,26 @@ export default function CompleteScheduleApp() {
     },
     []
   );
+
+  const turnOffBulk = useCallback(() => {
+    setIsBulkMode(false);
+    setBulkScheduleConfig((prev) => ({ ...prev, enabled: false }));
+    setBulkPreview({ weeks: [], months: [] });
+  }, []);
+
+  const canOpenBulk = useMemo(() => {
+    if (!selectedDepartment || !isDepartmentEditable(selectedDepartment))
+      return false;
+    const sel = getCurrentDepartmentSelections();
+    return activeView === "week"
+      ? sel.timeSlots.length > 0 // cần có khung giờ
+      : sel.days.length > 0; // cần có ngày
+  }, [
+    selectedDepartment,
+    isDepartmentEditable,
+    getCurrentDepartmentSelections,
+    activeView,
+  ]);
 
   const getAllSelections = useCallback(() => {
     const allDays: SelectedDay[] = [];
@@ -832,15 +857,11 @@ export default function CompleteScheduleApp() {
 
   // Sử dụng trong component
   const getTimeSlotDisplay = (time: string, index: number) => {
-    const nextTime = timeSlots[index + 1] || "18:00";
+    const nextTime = timeSlots[index + 1] || LAST_SLOT_END;
     return formatTimeRange(time, nextTime);
   };
 
   const handleSaveSchedule = async () => {
-    if (isBulkMode && bulkScheduleConfig.enabled) {
-      await handleGenerateBulkSchedule();
-    }
-
     const { allDays, allTimeSlots } = getAllSelections();
 
     if (allDays.length === 0 && allTimeSlots.length === 0) {
@@ -1078,10 +1099,9 @@ export default function CompleteScheduleApp() {
                     slot.applicable_date ||
                     (() => {
                       const weekDates = getWeekDates();
-                      const targetDayIndex =
-                        slot.day_of_week === 7 ? 0 : slot.day_of_week!;
+                      const targetDayIndex = dowToUi(slot.day_of_week!);
                       const applicableDate =
-                        weekDates[targetDayIndex] || new Date();
+                        getWeekDates()[targetDayIndex] || new Date();
                       return applicableDate.toISOString().split("T")[0];
                     })(),
                   activity_description: formData.description,
@@ -1176,7 +1196,7 @@ export default function CompleteScheduleApp() {
   // Helper functions
   const getSchedulesForSlot = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
-      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
+      const dayOfWeek = uiToDow(dayIndex);
       return filteredSchedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.HOURLY_SLOTS) return false;
 
@@ -1218,7 +1238,7 @@ export default function CompleteScheduleApp() {
 
   const isSlotBlockedByHiddenDepartment = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
-      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
+      const dayOfWeek = uiToDow(dayIndex);
 
       // Kiểm tra selections từ phòng ban bị ẩn
       for (const [deptId, selections] of departmentSelections) {
@@ -1329,7 +1349,7 @@ export default function CompleteScheduleApp() {
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth();
       const currentDate = new Date(year, month, date);
-      const isSunday = currentDate.getDay() === 6;
+  const isSunday = currentDate.getDay() === 0;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1381,7 +1401,7 @@ export default function CompleteScheduleApp() {
       const month = currentMonth.getMonth();
 
       const currentDate = new Date(year, month, date);
-      const isSunday = currentDate.getDay() === 6;
+  const isSunday = currentDate.getDay() === 0;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1436,7 +1456,7 @@ export default function CompleteScheduleApp() {
       const isCurrentMonth =
         month === currentMonth.getMonth() &&
         year === currentMonth.getFullYear();
-      const isSunday = currentDate.getDay() === 6;
+  const isSunday = currentDate.getDay() === 0;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1502,7 +1522,7 @@ export default function CompleteScheduleApp() {
   const isTimeSlotSelected = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
       const currentSelections = getCurrentDepartmentSelections();
-      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
+      const dayOfWeek = uiToDow(dayIndex);
       return currentSelections.timeSlots.some(
         (slot) =>
           slot.day_of_week === dayOfWeek &&
@@ -1534,7 +1554,7 @@ export default function CompleteScheduleApp() {
 
   const isTimeSlotSelectedByAnyDept = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
-      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
+      const dayOfWeek = uiToDow(dayIndex);
       for (const [deptId, selections] of departmentSelections) {
         if (
           selections.timeSlots.some(
@@ -1571,7 +1591,7 @@ export default function CompleteScheduleApp() {
       if (hasScheduleConflict) return true;
 
       // Kiểm tra xung đột với selections đang có của các phòng ban khác
-      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
+      const dayOfWeek = uiToDow(dayIndex);
       for (const [deptId, selections] of departmentSelections) {
         if (deptId !== selectedDepartment) {
           const hasSelectionConflict = selections.timeSlots.some(
@@ -1800,7 +1820,7 @@ export default function CompleteScheduleApp() {
 
       // Xác định trạng thái chọn/hủy chọn dựa trên trạng thái của ô bắt đầu
       const currentSelections = getCurrentDepartmentSelections();
-      const dayOfWeek = dayIndex === 6 ? 1 : dayIndex + 2;
+      const dayOfWeek = uiToDow(dayIndex);
       const isCurrentlySelected = currentSelections.timeSlots.some(
         (slot) =>
           slot.day_of_week === dayOfWeek &&
@@ -1859,8 +1879,8 @@ export default function CompleteScheduleApp() {
     if (dragState.isSelecting) {
       // Chọn thêm các ô chưa được chọn
       range.forEach(({ day, time }) => {
-        const endTime = timeSlots[timeSlots.indexOf(time) + 1] || "23:00";
-        const dayOfWeek = day === 6 ? 1 : day + 2;
+        const endTime = timeSlots[timeSlots.indexOf(time) + 1] || LAST_SLOT_END;
+        const dayOfWeek = uiToDow(day);
         const exists = newTimeSlots.some(
           (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
         );
@@ -1879,7 +1899,7 @@ export default function CompleteScheduleApp() {
     } else {
       // Hủy chọn các ô đã được chọn
       range.forEach(({ day, time }) => {
-        const dayOfWeek = day === 6 ? 1 : day + 2;
+        const dayOfWeek = uiToDow(day);
         newTimeSlots = newTimeSlots.filter(
           (slot) =>
             !(slot.day_of_week === dayOfWeek && slot.start_time === time)
@@ -1953,6 +1973,48 @@ export default function CompleteScheduleApp() {
     fetchAllSchedules();
   }, []);
 
+  useEffect(() => {
+    if (isBulkMode && bulkScheduleConfig.enabled && selectedDepartment) {
+      handleGenerateBulkSchedule(); // chạy ngay lúc bật bulk, dù count=1
+    }
+  }, [
+    isBulkMode,
+    bulkScheduleConfig.enabled,
+    bulkScheduleConfig.count,
+    bulkScheduleConfig.type,
+    selectedDepartment,
+  ]);
+
+  useEffect(() => {
+    if (!selectedDepartment && isBulkMode) {
+      turnOffBulk();
+      return;
+    }
+    if (selectedDepartment) {
+      const sel = departmentSelections.get(selectedDepartment) || {
+        days: [],
+        timeSlots: [],
+      };
+      const hasTemplate =
+        activeView === "week" ? sel.timeSlots.length > 0 : sel.days.length > 0;
+      if (!hasTemplate && isBulkMode) turnOffBulk(); // <--- NEW
+    }
+  }, [
+    selectedDepartment,
+    departmentSelections,
+    activeView,
+    isBulkMode,
+    turnOffBulk,
+  ]);
+
+  useEffect(() => {
+    if (!isBulkMode) return;
+    setBulkScheduleConfig((prev) => ({
+      ...prev,
+      type: activeView === "week" ? "weeks" : "months",
+    }));
+  }, [activeView, isBulkMode]);
+
   // Drag handling
   useEffect(() => {
     const handleGlobalMouseUp = () => {
@@ -1988,142 +2050,6 @@ export default function CompleteScheduleApp() {
     };
   }, [dragState.isDragging, monthlyDragState.isDragging, handleDayMouseUp]);
 
-  const generateWeeklyBulkSelections = useCallback(
-    async (
-      targetWeek: Date,
-      templateSelections: DepartmentSelections,
-      targetMap: Map<number, DepartmentSelections>,
-      isCurrentPeriod: boolean = false // ✅ Thêm flag
-    ) => {
-      if (!selectedDepartment) return;
-
-      const currentDepartmentSelections = targetMap.get(selectedDepartment) || {
-        days: [],
-        timeSlots: [],
-      };
-
-      // ✅ Nếu là tuần hiện tại, giữ nguyên template slots
-      if (isCurrentPeriod) {
-        currentDepartmentSelections.timeSlots.push(
-          ...templateSelections.timeSlots
-        );
-        targetMap.set(selectedDepartment, currentDepartmentSelections);
-        return;
-      }
-
-      // ✅ Xử lý time slots cho tuần target
-      for (const templateSlot of templateSelections.timeSlots) {
-        const targetWeekDates = getWeekDatesForDate(targetWeek);
-        const dayIndex =
-          templateSlot.day_of_week === 1 ? 6 : templateSlot.day_of_week! - 2;
-        const targetDate = targetWeekDates[dayIndex];
-
-        if (!targetDate) continue;
-
-        const specificDate = targetDate.toISOString().split("T")[0];
-        const isPast = isPastTimeSlot(
-          dayIndex,
-          templateSlot.start_time,
-          specificDate
-        );
-        const hasConflict = isTimeSlotConflicted(
-          dayIndex,
-          templateSlot.start_time,
-          specificDate
-        );
-
-        if (bulkScheduleConfig.skipWeekends && dayIndex === 6) continue;
-        if (isPast && bulkScheduleConfig.skipConflicts) continue;
-        if (hasConflict && bulkScheduleConfig.skipConflicts) continue;
-
-        // ✅ Tạo slot mới với ngày cụ thể cho tuần target
-        const newSlot: TimeSlot = {
-          id: `${templateSlot.id}-${specificDate}`, // Unique ID
-          day_of_week: templateSlot.day_of_week,
-          start_time: templateSlot.start_time,
-          end_time: templateSlot.end_time,
-          applicable_date: specificDate, // ✅ Ngày cụ thể cho tuần target
-          department_id: selectedDepartment,
-        };
-
-        currentDepartmentSelections.timeSlots.push(newSlot);
-      }
-
-      targetMap.set(selectedDepartment, currentDepartmentSelections);
-    },
-    [
-      selectedDepartment,
-      bulkScheduleConfig,
-      isTimeSlotConflicted,
-      isPastTimeSlot,
-    ]
-  );
-
-  const generateMonthlyBulkSelections = useCallback(
-    async (
-      targetMonth: Date,
-      templateSelections: DepartmentSelections,
-      targetMap: Map<number, DepartmentSelections>,
-      isCurrentPeriod: boolean = false // ✅ THÊM flag này
-    ) => {
-      if (!selectedDepartment) return;
-
-      const currentDepartmentSelections = targetMap.get(selectedDepartment) || {
-        days: [],
-        timeSlots: [],
-      };
-
-      // ✅ Nếu là tháng hiện tại, giữ nguyên template days
-      if (isCurrentPeriod) {
-        currentDepartmentSelections.days.push(...templateSelections.days);
-        targetMap.set(selectedDepartment, currentDepartmentSelections);
-        return;
-      }
-
-      // ✅ Xử lý days cho tháng target
-      for (const templateDay of templateSelections.days) {
-        const targetDate = templateDay.date;
-        const targetMonthValue = targetMonth.getMonth();
-        const targetYear = targetMonth.getFullYear();
-
-        // Kiểm tra ngày có tồn tại trong tháng target không
-        const targetDateObj = new Date(
-          targetYear,
-          targetMonthValue,
-          targetDate
-        );
-        if (targetDateObj.getMonth() !== targetMonthValue) continue;
-
-        // ✅ SỬA: Kiểm tra Chủ nhật đúng cách
-        const isSunday = targetDateObj.getDay() === 6; // Chủ nhật
-
-        const isPast = isPastDay(targetDate, targetMonthValue, targetYear);
-        const hasConflict = isDayConflicted(
-          targetDate,
-          targetMonthValue,
-          targetYear
-        );
-
-        if (bulkScheduleConfig.skipWeekends && isSunday) continue;
-        if (isPast && bulkScheduleConfig.skipConflicts) continue;
-        if (hasConflict && bulkScheduleConfig.skipConflicts) continue;
-
-        // Thêm day mới
-        const newDay: SelectedDay = {
-          date: targetDate,
-          month: targetMonthValue,
-          year: targetYear,
-          department_id: selectedDepartment,
-        };
-
-        currentDepartmentSelections.days.push(newDay);
-      }
-
-      targetMap.set(selectedDepartment, currentDepartmentSelections);
-    },
-    [selectedDepartment, bulkScheduleConfig, isDayConflicted, isPastDay]
-  );
-
   // Helper function
   const getWeekDatesForDate = useCallback((date: Date) => {
     const start = new Date(date);
@@ -2137,6 +2063,172 @@ export default function CompleteScheduleApp() {
       return weekDate;
     });
   }, []);
+
+  const generateWeeklyBulkSelections = useCallback(
+    async (
+      targetWeek: Date,
+      template: DepartmentSelections,
+      targetMap: Map<number, DepartmentSelections>
+    ) => {
+      if (!selectedDepartment) return;
+
+      const dest = targetMap.get(selectedDepartment) || {
+        days: [],
+        timeSlots: [],
+      };
+
+      // key để chống duplicate trong cùng 1 targetMap
+      const k = (s: TimeSlot) =>
+        `${s.applicable_date ?? ""}|${s.day_of_week}|${s.start_time}|${
+          s.end_time
+        }`;
+      const existing = new Set(dest.timeSlots.map(k));
+
+      // ✅ Tuần MẪU luôn là currentWeek (nơi user chọn slot)
+      const baseWeekDates = getWeekDatesForDate(currentWeek);
+      const baseStart = new Date(baseWeekDates[0].toDateString());
+      const baseEnd = new Date(baseWeekDates[6].toDateString());
+      const inRange = (d: Date) => d >= baseStart && d <= baseEnd;
+
+      // ✅ Chỉ lấy các slot được chọn trong tuần mẫu
+      const seedSlots = template.timeSlots
+        .filter(
+          (s) => s.applicable_date && inRange(new Date(s.applicable_date!))
+        )
+        .filter((s, i, arr) => {
+          const key = `${s.day_of_week}|${s.start_time}|${s.end_time}`;
+          return (
+            arr.findIndex(
+              (x) => `${x.day_of_week}|${x.start_time}|${x.end_time}` === key
+            ) === i
+          );
+        });
+
+      // Tuần đích để tính applicable_date mới cho từng slot
+      const tgtWeekDates = getWeekDatesForDate(targetWeek);
+
+      for (const s of seedSlots) {
+        const dayIdx = dowToUi(s.day_of_week!); // 0..6 (T2..CN)
+
+        // Bỏ CN nếu muốn
+        if (bulkScheduleConfig.skipWeekends && dayIdx === 6) continue;
+
+        const dateStr = tgtWeekDates[dayIdx]?.toISOString().split("T")[0];
+        if (!dateStr) continue;
+
+        // Bỏ qua các xung đột / quá khứ nếu được cấu hình
+        if (bulkScheduleConfig.skipConflicts) {
+          if (isPastTimeSlot(dayIdx, s.start_time, dateStr)) continue;
+          if (isTimeSlotConflicted(dayIdx, s.start_time, dateStr)) continue;
+        }
+
+        const newSlot: TimeSlot = {
+          ...s,
+          applicable_date: dateStr, // ✅ đổi sang ngày của tuần đích
+          department_id: selectedDepartment,
+        };
+
+        const kk = k(newSlot);
+        if (!existing.has(kk)) {
+          dest.timeSlots.push(newSlot);
+          existing.add(kk);
+        }
+      }
+
+      targetMap.set(selectedDepartment, dest);
+    },
+    [
+      selectedDepartment,
+      bulkScheduleConfig,
+      currentWeek,
+      getWeekDatesForDate,
+      isPastTimeSlot,
+      isTimeSlotConflicted,
+    ]
+  );
+
+  const generateMonthlyBulkSelections = useCallback(
+    async (
+      targetMonth: Date,
+      template: DepartmentSelections,
+      targetMap: Map<number, DepartmentSelections>,
+      isCurrentPeriod = false
+    ) => {
+      if (!selectedDepartment) return;
+
+      const dest = targetMap.get(selectedDepartment) || {
+        days: [],
+        timeSlots: [],
+      };
+      const key = (y: number, m: number, d: number) => `${y}-${m}-${d}`;
+      const existing = new Set(
+        dest.days.map((d) => key(d.year, d.month, d.date))
+      );
+
+      // ✅ chỉ seed từ THÁNG đang xem
+      const baseM = currentMonth.getMonth();
+      const baseY = currentMonth.getFullYear();
+      const seedDays = template.days
+        .filter((d) => d.month === baseM && d.year === baseY)
+        .filter(
+          (d, i, arr) =>
+            arr.findIndex(
+              (x) =>
+                x.date === d.date && x.month === d.month && x.year === d.year
+            ) === i
+        );
+
+      if (isCurrentPeriod) {
+        for (const d of seedDays) {
+          const k = key(d.year, d.month, d.date);
+          if (!existing.has(k)) {
+            existing.add(k);
+            dest.days.push({ ...d, department_id: selectedDepartment });
+          }
+        }
+        targetMap.set(selectedDepartment, dest);
+        return;
+      }
+
+      // Các tháng tương lai
+      for (const d of seedDays) {
+        const y = targetMonth.getFullYear();
+        const m = targetMonth.getMonth();
+
+        // ngày 29/30/31 có tồn tại không?
+        const probe = new Date(y, m, d.date);
+        if (probe.getMonth() !== m) continue;
+
+  const isSunday = probe.getDay() === 0; // ✅ CN = 0
+        if (bulkScheduleConfig.skipWeekends && isSunday) continue;
+
+        if (bulkScheduleConfig.skipConflicts) {
+          if (isPastDay(d.date, m, y)) continue;
+          if (isDayConflicted(d.date, m, y)) continue;
+        }
+
+        const k = key(y, m, d.date);
+        if (existing.has(k)) continue;
+
+        dest.days.push({
+          date: d.date,
+          month: m,
+          year: y,
+          department_id: selectedDepartment,
+        });
+        existing.add(k);
+      }
+
+      targetMap.set(selectedDepartment, dest);
+    },
+    [
+      selectedDepartment,
+      bulkScheduleConfig,
+      isDayConflicted,
+      isPastDay,
+      currentMonth,
+    ]
+  );
 
   // Hàm tạo danh sách các tuần/tháng tiếp theo
   const generateBulkPeriods = useCallback(() => {
@@ -2214,8 +2306,7 @@ export default function CompleteScheduleApp() {
         await generateWeeklyBulkSelections(
           period,
           currentSelections,
-          newBulkSelections,
-          index === 0
+          newBulkSelections
         );
       } else {
         await generateMonthlyBulkSelections(
@@ -2375,25 +2466,18 @@ export default function CompleteScheduleApp() {
                     <Button
                       variant={isBulkMode ? "default" : "outline"}
                       onClick={() => {
-                        setIsBulkMode(!isBulkMode);
-                        if (!isBulkMode) {
+                        if (isBulkMode) {
+                          turnOffBulk();
+                        } else {
+                          setIsBulkMode(true);
                           setBulkScheduleConfig((prev) => ({
                             ...prev,
                             enabled: true,
                           }));
-                        } else {
-                          setBulkScheduleConfig((prev) => ({
-                            ...prev,
-                            enabled: false,
-                          }));
-                          setBulkPreview({ weeks: [], months: [] });
                         }
                       }}
                       className="flex items-center gap-2 hover:bg-blue-50"
-                      disabled={
-                        !selectedDepartment ||
-                        !isDepartmentEditable(selectedDepartment)
-                      }
+                      disabled={!canOpenBulk}
                     >
                       <span className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
@@ -2405,15 +2489,7 @@ export default function CompleteScheduleApp() {
 
                     {isBulkMode && (
                       <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border">
-                        <Select
-                          value={bulkScheduleConfig.type}
-                          onValueChange={(value: "weeks" | "months") =>
-                            setBulkScheduleConfig((prev) => ({
-                              ...prev,
-                              type: value,
-                            }))
-                          }
-                        >
+                        <Select value={bulkScheduleConfig.type} disabled>
                           <SelectTrigger className="w-32">
                             <SelectValue />
                           </SelectTrigger>
@@ -2499,9 +2575,10 @@ export default function CompleteScheduleApp() {
                             }
                             return;
                           }
-                          setSelectedDepartment(
-                            selectedDepartment === dept.id ? null : dept.id
-                          );
+                          const newSelected =
+                            selectedDepartment === dept.id ? null : dept.id;
+                          setSelectedDepartment(newSelected);
+                          if (newSelected === null) turnOffBulk(); // <--- NEW
                         }}
                       >
                         <div className="flex items-center gap-2">
@@ -2637,6 +2714,7 @@ export default function CompleteScheduleApp() {
                           return;
                         }
                         setSelectedDepartment(null);
+                        turnOffBulk();
                       }}
                       className="text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -2863,10 +2941,7 @@ export default function CompleteScheduleApp() {
                                       : "bg-blue-100 text-blue-800"
                                   }`}
                                 >
-                                  {formatTimeRange(
-                                    time,
-                                    timeSlots[timeIndex + 1] || "18:00"
-                                  )}
+                                  {formatTimeRange(time, timeSlots[timeIndex + 1] || LAST_SLOT_END)}
                                   {time >= "12:00" && time < "13:30" && (
                                     <div className="text-xs mt-1">
                                       🍽️ Nghỉ trưa
@@ -3192,7 +3267,7 @@ export default function CompleteScheduleApp() {
                           day.date
                         );
                         const isSunday =
-                          day.isCurrentMonth && currentDate.getDay() === 6;
+                          day.isCurrentMonth && currentDate.getDay() === 0;
                         const isConflicted =
                           day.isCurrentMonth &&
                           isDayConflicted(
@@ -3498,9 +3573,7 @@ export default function CompleteScheduleApp() {
                                           <div>
                                             {
                                               weekDays[
-                                                slot.day_of_week === 1
-                                                  ? 6
-                                                  : slot.day_of_week! - 2
+                                                dowToUi(slot.day_of_week!)
                                               ]
                                             }{" "}
                                             {slot.start_time}-{slot.end_time}
@@ -3614,6 +3687,7 @@ export default function CompleteScheduleApp() {
                         onClick={() => {
                           setDepartmentSelections(new Map());
                           setSelectedDepartment(null);
+                          turnOffBulk();
                         }}
                         variant="outline"
                         disabled={

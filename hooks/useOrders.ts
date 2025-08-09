@@ -97,7 +97,7 @@ interface UseOrdersReturn {
     customerName: string,
     orderDetail?: OrderDetail
   ) => Promise<OrderDetail>;
-  deleteOrderDetail: (id: number) => Promise<void>;
+  deleteOrderDetail: (id: number, reason: string) => Promise<void>;
   getOrderDetailById: (id: number) => Promise<OrderDetail>;
 
   // Bulk operations
@@ -1048,13 +1048,14 @@ export const useOrders = (): UseOrdersReturn => {
   );
 
   const deleteOrderDetail = useCallback(
-    async (id: number): Promise<void> => {
+    async (id: number, reason: string): Promise<void> => {
       return handleApiCall(async () => {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/order-details/${id}`,
           {
             method: "DELETE",
             headers: getAuthHeaders(),
+            body: JSON.stringify({ reason }),
           }
         );
 
@@ -1452,63 +1453,6 @@ export const useOrders = (): UseOrdersReturn => {
   //   setCanGoBack(hasNavigationHistory());
   // }, [filters]);
 
-  const fetchTrashedOrders = useCallback(
-    async (currentFilters: Partial<OrderFilters>): Promise<OrdersResponse> => {
-      return handleApiCall(async () => {
-        const params = new URLSearchParams();
-        const page = currentFilters.page ?? filters.page;
-        const pageSize = currentFilters.pageSize ?? filters.pageSize;
-        params.append('page', String(page));
-        params.append('pageSize', String(pageSize));
-
-        if (currentFilters.search && currentFilters.search.trim()) {
-          params.append('search', currentFilters.search.trim());
-        }
-        if (currentFilters.employees && currentFilters.employees.trim()) {
-          params.append('employees', currentFilters.employees.trim());
-        }
-        if (currentFilters.departments && currentFilters.departments.trim()) {
-          params.append('departments', currentFilters.departments.trim());
-        }
-        if (currentFilters.products && currentFilters.products.trim()) {
-          params.append('products', currentFilters.products.trim());
-        }
-        if (currentFilters.sortField) {
-          params.append('sortField', currentFilters.sortField);
-        }
-        if (currentFilters.sortDirection) {
-          params.append('sortDirection', currentFilters.sortDirection);
-        }
-
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/order-details/trashed?${params.toString()}`,
-          { headers: getAuthHeaders() }
-        );
-        if (!res.ok) throw new Error(`Failed to fetch trashed orders: ${res.status}`);
-        const json = await res.json();
-        return json as OrdersResponse;
-      });
-    },
-    [handleApiCall, getAuthHeaders, filters.page, filters.pageSize]
-  );
-
-  const bulkRestoreOrderDetails = useCallback(
-    async (ids: number[]): Promise<void> => {
-      return handleApiCall(async () => {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-restore`,
-          {
-            method: 'POST',
-            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids }),
-          }
-        );
-        if (!res.ok) throw new Error(`Failed to bulk restore order details: ${res.status}`);
-      });
-    },
-    [handleApiCall, getAuthHeaders]
-  );
-
   return {
     // State
     orders,
@@ -1574,65 +1518,6 @@ export const useOrders = (): UseOrdersReturn => {
     // ✅ Debug functions
     forceResetRestoration,
 
-    // ✅ Trashed orders API
-    // Note: these don't affect the main `orders` state, they return data directly
-    fetchTrashedOrders,
-    bulkRestoreOrderDetails,
   } as unknown as UseOrdersReturn & {
-    fetchTrashedOrders: typeof fetchTrashedOrders;
-    bulkRestoreOrderDetails: typeof bulkRestoreOrderDetails;
   };
 };
-
-function parseFiltersFromUrl(params: URLSearchParams): Partial<OrderFilters> {
-  const filters: Partial<OrderFilters> = {};
-
-  const page = params.get("page");
-  if (page) filters.page = parseInt(page);
-
-  const pageSize = params.get("pageSize");
-  if (pageSize) filters.pageSize = parseInt(pageSize);
-
-  const search = params.get("search");
-  if (search) filters.search = search;
-
-  const status = params.get("status");
-  if (status) filters.status = status;
-
-  const date = params.get("date");
-  if (date) filters.date = date;
-
-  const dateRange = params.get("dateRange");
-  if (dateRange) {
-    try {
-      filters.dateRange = JSON.parse(dateRange);
-    } catch (e) {
-      console.warn("Invalid dateRange param:", dateRange);
-    }
-  }
-
-  const employee = params.get("employee");
-  if (employee) filters.employee = employee;
-
-  const employees = params.get("employees");
-  if (employees) filters.employees = employees;
-
-  const departments = params.get("departments");
-  if (departments) filters.departments = departments;
-
-  const products = params.get("products");
-  if (products) filters.products = products;
-
-  const warningLevel = params.get("warningLevel");
-  if (warningLevel) filters.warningLevel = warningLevel;
-
-  const sortField = params.get("sortField");
-  if (sortField === "quantity" || sortField === "unit_price")
-    filters.sortField = sortField as "quantity" | "unit_price";
-
-  const sortDirection = params.get("sortDirection");
-  if (sortDirection === "asc" || sortDirection === "desc")
-    filters.sortDirection = sortDirection as "asc" | "desc";
-
-  return filters;
-}
