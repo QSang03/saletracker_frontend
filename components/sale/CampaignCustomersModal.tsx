@@ -216,6 +216,7 @@ export default function CampaignCustomersModal({
   onClose,
   campaign,
 }: CampaignCustomersModalProps) {
+  const pageSize = 1000000;
   const [customers, setCustomers] = useState<CustomerWithStatus[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<
     CustomerWithStatus[]
@@ -223,53 +224,220 @@ export default function CampaignCustomersModal({
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-
   const [displayCount, setDisplayCount] = useState(20);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-
   const [selectedCustomer, setSelectedCustomer] =
     useState<CustomerWithStatus | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
-
-  // ✅ THÊM MỚI: State cho EditCustomerModal
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] =
     useState<CustomerWithStatus | null>(null);
+  const [processedEvents, setProcessedEvents] = useState<Set<string>>(
+    new Set()
+  );
+  const [lastEventTimestamp, setLastEventTimestamp] = useState<number>(0);
 
-  const pageSize = 1000000;
+  const getEventKey = (event: any): string => {
+    return `${event.ws_type || event.type}_${
+      event.campaignId || event.campaign_id
+    }_${event.customerId || event.customer_id}_${event.timestamp}`;
+  };
 
-  const fetchCustomers = useCallback(async (searchQuery = "", status = "all") => {
-    if (!campaign) return;
+  const hasRealChanges = (event: any): boolean => {
+    if (!event.changes && !event.status && !event.interaction_data)
+      return false;
 
-    try {
-      setLoading(true);
-
-      const response = await campaignAPI.getCampaignCustomers(campaign.id, {
-        search: searchQuery,
-        status: status === "all" ? undefined : status,
-        page: 1,
-        limit: pageSize,
+    // Kiểm tra changes object
+    if (event.changes) {
+      return Object.keys(event.changes).some((key) => {
+        const change = event.changes[key];
+        if (typeof change === "object" && "old" in change && "new" in change) {
+          return change.old !== change.new;
+        }
+        return true;
       });
-
-      const allCustomers = response.data || [];
-      setCustomers(allCustomers);
-      setDisplayCount(20);
-    } catch (error) {
-      console.error("Error fetching customers:", error);
-      toast.error("Không thể tải danh sách khách hàng");
-      setCustomers([]);
-    } finally {
-      setLoading(false);
     }
-  }, [campaign]);
 
-  const handleCampaignInteractionLogUpdate = useCallback((data: any) => {
-    console.log('Campaign interaction log updated via socket (customers modal):', data);
-    // Refresh customers when interaction logs change
-    if (campaign && data.campaignId === campaign.id) {
-      fetchCustomers(searchTerm, statusFilter);
-    }
-  }, [campaign, searchTerm, statusFilter, fetchCustomers]);
+    // Có status change hoặc interaction data mới
+    return Boolean(event.status || event.interaction_data);
+  };
+
+  const fetchCustomers = useCallback(
+    async (searchQuery = "", status = "all") => {
+      if (!campaign) return;
+
+      try {
+        setLoading(true);
+
+        const response = await campaignAPI.getCampaignCustomers(campaign.id, {
+          search: searchQuery,
+          status: status === "all" ? undefined : status,
+          page: 1,
+          limit: pageSize,
+        });
+
+        const allCustomers = response.data || [];
+        setCustomers(allCustomers);
+        setDisplayCount(20);
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+        toast.error("Không thể tải danh sách khách hàng");
+        setCustomers([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [campaign]
+  );
+
+  // ✅ CẬP NHẬT: Function cập nhật customer cụ thể thay vì reload toàn bộ
+  const updateSpecificCustomer = useCallback(
+    async (customerId: string, changes: any, interactionData?: any) => {
+      try {
+        const customerIndex = customers.findIndex((c) => c.id === customerId);
+        if (customerIndex === -1) {
+          // Nếu không tìm thấy customer, có thể là customer mới được thêm
+          await fetchCustomers(searchTerm, statusFilter);
+          return;
+        }
+
+        // ✅ CHỈ cập nhật những field thay đổi, GIỮ NGUYÊN data cũ
+        if (changes || interactionData) {
+          setCustomers((prev) => {
+            const newCustomers = [...prev];
+            const existingCustomer = newCustomers[customerIndex];
+
+            const updatedFields: any = {};
+
+            // Xử lý status changes
+            if (changes?.status) {
+              updatedFields.status = changes.status.new || changes.status;
+            }
+
+            // Xử lý interaction changes
+            if (interactionData) {
+              updatedFields.conversation_metadata =
+                interactionData.conversation_metadata;
+              updatedFields.total_interactions =
+                interactionData.total_interactions ||
+                existingCustomer.total_interactions;
+              updatedFields.last_interaction_at =
+                interactionData.last_interaction_at;
+            }
+
+            // Xử lý sent_at changes
+            if (changes?.sent_at) {
+              updatedFields.sent_at = changes.sent_at.new;
+            }
+
+            // ✅ MERGE chỉ những field cần thiết
+            newCustomers[customerIndex] = {
+              ...existingCustomer,
+              ...updatedFields,
+            };
+
+            return newCustomers;
+          });
+
+          console.log(`✅ Updated customer ${customerId} specifically:`, {
+            changes,
+            interactionData,
+          });
+          return;
+        }
+
+        // ✅ FALLBACK: Chỉ fetch khi cần thiết
+        console.log(`⚠️ Fallback to full customer refresh for ${customerId}`);
+        await fetchCustomers(searchTerm, statusFilter);
+      } catch (error) {
+        console.error("Error updating specific customer:", error);
+        // Fallback to full reload
+        await fetchCustomers(searchTerm, statusFilter);
+      }
+    },
+    [customers, searchTerm, statusFilter, fetchCustomers]
+  );
+
+  // ✅ CẬP NHẬT: Tối ưu interaction log update handler
+  const handleCampaignInteractionLogUpdate = useCallback(
+    (data: any) => {
+      console.log(
+        "Campaign interaction log updated via socket (customers modal):",
+        data
+      );
+
+      // ✅ Xử lý theo structure events array
+      const events = data.events || [data];
+      if (events.length === 0) {
+        console.log("No events to process in customers modal");
+        return;
+      }
+
+      // ✅ Chỉ xử lý events của campaign hiện tại
+      if (!campaign) return;
+
+      events.forEach((event: any) => {
+        // Kiểm tra campaign match
+        const eventCampaignId = event.campaignId || event.campaign_id;
+        if (eventCampaignId !== campaign.id) {
+          console.log(
+            "Event not for current campaign:",
+            eventCampaignId,
+            "vs",
+            campaign.id
+          );
+          return;
+        }
+
+        // ✅ Kiểm tra duplicate events
+        const eventKey = getEventKey(event);
+        if (processedEvents.has(eventKey)) {
+          console.log("🔄 Duplicate interaction event ignored:", eventKey);
+          return;
+        }
+
+        // ✅ Kiểm tra timestamp để tránh xử lý sự kiện cũ
+        const eventTime = new Date(event.timestamp).getTime();
+        if (eventTime <= lastEventTimestamp) {
+          console.log("⏰ Old interaction event ignored:", event.timestamp);
+          return;
+        }
+
+        // ✅ Kiểm tra có thay đổi thực sự không
+        if (!hasRealChanges(event)) {
+          console.log("📝 No real interaction changes detected:", event);
+          return;
+        }
+
+        // ✅ Đánh dấu event đã xử lý
+        setProcessedEvents((prev) => new Set([...prev, eventKey]));
+        setLastEventTimestamp(eventTime);
+
+        // ✅ Cập nhật customer cụ thể
+        const customerId = event.customerId || event.customer_id;
+        if (customerId) {
+          updateSpecificCustomer(
+            customerId,
+            event.changes,
+            event.interaction_data
+          );
+        } else {
+          // Fallback to full reload nếu không có customer ID
+          console.log("⚠️ No customer ID in event, fallback to full reload");
+          fetchCustomers(searchTerm, statusFilter);
+        }
+      });
+    },
+    [
+      campaign,
+      processedEvents,
+      lastEventTimestamp,
+      updateSpecificCustomer,
+      searchTerm,
+      statusFilter,
+      fetchCustomers,
+    ]
+  );
 
   useEffect(() => {
     let filtered = customers;
@@ -293,20 +461,6 @@ export default function CampaignCustomersModal({
     setDisplayCount(20);
   }, [customers, searchTerm, statusFilter]);
 
-  const loadMoreCustomers = () => {
-    if (isLoadingMore) return;
-
-    setIsLoadingMore(true);
-
-    setTimeout(() => {
-      setDisplayCount((prev) => Math.min(prev + 20, filteredCustomers.length));
-      setIsLoadingMore(false);
-    }, 300);
-  };
-
-  const displayedCustomers = filteredCustomers.slice(0, displayCount);
-  const hasMoreData = displayCount < filteredCustomers.length;
-
   useEffect(() => {
     if (isOpen && campaign) {
       fetchCustomers(searchTerm, statusFilter);
@@ -322,6 +476,33 @@ export default function CampaignCustomersModal({
       setDisplayCount(20);
     }
   }, [isOpen]);
+
+  // ✅ THÊM: Cleanup processed events để tránh memory leak
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const now = Date.now();
+      const fifteenMinutesAgo = now - 15 * 60 * 1000;
+
+      setProcessedEvents((prev) => {
+        const filtered = new Set<string>();
+        prev.forEach((eventKey) => {
+          const parts = eventKey.split("_");
+          const timestamp = parts[parts.length - 1];
+          try {
+            if (new Date(timestamp).getTime() > fifteenMinutesAgo) {
+              filtered.add(eventKey);
+            }
+          } catch {
+            // Keep events we can't parse timestamp for safety
+            filtered.add(eventKey);
+          }
+        });
+        return filtered;
+      });
+    }, 5 * 60 * 1000); // Cleanup mỗi 5 phút
+
+    return () => clearInterval(cleanup);
+  }, []);
 
   const handleStatusFilterChange = (value: string) => {
     setStatusFilter(value);
@@ -357,7 +538,7 @@ export default function CampaignCustomersModal({
   };
 
   const handleExportCustomers = async () => {
-    if (!campaign) return;
+    if (!campaign) return null;
 
     try {
       toast.info("Đang xuất báo cáo tổng quan...");
@@ -411,6 +592,19 @@ export default function CampaignCustomersModal({
     ).length;
   };
 
+  const loadMoreCustomers = () => {
+    if (isLoadingMore) return;
+
+    setIsLoadingMore(true);
+
+    setTimeout(() => {
+      setDisplayCount((prev) => Math.min(prev + 20, filteredCustomers.length));
+      setIsLoadingMore(false);
+    }, 300);
+  };
+
+  const displayedCustomers = filteredCustomers.slice(0, displayCount);
+  const hasMoreData = displayCount < filteredCustomers.length;
   const getLastCustomerInteractionTime = (
     conversationMetadata: any
   ): string | null => {

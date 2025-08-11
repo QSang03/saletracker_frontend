@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   Campaign,
   CampaignFormData,
@@ -637,7 +637,7 @@ CampaignRow.displayName = "CampaignRow";
 
 // ✅ MAIN COMPONENT
 export default function CampaignManagement({
-  campaigns,
+  campaigns: initialCampaigns,
   expectedRowCount,
   startIndex,
   onReload,
@@ -645,6 +645,8 @@ export default function CampaignManagement({
   onCreateNew,
   availableUsers = [],
 }: CampaignManagementProps) {
+  const [campaigns, setCampaigns] =
+    useState<CampaignWithDetails[]>(initialCampaigns);
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
     null
@@ -666,6 +668,89 @@ export default function CampaignManagement({
     message: "",
     onConfirm: () => {},
   });
+  const [processedEvents, setProcessedEvents] = useState<Set<string>>(
+    new Set()
+  );
+  const [lastEventTimestamp, setLastEventTimestamp] = useState<number>(0);
+
+  const getEventKey = (event: any): string => {
+    return `${event.ws_type}_${event.campaign_id}_${event.entity_id}_${event.timestamp}`;
+  };
+
+  const hasRealChanges = (event: any): boolean => {
+    if (!event.changes) return false;
+
+    return Object.keys(event.changes).some((key) => {
+      const change = event.changes[key];
+      return change.old !== change.new;
+    });
+  };
+
+  const updateSpecificCampaign = useCallback(
+    async (campaignId: string, changes: any) => {
+      try {
+        const campaignIndex = campaigns.findIndex((c) => c.id === campaignId);
+        if (campaignIndex === -1) {
+          onReload();
+          return;
+        }
+
+        // ✅ THAY VÌ FETCH TOÀN BỘ, chỉ cập nhật những field thay đổi
+        if (changes) {
+          setCampaigns((prev) => {
+            const newCampaigns = [...prev];
+            const existingCampaign = newCampaigns[campaignIndex];
+
+            // Chỉ cập nhật những field có trong changes
+            const updatedFields: any = {};
+
+            if (changes.status) {
+              updatedFields.status = changes.status.new || changes.status;
+            }
+
+            if (changes.start_date) {
+              updatedFields.start_date = changes.start_date.new;
+            }
+
+            if (changes.end_date) {
+              updatedFields.end_date = changes.end_date.new;
+            }
+
+            // ✅ MERGE chỉ những field cần thiết, GIỮ NGUYÊN data cũ
+            newCampaigns[campaignIndex] = {
+              ...existingCampaign,
+              ...updatedFields,
+            };
+
+            return newCampaigns;
+          });
+
+          console.log(`✅ Updated campaign ${campaignId} fields:`, changes);
+          return; // Không cần fetch API
+        }
+
+        // ✅ CHỈ FETCH API khi cần thiết (fallback)
+        const updatedCampaign = await campaignAPI.getById(campaignId);
+        const existingCampaign = campaigns[campaignIndex];
+
+        const mergedCampaign = {
+          ...transformToCampaignWithDetails(updatedCampaign),
+          created_by: updatedCampaign.created_by || existingCampaign.created_by,
+          created_at: updatedCampaign.created_at || existingCampaign.created_at,
+        };
+
+        setCampaigns((prev) => {
+          const newCampaigns = [...prev];
+          newCampaigns[campaignIndex] = mergedCampaign;
+          return newCampaigns;
+        });
+      } catch (error) {
+        console.error("Error updating specific campaign:", error);
+        onReload();
+      }
+    },
+    [campaigns, onReload]
+  );
 
   const showConfirmDialog = useCallback(
     (config: {
@@ -1050,20 +1135,117 @@ export default function CampaignManagement({
   const handleCampaignUpdate = useCallback(
     (data: any) => {
       console.log("Campaign updated via socket:", data);
-      // Auto reload when campaign status changes
-      onReload();
+
+      // ✅ EXTRACT events từ data
+      const events = data.events || [];
+      if (events.length === 0) {
+        console.log("No events to process");
+        return;
+      }
+
+      // ✅ XỬ LÝ TỪNG EVENT
+      events.forEach((event: any) => {
+        const eventKey = getEventKey(event);
+        if (processedEvents.has(eventKey)) {
+          console.log("🔄 Duplicate event ignored:", eventKey);
+          return;
+        }
+
+        const eventTime = new Date(event.timestamp).getTime();
+        if (eventTime <= lastEventTimestamp) {
+          console.log("⏰ Old event ignored:", event.timestamp);
+          return;
+        }
+
+        // ✅ KIỂM TRA CHANGES ĐÚNG VỚI EVENT OBJECT
+        if (!hasRealChanges(event)) {
+          console.log("📝 No real changes detected for event:", event);
+          return;
+        }
+
+        setProcessedEvents((prev) => new Set([...prev, eventKey]));
+        setLastEventTimestamp(eventTime);
+
+        // ✅ Cập nhật campaign cụ thể
+        if (event.campaign_id) {
+          updateSpecificCampaign(event.campaign_id.toString(), event.changes);
+        }
+      });
     },
-    [onReload]
+    [processedEvents, lastEventTimestamp, updateSpecificCampaign, onReload]
   );
 
   const handleCampaignScheduleUpdate = useCallback(
     (data: any) => {
       console.log("Campaign schedule updated via socket:", data);
-      // Auto reload when campaign schedule changes
-      onReload();
+
+      // ✅ EXTRACT events từ data
+      const events = data.events || [];
+      if (events.length === 0) {
+        console.log("No events to process");
+        return;
+      }
+
+      // ✅ XỬ LÝ TỪNG EVENT
+      events.forEach((event: any) => {
+        const eventKey = getEventKey(event);
+        if (processedEvents.has(eventKey)) {
+          console.log("🔄 Duplicate schedule event ignored:", eventKey);
+          return;
+        }
+
+        const eventTime = new Date(event.timestamp).getTime();
+        if (eventTime <= lastEventTimestamp) {
+          console.log("⏰ Old schedule event ignored:", event.timestamp);
+          return;
+        }
+
+        // ✅ KIỂM TRA CHANGES ĐÚNG STRUCTURE
+        const hasScheduleChanges =
+          event.changes &&
+          ((event.changes.start_date &&
+            event.changes.start_date.old !== event.changes.start_date.new) ||
+            (event.changes.end_date &&
+              event.changes.end_date.old !== event.changes.end_date.new));
+
+        if (!hasScheduleChanges) {
+          console.log("📅 No schedule changes detected for event:", event);
+          return;
+        }
+
+        setProcessedEvents((prev) => new Set([...prev, eventKey]));
+        setLastEventTimestamp(eventTime);
+
+        // ✅ Cập nhật campaign cụ thể
+        if (event.campaign_id) {
+          updateSpecificCampaign(event.campaign_id.toString(), event.changes);
+        }
+      });
     },
-    [onReload]
+    [processedEvents, lastEventTimestamp, updateSpecificCampaign]
   );
+
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const now = Date.now();
+      const fifteenMinutesAgo = now - 15 * 60 * 1000;
+
+      setProcessedEvents((prev) => {
+        const filtered = new Set<string>();
+        prev.forEach((eventKey) => {
+          // Giữ lại events trong 15 phút gần đây
+          const parts = eventKey.split("_");
+          const timestamp = parts[parts.length - 1];
+          if (new Date(timestamp).getTime() > fifteenMinutesAgo) {
+            filtered.add(eventKey);
+          }
+        });
+        return filtered;
+      });
+    }, 5 * 60 * 1000); // Cleanup mỗi 5 phút
+
+    return () => clearInterval(cleanup);
+  }, []);
 
   return (
     <TooltipProvider>

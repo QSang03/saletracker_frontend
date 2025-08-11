@@ -56,7 +56,8 @@ export function DateRangePicker({
             className
           )}
         >
-          <CalendarIcon className="mr-2 h-4 w-4" />
+          <span className="flex items-center gap-2">
+            <CalendarIcon className="mr-2 h-4 w-4" />
           {date?.from ? (
             date.to ? (
               <>
@@ -69,6 +70,7 @@ export function DateRangePicker({
           ) : (
             <span>Chọn khoảng ngày</span>
           )}
+          </span>
         </Button>
       </PopoverTrigger>
 

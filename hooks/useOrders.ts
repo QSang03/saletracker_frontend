@@ -871,7 +871,6 @@ export const useOrders = (): UseOrdersReturn => {
   // }, [updateFiltersAndUrl]);
 
   const resetFilters = useCallback(() => {
-
     const defaultPageSize = 10;
 
     // ✅ BLOCK tất cả operations khác ngay lập tức
@@ -937,7 +936,6 @@ export const useOrders = (): UseOrdersReturn => {
       isRestoringRef.current = false;
       setIsRestoring(false);
     }, 100); // ✅ Tăng delay lên 1 giây
-
   }, [isInCustomerSearchMode, conditionalSaveFilters]);
 
   const refetch = useCallback(async () => {
@@ -1706,7 +1704,6 @@ export const useOrders = (): UseOrdersReturn => {
             newUrl
           );
         } else if (historyState.previousFilters) {
-
           const searchParams = new URLSearchParams();
 
           if (historyState.previousFilters.page > 1) {
@@ -1813,7 +1810,6 @@ export const useOrders = (): UseOrdersReturn => {
             newUrl
           );
         } else if (historyState.filters) {
-
           flushSync(() => {
             setFiltersState(historyState.filters);
             conditionalSaveFilters(historyState.filters);

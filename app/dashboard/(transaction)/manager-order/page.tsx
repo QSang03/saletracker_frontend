@@ -156,11 +156,13 @@ function ManagerOrderContent() {
     (paginatedFilters: Filters) => {
       const shouldResetPage = !isInCustomerSearchMode && !filters.search;
 
-      // ✅ Build new filters object với tất cả changes cùng lúc
+      // Build new filters object với tất cả changes cùng lúc
       const searchValue = paginatedFilters.search || "";
+
+      // ✅ SỬA: Chỉ cần statusesValue cho multiple selection
       const statusValue =
         paginatedFilters.statuses.length > 0
-          ? paginatedFilters.statuses[0].toString()
+          ? paginatedFilters.statuses.join(",") // ← CSV string cho multiple
           : "";
 
       // Handle single date
@@ -213,10 +215,10 @@ function ManagerOrderContent() {
         warningLevelValue = selectedWarningLevels.join(",");
       }
 
-      // ✅ Build complete new filters object
+      // ✅ SỬA: Build complete new filters object với statuses
       const newFilters: Partial<OrderFilters> = {
         search: searchValue,
-        status: statusValue,
+        status: statusValue, // ✅ Clear status cũ cho backward compatibility
         date: dateValue,
         dateRange: dateRangeValue,
         employees: employeesValue,

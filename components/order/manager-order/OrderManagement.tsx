@@ -791,7 +791,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 {displayOrders.length === 0 && (
                   <TableRow className="border-l-4 border-gray-300 bg-gradient-to-r from-gray-50 to-white rounded-lg shadow-sm my-1">
                     <TableCell
-                      colSpan={12}
+                      colSpan={16}
                       className="text-center py-8 text-gray-500"
                     >
                       <div className="flex flex-col items-center space-y-3">

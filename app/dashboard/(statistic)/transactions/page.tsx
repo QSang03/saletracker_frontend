@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
 import type { OrderDetail, User } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -54,54 +53,25 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { AxiosResponse } from "axios";
+import CountUpAnimation from "@/components/order/order-statistic/CountUpAnimation";
+import ProgressLine from "@/components/order/order-statistic/ProgressLine";
+import StatDot from "@/components/order/order-statistic/StatDot";
+import ElegantStatusBadge from "@/components/order/order-statistic/ElegantStatusBadge";
+import MiniKPI from "@/components/order/order-statistic/MiniKPI";
+import ElegantKPI from "@/components/order/order-statistic/ElegantKPI";
+import ElegantBarChart, {
+  chartConfig,
+  ChartPoint,
+} from "@/components/order/order-statistic/ElegantBarChart";
+import {
+  endOfDay,
+  formatCurrency,
+  numberCompact,
+  startOfDay,
+} from "@/lib/order-helper";
+import { useOrderStats } from "@/hooks/useOrderStats";
 
 type Period = "day" | "week" | "quarter";
-
-type ChartPoint = {
-  name: string;
-  timestamp: number;
-  demand: number;
-  completed: number;
-  quoted: number;
-  pending: number;
-};
-
-// Elegant color palette - softer but still noble
-const chartConfig = {
-  demand: {
-    label: "Nhu cầu",
-    color: "#0ea5e9", // Sky 500 (xanh biển)
-    lightColor: "#7dd3fc", // Sky 300
-    bgColor: "#f0f9ff", // Sky 50
-  },
-  completed: {
-    label: "Đã chốt",
-    color: "#10b981", // Emerald 500
-    lightColor: "#6ee7b7", // Emerald 300
-    bgColor: "#ecfdf5", // Emerald 50
-  },
-  quoted: {
-    label: "Chưa chốt",
-    color: "#ef4444", // Red 500
-    lightColor: "#fca5a5", // Red 300
-    bgColor: "#fef2f2", // Red 50
-  },
-  pending: {
-    label: "Chờ xử lý",
-    color: "#2dd4bf", // Mint/Teal 400
-    lightColor: "#99f6e4", // Mint/Teal 200
-    bgColor: "#f0fdfa", // Mint/Teal 50
-  },
-};
-
-// Fixed series order to ensure columns never change order
-const seriesOrder: Array<keyof ChartPoint> = [
-  "demand",
-  "completed",
-  "quoted",
-  "pending",
-];
 
 // Refined animation variants
 const containerVariants = {
@@ -123,30 +93,6 @@ const itemVariants = {
     transition: { duration: 0.3 },
   },
 };
-
-// Utility functions (keeping existing ones)
-function formatVN(dt: Date) {
-  return dt
-    .toLocaleString("vi-VN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    })
-    .replace(",", "");
-}
-
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
 
 function getPresetRange(period: Period): DateRange {
   const now = new Date();
@@ -213,19 +159,6 @@ function calcDynamicExtended(
   }
 }
 
-function numberCompact(n: number) {
-  return Intl.NumberFormat("vi-VN", { notation: "compact" }).format(n);
-}
-
-function formatCurrency(n: number) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
 function startOfWeekMonday(d: Date): Date {
   const date = startOfDay(d);
   const day = (date.getDay() + 6) % 7; // 0=Monday
@@ -279,41 +212,48 @@ function getBucketRange(ts: number, period: Period): { from: Date; to: Date } {
   return { from, to: endOfDay(to) };
 }
 
-// Enhanced data fetching
-async function fetchOrderDetails(range: DateRange): Promise<OrderDetail[]> {
-  try {
-    const params: any = {
-      page: 1,
-      pageSize: 100,
-      dateRange: JSON.stringify({
-        start: range.from?.toISOString(),
-        end: range.to?.toISOString(),
-      }),
-    };
-    const first = await api.get("/orders", { params });
-    const { data: firstData, total } = first.data || { data: [], total: 0 };
-    let items: OrderDetail[] = (firstData as OrderDetail[]) || [];
-    const totalPages = Math.ceil((total || items.length) / 100);
+// Map backend detailed rows to local OrderDetail-like shape
+type DetailedRow = {
+  id: number | string;
+  orderId: number | string;
+  productId: number | string | null;
+  status: string;
+  quantity: number;
+  unit_price: number | string;
+  revenue: number | string;
+  sale_by: { id: number; fullName: string };
+  customer: { id: string | null; name: string | null };
+  created_at: string;
+  dynamicExtended: number | null;
+};
 
-    const promises: Promise<AxiosResponse<any>>[] = [];
-    for (let p = 2; p <= totalPages; p++) {
-      promises.push(api.get("/orders", { params: { ...params, page: p } }));
-    }
-
-    if (promises.length > 0) {
-      const responses = await Promise.all(
-        promises as Promise<AxiosResponse<any>>[]
-      );
-      for (const resp of responses) {
-        items = items.concat((resp.data?.data as OrderDetail[]) || []);
-      }
-    }
-
-    return items;
-  } catch (error) {
-    console.warn("API failed, using mock data:", error);
-    return generateMockData(range);
-  }
+function mapRowsToOrderDetails(rows: DetailedRow[]): OrderDetail[] {
+  return rows.map((r) => ({
+    id: Number(r.id as any),
+    order_id: Number(r.orderId as any),
+    order: {
+      id: Number(r.orderId as any),
+      sale_by: {
+        id: r.sale_by?.id as any,
+        fullName: r.sale_by?.fullName,
+        username: r.sale_by?.fullName,
+        roles: [],
+        departments: [],
+        status: "active",
+        isBlock: false,
+      } as any,
+      created_at: r.created_at,
+    } as any,
+    product_id: (r.productId != null ? Number(r.productId as any) : null) as any,
+    quantity: r.quantity,
+    unit_price: Number(r.unit_price as any),
+  // Keep original extended for mock only; dynamic from API is stored in metadata
+    customer_name: r.customer?.name ?? undefined,
+    status: r.status,
+    total_price: Number(r.revenue as any),
+    created_at: r.created_at,
+  metadata: { dynamicExtended: r.dynamicExtended },
+  }));
 }
 
 function generateMockData(range: DateRange): OrderDetail[] {
@@ -412,234 +352,9 @@ function generateMockData(range: DateRange): OrderDetail[] {
   return list;
 }
 
-// Enhanced Bar Chart Component with better design and logic
-function ElegantBarChart({
-  data,
-  visibleSeries,
-  onToggleSeries,
-  onBarClick,
-}: {
-  data: ChartPoint[];
-  visibleSeries: Record<string, boolean>;
-  onToggleSeries: (key: keyof typeof chartConfig) => void;
-  onBarClick: (data: {
-    name: string;
-    type: string;
-    value: number;
-    timestamp: number;
-  }) => void;
-}) {
-  // Limit to 7 data points for better readability
-  const limitedData = useMemo(() => data.slice(-7), [data]);
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <motion.div
-          className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg rounded-lg border border-slate-200/50 dark:border-slate-700/50 p-3 shadow-xl"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.15 }}
-        >
-          <p className="font-medium text-slate-700 dark:text-slate-300 mb-2">
-            {label}
-          </p>
-          {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center gap-2 text-sm">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-slate-600 dark:text-slate-400">
-                {entry.name}:
-              </span>
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {numberCompact(entry.value)}
-              </span>
-            </div>
-          ))}
-        </motion.div>
-      );
-    }
-    return null;
-  };
-
-  const handleBarClick = (data: any, key: string) => {
-    if (data && data.payload) {
-      onBarClick({
-        name: data.payload.name,
-        type: key,
-        value: data.payload[key],
-        timestamp: data.payload.timestamp,
-      });
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Series Toggle Controls */}
-      <div className="flex flex-wrap gap-2">
-        {seriesOrder.map((key) => {
-          const config = chartConfig[key as keyof typeof chartConfig];
-          if (!config) return null;
-          return (
-            <motion.button
-              key={key}
-              onClick={() => onToggleSeries(key as keyof typeof chartConfig)}
-              className={`
-              flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium
-              transition-all duration-200 border
-              ${visibleSeries[key as keyof typeof visibleSeries]
-                  ? "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm"
-                  : "bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60"
-                }
-            `}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="button"
-            >
-              <div className="flex items-center gap-2">
-                {visibleSeries[key as keyof typeof visibleSeries] ? (
-                  <Eye
-                    className="w-3.5 h-3.5"
-                    style={{ color: config.color }}
-                  />
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5 text-slate-400" />
-                )}
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{
-                    backgroundColor: visibleSeries[
-                      key as keyof typeof visibleSeries
-                    ]
-                      ? config.color
-                      : "#cbd5e1",
-                  }}
-                />
-                <span
-                  className={
-                    visibleSeries[key as keyof typeof visibleSeries]
-                      ? "text-slate-700 dark:text-slate-300"
-                      : "text-slate-400"
-                  }
-                >
-                  {config.label}
-                </span>
-              </div>
-            </motion.button>
-          );
-        })}
-      </div>
-
-      {/* Chart Container */}
-      <div className="h-80 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={limitedData}
-            margin={{ top: 20, right: 20, left: 0, bottom: 20 }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="#e2e8f0"
-              opacity={0.3}
-              vertical={false}
-            />
-            <XAxis
-              dataKey="name"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 12, fill: "#64748b" }}
-              dy={10}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 12, fill: "#64748b" }}
-              dx={-10}
-            />
-            <RechartsTooltip content={<CustomTooltip />} />
-
-            {seriesOrder.map((key) => {
-              const config = chartConfig[key as keyof typeof chartConfig];
-              if (!config) return null;
-              const isVisible =
-                visibleSeries[key as keyof typeof visibleSeries];
-              return (
-                <Bar
-                  key={key}
-                  dataKey={key}
-                  hide={!isVisible}
-                  fill={config.color}
-                  radius={[2, 2, 0, 0]}
-                  cursor={isVisible ? "pointer" : "default"}
-                  onClick={
-                    isVisible
-                      ? (data) => handleBarClick(data, key as string)
-                      : undefined
-                  }
-                >
-                  {limitedData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={config.color}
-                      style={{
-                        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))",
-                        transition: "all 0.2s ease",
-                      }}
-                    />
-                  ))}
-                </Bar>
-              );
-            })}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Chart Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-        {seriesOrder.map((key) => {
-          const config = chartConfig[key as keyof typeof chartConfig];
-          if (!config) return null;
-          const total = limitedData.reduce(
-            (sum, item) =>
-              sum +
-              (visibleSeries[key as keyof typeof visibleSeries]
-                ? (item[key] as number)
-                : 0),
-            0
-          );
-          return (
-            <div key={key} className="text-center">
-              <div
-                className="w-3 h-3 rounded-full mx-auto mb-1"
-                style={{
-                  backgroundColor: visibleSeries[
-                    key as keyof typeof visibleSeries
-                  ]
-                    ? config.color
-                    : "#cbd5e1",
-                }}
-              />
-              <div
-                className={`text-sm font-semibold ${visibleSeries[key as keyof typeof visibleSeries]
-                  ? "text-slate-700 dark:text-slate-300"
-                  : "text-slate-400"
-                  }`}
-              >
-                {numberCompact(total)}
-              </div>
-              <div className="text-xs text-slate-500">{config.label}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // Main component
 export default function ElegantTransactionsPage() {
+  const { getDetailedStats } = useOrderStats();
   const [period, setPeriod] = useState<Period>("week");
   const [range, setRange] = useState<DateRange>(() => getPresetRange("week"));
   const [loading, setLoading] = useState(true);
@@ -674,22 +389,52 @@ export default function ElegantTransactionsPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      const prevRange = getPreviousRange(period, range);
-      const [cur, prev] = await Promise.all([
-        fetchOrderDetails(range),
-        fetchOrderDetails(prevRange),
-      ]);
-      if (!cancelled) {
-        setItems(cur || []);
-        setPrevItems(prev || []);
-        setLoading(false);
+      try {
+        setLoading(true);
+        const prevRange = getPreviousRange(period, range);
+
+        const buildParams = (r: DateRange) => {
+          const dateFrom = r.from ? new Date(r.from) : undefined;
+          const dateTo = r.to ? new Date(r.to) : undefined;
+          const fmt = (d?: Date) => {
+            if (!d) return undefined;
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+          };
+          return {
+      // Use custom to respect explicit date range on backend
+      period: 'custom' as any,
+            dateFrom: fmt(dateFrom),
+            dateTo: fmt(dateTo),
+          };
+        };
+
+        const [curRes, prevRes] = await Promise.all([
+          getDetailedStats(buildParams(range)),
+          getDetailedStats(buildParams(prevRange)),
+        ]);
+
+        if (cancelled) return;
+        const curItems = mapRowsToOrderDetails(curRes?.rows || []);
+        const prevMapped = mapRowsToOrderDetails(prevRes?.rows || []);
+        setItems(curItems);
+        setPrevItems(prevMapped);
+      } catch (error) {
+        console.warn("Stats API failed, falling back to mock:", error);
+        if (!cancelled) {
+          setItems(generateMockData(range));
+          setPrevItems(generateMockData(getPreviousRange(period, range)));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [range.from?.getTime(), range.to?.getTime(), period]);
+  }, [range.from?.getTime(), range.to?.getTime(), period, getDetailedStats]);
 
   // Enhanced summary calculations
   const summary = useMemo(() => {
@@ -720,10 +465,9 @@ export default function ElegantTransactionsPage() {
       if (createdDay === startOfDay(yesterday).getTime()) gd1++;
       if (createdDay === startOfDay(twoDaysAgo).getTime()) gd2++;
 
-      const dExt = calcDynamicExtended(
-        it.order?.created_at as any,
-        it.extended || 0
-      );
+      const dExt =
+        (it as any)?.metadata?.dynamicExtended ??
+        calcDynamicExtended(it.order?.created_at as any, (it.extended as any) || 0);
       if (dExt === 0) gdExpireToday++;
 
       if (it.status === "completed") {
@@ -783,10 +527,9 @@ export default function ElegantTransactionsPage() {
       if (createdDay === startOfDay(yesterday).getTime()) gd1++;
       if (createdDay === startOfDay(twoDaysAgo).getTime()) gd2++;
 
-      const dExt = calcDynamicExtended(
-        it.order?.created_at as any,
-        it.extended || 0
-      );
+      const dExt =
+        (it as any)?.metadata?.dynamicExtended ??
+        calcDynamicExtended(it.order?.created_at as any, (it.extended as any) || 0);
       if (dExt === 0) gdExpireToday++;
 
       if (it.status === "completed") {
@@ -990,17 +733,18 @@ export default function ElegantTransactionsPage() {
   return (
     <TooltipProvider>
       <motion.main
-        className="flex flex-col gap-6 pt-0 pb-6 min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950"
+        className="flex flex-col gap-6 m-4 pt-0 pb-6 min-h-screen via-white to-blue-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         {/* Elegant Header */}
         <motion.div
-          className="flex items-center justify-between flex-wrap gap-4 p-6 rounded-xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg shadow-lg border border-slate-200/50 dark:border-slate-700/50"
+          className="grid grid-cols-12 gap-4 p-6 rounded-xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg shadow-lg border border-slate-200/50 dark:border-slate-700/50"
           variants={itemVariants}
         >
-          <div className="flex items-center gap-4">
+          {/* Phần Thống kê giao dịch - chiếm 4/12 cột */}
+          <div className="col-span-4 flex items-center gap-4">
             <motion.div
               className="p-3 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md"
               whileHover={{ scale: 1.05 }}
@@ -1014,46 +758,50 @@ export default function ElegantTransactionsPage() {
                 Thống kê giao dịch
               </h1>
               <p className="text-slate-600 dark:text-slate-400 text-sm">
-                Thống kê giao dịch và khách hàng của bạn theo ngày, tuần hoặc quý.
+                Thống kê giao dịch và khách hàng của bạn theo ngày, tuần hoặc
+                quý.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Phần bộ lọc - chiếm 8/12 cột */}
+          <div className="col-span-8 flex items-center justify-end gap-3">
+            <div className="max-w-xs">
+              <DateRangePicker
+                locale="vi"
+                initialDateRange={range}
+                onUpdate={(r) => setRange(r.range || range)}
+                align="start"
+                className="p-5.5"
+                numberOfMonths={2}
+              />
+            </div>
             <ToggleGroup
               type="single"
               value={period}
               onValueChange={(v) => v && setPeriod(v as Period)}
               className="rounded-lg border bg-white/80 dark:bg-slate-800/80 p-1 shadow-sm backdrop-blur-sm"
             >
-              <ToggleGroupItem value="day" className="rounded-md text-sm">
+                <ToggleGroupItem value="day" className="rounded-md text-sm cursor-pointer">
                 <Calendar className="w-4 h-4 mr-1" />
                 Ngày
-              </ToggleGroupItem>
-              <ToggleGroupItem value="week" className="rounded-md text-sm">
+                </ToggleGroupItem>
+                <ToggleGroupItem value="week" className="rounded-md text-sm cursor-pointer">
                 <Calendar className="w-4 h-4 mr-1" />
                 Tuần
-              </ToggleGroupItem>
-              <ToggleGroupItem value="quarter" className="rounded-md text-sm">
+                </ToggleGroupItem>
+                <ToggleGroupItem value="quarter" className="rounded-md text-sm cursor-pointer">
                 <Calendar className="w-4 h-4 mr-1" />
                 Quý
-              </ToggleGroupItem>
+                </ToggleGroupItem>
             </ToggleGroup>
-
-            <DateRangePicker
-              locale="vi"
-              initialDateRange={range}
-              onUpdate={(r) => setRange(r.range || range)}
-              align="start"
-              numberOfMonths={2}
-            />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-lg shadow-sm bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm"
+                  className="rounded-lg shadow-sm py-5.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm"
                 >
                   <MoreVertical className="w-4 h-4" />
                 </Button>
@@ -1064,9 +812,12 @@ export default function ElegantTransactionsPage() {
               >
                 <DropdownMenuItem
                   onClick={() => setRange(getPresetRange(period))}
+                  className="cursor-pointer"
                 >
+                  <span className="flex items-center gap-2">
                   <Target className="w-4 h-4 mr-2" />
                   Đặt lại khoảng ngày
+                  </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1076,24 +827,24 @@ export default function ElegantTransactionsPage() {
         {/* Elegant Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <motion.div variants={itemVariants}>
-            <TabsList className="mb-6 p-1 rounded-lg bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg shadow-md border border-slate-200/50 dark:border-slate-700/50">
+            <TabsList className="mb-3 px-1 py-8 rounded-lg bg-white/70 dark:bg-slate-900/70 backdrop-blur-lg shadow-md border border-slate-200/50 dark:border-slate-700/50">
               <TabsTrigger
                 value="transactions"
-                className="rounded-md px-4 py-2 data-[state=active]:bg-indigo-500 data-[state=active]:text-white"
+                className="rounded-md px-10 py-6 cursor-pointer data-[state=active]:bg-indigo-500 data-[state=active]:text-white"
               >
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Thống kê giao dịch
               </TabsTrigger>
               <TabsTrigger
                 value="customers"
-                className="rounded-md px-4 py-2 data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
+                className="rounded-md px-10 py-6 cursor-pointer data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Khách hàng
               </TabsTrigger>
               <TabsTrigger
                 value="employees"
-                className="rounded-md px-4 py-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white"
+                className="rounded-md px-10 py-6 cursor-pointer data-[state=active]:bg-orange-500 data-[state=active]:text-white"
               >
                 <Award className="w-4 h-4 mr-2" />
                 Nhân viên
@@ -1135,7 +886,11 @@ export default function ElegantTransactionsPage() {
                       <>
                         {/* Elegant KPI Grid */}
                         <motion.div
-                          className={`grid grid-cols-1 md:grid-cols-2 ${visibleSeries.pending ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-6`}
+                          className={`grid grid-cols-1 md:grid-cols-2 ${
+                            visibleSeries.pending
+                              ? "xl:grid-cols-5"
+                              : "xl:grid-cols-4"
+                          } gap-6`}
                           variants={containerVariants}
                         >
                           <motion.div variants={itemVariants}>
@@ -1351,13 +1106,14 @@ export default function ElegantTransactionsPage() {
                                     <div
                                       className="h-full bg-gradient-to-r from-emerald-500 to-green-500"
                                       style={{
-                                        width: `${(c.total /
-                                          Math.max(
-                                            1,
-                                            customerStats[0]?.total || c.total
-                                          )) *
+                                        width: `${
+                                          (c.total /
+                                            Math.max(
+                                              1,
+                                              customerStats[0]?.total || c.total
+                                            )) *
                                           100
-                                          }%`,
+                                        }%`,
                                       }}
                                     />
                                   </div>
@@ -1400,7 +1156,7 @@ export default function ElegantTransactionsPage() {
                                   conv: Math.round(
                                     (c.completed /
                                       Math.max(1, c.completed + c.quoted)) *
-                                    100
+                                      100
                                   ),
                                 }))
                                 .sort((a, b) => b.conv - a.conv)
@@ -1449,17 +1205,31 @@ export default function ElegantTransactionsPage() {
                         </motion.div>
                         Thống kê theo nhân viên
                       </CardTitle>
-                      <ToggleGroup
-                        type="single"
-                        value={employeeSort}
-                        onValueChange={(v) => v && setEmployeeSort(v as any)}
-                      >
-                        <ToggleGroupItem value="orders">Đơn</ToggleGroupItem>
-                        <ToggleGroupItem value="customers">KH</ToggleGroupItem>
-                        <ToggleGroupItem value="conversion">
+                        <ToggleGroup
+                          type="single"
+                          value={employeeSort}
+                          onValueChange={(v) => v && setEmployeeSort(v as any)}
+                          className="space-x-3"
+                        >
+                          <ToggleGroupItem
+                          value="orders"
+                          className="px-4 py-2 rounded-md text-sm cursor-pointer"
+                          >
+                          Đơn
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                          value="customers"
+                          className="px-4 py-2 rounded-md text-sm cursor-pointer"
+                          >
+                          KH
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                          value="conversion"
+                          className="px-4 py-2 rounded-md text-sm cursor-pointer"
+                          >
                           Tỉ lệ chốt
-                        </ToggleGroupItem>
-                      </ToggleGroup>
+                          </ToggleGroupItem>
+                        </ToggleGroup>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-6 p-6">
@@ -1691,323 +1461,5 @@ export default function ElegantTransactionsPage() {
         </Dialog>
       </motion.main>
     </TooltipProvider>
-  );
-}
-
-// Enhanced KPI Components with elegant design
-function ElegantKPI({
-  label,
-  value,
-  icon,
-  color = "indigo",
-  trendPrev,
-  description,
-  isCurrency = false,
-  accentFrom,
-  accentTo,
-  bg,
-  border,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  color?: "indigo" | "emerald" | "blue" | "rose";
-  trendPrev?: number;
-  description?: string;
-  isCurrency?: boolean;
-  accentFrom?: string;
-  accentTo?: string;
-  bg?: string;
-  border?: string;
-}) {
-  const defaults = {
-    indigo: {
-      from: "#6366f1",
-      to: "#4f46e5",
-      bg: "#eef2ff",
-      border: "#c7d2fe",
-    },
-    emerald: {
-      from: "#10b981",
-      to: "#059669",
-      bg: "#ecfdf5",
-      border: "#a7f3d0",
-    },
-    blue: { from: "#3b82f6", to: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
-    rose: { from: "#f43f5e", to: "#e11d48", bg: "#fff1f2", border: "#fecdd3" },
-  } as const;
-
-  const palette = defaults[color] || defaults.indigo;
-  const fromHex = accentFrom || palette.from;
-  const toHex = accentTo || palette.to;
-  const bgHex = bg || palette.bg;
-  const borderHex = border || palette.border;
-
-  const percent = useMemo(() => {
-    if (trendPrev == null) return null;
-    const p =
-      trendPrev === 0
-        ? value > 0
-          ? 100
-          : 0
-        : Math.round(((value - trendPrev) / Math.max(1, trendPrev)) * 100);
-    return p;
-  }, [value, trendPrev]);
-
-  return (
-    <motion.div
-      className={`relative rounded-xl overflow-hidden shadow-sm border`}
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.2 }}
-      style={{ backgroundColor: bgHex, borderColor: borderHex }}
-    >
-      <div className="relative p-6">
-        <div className="flex items-start justify-between mb-4">
-          <motion.div
-            className={`p-3 rounded-lg shadow-sm`}
-            whileHover={{ scale: 1.05 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            style={{
-              background: `linear-gradient(to bottom right, ${fromHex}, ${toHex})`,
-            }}
-          >
-            <div className="text-white">{icon}</div>
-          </motion.div>
-          {percent !== null && (
-            <div
-              className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${percent >= 0
-                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-                }`}
-            >
-              {percent >= 0 ? (
-                <ArrowUpRight className="w-3 h-3" />
-              ) : (
-                <ArrowDownRight className="w-3 h-3" />
-              )}
-              {Math.abs(percent)}%
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-            <CountUpAnimation value={value} isCurrency={isCurrency} />
-          </div>
-          <div className="text-sm font-semibold text-slate-600 dark:text-slate-400">
-            {label}
-          </div>
-          {description && (
-            <div className="text-xs text-slate-500 dark:text-slate-500">
-              {description}
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function MiniKPI({
-  label,
-  value,
-  color = "indigo",
-  icon,
-  suffix = "",
-  isAlert = false,
-}: {
-  label: string;
-  value: number;
-  color?: string;
-  icon: React.ReactNode;
-  suffix?: string;
-  isAlert?: boolean;
-}) {
-  const colorClasses = {
-    indigo: "from-indigo-500 to-indigo-600",
-    emerald: "from-emerald-500 to-emerald-600",
-    blue: "from-blue-500 to-blue-600",
-    purple: "from-purple-500 to-purple-600",
-    red: "from-red-500 to-red-600",
-  };
-
-  return (
-    <motion.div
-      className={`relative rounded-lg overflow-hidden bg-white dark:bg-slate-900 shadow-sm border ${isAlert
-        ? "border-red-200 dark:border-red-800"
-        : "border-slate-200 dark:border-slate-700"
-        }`}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-    >
-      <div className="relative p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div
-            className={`p-2 rounded-md bg-gradient-to-br ${colorClasses[color as keyof typeof colorClasses] ||
-              colorClasses.indigo
-              }`}
-          >
-            <div className="text-white text-sm">{icon}</div>
-          </div>
-          {isAlert && (
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="w-2 h-2 bg-red-500 rounded-full"
-            />
-          )}
-        </div>
-        <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
-          <CountUpAnimation value={value} />
-          {suffix}
-        </div>
-        <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
-          {label}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function CountUpAnimation({
-  value,
-  duration = 800,
-  isCurrency = false,
-}: {
-  value: number;
-  duration?: number;
-  isCurrency?: boolean;
-}) {
-  const [display, setDisplay] = useState(0);
-  const startRef = useRef<number | null>(null);
-  const fromRef = useRef(0);
-
-  useEffect(() => {
-    const from = fromRef.current;
-    const to = value;
-
-    const step = (timestamp: number) => {
-      if (startRef.current == null) startRef.current = timestamp;
-      const progress = Math.min(1, (timestamp - startRef.current) / duration);
-      const easeOutQuart = 1 - Math.pow(1 - progress, 3);
-      const current = Math.round(from + (to - from) * easeOutQuart);
-      setDisplay(current);
-
-      if (progress < 1) {
-        requestAnimationFrame(step);
-      } else {
-        fromRef.current = to;
-        startRef.current = null;
-      }
-    };
-
-    const id = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(id);
-  }, [value, duration]);
-
-  if (isCurrency) {
-    return <>{formatCurrency(display)}</>;
-  }
-
-  return <>{numberCompact(display)}</>;
-}
-
-function ElegantStatusBadge({ status }: { status: string }) {
-  const config = {
-    pending: {
-      label: "Chờ xử lý",
-      color:
-        "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-      icon: "⏳",
-    },
-    quoted: {
-      label: "Đang Chưa chốt",
-      color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-      icon: "💬",
-    },
-    completed: {
-      label: "Đã chốt",
-      color:
-        "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
-      icon: "✅",
-    },
-    demand: {
-      label: "Nhu cầu mới",
-      color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300",
-      icon: "🔥",
-    },
-    confirmed: {
-      label: "Đã xác nhận",
-      color:
-        "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
-      icon: "📞",
-    },
-  };
-
-  const statusConfig = config[status as keyof typeof config] || {
-    label: status || "Không xác định",
-    color: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300",
-    icon: "❓",
-  };
-
-  return (
-    <motion.div
-      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${statusConfig.color}`}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-    >
-      <span className="text-xs">{statusConfig.icon}</span>
-      <span>{statusConfig.label}</span>
-    </motion.div>
-  );
-}
-
-function StatDot({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <div className="inline-flex items-center gap-2">
-      <span
-        className="w-2.5 h-2.5 rounded-full"
-        style={{ background: color }}
-      />
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className="text-xs font-medium">{numberCompact(value)}</span>
-    </div>
-  );
-}
-
-function ProgressLine({
-  label,
-  value,
-  max,
-  color,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  color: string;
-}) {
-  const percent = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
-  return (
-    <div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-medium">{numberCompact(value)}</span>
-      </div>
-      <div className="mt-1 h-2 w-full bg-muted rounded-full overflow-hidden">
-        <div
-          className={`h-full bg-gradient-to-r ${color}`}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
   );
 }

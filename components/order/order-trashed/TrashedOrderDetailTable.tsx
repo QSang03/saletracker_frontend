@@ -276,6 +276,7 @@ export default function TrashedOrderDetailTable() {
                   <TableHead>Đơn giá</TableHead>
                   <TableHead>Lý do xóa</TableHead>
                   <TableHead>Ngày giờ xóa</TableHead>
+                  <TableHead>Ngày giờ tạo</TableHead>
                   <TableHead>Hành động</TableHead>
                 </TableRow>
               </TableHeader>
@@ -333,6 +334,13 @@ export default function TrashedOrderDetailTable() {
                       <TableCell>
                         {od.deleted_at
                           ? new Date(od.deleted_at as any).toLocaleString(
+                              "vi-VN"
+                            )
+                          : "--"}
+                      </TableCell>
+                      <TableCell>
+                        {od.created_at
+                          ? new Date(od.created_at as any).toLocaleString(
                               "vi-VN"
                             )
                           : "--"}
