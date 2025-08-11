@@ -202,6 +202,8 @@ export interface OrderDetail {
   customer_name?: string;
   total_price?: number;
   status?: string;
+  last_extended_at?: Date | string;
+  extend_reason?: 'hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ' | 'chính chủ gia hạn';
   note?: string;
   notes?: string;
   reason?: string;

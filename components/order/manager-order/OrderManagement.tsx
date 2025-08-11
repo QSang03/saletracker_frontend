@@ -163,13 +163,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const { currentUser } = useCurrentUser();
-  const isOwner = React.useCallback((od: OrderDetail) => {
-    return !!(
-      od?.order?.sale_by?.id &&
-      currentUser?.id &&
-      od.order!.sale_by!.id === currentUser.id
-    );
-  }, [currentUser?.id]);
+  const isOwner = React.useCallback(
+    (od: OrderDetail) => {
+      return !!(
+        od?.order?.sale_by?.id &&
+        currentUser?.id &&
+        od.order!.sale_by!.id === currentUser.id
+      );
+    },
+    [currentUser?.id]
+  );
 
   // ✅ Tính toán số dòng hiển thị thực tế
   const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
@@ -191,8 +194,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     useState(false);
 
   // ✅ Blacklist states
-  const [addingToBlacklist, setAddingToBlacklist] = useState<OrderDetail | null>(null);
-  const [isAddToBlacklistModalOpen, setIsAddToBlacklistModalOpen] = useState(false);
+  const [addingToBlacklist, setAddingToBlacklist] =
+    useState<OrderDetail | null>(null);
+  const [isAddToBlacklistModalOpen, setIsAddToBlacklistModalOpen] =
+    useState(false);
 
   // ✅ Bulk selection states
   const [selectedOrderIds, setSelectedOrderIds] = useState<
@@ -567,6 +572,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[120px] text-center">
                   Trạng thái
                 </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                  Gia Hạn Cuối
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                  Lý Do Gia Hạn
+                </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[140px] text-center">
                   Ghi chú
                 </TableHead>
@@ -606,11 +617,23 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-8 rounded mx-auto" />
                   </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-8 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-8 rounded mx-auto" />
+                  </TableCell>
                   <TableCell className="text-right">
                     <Skeleton className="h-4 w-16 rounded ml-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-20 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-24 rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-24 rounded mx-auto" />
@@ -741,6 +764,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     📊 Trạng thái
                   </TableHead>
+                  {/* ✅ CẬP NHẬT: Thêm width cụ thể cho cột thời gian gia hạn cuối */}
+                  <TableHead className="font-bold text-slate-700 text-sm w-[130px] text-center bg-gradient-to-r from-purple-50 to-violet-50 border-b-2 border-purple-200">
+                    ⏰ Gia hạn cuối
+                  </TableHead>
+
+                  {/* ✅ CẬP NHẬT: Thêm width cụ thể cho cột lý do gia hạn */}
+                  <TableHead className="font-bold text-slate-700 text-sm w-[350px] text-center bg-gradient-to-r from-pink-50 to-rose-50 border-b-2 border-pink-200">
+                    📋 Lý do gia hạn
+                  </TableHead>
+
                   <TableHead className="font-bold text-slate-700 text-sm w-[140px] text-center">
                     📝 Ghi chú
                   </TableHead>
@@ -773,253 +806,369 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       key={orderDetail.id || index}
                       className={getRowClassName(orderDetail, index)}
                     >
-                      {(() => { const owner = isOwner(orderDetail); return (
-                        <>
-                        {/* ✅ Checkbox cell */}
-                        <TableCell className="text-center left-0 bg-inherit">
-                          <Checkbox
-                            checked={selectedOrderIds.has(orderDetail.id)}
-                            onCheckedChange={() =>
-                              handleSelectOrder(orderDetail.id)
-                            }
-                            aria-label={`Chọn đơn hàng #${orderDetail.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="text-center left-[40px] bg-inherit">
-                          <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
-                            {startIndex + index + 1}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center font-medium text-blue-700">
-                          <div className="text-truncate">
-                            #{orderDetail.id || "N/A"}
-                          </div>
-                        </TableCell>
-                        {/* ✅ Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
-                        <TableCell className="text-center">
-                          {(() => {
-                            const dynamicExtended = calculateDynamicExtended(
-                              orderDetail.created_at,
-                              orderDetail.extended || 0
-                            );
-                            return (
-                              <span
-                                className={`inline-flex items-center ${getExtendedBadgeStyle(
-                                  dynamicExtended
-                                )}`}
-                                title={`Công thức: ${
-                                  orderDetail.created_at
-                                    ? new Date(orderDetail.created_at).getDate()
-                                    : "N/A"
-                                } + ${
-                                  orderDetail.extended || 0
-                                } - ${new Date().getDate()} = ${dynamicExtended}`}
-                              >
-                                {getExtendedIcon(dynamicExtended)}
-                                {dynamicExtended}
-                              </span>
-                            );
-                          })()}
-                        </TableCell>
-                        <TableCell className="text-center text-slate-600 text-sm">
-                          <div className="flex flex-col">
-                            {orderDetail.created_at ? (
-                              typeof orderDetail.created_at === "string" ? (
-                                <>
-                                  <div className="font-medium text-blue-600">
-                                    {orderDetail.created_at.includes(" ")
-                                      ? orderDetail.created_at.split(" ")[1] || ""
-                                      : ""}
-                                  </div>
-                                  <div className="text-xs text-slate-500">
-                                    {orderDetail.created_at.includes(" ")
-                                      ? orderDetail.created_at.split(" ")[0] || ""
-                                      : orderDetail.created_at}
-                                  </div>
-                                </>
-                              ) : orderDetail.created_at instanceof Date ? (
-                                <>
-                                  <div className="font-medium text-blue-600">
-                                    {orderDetail.created_at.toLocaleTimeString(
-                                      "vi-VN"
-                                    )}
-                                  </div>
-                                  <div className="text-xs text-slate-500">
-                                    {orderDetail.created_at.toLocaleDateString(
-                                      "vi-VN"
-                                    )}
-                                  </div>
-                                </>
-                              ) : (
-                                <div>""</div>
-                              )
-                            ) : (
-                              <div>""</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center font-medium text-purple-700 text-sm">
-                          <TruncatedText
-                            text={
-                              orderDetail.order?.sale_by?.fullName ||
-                              orderDetail.order?.sale_by?.username ||
-                              "N/A"
-                            }
-                            maxLength={15}
-                            className="text-truncate"
-                          />
-                        </TableCell>
-                        <TableCell className="text-center font-medium text-green-700 text-sm">
-                          <div className="flex items-center justify-center gap-1">
-                            <div
-                              className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
-                              onDoubleClick={() =>
-                                handleCustomerNameClick(
-                                  orderDetail.customer_name || ""
-                                )
-                              }
-                              title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
-                            >
+                      {(() => {
+                        const owner = isOwner(orderDetail);
+                        return (
+                          <>
+                            {/* ✅ Checkbox cell */}
+                            <TableCell className="text-center left-0 bg-inherit">
+                              <Checkbox
+                                checked={selectedOrderIds.has(orderDetail.id)}
+                                onCheckedChange={() =>
+                                  handleSelectOrder(orderDetail.id)
+                                }
+                                aria-label={`Chọn đơn hàng #${orderDetail.id}`}
+                              />
+                            </TableCell>
+                            <TableCell className="text-center left-[40px] bg-inherit">
+                              <div className="flex items-center justify-center w-8 h-8 bg-slate-200 rounded-full text-xs font-bold shadow-sm mx-auto">
+                                {startIndex + index + 1}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-medium text-blue-700">
+                              <div className="text-truncate">
+                                #{orderDetail.id || "N/A"}
+                              </div>
+                            </TableCell>
+                            {/* ✅ Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
+                            <TableCell className="text-center">
+                              {(() => {
+                                const dynamicExtended =
+                                  calculateDynamicExtended(
+                                    orderDetail.created_at,
+                                    orderDetail.extended || 0
+                                  );
+                                return (
+                                  <span
+                                    className={`inline-flex items-center ${getExtendedBadgeStyle(
+                                      dynamicExtended
+                                    )}`}
+                                    title={`Công thức: ${
+                                      orderDetail.created_at
+                                        ? new Date(
+                                            orderDetail.created_at
+                                          ).getDate()
+                                        : "N/A"
+                                    } + ${
+                                      orderDetail.extended || 0
+                                    } - ${new Date().getDate()} = ${dynamicExtended}`}
+                                  >
+                                    {getExtendedIcon(dynamicExtended)}
+                                    {dynamicExtended}
+                                  </span>
+                                );
+                              })()}
+                            </TableCell>
+                            <TableCell className="text-center text-slate-600 text-sm">
+                              <div className="flex flex-col">
+                                {orderDetail.created_at ? (
+                                  typeof orderDetail.created_at === "string" ? (
+                                    <>
+                                      <div className="font-medium text-blue-600">
+                                        {orderDetail.created_at.includes(" ")
+                                          ? orderDetail.created_at.split(
+                                              " "
+                                            )[1] || ""
+                                          : ""}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        {orderDetail.created_at.includes(" ")
+                                          ? orderDetail.created_at.split(
+                                              " "
+                                            )[0] || ""
+                                          : orderDetail.created_at}
+                                      </div>
+                                    </>
+                                  ) : orderDetail.created_at instanceof Date ? (
+                                    <>
+                                      <div className="font-medium text-blue-600">
+                                        {orderDetail.created_at.toLocaleTimeString(
+                                          "vi-VN"
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        {orderDetail.created_at.toLocaleDateString(
+                                          "vi-VN"
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div>""</div>
+                                  )
+                                ) : (
+                                  <div>""</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-medium text-purple-700 text-sm">
                               <TruncatedText
-                                text={orderDetail.customer_name || "--"}
-                                maxLength={12}
+                                text={
+                                  orderDetail.order?.sale_by?.fullName ||
+                                  orderDetail.order?.sale_by?.username ||
+                                  "N/A"
+                                }
+                                maxLength={15}
                                 className="text-truncate"
                               />
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0 hover:bg-green-100 mr-5"
-                              onClick={() => owner && handleCustomerNameEdit(orderDetail)}
-                              title={owner ? "Sửa tên khách hàng" : "Chỉ chủ sở hữu đơn hàng mới được sửa tên khách hàng"}
-                              disabled={!owner}
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
-                          <TruncatedText
-                            text={orderDetail.raw_item || "N/A"}
-                            maxLength={55}
-                            className="text-wrap leading-relaxed"
-                          />
-                        </TableCell>
-                        <TableCell className="text-center font-semibold text-indigo-600">
-                          <div className="text-truncate">
-                            {orderDetail.quantity || 0}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-green-600 text-sm">
-                          <div className="text-truncate">
-                            {orderDetail.unit_price
-                              ? Number(orderDetail.unit_price).toLocaleString() +
-                                "₫"
-                              : "0₫"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                              orderDetail.status || ""
-                            )}`}
-                          >
-                            {getStatusIcon(orderDetail.status || "")}
-                            <span className="text-truncate max-w-[80px]">
-                              {getStatusLabel(orderDetail.status || "")}
-                            </span>
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
-                          <TruncatedText
-                            text={orderDetail.notes || "—"}
-                            maxLength={18}
-                            className="text-wrap leading-relaxed"
-                          />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center space-x-1">
-                            <POrderDynamic action="read">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    onClick={() => handleViewClick(orderDetail)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
-                                  >
-                                    <Eye className="h-3 w-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Xem tin nhắn</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </POrderDynamic>
+                            </TableCell>
+                            <TableCell className="text-center font-medium text-green-700 text-sm">
+                              <div className="flex items-center justify-center gap-1">
+                                <div
+                                  className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
+                                  onDoubleClick={() =>
+                                    handleCustomerNameClick(
+                                      orderDetail.customer_name || ""
+                                    )
+                                  }
+                                  title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
+                                >
+                                  <TruncatedText
+                                    text={orderDetail.customer_name || "--"}
+                                    maxLength={12}
+                                    className="text-truncate"
+                                  />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 hover:bg-green-100 mr-5"
+                                  onClick={() =>
+                                    owner && handleCustomerNameEdit(orderDetail)
+                                  }
+                                  title={
+                                    owner
+                                      ? "Sửa tên khách hàng"
+                                      : "Chỉ chủ sở hữu đơn hàng mới được sửa tên khách hàng"
+                                  }
+                                  disabled={!owner}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
+                              <TruncatedText
+                                text={orderDetail.raw_item || "N/A"}
+                                maxLength={55}
+                                className="text-wrap leading-relaxed"
+                              />
+                            </TableCell>
+                            <TableCell className="text-center font-semibold text-indigo-600">
+                              <div className="text-truncate">
+                                {orderDetail.quantity || 0}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-green-600 text-sm">
+                              <div className="text-truncate">
+                                {orderDetail.unit_price
+                                  ? Number(
+                                      orderDetail.unit_price
+                                    ).toLocaleString() + "₫"
+                                  : "0₫"}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                  orderDetail.status || ""
+                                )}`}
+                              >
+                                {getStatusIcon(orderDetail.status || "")}
+                                <span className="text-truncate max-w-[80px]">
+                                  {getStatusLabel(orderDetail.status || "")}
+                                </span>
+                              </span>
+                            </TableCell>
+                            <TableCell className="p-3 text-center border-r border-gray-200 w-[130px]">
+                              {orderDetail.last_extended_at ? (
+                                <div className="flex flex-col items-center space-y-1">
+                                  <span className="text-xs text-purple-600 font-medium truncate">
+                                    {(() => {
+                                      const date =
+                                        typeof orderDetail.last_extended_at ===
+                                        "string"
+                                          ? new Date(
+                                              orderDetail.last_extended_at
+                                            )
+                                          : orderDetail.last_extended_at;
+                                      return date.toLocaleDateString("vi-VN", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                      });
+                                    })()}
+                                  </span>
+                                  <span className="text-xs text-purple-500">
+                                    {(() => {
+                                      const date =
+                                        typeof orderDetail.last_extended_at ===
+                                        "string"
+                                          ? new Date(
+                                              orderDetail.last_extended_at
+                                            )
+                                          : orderDetail.last_extended_at;
+                                      return date.toLocaleTimeString("vi-VN", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      });
+                                    })()}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-sm">
+                                  --
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="p-3 text-center border-r border-gray-200 w-[120px]">
+                              {orderDetail.extend_reason ? (
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs font-medium truncate ${
+                                    orderDetail.extend_reason ===
+                                    "hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ"
+                                      ? "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border border-blue-300"
+                                      : "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300"
+                                  }`}
+                                >
+                                  {orderDetail.extend_reason ===
+                                  "hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ" ? (
+                                    <>🤖 Hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ</>
+                                  ) : (
+                                    <>👤 Chính chủ gia hạn</>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 text-sm">
+                                  --
+                                </span>
+                              )}
+                            </TableCell>
 
-                            <POrderDynamic action="update">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    onClick={() => owner && handleEditClick(orderDetail)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-                                    disabled={!owner}
-                                    title={owner ? "Sửa" : "Chỉ chủ sở hữu được sửa"}
-                                  >
-                                    <Edit className="h-3 w-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{owner ? "Sửa" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </POrderDynamic>
+                            <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
+                              <TruncatedText
+                                text={orderDetail.notes || "—"}
+                                maxLength={18}
+                                className="text-wrap leading-relaxed"
+                              />
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <POrderDynamic action="read">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          handleViewClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
+                                      >
+                                        <Eye className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Xem tin nhắn</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
 
-                            <POrderDynamic action="delete">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    onClick={() => owner && handleDeleteClick(orderDetail)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors"
-                                    disabled={!owner}
-                                    title={owner ? "Xóa" : "Chỉ chủ sở hữu được xóa"}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{owner ? "Xóa" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </POrderDynamic>
+                                <POrderDynamic action="update">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner && handleEditClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Sửa"
+                                            : "Chỉ chủ sở hữu được sửa"
+                                        }
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Sửa"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
 
-                            <POrderDynamic action="update">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    onClick={() => owner && handleAddToBlacklistClick(orderDetail)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
-                                    disabled={!owner}
-                                    title={owner ? "Thêm vào blacklist" : "Chỉ chủ sở hữu được thao tác"}
-                                  >
-                                    <Shield className="h-3 w-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{owner ? "Thêm vào blacklist" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </POrderDynamic>
-                          </div>
-                        </TableCell>
-                        </>
-                      ); })()}
+                                <POrderDynamic action="delete">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner &&
+                                          handleDeleteClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Xóa"
+                                            : "Chỉ chủ sở hữu được xóa"
+                                        }
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Xóa"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
+
+                                <POrderDynamic action="update">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner &&
+                                          handleAddToBlacklistClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Thêm vào blacklist"
+                                            : "Chỉ chủ sở hữu được thao tác"
+                                        }
+                                      >
+                                        <Shield className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Thêm vào blacklist"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
+                              </div>
+                            </TableCell>
+                          </>
+                        );
+                      })()}
                     </TableRow>
                   ))}
 
@@ -1053,10 +1202,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       {/* Messages Modal */}
       {viewingDetail && (
         <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-            <DialogContent
+          <DialogContent
             className="max-w-7xl max-h-[90vh] p-0 overflow-hidden border-0 bg-transparent"
             style={{ width: "90vw", minWidth: 1000 }}
-            >
+          >
             {/* Floating background particles */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
               <div className="absolute top-6 left-8 text-blue-300 animate-pulse">
