@@ -327,15 +327,131 @@ export const useOrders = (): UseOrdersReturn => {
     [isInCustomerSearchMode]
   );
 
+  // const updateFiltersAndUrl = useCallback(
+  //   (
+  //     newFilters: OrderFilters,
+  //     skipHistory = false,
+  //     isCustomerSearch = false,
+  //     previousFilters?: OrderFilters,
+  //     skipRouterNavigation = false
+  //   ) => {
+  //     // ✅ Skip URL update if we're currently restoring from popstate
+  //     if (isRestoringRef.current) {
+  //       return;
+  //     }
+
+  //     // Lưu vào localStorage
+  //     conditionalSaveFilters(newFilters);
+
+  //     // Update state
+  //     setFiltersState(newFilters);
+
+  //     // Update URL using Next.js router
+  //     if (!isUpdatingUrl.current) {
+  //       isUpdatingUrl.current = true;
+
+  //       const searchParams = new URLSearchParams();
+
+  //       // Build query parameters
+  //       if (newFilters.page > 1) {
+  //         searchParams.set("page", newFilters.page.toString());
+  //       }
+
+  //       if (newFilters.pageSize !== 10) {
+  //         searchParams.set("pageSize", newFilters.pageSize.toString());
+  //       }
+
+  //       if (newFilters.search?.trim()) {
+  //         searchParams.set("search", newFilters.search.trim());
+  //       }
+
+  //       if (newFilters.status?.trim()) {
+  //         searchParams.set("status", newFilters.status.trim());
+  //       }
+
+  //       if (newFilters.date?.trim()) {
+  //         searchParams.set("date", newFilters.date.trim());
+  //       }
+
+  //       if (newFilters.dateRange) {
+  //         searchParams.set("dateRange", JSON.stringify(newFilters.dateRange));
+  //       }
+
+  //       if (newFilters.employee?.trim()) {
+  //         searchParams.set("employee", newFilters.employee.trim());
+  //       }
+
+  //       if (newFilters.employees?.trim()) {
+  //         searchParams.set("employees", newFilters.employees.trim());
+  //       }
+
+  //       if (newFilters.departments?.trim()) {
+  //         searchParams.set("departments", newFilters.departments.trim());
+  //       }
+
+  //       if (newFilters.products?.trim()) {
+  //         searchParams.set("products", newFilters.products.trim());
+  //       }
+
+  //       if (newFilters.warningLevel?.trim()) {
+  //         searchParams.set("warningLevel", newFilters.warningLevel.trim());
+  //       }
+
+  //       if (newFilters.sortField) {
+  //         searchParams.set("sortField", newFilters.sortField);
+  //       }
+
+  //       if (newFilters.sortDirection) {
+  //         searchParams.set("sortDirection", newFilters.sortDirection);
+  //       }
+
+  //       const queryString = searchParams.toString();
+  //       const newUrl =
+  //         window.location.pathname + (queryString ? `?${queryString}` : "");
+
+  //       // Use Next.js router for navigation only if not skipping router navigation
+  //       if (!skipRouterNavigation) {
+  //         if (skipHistory) {
+  //           router.replace(newUrl);
+  //         } else {
+  //           router.push(newUrl);
+  //         }
+  //       }
+
+  //       // Also update browser history state for back/forward navigation
+  //       const historyState = {
+  //         filters: newFilters,
+  //         page: newFilters.page,
+  //         pageSize: newFilters.pageSize,
+  //         timestamp: Date.now(),
+  //         isCustomerSearch: isCustomerSearch,
+  //         previousFilters: previousFilters || undefined,
+  //       };
+
+  //       if (skipHistory) {
+  //         window.history.replaceState(historyState, "", newUrl);
+  //       } else {
+  //         window.history.pushState(historyState, "", newUrl);
+  //       }
+
+  //       // Reset flag sau một chút
+  //       setTimeout(() => {
+  //         isUpdatingUrl.current = false;
+  //       }, 100);
+  //     }
+  //   },
+  //   [router, conditionalSaveFilters]
+  // );
+
   const updateFiltersAndUrl = useCallback(
     (
       newFilters: OrderFilters,
       skipHistory = false,
       isCustomerSearch = false,
       previousFilters?: OrderFilters,
-      skipRouterNavigation = false
+      skipRouterNavigation = false,
+      isReset = false // ✅ THÊM parameter này
     ) => {
-      // ✅ Skip URL update if we're currently restoring from popstate
       if (isRestoringRef.current) {
         return;
       }
@@ -356,51 +472,39 @@ export const useOrders = (): UseOrdersReturn => {
         if (newFilters.page > 1) {
           searchParams.set("page", newFilters.page.toString());
         }
-
         if (newFilters.pageSize !== 10) {
           searchParams.set("pageSize", newFilters.pageSize.toString());
         }
-
         if (newFilters.search?.trim()) {
           searchParams.set("search", newFilters.search.trim());
         }
-
         if (newFilters.status?.trim()) {
           searchParams.set("status", newFilters.status.trim());
         }
-
         if (newFilters.date?.trim()) {
           searchParams.set("date", newFilters.date.trim());
         }
-
         if (newFilters.dateRange) {
           searchParams.set("dateRange", JSON.stringify(newFilters.dateRange));
         }
-
         if (newFilters.employee?.trim()) {
           searchParams.set("employee", newFilters.employee.trim());
         }
-
         if (newFilters.employees?.trim()) {
           searchParams.set("employees", newFilters.employees.trim());
         }
-
         if (newFilters.departments?.trim()) {
           searchParams.set("departments", newFilters.departments.trim());
         }
-
         if (newFilters.products?.trim()) {
           searchParams.set("products", newFilters.products.trim());
         }
-
         if (newFilters.warningLevel?.trim()) {
           searchParams.set("warningLevel", newFilters.warningLevel.trim());
         }
-
         if (newFilters.sortField) {
           searchParams.set("sortField", newFilters.sortField);
         }
-
         if (newFilters.sortDirection) {
           searchParams.set("sortDirection", newFilters.sortDirection);
         }
@@ -426,9 +530,12 @@ export const useOrders = (): UseOrdersReturn => {
           timestamp: Date.now(),
           isCustomerSearch: isCustomerSearch,
           previousFilters: previousFilters || undefined,
+          isReset: isReset, // ✅ THÊM flag này
         };
-
-        if (skipHistory) {
+        // Với reset, luôn push state
+        if (isReset) {
+          window.history.pushState(historyState, "", newUrl);
+        } else if (skipHistory) {
           window.history.replaceState(historyState, "", newUrl);
         } else {
           window.history.pushState(historyState, "", newUrl);
@@ -441,6 +548,23 @@ export const useOrders = (): UseOrdersReturn => {
       }
     },
     [router, conditionalSaveFilters]
+  );
+
+  const setSortOptions = useCallback(
+    (
+      sortField: "quantity" | "unit_price" | "created_at" | null,
+      sortDirection: "asc" | "desc" | null,
+      resetPage = true
+    ) => {
+      const newFilters = {
+        ...filters,
+        sortField,
+        sortDirection,
+        page: resetPage ? 1 : filters.page,
+      };
+      updateFiltersAndUrl(newFilters);
+    },
+    [filters, updateFiltersAndUrl]
   );
 
   // ✅ Debug: Track khi filters.page thay đổi
@@ -517,23 +641,10 @@ export const useOrders = (): UseOrdersReturn => {
         }
         if (currentFilters.sortField) {
           params.append("sortField", currentFilters.sortField);
-          console.log(
-            "✅ Added sortField to params:",
-            currentFilters.sortField
-          );
         }
         if (currentFilters.sortDirection) {
           params.append("sortDirection", currentFilters.sortDirection);
-          console.log(
-            "✅ Added sortDirection to params:",
-            currentFilters.sortDirection
-          );
         }
-
-        console.log("🔍 Sending sort params:", {
-          sortField: currentFilters.sortField,
-          sortDirection: currentFilters.sortDirection,
-        });
 
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
@@ -732,8 +843,43 @@ export const useOrders = (): UseOrdersReturn => {
   );
 
   // ✅ Cập nhật resetFilters để clear localStorage và update URL
+  // const resetFilters = useCallback(() => {
+  //   const defaultPageSize = 10;
+
+  //   // Clear localStorage
+  //   clearPageSizeFromStorage();
+  //   clearFiltersFromStorage();
+
+  //   const resetFiltersData = {
+  //     page: 1,
+  //     pageSize: defaultPageSize,
+  //     search: "",
+  //     status: "",
+  //     date: "",
+  //     dateRange: undefined,
+  //     employee: "",
+  //     employees: "",
+  //     departments: "",
+  //     products: "",
+  //     warningLevel: "",
+  //     sortField: null,
+  //     sortDirection: null,
+  //   };
+
+  //   // Update filters and URL using the new mechanism
+  //   updateFiltersAndUrl(resetFiltersData, true);
+  // }, [updateFiltersAndUrl]);
+
   const resetFilters = useCallback(() => {
+
     const defaultPageSize = 10;
+
+    // ✅ BLOCK tất cả operations khác ngay lập tức
+    isRestoringRef.current = true;
+    setIsRestoring(true);
+
+    // Kiểm tra customer search mode
+    const wasInCustomerSearchMode = isInCustomerSearchMode;
 
     // Clear localStorage
     clearPageSizeFromStorage();
@@ -755,9 +901,44 @@ export const useOrders = (): UseOrdersReturn => {
       sortDirection: null,
     };
 
-    // Update filters and URL using the new mechanism
-    updateFiltersAndUrl(resetFiltersData, true);
-  }, [updateFiltersAndUrl]);
+    // Exit customer search mode nếu cần
+    if (wasInCustomerSearchMode) {
+      flushSync(() => {
+        setIsInCustomerSearchMode(false);
+        setPreviousFilters(null);
+        setCanGoBack(false);
+      });
+    }
+
+    // ✅ FORCE update state trước với flushSync
+    flushSync(() => {
+      setFiltersState(resetFiltersData);
+      conditionalSaveFilters(resetFiltersData);
+    });
+
+    // ✅ MANUAL history management để tránh router interference
+    const newUrl = window.location.pathname; // Clean URL
+
+    const resetHistoryState = {
+      filters: resetFiltersData,
+      page: 1,
+      pageSize: defaultPageSize,
+      timestamp: Date.now(),
+      isCustomerSearch: false,
+      previousFilters: undefined,
+      isReset: true,
+    };
+
+    // ✅ FORCE push reset state với manual history API
+    window.history.pushState(resetHistoryState, "", newUrl);
+
+    // ✅ Delay longer để prevent interference từ các components khác
+    setTimeout(() => {
+      isRestoringRef.current = false;
+      setIsRestoring(false);
+    }, 100); // ✅ Tăng delay lên 1 giây
+
+  }, [isInCustomerSearchMode, conditionalSaveFilters]);
 
   const refetch = useCallback(async () => {
     if (isFetching) {
@@ -1015,11 +1196,6 @@ export const useOrders = (): UseOrdersReturn => {
               }
 
               if (apiUrl) {
-                console.log(`Updating ${conversationType} name:`, {
-                  apiUrl,
-                  payload,
-                });
-
                 const backendRes = await fetch(apiUrl, {
                   method: "PUT",
                   headers: {
@@ -1033,10 +1209,6 @@ export const useOrders = (): UseOrdersReturn => {
                   console.warn(
                     `Failed to update ${conversationType} name in backend: ${backendRes.status}`,
                     errorText
-                  );
-                } else {
-                  console.log(
-                    `Successfully updated ${conversationType} name in backend`
                   );
                 }
               }
@@ -1291,18 +1463,251 @@ export const useOrders = (): UseOrdersReturn => {
   }, [previousFilters, updateFiltersAndUrl]);
 
   // Trong file useOrders.ts
+  // useEffect(() => {
+  //   const handlePopState = (event: PopStateEvent) => {
+  //     const historyState = event.state as HistoryState;
+
+  //     if (historyState) {
+  //       setIsRestoring(true);
+  //       isRestoringRef.current = true;
+
+  //       // ✅ Logic mới: Nếu state có previousFilters, có nghĩa là đang back từ customer search
+  //       if (historyState.previousFilters) {
+  //         // ✅ Update URL với previousFilters
+  //         const searchParams = new URLSearchParams();
+  //         if (historyState.previousFilters.page > 1) {
+  //           searchParams.set(
+  //             "page",
+  //             historyState.previousFilters.page.toString()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.pageSize !== 10) {
+  //           searchParams.set(
+  //             "pageSize",
+  //             historyState.previousFilters.pageSize.toString()
+  //           );
+  //         }
+  //         // Add other filters...
+  //         if (historyState.previousFilters.search?.trim()) {
+  //           searchParams.set(
+  //             "search",
+  //             historyState.previousFilters.search.trim()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.status?.trim()) {
+  //           searchParams.set(
+  //             "status",
+  //             historyState.previousFilters.status.trim()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.departments?.trim()) {
+  //           searchParams.set(
+  //             "departments",
+  //             historyState.previousFilters.departments.trim()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.employees?.trim()) {
+  //           searchParams.set(
+  //             "employees",
+  //             historyState.previousFilters.employees.trim()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.products?.trim()) {
+  //           searchParams.set(
+  //             "products",
+  //             historyState.previousFilters.products.trim()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.warningLevel?.trim()) {
+  //           searchParams.set(
+  //             "warningLevel",
+  //             historyState.previousFilters.warningLevel.trim()
+  //           );
+  //         }
+  //         if (historyState.previousFilters.sortField) {
+  //           searchParams.set(
+  //             "sortField",
+  //             historyState.previousFilters.sortField
+  //           );
+  //         }
+  //         if (historyState.previousFilters.sortDirection) {
+  //           searchParams.set(
+  //             "sortDirection",
+  //             historyState.previousFilters.sortDirection
+  //           );
+  //         }
+
+  //         const queryString = searchParams.toString();
+  //         const newUrl =
+  //           window.location.pathname + (queryString ? `?${queryString}` : "");
+
+  //         // ✅ Update state directly without router navigation
+  //         flushSync(() => {
+  //           setFiltersState(historyState.previousFilters);
+  //           conditionalSaveFilters(historyState.previousFilters);
+  //           setIsInCustomerSearchMode(false);
+  //           setPreviousFilters(null);
+  //         });
+
+  //         // ✅ Update URL manually
+  //         window.history.replaceState(
+  //           {
+  //             filters: historyState.previousFilters,
+  //             page: historyState.previousFilters.page,
+  //             pageSize: historyState.previousFilters.pageSize,
+  //             timestamp: Date.now(),
+  //           },
+  //           "",
+  //           newUrl
+  //         );
+  //       } else if (historyState.filters) {
+  //         // ✅ Update state directly without router navigation
+  //         flushSync(() => {
+  //           setFiltersState(historyState.filters);
+  //           conditionalSaveFilters(historyState.filters);
+  //         });
+
+  //         // ✅ Update customer search mode
+  //         if (historyState.isCustomerSearch) {
+  //           setIsInCustomerSearchMode(true);
+  //           if (historyState.previousFilters) {
+  //             setPreviousFilters(historyState.previousFilters);
+  //           }
+  //         } else {
+  //           setIsInCustomerSearchMode(false);
+  //           setPreviousFilters(null);
+  //         }
+  //       }
+
+  //       // ✅ Delay longer để đảm bảo tất cả state đã stable, sau đó trigger fetch
+  //       setTimeout(() => {
+  //         setIsRestoring(false);
+  //         isRestoringRef.current = false;
+
+  //         // ✅ Trigger fetch ngay sau khi restore để đảm bảo data được cập nhật
+  //         const filtersToFetch =
+  //           historyState?.previousFilters || historyState?.filters;
+  //         if (filtersToFetch) {
+  //           setIsFetching(true);
+  //           fetchOrdersInternal(filtersToFetch)
+  //             .then(() => {})
+  //             .catch((error) => {
+  //               if (error.name !== "AbortError") {
+  //                 console.error("❌ Post-restore fetch failed:", error);
+  //               }
+  //             })
+  //             .finally(() => {
+  //               setIsFetching(false);
+  //             });
+  //         }
+  //       }, 500);
+  //     }
+  //   };
+
+  //   window.addEventListener("popstate", handlePopState);
+  //   return () => window.removeEventListener("popstate", handlePopState);
+  // }, [conditionalSaveFilters]);
+
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
-      const historyState = event.state as HistoryState;
+      const historyState = event.state as HistoryState & { isReset?: boolean };
 
       if (historyState) {
         setIsRestoring(true);
         isRestoringRef.current = true;
 
-        // ✅ Logic mới: Nếu state có previousFilters, có nghĩa là đang back từ customer search
-        if (historyState.previousFilters) {
-          // ✅ Update URL với previousFilters
+        if (historyState.isReset === true) {
+          flushSync(() => {
+            setFiltersState(historyState.filters);
+            conditionalSaveFilters(historyState.filters);
+            setIsInCustomerSearchMode(false);
+            setPreviousFilters(null);
+            setCanGoBack(false);
+          });
+
+          // ✅ THÊM: Build URL đầy đủ cho reset state (không phải empty)
           const searchParams = new URLSearchParams();
+
+          // ✅ Reset state vẫn có thể có một số values không phải default
+          if (historyState.filters.page > 1) {
+            searchParams.set("page", historyState.filters.page.toString());
+          }
+          if (historyState.filters.pageSize !== 10) {
+            searchParams.set(
+              "pageSize",
+              historyState.filters.pageSize.toString()
+            );
+          }
+          if (historyState.filters.search?.trim()) {
+            searchParams.set("search", historyState.filters.search.trim());
+          }
+          if (historyState.filters.status?.trim()) {
+            searchParams.set("status", historyState.filters.status.trim());
+          }
+          if (historyState.filters.date?.trim()) {
+            searchParams.set("date", historyState.filters.date.trim());
+          }
+          // ✅ THÊM: Handle dateRange cho reset state
+          if (historyState.filters.dateRange) {
+            searchParams.set(
+              "dateRange",
+              JSON.stringify(historyState.filters.dateRange)
+            );
+          }
+          if (historyState.filters.employee?.trim()) {
+            searchParams.set("employee", historyState.filters.employee.trim());
+          }
+          if (historyState.filters.employees?.trim()) {
+            searchParams.set(
+              "employees",
+              historyState.filters.employees.trim()
+            );
+          }
+          if (historyState.filters.departments?.trim()) {
+            searchParams.set(
+              "departments",
+              historyState.filters.departments.trim()
+            );
+          }
+          if (historyState.filters.products?.trim()) {
+            searchParams.set("products", historyState.filters.products.trim());
+          }
+          if (historyState.filters.warningLevel?.trim()) {
+            searchParams.set(
+              "warningLevel",
+              historyState.filters.warningLevel.trim()
+            );
+          }
+          if (historyState.filters.sortField) {
+            searchParams.set("sortField", historyState.filters.sortField);
+          }
+          if (historyState.filters.sortDirection) {
+            searchParams.set(
+              "sortDirection",
+              historyState.filters.sortDirection
+            );
+          }
+
+          const queryString = searchParams.toString();
+          const newUrl =
+            window.location.pathname + (queryString ? `?${queryString}` : "");
+
+          // Update URL manually
+          window.history.replaceState(
+            {
+              filters: historyState.filters,
+              page: historyState.filters.page,
+              pageSize: historyState.filters.pageSize,
+              timestamp: Date.now(),
+              isReset: false, // ✅ Sau khi restore, không còn là reset state nữa
+            },
+            "",
+            newUrl
+          );
+        } else if (historyState.previousFilters) {
+
+          const searchParams = new URLSearchParams();
+
           if (historyState.previousFilters.page > 1) {
             searchParams.set(
               "page",
@@ -1315,7 +1720,6 @@ export const useOrders = (): UseOrdersReturn => {
               historyState.previousFilters.pageSize.toString()
             );
           }
-          // Add other filters...
           if (historyState.previousFilters.search?.trim()) {
             searchParams.set(
               "search",
@@ -1328,16 +1732,34 @@ export const useOrders = (): UseOrdersReturn => {
               historyState.previousFilters.status.trim()
             );
           }
-          if (historyState.previousFilters.departments?.trim()) {
+          // ✅ THÊM: Handle date field
+          if (historyState.previousFilters.date?.trim()) {
+            searchParams.set("date", historyState.previousFilters.date.trim());
+          }
+          // ✅ THÊM: Handle dateRange field
+          if (historyState.previousFilters.dateRange) {
             searchParams.set(
-              "departments",
-              historyState.previousFilters.departments.trim()
+              "dateRange",
+              JSON.stringify(historyState.previousFilters.dateRange)
+            );
+          }
+          // ✅ THÊM: Handle employee field
+          if (historyState.previousFilters.employee?.trim()) {
+            searchParams.set(
+              "employee",
+              historyState.previousFilters.employee.trim()
             );
           }
           if (historyState.previousFilters.employees?.trim()) {
             searchParams.set(
               "employees",
               historyState.previousFilters.employees.trim()
+            );
+          }
+          if (historyState.previousFilters.departments?.trim()) {
+            searchParams.set(
+              "departments",
+              historyState.previousFilters.departments.trim()
             );
           }
           if (historyState.previousFilters.products?.trim()) {
@@ -1369,15 +1791,16 @@ export const useOrders = (): UseOrdersReturn => {
           const newUrl =
             window.location.pathname + (queryString ? `?${queryString}` : "");
 
-          // ✅ Update state directly without router navigation
+          // Update state directly without router navigation
           flushSync(() => {
             setFiltersState(historyState.previousFilters);
             conditionalSaveFilters(historyState.previousFilters);
             setIsInCustomerSearchMode(false);
             setPreviousFilters(null);
+            setCanGoBack(false);
           });
 
-          // ✅ Update URL manually
+          // Update URL manually
           window.history.replaceState(
             {
               filters: historyState.previousFilters,
@@ -1389,52 +1812,94 @@ export const useOrders = (): UseOrdersReturn => {
             newUrl
           );
         } else if (historyState.filters) {
-          // ✅ Update state directly without router navigation
+
           flushSync(() => {
             setFiltersState(historyState.filters);
             conditionalSaveFilters(historyState.filters);
           });
 
-          // ✅ Update customer search mode
+          // ✅ Update customer search mode với validation
           if (historyState.isCustomerSearch) {
             setIsInCustomerSearchMode(true);
             if (historyState.previousFilters) {
               setPreviousFilters(historyState.previousFilters);
+              setCanGoBack(true);
+            } else {
+              // ✅ THÊM: Nếu không có previousFilters nhưng vẫn là customer search
+              setCanGoBack(false);
+              console.warn("⚠️ Customer search mode without previousFilters");
             }
           } else {
             setIsInCustomerSearchMode(false);
             setPreviousFilters(null);
+            setCanGoBack(false);
           }
         }
+        // ✅ THÊM: Handle trường hợp không có historyState.filters
+        else {
+          console.warn(
+            "⚠️ PopState event without valid filters, using current filters"
+          );
+          flushSync(() => {
+            // Giữ nguyên current state
+            setIsInCustomerSearchMode(false);
+            setPreviousFilters(null);
+            setCanGoBack(false);
+          });
+        }
 
-        // ✅ Delay longer để đảm bảo tất cả state đã stable, sau đó trigger fetch
+        // ✅ DELAY VÀ CLEANUP LOGIC
         setTimeout(() => {
           setIsRestoring(false);
           isRestoringRef.current = false;
 
-          // ✅ Trigger fetch ngay sau khi restore để đảm bảo data được cập nhật
+          // ✅ THÊM: Validation cho filtersToFetch
           const filtersToFetch =
             historyState?.previousFilters || historyState?.filters;
-          if (filtersToFetch) {
-            setIsFetching(true);
-            fetchOrdersInternal(filtersToFetch)
-              .then(() => {})
-              .catch((error) => {
-                if (error.name !== "AbortError") {
-                  console.error("❌ Post-restore fetch failed:", error);
-                }
-              })
-              .finally(() => {
-                setIsFetching(false);
-              });
+          if (filtersToFetch && typeof filtersToFetch === "object") {
+            // ✅ THÊM: Validate filters trước khi fetch
+            const isValidFilters =
+              typeof filtersToFetch.page === "number" &&
+              typeof filtersToFetch.pageSize === "number" &&
+              filtersToFetch.page > 0 &&
+              filtersToFetch.pageSize > 0;
+
+            if (isValidFilters) {
+              setIsFetching(true);
+              fetchOrdersInternal(filtersToFetch)
+                .then(() => {
+                  console.log("✅ Post-restore fetch completed");
+                })
+                .catch((error) => {
+                  if (error.name !== "AbortError") {
+                    console.error("❌ Post-restore fetch failed:", error);
+                  }
+                })
+                .finally(() => {
+                  setIsFetching(false);
+                });
+            } else {
+              console.error("❌ Invalid filters for fetch:", filtersToFetch);
+            }
+          } else {
+            console.warn("⚠️ No valid filters to fetch after popstate");
           }
-        }, 500);
+        }, 200);
+      }
+      // ✅ THÊM: Handle trường hợp không có historyState
+      else {
+        console.warn("⚠️ PopState event without historyState");
+        // Reset restoration state nếu bị stuck
+        setTimeout(() => {
+          setIsRestoring(false);
+          isRestoringRef.current = false;
+        }, 100);
       }
     };
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [conditionalSaveFilters]);
+  }, [conditionalSaveFilters, fetchOrdersInternal]);
 
   useEffect(() => {
     // Cleanup timeout, abort controller và reset fetching state khi component unmount
@@ -1493,6 +1958,7 @@ export const useOrders = (): UseOrdersReturn => {
     refetch,
     resetFilters, // ✅ Đã update để clear localStorage
     getFilterOptions,
+    setSortOptions,
 
     // CRUD methods
     createOrder,

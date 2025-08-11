@@ -8,6 +8,7 @@ export interface HistoryState {
   isCustomerSearch?: boolean;
   originalUrl?: string;
   previousFilters?: any;
+  isReset?: boolean;
 }
 
 const HISTORY_STATE_KEY = 'orderManagementState';
@@ -27,7 +28,6 @@ export const pushToHistory = (state: Omit<HistoryState, 'timestamp'>, url?: stri
   
   try {
     window.history.pushState(historyState, '', currentUrl);
-    console.log('🏛️ Pushed to browser history:', historyState);
   } catch (error) {
     console.warn('❌ Failed to push browser history:', error);
   }
@@ -48,7 +48,6 @@ export const replaceHistory = (state: Omit<HistoryState, 'timestamp'>, url?: str
   
   try {
     window.history.replaceState(historyState, '', currentUrl);
-    console.log('🔄 Replaced browser history:', historyState);
   } catch (error) {
     console.warn('❌ Failed to replace browser history:', error);
   }

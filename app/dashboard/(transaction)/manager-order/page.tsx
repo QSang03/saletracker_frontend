@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  Suspense,
+} from "react";
 import { OrderDetail } from "@/types"; // ✅ Thay đổi từ Order thành OrderDetail
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useOrders } from "@/hooks/useOrders";
@@ -13,7 +19,10 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
 import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
-import { ServerResponseAlert, type AlertType } from "@/components/ui/loading/ServerResponseAlert";
+import {
+  ServerResponseAlert,
+  type AlertType,
+} from "@/components/ui/loading/ServerResponseAlert";
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function ManagerOrderContent() {
@@ -145,19 +154,22 @@ function ManagerOrderContent() {
   // Convert PaginatedTable filters to useOrders filters
   const handleFilterChange = useCallback(
     (paginatedFilters: Filters) => {
-      
       const shouldResetPage = !isInCustomerSearchMode && !filters.search;
 
       // ✅ Build new filters object với tất cả changes cùng lúc
       const searchValue = paginatedFilters.search || "";
-      const statusValue = paginatedFilters.statuses.length > 0 ? paginatedFilters.statuses[0].toString() : "";
-      
+      const statusValue =
+        paginatedFilters.statuses.length > 0
+          ? paginatedFilters.statuses[0].toString()
+          : "";
+
       // Handle single date
       let dateValue = "";
       if (paginatedFilters.singleDate) {
-        dateValue = paginatedFilters.singleDate instanceof Date
-          ? paginatedFilters.singleDate.toLocaleDateString("en-CA")
-          : paginatedFilters.singleDate.toString();
+        dateValue =
+          paginatedFilters.singleDate instanceof Date
+            ? paginatedFilters.singleDate.toLocaleDateString("en-CA")
+            : paginatedFilters.singleDate.toString();
       }
 
       // Handle date range
@@ -170,14 +182,23 @@ function ManagerOrderContent() {
       }
 
       // Handle employees
-      const employeesValue = paginatedFilters.employees.length > 0 ? paginatedFilters.employees.join(",") : "";
-      
+      const employeesValue =
+        paginatedFilters.employees.length > 0
+          ? paginatedFilters.employees.join(",")
+          : "";
+
       // Handle departments
-      const departmentsValue = paginatedFilters.departments.length > 0 ? paginatedFilters.departments.join(",") : "";
-      
+      const departmentsValue =
+        paginatedFilters.departments.length > 0
+          ? paginatedFilters.departments.join(",")
+          : "";
+
       // Handle products/categories
-      const productsValue = paginatedFilters.categories.length > 0 ? paginatedFilters.categories.join(",") : "";
-      
+      const productsValue =
+        paginatedFilters.categories.length > 0
+          ? paginatedFilters.categories.join(",")
+          : "";
+
       // Handle warning levels
       let warningLevelValue = "";
       if (paginatedFilters.warningLevels.length > 0) {
@@ -204,7 +225,7 @@ function ManagerOrderContent() {
         warningLevel: warningLevelValue,
         page: shouldResetPage ? 1 : filters.page,
       };
-      
+
       // ✅ Apply tất cả filters chỉ với 1 lần gọi
       setFilters(newFilters);
     },
@@ -282,9 +303,12 @@ function ManagerOrderContent() {
   const handleBulkDelete = useCallback(
     async (orderDetails: OrderDetail[], reason: string) => {
       try {
-        const ids = orderDetails.map(od => Number(od.id));
+        const ids = orderDetails.map((od) => Number(od.id));
         await bulkDeleteOrderDetails(ids, reason);
-        setAlert({ type: "success", message: `Đã xóa ${orderDetails.length} đơn hàng thành công!` });
+        setAlert({
+          type: "success",
+          message: `Đã xóa ${orderDetails.length} đơn hàng thành công!`,
+        });
         refetch();
       } catch (err) {
         console.error("Error bulk deleting order details:", err);
@@ -298,9 +322,12 @@ function ManagerOrderContent() {
   const handleBulkExtend = useCallback(
     async (orderDetails: OrderDetail[]) => {
       try {
-        const ids = orderDetails.map(od => Number(od.id));
+        const ids = orderDetails.map((od) => Number(od.id));
         await bulkExtendOrderDetails(ids);
-        setAlert({ type: "success", message: `Đã gia hạn ${orderDetails.length} đơn hàng thành công!` });
+        setAlert({
+          type: "success",
+          message: `Đã gia hạn ${orderDetails.length} đơn hàng thành công!`,
+        });
         refetch();
       } catch (err) {
         console.error("Error bulk extending order details:", err);
@@ -314,13 +341,19 @@ function ManagerOrderContent() {
   const handleBulkNotes = useCallback(
     async (orderDetails: OrderDetail[], notes: string) => {
       try {
-        const ids = orderDetails.map(od => Number(od.id));
+        const ids = orderDetails.map((od) => Number(od.id));
         await bulkAddNotesOrderDetails(ids, notes);
-        setAlert({ type: "success", message: `Đã cập nhật ghi chú cho ${orderDetails.length} đơn hàng thành công!` });
+        setAlert({
+          type: "success",
+          message: `Đã cập nhật ghi chú cho ${orderDetails.length} đơn hàng thành công!`,
+        });
         refetch();
       } catch (err) {
         console.error("Error bulk adding notes to order details:", err);
-        setAlert({ type: "error", message: "Lỗi khi cập nhật ghi chú nhiều đơn hàng!" });
+        setAlert({
+          type: "error",
+          message: "Lỗi khi cập nhật ghi chú nhiều đơn hàng!",
+        });
       }
     },
     [bulkAddNotesOrderDetails, refetch]
@@ -330,12 +363,22 @@ function ManagerOrderContent() {
   const handleEditCustomerName = useCallback(
     async (orderDetail: OrderDetail, newCustomerName: string) => {
       try {
-        await updateOrderDetailCustomerName(Number(orderDetail.id), newCustomerName, orderDetail);
-        setAlert({ type: "success", message: "Đã cập nhật tên khách hàng thành công!" });
+        await updateOrderDetailCustomerName(
+          Number(orderDetail.id),
+          newCustomerName,
+          orderDetail
+        );
+        setAlert({
+          type: "success",
+          message: "Đã cập nhật tên khách hàng thành công!",
+        });
         refetch();
       } catch (err) {
         console.error("Error updating customer name:", err);
-        setAlert({ type: "error", message: "Lỗi khi cập nhật tên khách hàng!" });
+        setAlert({
+          type: "error",
+          message: "Lỗi khi cập nhật tên khách hàng!",
+        });
       }
     },
     [updateOrderDetailCustomerName, refetch]
@@ -346,7 +389,10 @@ function ManagerOrderContent() {
     async (orderDetail: OrderDetail, reason?: string) => {
       try {
         await addToBlacklist(Number(orderDetail.id), reason);
-        setAlert({ type: "success", message: "Đã thêm vào blacklist thành công!" });
+        setAlert({
+          type: "success",
+          message: "Đã thêm vào blacklist thành công!",
+        });
         refetch();
       } catch (err) {
         console.error("Error adding to blacklist:", err);
@@ -379,11 +425,14 @@ function ManagerOrderContent() {
       field: "quantity" | "unit_price" | "created_at" | null,
       direction: "asc" | "desc" | null
     ) => {
-      setSortField(field);
-      setSortDirection(direction);
-      setPage(1); // Reset về page 1 khi sort
+      // ✅ Batch update tất cả cùng lúc
+      setFilters({
+        sortField: field,
+        sortDirection: direction,
+        page: 1,
+      });
     },
-    [setSortField, setSortDirection, setPage]
+    [setFilters]
   );
 
   // Effects
