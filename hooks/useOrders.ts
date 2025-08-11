@@ -1200,6 +1200,7 @@ export const useOrders = (): UseOrdersReturn => {
                   method: "PUT",
                   headers: {
                     "Content-Type": "application/json",
+                    "X-Master-Key": process.env.NEXT_PUBLIC_MASTER_KEY || "",
                   },
                   body: JSON.stringify(payload),
                 });
