@@ -28,7 +28,7 @@ interface OrderFilters {
   departments?: string;
   products?: string;
   warningLevel?: string;
-  sortField?: "quantity" | "unit_price" | null;
+  sortField?: "quantity" | "unit_price" | "created_at" | null;
   sortDirection?: "asc" | "desc" | null;
 }
 
@@ -64,7 +64,7 @@ interface UseOrdersReturn {
   setProducts: (products: string, resetPage?: boolean) => void;
   setWarningLevel: (warningLevel: string, resetPage?: boolean) => void;
   setSortField: (
-    sortField: "quantity" | "unit_price" | null,
+    sortField: "quantity" | "unit_price" | "created_at" | null,
     resetPage?: boolean
   ) => void;
   setSortDirection: (
@@ -255,6 +255,7 @@ export const useOrders = (): UseOrdersReturn => {
     const sortField = searchParams.get("sortField") as
       | "quantity"
       | "unit_price"
+      | "created_at"
       | null;
     const sortDirection = searchParams.get("sortDirection") as
       | "asc"
@@ -516,10 +517,23 @@ export const useOrders = (): UseOrdersReturn => {
         }
         if (currentFilters.sortField) {
           params.append("sortField", currentFilters.sortField);
+          console.log(
+            "✅ Added sortField to params:",
+            currentFilters.sortField
+          );
         }
         if (currentFilters.sortDirection) {
           params.append("sortDirection", currentFilters.sortDirection);
+          console.log(
+            "✅ Added sortDirection to params:",
+            currentFilters.sortDirection
+          );
         }
+
+        console.log("🔍 Sending sort params:", {
+          sortField: currentFilters.sortField,
+          sortDirection: currentFilters.sortDirection,
+        });
 
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
@@ -691,7 +705,10 @@ export const useOrders = (): UseOrdersReturn => {
   );
 
   const setSortField = useCallback(
-    (sortField: "quantity" | "unit_price" | null, resetPage = true) => {
+    (
+      sortField: "quantity" | "unit_price" | "created_at" | null,
+      resetPage = true
+    ) => {
       const newFilters = {
         ...filters,
         sortField,
@@ -1193,9 +1210,11 @@ export const useOrders = (): UseOrdersReturn => {
 
         if (!res.ok) {
           const errorText = await res.text();
-          throw new Error(`Failed to add to blacklist: ${res.status} - ${errorText}`);
+          throw new Error(
+            `Failed to add to blacklist: ${res.status} - ${errorText}`
+          );
         }
-        
+
         return res.json();
       });
     },
@@ -1448,11 +1467,6 @@ export const useOrders = (): UseOrdersReturn => {
     }
   }, []);
 
-  // // ✅ Update canGoBack state based on navigation history
-  // useEffect(() => {
-  //   setCanGoBack(hasNavigationHistory());
-  // }, [filters]);
-
   return {
     // State
     orders,
@@ -1517,7 +1531,5 @@ export const useOrders = (): UseOrdersReturn => {
 
     // ✅ Debug functions
     forceResetRestoration,
-
-  } as unknown as UseOrdersReturn & {
-  };
+  } as unknown as UseOrdersReturn & {};
 };

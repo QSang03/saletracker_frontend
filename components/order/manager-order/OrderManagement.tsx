@@ -78,10 +78,10 @@ interface OrderManagementProps {
   onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
   onSearch?: (searchTerm: string) => void;
   onSort?: (
-    field: "quantity" | "unit_price" | null,
+    field: "quantity" | "unit_price" | "created_at" | null,
     direction: "asc" | "desc" | null
   ) => void;
-  currentSortField?: "quantity" | "unit_price" | null;
+  currentSortField?: "quantity" | "unit_price" | "created_at" | null;
   currentSortDirection?: "asc" | "desc" | null;
   loading?: boolean;
 }
@@ -342,7 +342,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   // ✅ Function để handle sort - 3 trạng thái: desc -> asc -> null
-  const handleSort = (field: "quantity" | "unit_price") => {
+  const handleSort = (field: "quantity" | "unit_price" | "created_at") => {
     if (!onSort) return;
 
     if (currentSortField !== field) {
@@ -414,7 +414,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const displayOrders = safeOrders;
 
   // ✅ Function để render sort icon
-  const renderSortIcon = (field: "quantity" | "unit_price") => {
+  const renderSortIcon = (field: "quantity" | "unit_price" | "created_at") => {
     if (currentSortField !== field) {
       return null; // Không hiển thị icon nếu không phải cột đang sort
     }
@@ -735,8 +735,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center">
                     ⏰ Gia hạn
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
-                    📅 Thời gian
+                  <TableHead
+                    className="font-bold text-slate-700 text-sm w-[120px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                    onDoubleClick={() => handleSort("created_at")} // ✅ THÊM handler
+                    title="Double-click để sắp xếp"
+                  >
+                    📅 Thời gian{renderSortIcon("created_at")}{" "}
+                    {/* ✅ THÊM icon */}
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">
                     👤 Nhân viên
@@ -765,12 +770,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                     📊 Trạng thái
                   </TableHead>
                   {/* ✅ CẬP NHẬT: Thêm width cụ thể cho cột thời gian gia hạn cuối */}
-                  <TableHead className="font-bold text-slate-700 text-sm w-[130px] text-center bg-gradient-to-r from-purple-50 to-violet-50 border-b-2 border-purple-200">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[130px] text-center">
                     ⏰ Gia hạn cuối
                   </TableHead>
 
                   {/* ✅ CẬP NHẬT: Thêm width cụ thể cho cột lý do gia hạn */}
-                  <TableHead className="font-bold text-slate-700 text-sm w-[350px] text-center bg-gradient-to-r from-pink-50 to-rose-50 border-b-2 border-pink-200">
+                  <TableHead className="font-bold text-slate-700 text-sm w-[350px] text-center">
                     📋 Lý do gia hạn
                   </TableHead>
 
@@ -979,7 +984,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 </span>
                               </span>
                             </TableCell>
-                            <TableCell className="p-3 text-center border-r border-gray-200 w-[130px]">
+                            <TableCell className="p-3 text-center w-[130px]">
                               {orderDetail.last_extended_at ? (
                                 <div className="flex flex-col items-center space-y-1">
                                   <span className="text-xs text-purple-600 font-medium truncate">
@@ -1020,7 +1025,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="p-3 text-center border-r border-gray-200 w-[120px]">
+                            <TableCell className="p-3 text-center w-[120px]">
                               {orderDetail.extend_reason ? (
                                 <span
                                   className={`px-2 py-1 rounded-full text-xs font-medium truncate ${
@@ -1032,7 +1037,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 >
                                   {orderDetail.extend_reason ===
                                   "hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ" ? (
-                                    <>🤖 Hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ</>
+                                    <>
+                                      🤖 Hệ thống tự gia hạn vào chủ nhật hoặc
+                                      nghỉ lễ
+                                    </>
                                   ) : (
                                     <>👤 Chính chủ gia hạn</>
                                   )}

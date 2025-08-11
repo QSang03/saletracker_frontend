@@ -376,7 +376,7 @@ function ManagerOrderContent() {
   // ✅ Handle sort từ OrderManagement
   const handleSort = useCallback(
     (
-      field: "quantity" | "unit_price" | null,
+      field: "quantity" | "unit_price" | "created_at" | null,
       direction: "asc" | "desc" | null
     ) => {
       setSortField(field);
