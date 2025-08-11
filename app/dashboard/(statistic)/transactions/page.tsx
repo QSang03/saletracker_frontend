@@ -94,17 +94,35 @@ const itemVariants = {
   },
 };
 
+function getLastNDaysExcludingSundays(n: number, end?: Date) {
+  const endDate = end ? new Date(end) : new Date();
+  // If endDate is Sunday, move to Saturday
+  if (endDate.getDay() === 0) {
+    endDate.setDate(endDate.getDate() - 1);
+  }
+  const dates: Date[] = [];
+  const cursor = new Date(endDate);
+  while (dates.length < n) {
+    if (cursor.getDay() !== 0) {
+      dates.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  const from = dates[dates.length - 1];
+  const to = dates[0];
+  return { from: startOfDay(from), to: endOfDay(to) };
+}
+
 function getPresetRange(period: Period): DateRange {
   const now = new Date();
   const to = endOfDay(now);
   if (period === "day") {
-    const from = startOfDay(now);
-    return { from, to };
+  // Last 7 days rolling, skipping Sundays
+  return getLastNDaysExcludingSundays(7, now);
   }
   if (period === "week") {
-    const from = new Date(now);
-    from.setDate(now.getDate() - 6);
-    return { from: startOfDay(from), to };
+  // Last 7 days rolling, skipping Sundays
+  return getLastNDaysExcludingSundays(7, now);
   }
   // quarter
   const q = Math.floor(now.getMonth() / 3);
@@ -117,16 +135,16 @@ function getPreviousRange(period: Period, current: DateRange): DateRange {
   const to = current.to ? new Date(current.to) : new Date();
   const from = current.from ? new Date(current.from) : new Date();
   if (period === "day") {
-    const prev = new Date(from);
-    prev.setDate(prev.getDate() - 1);
-    return { from: startOfDay(prev), to: endOfDay(prev) };
+  // Previous window of 7 non-Sunday days before current range
+  const prevEnd = new Date(startOfDay(from));
+  prevEnd.setDate(prevEnd.getDate() - 1);
+  return getLastNDaysExcludingSundays(7, prevEnd);
   }
   if (period === "week") {
-    const prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - 7);
-    const prevTo = new Date(to);
-    prevTo.setDate(prevTo.getDate() - 7);
-    return { from: startOfDay(prevFrom), to: endOfDay(prevTo) };
+  // Previous window of 7 non-Sunday days before current range
+  const prevEnd = new Date(startOfDay(from));
+  prevEnd.setDate(prevEnd.getDate() - 1);
+  return getLastNDaysExcludingSundays(7, prevEnd);
   }
   // quarter
   const now = from;
@@ -187,9 +205,13 @@ function groupKeyByPeriod(date: Date, period: Period): string {
   }
   if (period === "week") {
     const d = start;
-    return `Tuần ${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1)
+    // Label week as Mon-Sat
+    const sat = new Date(d);
+    sat.setDate(d.getDate() + 5);
+    const fmt = (x: Date) => `${x.getDate().toString().padStart(2, "0")}/${(x.getMonth() + 1)
       .toString()
       .padStart(2, "0")}`;
+    return `Tuần ${fmt(d)}-${fmt(sat)}`;
   }
   const q = Math.floor(start.getMonth() / 3) + 1;
   return `Q${q} ${start.getFullYear()}`;
@@ -201,10 +223,11 @@ function getBucketRange(ts: number, period: Period): { from: Date; to: Date } {
     return { from: startOfDay(start), to: endOfDay(start) };
   }
   if (period === "week") {
-    const from = startOfWeekMonday(start);
-    const to = new Date(from);
-    to.setDate(from.getDate() + 6);
-    return { from, to: endOfDay(to) };
+  const from = startOfWeekMonday(start);
+  const to = new Date(from);
+  // End at Saturday
+  to.setDate(from.getDate() + 5);
+  return { from, to: endOfDay(to) };
   }
   // quarter
   const from = startOfQuarter(start);
@@ -355,8 +378,8 @@ function generateMockData(range: DateRange): OrderDetail[] {
 // Main component
 export default function ElegantTransactionsPage() {
   const { getDetailedStats } = useOrderStats();
-  const [period, setPeriod] = useState<Period>("week");
-  const [range, setRange] = useState<DateRange>(() => getPresetRange("week"));
+  const [period, setPeriod] = useState<Period>("day");
+  const [range, setRange] = useState<DateRange>(() => getPresetRange("day"));
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<OrderDetail[]>([]);
   const [prevItems, setPrevItems] = useState<OrderDetail[]>([]);
@@ -419,13 +442,33 @@ export default function ElegantTransactionsPage() {
         if (cancelled) return;
         const curItems = mapRowsToOrderDetails(curRes?.rows || []);
         const prevMapped = mapRowsToOrderDetails(prevRes?.rows || []);
-        setItems(curItems);
-        setPrevItems(prevMapped);
+        // Filter out Sundays from both sets
+        const isSunday = (d: Date) => d.getDay() === 0;
+        const filterSunday = (arr: OrderDetail[]) =>
+          arr.filter((it) => {
+            const created = it.order?.created_at
+              ? new Date(it.order.created_at as any)
+              : new Date(it.created_at as any);
+            return !isSunday(created);
+          });
+        setItems(filterSunday(curItems));
+        setPrevItems(filterSunday(prevMapped));
       } catch (error) {
         console.warn("Stats API failed, falling back to mock:", error);
         if (!cancelled) {
-          setItems(generateMockData(range));
-          setPrevItems(generateMockData(getPreviousRange(period, range)));
+          // Apply same Sunday filter to mock
+          const curMock = generateMockData(range);
+          const prevMock = generateMockData(getPreviousRange(period, range));
+          const isSun = (d: Date) => d.getDay() === 0;
+          const filterSunday = (arr: OrderDetail[]) =>
+            arr.filter((it) => {
+              const created = it.order?.created_at
+                ? new Date(it.order.created_at as any)
+                : new Date(it.created_at as any);
+              return !isSun(created);
+            });
+          setItems(filterSunday(curMock));
+          setPrevItems(filterSunday(prevMock));
         }
       } finally {
         if (!cancelled) setLoading(false);
