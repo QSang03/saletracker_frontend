@@ -180,6 +180,78 @@ const parseMessageContent = (content: string, contentType?: string) => {
     // Try to parse as JSON first
     const parsed = JSON.parse(content);
 
+    if (contentType === "SYSTEM") {
+      // Handle undo message action
+      if (parsed.action === "undo_message") {
+        return {
+          type: "system_action",
+          action: "undo_message",
+          originalContent: parsed.originalContent,
+          displayText: "Tin nhắn đã được hoàn tác",
+          icon: "↶",
+          actionData: parsed,
+        };
+      }
+
+      // Handle delete message action
+      if (parsed.action === "delete_message") {
+        return {
+          type: "system_action",
+          action: "delete_message",
+          deletedMessageId: parsed.deletedMessageId,
+          deletedBy: parsed.deletedBy,
+          deleteType: parsed.deleteType,
+          displayText: "Tin nhắn đã được xóa",
+          icon: "🗑️",
+          actionData: parsed,
+        };
+      }
+
+      // Handle msginfo.actionlist system actions
+      if (parsed.systemAction === "msginfo.actionlist") {
+        const message = parsed.message || "";
+        let actionIcon = "ℹ️";
+        let actionType = "system_info";
+
+        // Determine action type based on message content
+        if (message.includes("tạo nhắc hẹn")) {
+          actionIcon = "⏰";
+          actionType = "reminder_created";
+        } else if (message.includes("xóa nhắc hẹn")) {
+          actionIcon = "🗑️";
+          actionType = "reminder_deleted";
+        } else if (message.includes("kết bạn")) {
+          actionIcon = "🤝";
+          actionType = "friend_added";
+        } else if (message.includes("bỏ ghim")) {
+          actionIcon = "📌";
+          actionType = "message_unpinned";
+        } else if (message.includes("ghim")) {
+          actionIcon = "📌";
+          actionType = "message_pinned";
+        }
+
+        return {
+          type: "system_action",
+          action: "msginfo_actionlist",
+          systemAction: parsed.systemAction,
+          message: processTextWithEmoji(message),
+          actionType,
+          icon: actionIcon,
+          actionData: parsed.actionData || {},
+        };
+      }
+
+      // Generic system message fallback
+      return {
+        type: "system_action",
+        action: "unknown_system",
+        displayText: "Hành động hệ thống",
+        icon: "⚙️",
+        actionData: parsed,
+      };
+    }
+
     // ✅ Handle IMAGE contentType with imageUrl
     if (contentType === "IMAGE" && parsed.imageUrl) {
       return {
@@ -340,6 +412,94 @@ const downloadFileFromUrl = (fileUrl: string, fileName: string) => {
     window.open(fileUrl, "_blank");
     toast.info(`Đã mở file trong tab mới: ${fileName}`);
   }
+};
+
+const SystemActionRenderer = ({
+  actionData,
+  senderType = "customer",
+}: {
+  actionData: any;
+  senderType?: "staff" | "customer" | "bot";
+}) => {
+  const isStaff = senderType === "staff";
+  const isBot = senderType === "bot";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      className={cn(
+        "p-3 rounded-xl border-2 transition-all duration-200",
+        isStaff
+          ? "bg-blue-50/50 border-blue-200/50"
+          : isBot
+          ? "bg-yellow-50/50 border-yellow-200/50"
+          : "bg-gray-50/80 border-gray-200/80"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm",
+            isStaff
+              ? "bg-blue-100 text-blue-600"
+              : isBot
+              ? "bg-yellow-100 text-yellow-600"
+              : "bg-gray-100 text-gray-600"
+          )}
+        >
+          {actionData.icon}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div
+            className={cn(
+              "font-medium text-sm",
+              isStaff
+                ? "text-blue-700"
+                : isBot
+                ? "text-yellow-700"
+                : "text-gray-700"
+            )}
+          >
+            {actionData.message || actionData.displayText}
+          </div>
+
+          <div
+            className={cn(
+              "text-xs mt-1 opacity-75",
+              isStaff
+                ? "text-blue-600"
+                : isBot
+                ? "text-yellow-600"
+                : "text-gray-500"
+            )}
+          >
+            {actionData.action === "undo_message" &&
+              "Hành động: Hoàn tác tin nhắn"}
+            {actionData.action === "delete_message" &&
+              "Hành động: Xóa tin nhắn"}
+            {actionData.action === "msginfo_actionlist" &&
+              `Loại: ${actionData.actionType}`}
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium",
+            isStaff
+              ? "bg-blue-100 text-blue-700"
+              : isBot
+              ? "bg-yellow-100 text-yellow-700"
+              : "bg-gray-100 text-gray-600"
+          )}
+        >
+          Hệ thống
+        </div>
+      </div>
+    </motion.div>
+  );
 };
 
 // ✅ ENHANCED: Attachment renderer with proper file handling
@@ -728,7 +888,15 @@ const ZaloChatMessage = ({
             )}
 
             {/* ✅ Handle parsed message content */}
-            {parsedMessage.type === "image" ? (
+            {parsedMessage.type === "system_action" ? (
+              // ✅ Display system action message
+              <div className="mb-3">
+                <SystemActionRenderer
+                  actionData={parsedMessage}
+                  senderType={message.sender}
+                />
+              </div>
+            ) : parsedMessage.type === "image" ? (
               // ✅ Display inline image from imageUrl (có thể phóng to)
               <div className="mb-3">
                 <motion.div
