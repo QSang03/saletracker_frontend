@@ -41,6 +41,7 @@ import {
   Star,
   TrendingUp,
   Eye,
+  EyeOff,
   ChevronUp,
   ChevronDown,
   Sparkles,
@@ -57,6 +58,8 @@ import BulkActions from "./BulkActions";
 import BulkDeleteModal from "./BulkDeleteModal";
 import BulkExtendModal from "./BulkExtendModal";
 import BulkNotesModal from "./BulkNotesModal";
+import HideOrderDetailModal from "./HideOrderDetailModal";
+import BulkHideModal from "./BulkHideModal";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -67,15 +70,17 @@ interface OrderManagementProps {
   startIndex: number;
   onReload: () => void;
   onEdit?: (orderDetail: OrderDetail, data: any) => void;
-  onDelete?: (orderDetail: OrderDetail, reason: string) => void;
+  onDelete?: (orderDetail: OrderDetail, reason?: string) => void;
   onEditCustomerName?: (
     orderDetail: OrderDetail,
     newCustomerName: string
   ) => void;
-  onBulkDelete?: (orderDetails: OrderDetail[], reason: string) => void;
+  onBulkDelete?: (orderDetails: OrderDetail[], reason?: string) => void;
   onBulkExtend?: (orderDetails: OrderDetail[]) => void;
   onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
   onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
+  onBulkHide?: (orderDetails: OrderDetail[], reason: string) => void;
+  onHide?: (orderDetail: OrderDetail, reason: string) => void;
   onSearch?: (searchTerm: string) => void;
   onSort?: (
     field: "quantity" | "unit_price" | "created_at" | null,
@@ -155,6 +160,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onBulkExtend,
   onBulkNotes,
   onAddToBlacklist,
+  onBulkHide,
+  onHide,
   onSearch,
   onSort,
   currentSortField,
@@ -182,9 +189,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(
     null
   );
+  const [hidingDetail, setHidingDetail] = useState<OrderDetail | null>(null);
   const [viewingDetail, setViewingDetail] = useState<OrderDetail | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isHideModalOpen, setIsHideModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
   // ✅ Customer name edit states
@@ -206,6 +215,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isBulkExtendModalOpen, setIsBulkExtendModalOpen] = useState(false);
   const [isBulkNotesModalOpen, setIsBulkNotesModalOpen] = useState(false);
+  const [isBulkHideModalOpen, setIsBulkHideModalOpen] = useState(false);
 
   // ✅ Get selected orders
   const selectedOrders = useMemo(() => {
@@ -271,7 +281,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsBulkNotesModalOpen(true);
   };
 
-  const handleBulkDeleteConfirm = (reason: string) => {
+  const handleBulkHide = () => {
+    setIsBulkHideModalOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = (reason?: string) => {
     if (onBulkDelete && selectedOrders.length > 0) {
       onBulkDelete(selectedOrders, reason);
       setSelectedOrderIds(new Set());
@@ -305,6 +319,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsDeleteModalOpen(true);
   };
 
+  const handleHideClick = (orderDetail: OrderDetail) => {
+    setHidingDetail(orderDetail);
+    setIsHideModalOpen(true);
+  };
+
   const handleViewClick = (orderDetail: OrderDetail) => {
     setViewingDetail(orderDetail);
     setIsViewModalOpen(true);
@@ -318,11 +337,19 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-  const handleDeleteConfirm = (reason: string) => {
+  const handleDeleteConfirm = (reason?: string) => {
     if (deletingDetail && onDelete) {
       onDelete(deletingDetail, reason);
       setIsDeleteModalOpen(false);
       setDeletingDetail(null);
+    }
+  };
+
+  const handleHideConfirm = (reason: string) => {
+    if (hidingDetail && onHide) {
+      onHide(hidingDetail, reason);
+      setIsHideModalOpen(false);
+      setHidingDetail(null);
     }
   };
 
@@ -334,6 +361,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleDeleteCancel = () => {
     setIsDeleteModalOpen(false);
     setDeletingDetail(null);
+  };
+
+  const handleHideCancel = () => {
+    setIsHideModalOpen(false);
+    setHidingDetail(null);
   };
 
   const handleViewCancel = () => {
@@ -704,6 +736,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           onBulkDelete={handleBulkDelete}
           onBulkExtend={handleBulkExtend}
           onBulkNotes={handleBulkNotes}
+          onBulkHide={handleBulkHide}
           loading={loading}
           canAct={canBulkAct}
         />
@@ -1142,6 +1175,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   </Tooltip>
                                 </POrderDynamic>
 
+        <POrderDynamic action="update">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() => owner && handleHideClick(orderDetail)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition-colors"
+                                        disabled={!owner}
+                                        title={owner ? "Ẩn" : "Chỉ chủ sở hữu được ẩn"}
+                                      >
+          <EyeOff className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{owner ? "Ẩn" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
+
                                 <POrderDynamic action="update">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -1203,6 +1256,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           isOpen={isDeleteModalOpen}
           onClose={handleDeleteCancel}
           onConfirm={handleDeleteConfirm}
+          loading={loading}
+        />
+      )}
+
+      {hidingDetail && (
+        <HideOrderDetailModal
+          orderDetail={hidingDetail}
+          isOpen={isHideModalOpen}
+          onClose={handleHideCancel}
+          onConfirm={handleHideConfirm}
           loading={loading}
         />
       )}
@@ -1641,6 +1704,20 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         isOpen={isBulkNotesModalOpen}
         onClose={() => setIsBulkNotesModalOpen(false)}
         onConfirm={handleBulkNotesConfirm}
+        loading={loading}
+      />
+
+      <BulkHideModal
+        selectedOrders={selectedOrders}
+        isOpen={isBulkHideModalOpen}
+        onClose={() => setIsBulkHideModalOpen(false)}
+        onConfirm={(reason: string) => {
+          if (onBulkHide && selectedOrders.length > 0) {
+            onBulkHide(selectedOrders, reason);
+            setSelectedOrderIds(new Set());
+            setIsBulkHideModalOpen(false);
+          }
+        }}
         loading={loading}
       />
 

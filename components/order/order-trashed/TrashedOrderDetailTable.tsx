@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function TrashedOrderDetailTable() {
@@ -162,6 +163,45 @@ export default function TrashedOrderDetailTable() {
     onConfirm: () => {},
   });
 
+  // ✅ Enhanced Skeleton Row Component
+  const SkeletonTableRow = () => (
+    <TableRow className="group transition-all duration-300 border-b border-red-100">
+      <TableCell className="min-w-[60px] text-center py-4 px-6">
+        <Skeleton className="h-3 w-3 rounded animate-pulse mx-auto" />
+      </TableCell>
+      <TableCell className="min-w-[80px] py-4 px-6">
+        <Skeleton className="h-4 w-8 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[120px] py-4 px-6">
+        <Skeleton className="h-4 w-16 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[180px] py-4 px-6">
+        <Skeleton className="h-4 w-24 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[220px] py-4 px-6">
+        <Skeleton className="h-4 w-32 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[280px] py-4 px-6">
+        <Skeleton className="h-4 w-36 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[80px] text-center py-4 px-6">
+        <Skeleton className="h-4 w-6 mx-auto rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[120px] text-center py-4 px-6">
+        <Skeleton className="h-4 w-16 mx-auto rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[180px] py-4 px-6">
+        <Skeleton className="h-4 w-20 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[180px] py-4 px-6">
+        <Skeleton className="h-4 w-20 rounded-lg animate-pulse" />
+      </TableCell>
+      <TableCell className="min-w-[140px] py-4 px-6">
+        <Skeleton className="h-7 w-20 rounded-lg animate-pulse" />
+      </TableCell>
+    </TableRow>
+  );
+
   return (
     <div className="h-full overflow-hidden relative">
       {alert && (
@@ -251,143 +291,271 @@ export default function TrashedOrderDetailTable() {
                 : [],
             }}
           >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[40px]">
-                    <Checkbox
-                      checked={
-                        data.length > 0 && data.every((d) => selected.has(d.id))
-                      }
-                      onCheckedChange={(checked) => {
-                        if (checked)
-                          setSelected(new Set(data.map((d) => d.id)));
-                        else setSelected(new Set());
-                      }}
-                      aria-label="Select all"
-                    />
-                  </TableHead>
-                  <TableHead className="w-[60px]">#</TableHead>
-                  <TableHead>Mã đơn</TableHead>
-                  <TableHead>Nhân viên</TableHead>
-                  <TableHead>Khách hàng</TableHead>
-                  <TableHead>Mặt hàng</TableHead>
-                  <TableHead>SL</TableHead>
-                  <TableHead>Đơn giá</TableHead>
-                  <TableHead>Lý do xóa</TableHead>
-                  <TableHead>Ngày giờ xóa</TableHead>
-                  <TableHead>Ngày giờ tạo</TableHead>
-                  <TableHead>Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={11}
-                      className="text-center py-6 text-slate-500"
-                    >
-                      Không có dữ liệu
-                    </TableCell>
+            {/* ✅ Enhanced Table Container - CHỈ PHẦN NÀY ĐƯỢC TỐI ƯU */}
+            <div className="relative rounded-2xl shadow-2xl bg-white border border-gray-200 max-h-[600px] overflow-auto">
+              {/* Floating gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 via-transparent to-orange-500/5 pointer-events-none rounded-2xl"></div>
+
+              <Table className="relative whitespace-nowrap min-w-full">
+                <TableHeader className="sticky top-0 z-20">
+                  <TableRow className="bg-red-100 hover:bg-red-200 transition-all duration-300 border-b-2 border-red-200">
+                    <TableHead className="min-w-[60px] text-center sticky top-0 bg-red-100 py-4 px-6">
+                      <Checkbox
+                        checked={
+                          data.length > 0 && data.every((d) => selected.has(d.id))
+                        }
+                        onCheckedChange={(checked) => {
+                          if (checked)
+                            setSelected(new Set(data.map((d) => d.id)));
+                          else setSelected(new Set());
+                        }}
+                        aria-label="Select all"
+                        className="border-2 border-red-400 data-[state=checked]:bg-red-500 data-[state=checked]:text-white transition-all duration-200"
+                      />
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[80px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0s" }}>📊</span>
+                        <span>STT</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[120px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.1s" }}>🆔</span>
+                        <span>Mã đơn</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[180px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.2s" }}>👨‍💼</span>
+                        <span>Nhân viên</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[220px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.3s" }}>👤</span>
+                        <span>Khách hàng</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[280px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.4s" }}>📦</span>
+                        <span>Mặt hàng</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[80px] font-bold text-center text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.5s" }}>🔢</span>
+                        <span>SL</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[120px] font-bold text-center text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.6s" }}>💰</span>
+                        <span>Đơn giá</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[180px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.7s" }}>🗑️</span>
+                        <span>Ngày xóa</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[180px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.8s" }}>📅</span>
+                        <span>Ngày tạo</span>
+                      </div>
+                    </TableHead>
+                    
+                    <TableHead className="min-w-[140px] font-bold text-sm text-red-800 tracking-wide sticky top-0 bg-red-100 py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block animate-bounce text-xs" style={{ animationDelay: "0.9s" }}>⚡</span>
+                        <span>Hành động</span>
+                      </div>
+                    </TableHead>
                   </TableRow>
-                )}
-                {data.map((od, idx) => {
-                  const owner = !!(
-                    od?.order?.sale_by?.id &&
-                    currentUser?.id &&
-                    od.order!.sale_by!.id === currentUser.id
-                  );
-                  return (
-                    <TableRow key={String(od.id)}>
-                      <TableCell className="text-center">
-                        <Checkbox
-                          checked={selected.has(od.id)}
-                          onCheckedChange={(checked) => {
-                            const s = new Set(selected);
-                            if (checked) s.add(od.id);
-                            else s.delete(od.id);
-                            setSelected(s);
-                          }}
-                          aria-label="Select row"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {(filters.page - 1) * filters.pageSize + idx + 1}
-                      </TableCell>
-                      <TableCell>#{od.id}</TableCell>
-                      <TableCell>
-                        {od.order?.sale_by?.fullName ||
-                          od.order?.sale_by?.username ||
-                          "--"}
-                      </TableCell>
-                      <TableCell>{od.customer_name || "--"}</TableCell>
-                      <TableCell>{od.raw_item || "--"}</TableCell>
-                      <TableCell className="text-center">
-                        {od.quantity ?? 0}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {od.unit_price
-                          ? Number(od.unit_price).toLocaleString("vi-VN") + "₫"
-                          : "0₫"}
-                      </TableCell>
-                      <TableCell>{od.reason || "--"}</TableCell>
-                      <TableCell>
-                        {od.deleted_at
-                          ? new Date(od.deleted_at as any).toLocaleString(
-                              "vi-VN"
-                            )
-                          : "--"}
-                      </TableCell>
-                      <TableCell>
-                        {od.created_at
-                          ? new Date(od.created_at as any).toLocaleString(
-                              "vi-VN"
-                            )
-                          : "--"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="edit"
-                          disabled={!owner}
-                          onClick={() => {
-                            setConfirmDialog({
-                              isOpen: true,
-                              title: "Xác nhận khôi phục",
-                              message: `Bạn có chắc chắn muốn khôi phục đơn hàng #${od.id}?`,
-                              onConfirm: async () => {
-                                try {
-                                  await bulkRestoreOrderDetails([
-                                    Number(od.id),
-                                  ]);
-                                  setAlert({
-                                    type: "success",
-                                    message: "Đã khôi phục 1 đơn",
-                                  });
-                                  reload();
-                                } catch {
-                                  setAlert({
-                                    type: "error",
-                                    message: "Khôi phục thất bại",
-                                  });
-                                } finally {
-                                  setConfirmDialog((prev) => ({
-                                    ...prev,
-                                    isOpen: false,
-                                  }));
-                                }
-                              },
-                            });
-                          }}
-                        >
-                          Khôi phục
-                        </Button>
+                </TableHeader>
+
+                <TableBody>
+                  {isLoading ? (
+                    // ✅ Enhanced Skeleton Loading
+                    Array.from({ length: filters.pageSize || 10 }).map(
+                      (_, index) => <SkeletonTableRow key={`skeleton-${index}`} />
+                    )
+                  ) : data.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={11} className="text-center py-20">
+                        <div className="space-y-6">
+                          <div className="text-6xl animate-pulse">🎉</div>
+                          <div className="text-xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                            Tuyệt vời! Không có đơn hàng nào bị xóa
+                          </div>
+                          <div className="text-base text-gray-500">
+                            Tất cả đơn hàng đều được giữ nguyên vẹn
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                  ) : (
+                    data.map((od, idx) => {
+                      const owner = isOwner(od);
+                      return (
+                        <TableRow 
+                          key={String(od.id)}
+                          className={`group relative transition-all duration-300 border-b border-red-100 hover:bg-red-50/50 ${
+                            idx % 2 === 0 ? "bg-white" : "bg-red-50/30"
+                          }`}
+                        >
+                          <TableCell className="min-w-[60px] text-center py-4 px-6">
+                            <Checkbox
+                              checked={selected.has(od.id)}
+                              onCheckedChange={(checked) => {
+                                const s = new Set(selected);
+                                if (checked) s.add(od.id);
+                                else s.delete(od.id);
+                                setSelected(s);
+                              }}
+                              aria-label="Select row"
+                              className="transition-all duration-200"
+                            />
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[80px] text-center py-4 px-6">
+                            <span className="inline-flex items-center justify-center w-8 h-8 bg-gradient-to-r from-red-100 to-orange-100 text-red-700 rounded-full text-sm font-bold shadow-sm">
+                              {(filters.page - 1) * filters.pageSize + idx + 1}
+                            </span>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[120px] py-4 px-6">
+                            <div className="font-mono text-sm font-bold bg-gradient-to-r from-red-600 to-orange-600 bg-clip-text text-transparent">
+                              #{od.id}
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[180px] py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                {(od.order?.sale_by?.fullName || od.order?.sale_by?.username || "??").charAt(0).toUpperCase()}
+                              </div>
+                              <div className="text-sm font-medium text-gray-800 leading-relaxed">
+                                {od.order?.sale_by?.fullName || od.order?.sale_by?.username || "—"}
+                              </div>
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[220px] py-4 px-6">
+                            <div className="text-sm font-medium text-gray-800 leading-relaxed" title={od.customer_name || "—"}>
+                              {od.customer_name || "—"}
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[280px] py-4 px-6">
+                            <div className="text-sm text-gray-700 leading-relaxed" title={od.raw_item || "—"}>
+                              {od.raw_item || "—"}
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[80px] text-center py-4 px-6">
+                            <span className="inline-flex items-center justify-center px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-sm font-semibold min-w-[40px] shadow-sm">
+                              {od.quantity ?? 0}
+                            </span>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[120px] text-center py-4 px-6">
+                            <span className="font-mono font-bold text-sm bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                              {od.unit_price
+                                ? Number(od.unit_price).toLocaleString("vi-VN") + "₫"
+                                : "0₫"}
+                            </span>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[180px] py-4 px-6">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>
+                              <span className="text-sm text-gray-600 font-medium">
+                                {od.deleted_at
+                                  ? new Date(od.deleted_at as any).toLocaleString("vi-VN")
+                                  : "—"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[180px] py-4 px-6">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                              <span className="text-sm text-gray-600 font-medium">
+                                {od.created_at
+                                  ? new Date(od.created_at as any).toLocaleString("vi-VN")
+                                  : "—"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="min-w-[140px] py-4 px-6">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!owner}
+                              onClick={() => {
+                                setConfirmDialog({
+                                  isOpen: true,
+                                  title: "Xác nhận khôi phục",
+                                  message: `Bạn có chắc chắn muốn khôi phục đơn hàng #${od.id}?`,
+                                  onConfirm: async () => {
+                                    try {
+                                      await bulkRestoreOrderDetails([Number(od.id)]);
+                                      setAlert({
+                                        type: "success",
+                                        message: "Đã khôi phục 1 đơn",
+                                      });
+                                      reload();
+                                    } catch {
+                                      setAlert({
+                                        type: "error",
+                                        message: "Khôi phục thất bại",
+                                      });
+                                    } finally {
+                                      setConfirmDialog((prev) => ({
+                                        ...prev,
+                                        isOpen: false,
+                                      }));
+                                    }
+                                  },
+                                });
+                              }}
+                              className={`group relative overflow-hidden px-3 py-1.5 rounded-lg transition-all duration-200 text-xs font-medium shadow-sm ${
+                                owner
+                                  ? "text-emerald-600 border-emerald-300 hover:border-emerald-400 bg-white hover:bg-emerald-50"
+                                  : "text-gray-400 border-gray-300 bg-gray-100 cursor-not-allowed"
+                              }`}
+                              title={
+                                owner
+                                  ? "Khôi phục đơn hàng này"
+                                  : "Chỉ chủ sở hữu đơn hàng mới được khôi phục"
+                              }
+                            >
+                              <span className="flex items-center gap-1">
+                                ♻️ <span>Khôi phục</span>
+                              </span>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </PaginatedTable>
         </CardContent>
 

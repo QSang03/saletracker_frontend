@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { OrderDetail } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -10,13 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   Trash2,
@@ -32,18 +24,9 @@ interface BulkDeleteModalProps {
   selectedOrders: OrderDetail[];
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: () => void;
   loading?: boolean;
 }
-
-const deleteReasons = [
-  "Khách không chốt",
-  "Giá không theo được",
-  "Kẹt công nợ",
-  "Đã chốt đơn",
-  "Sai tên mặt hàng",
-  "Mặt hàng của nhóm khác",
-];
 
 const BulkDeleteModal: React.FC<BulkDeleteModalProps> = ({
   selectedOrders,
@@ -52,47 +35,21 @@ const BulkDeleteModal: React.FC<BulkDeleteModalProps> = ({
   onConfirm,
   loading = false,
 }) => {
-  const [reason, setReason] = useState("");
-  const [customReason, setCustomReason] = useState("");
-  const [useCustomReason, setUseCustomReason] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   const handleConfirm = () => {
-    const finalReason = useCustomReason ? customReason.trim() : reason;
-    if (!finalReason) {
-      return;
-    }
     setShowConfirm(true);
   };
 
   const handleConfirmDelete = () => {
-    const finalReason = useCustomReason ? customReason.trim() : reason;
     setShowConfirm(false);
-    onConfirm(finalReason);
+    onConfirm();
   };
 
   const handleClose = () => {
-    setReason("");
-    setCustomReason("");
-    setUseCustomReason(false);
     setShowConfirm(false);
     onClose();
   };
-
-  const handleReasonChange = (value: string) => {
-    if (value === "custom") {
-      setUseCustomReason(true);
-      setReason("");
-    } else {
-      setUseCustomReason(false);
-      setReason(value);
-      setCustomReason("");
-    }
-  };
-
-  const isValid = useCustomReason
-    ? customReason.trim().length > 0
-    : reason.length > 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -158,7 +115,7 @@ const BulkDeleteModal: React.FC<BulkDeleteModalProps> = ({
                 đơn hàng đã chọn?
                 <br />
                 <span className="text-red-500 font-semibold">
-                  ⚠️ Hành động này không thể hoàn tác.
+                  ⚠️ Hành động này có thể ảnh hưởng đến dữ liệu thống kê và báo cáo của bạn.
                 </span>
               </DialogDescription>
             </DialogHeader>
@@ -207,74 +164,6 @@ const BulkDeleteModal: React.FC<BulkDeleteModalProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Reason selection with enhanced design */}
-              <div className="space-y-3">
-                <Label
-                  htmlFor="delete-reason"
-                  className="flex items-center gap-2 text-base font-bold text-gray-700"
-                >
-                  <AlertTriangle className="w-4 h-4 text-orange-500" />
-                  Lý do xóa <span className="text-red-500">*</span>
-                </Label>
-
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-200 to-purple-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
-                  <Select onValueChange={handleReasonChange}>
-                    <SelectTrigger className="relative h-12 text-base border-2 border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-200 hover:border-blue-300">
-                      <SelectValue placeholder="🤔 Chọn lý do xóa..." />
-                    </SelectTrigger>
-                    <SelectContent className="border-2 border-gray-200 rounded-xl shadow-xl">
-                      {deleteReasons.map((reasonOption, index) => (
-                        <SelectItem
-                          key={reasonOption}
-                          value={reasonOption}
-                          className="text-base py-3 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200 cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                            {reasonOption}
-                          </span>
-                        </SelectItem>
-                      ))}
-                      <SelectItem
-                        value="custom"
-                        className="text-base py-3 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 transition-all duration-200 cursor-pointer border-t border-gray-100"
-                      >
-                        <span className="flex items-center gap-2 font-medium text-purple-600">
-                          <Sparkles className="w-3 h-3" />
-                          Lý do khác...
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Custom reason textarea with enhanced design */}
-              {useCustomReason && (
-                <div className="space-y-3 animate-fadeIn">
-                  <Label
-                    htmlFor="custom-reason"
-                    className="flex items-center gap-2 text-base font-bold text-gray-700"
-                  >
-                    <Sparkles className="w-4 h-4 text-purple-500" />
-                    Lý do tùy chỉnh <span className="text-red-500">*</span>
-                  </Label>
-
-                  <div className="relative group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-200 to-pink-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
-                    <Textarea
-                      id="custom-reason"
-                      placeholder="✍️ Nhập lý do xóa chi tiết..."
-                      value={customReason}
-                      onChange={(e) => setCustomReason(e.target.value)}
-                      rows={4}
-                      className="relative text-base border-2 border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md focus:shadow-lg transition-all duration-200 focus:border-purple-300 resize-none"
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Action buttons with stunning effects */}
@@ -299,7 +188,7 @@ const BulkDeleteModal: React.FC<BulkDeleteModalProps> = ({
               <Button
                 variant="destructive"
                 onClick={handleConfirm}
-                disabled={!isValid || loading}
+                disabled={loading}
                 className="group relative overflow-hidden flex items-center gap-3 px-6 py-3 text-base font-bold
                          bg-gradient-to-r from-red-500 via-red-600 to-pink-600 
                          hover:from-red-600 hover:via-red-700 hover:to-pink-700 
@@ -364,20 +253,16 @@ const BulkDeleteModal: React.FC<BulkDeleteModalProps> = ({
         message={
           <div className="space-y-2">
             <p>Bạn có chắc chắn muốn xóa <strong>{selectedOrders.length}</strong> đơn hàng đã chọn?</p>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-3">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-3 mb-5">
               <p className="text-sm text-red-800">
-                <strong>⚠️ Cảnh báo:</strong> Hành động này <strong>không thể hoàn tác</strong>!
+                <strong>⚠️ Cảnh báo:</strong> Hành động này <strong>Hành động này có thể ảnh hưởng đến dữ liệu thống kê và báo cáo của bạn</strong>!
               </p>
-            </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2">
-              <p className="text-sm text-gray-600 font-medium">Lý do xóa:</p>
-              <p className="text-sm text-gray-800 mt-1 italic">"{useCustomReason ? customReason.trim() : reason}"</p>
             </div>
           </div>
         }
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowConfirm(false)}
-        confirmText="Xóa vĩnh viễn"
+        confirmText="Xóa đơn hàng"
         cancelText="Hủy"
       />
     </Dialog>

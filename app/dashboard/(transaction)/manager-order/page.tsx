@@ -68,6 +68,7 @@ function ManagerOrderContent() {
     bulkDeleteOrderDetails,
     bulkExtendOrderDetails,
     bulkAddNotesOrderDetails,
+  bulkHideOrderDetails,
     addToBlacklist,
     isLoading,
     error,
@@ -286,7 +287,7 @@ function ManagerOrderContent() {
 
   // ✅ Cập nhật handleDelete - chỉ nhận OrderDetail và reason
   const handleDelete = useCallback(
-    async (orderDetail: OrderDetail, reason: string) => {
+    async (orderDetail: OrderDetail, reason?: string) => {
       // if (!confirm("Bạn có chắc chắn muốn xóa order detail này?")) return;
 
       try {
@@ -298,12 +299,12 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi xóa order detail!" });
       }
     },
-    [deleteOrderDetail, refetch]
+  [deleteOrderDetail, refetch]
   ); // ✅ Thay đổi dependency
 
   // ✅ Handle bulk delete
   const handleBulkDelete = useCallback(
-    async (orderDetails: OrderDetail[], reason: string) => {
+    async (orderDetails: OrderDetail[], reason?: string) => {
       try {
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkDeleteOrderDetails(ids, reason);
@@ -402,6 +403,40 @@ function ManagerOrderContent() {
       }
     },
     [addToBlacklist, refetch]
+  );
+
+  // ✅ Handle hide (single)
+  const handleHide = useCallback(
+    async (orderDetail: OrderDetail, reason: string) => {
+      try {
+        await bulkHideOrderDetails([Number(orderDetail.id)], reason);
+        setAlert({ type: "success", message: "Đã ẩn đơn hàng thành công!" });
+        refetch();
+      } catch (err) {
+        console.error("Error hiding order detail:", err);
+        setAlert({ type: "error", message: "Lỗi khi ẩn đơn hàng!" });
+      }
+    },
+    [bulkHideOrderDetails, refetch]
+  );
+
+  // ✅ Handle bulk hide
+  const handleBulkHide = useCallback(
+    async (orderDetails: OrderDetail[], reason: string) => {
+      try {
+        const ids = orderDetails.map((od) => Number(od.id));
+        await bulkHideOrderDetails(ids, reason);
+        setAlert({
+          type: "success",
+          message: `Đã ẩn ${orderDetails.length} đơn hàng thành công!`,
+        });
+        refetch();
+      } catch (err) {
+        console.error("Error bulk hiding order details:", err);
+        setAlert({ type: "error", message: "Lỗi khi ẩn nhiều đơn hàng!" });
+      }
+    },
+    [bulkHideOrderDetails, refetch]
   );
 
   const handleReload = useCallback(() => {
@@ -755,6 +790,8 @@ function ManagerOrderContent() {
               onBulkDelete={handleBulkDelete}
               onBulkExtend={handleBulkExtend}
               onBulkNotes={handleBulkNotes}
+              onHide={handleHide}
+              onBulkHide={handleBulkHide}
               onSearch={handleSearch}
               onSort={handleSort}
               currentSortField={filters.sortField}

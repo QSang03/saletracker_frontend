@@ -8,6 +8,7 @@ interface BulkActionsProps {
   onBulkDelete: () => void;
   onBulkExtend: () => void;
   onBulkNotes: () => void;
+  onBulkHide?: () => void;
   loading?: boolean;
   canAct?: boolean; // when false, disable bulk actions due to ownership
 }
@@ -17,6 +18,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
   onBulkDelete,
   onBulkExtend,
   onBulkNotes,
+  onBulkHide,
   loading = false,
   canAct = true,
 }) => {
@@ -92,6 +94,30 @@ const BulkActions: React.FC<BulkActionsProps> = ({
 
             {/* Action buttons with MEGA spacing and effects */}
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 justify-start lg:justify-end w-full lg:w-auto">
+              {/* Hide Button */}
+              {onBulkHide && (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={onBulkHide}
+                  disabled={loading || !canAct}
+                  className="group relative overflow-hidden flex items-center justify-center gap-3 
+                           whitespace-nowrap min-w-[140px] px-6 py-4 text-base font-semibold
+                           bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 
+                           hover:from-amber-500 hover:via-amber-600 hover:to-orange-600 
+                           border-0 shadow-2xl hover:shadow-amber-500/40 
+                           transform hover:scale-110 hover:-translate-y-1
+                           transition-all duration-500 ease-out rounded-2xl text-white
+                           active:scale-95 active:translate-y-0"
+                  title={!canAct ? "Chỉ thao tác với đơn hàng do bạn sở hữu" : undefined}
+                >
+                  <div
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent 
+                                -translate-x-full group-hover:translate-x-full transition-transform duration-1000"
+                  ></div>
+                  Ẩn ({selectedOrders.length})
+                </Button>
+              )}
               {/* Delete Button - Enhanced */}
               <Button
                 variant="destructive"

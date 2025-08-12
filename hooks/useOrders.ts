@@ -97,17 +97,21 @@ interface UseOrdersReturn {
     customerName: string,
     orderDetail?: OrderDetail
   ) => Promise<OrderDetail>;
-  deleteOrderDetail: (id: number, reason: string) => Promise<void>;
+  deleteOrderDetail: (id: number, reason?: string) => Promise<void>;
   getOrderDetailById: (id: number) => Promise<OrderDetail>;
 
   // Bulk operations
-  bulkDeleteOrderDetails: (ids: number[], reason: string) => Promise<void>;
+  bulkDeleteOrderDetails: (ids: number[], reason?: string) => Promise<void>;
   bulkUpdateOrderDetails: (
     ids: number[],
     updates: Partial<OrderDetail>
   ) => Promise<void>;
   bulkExtendOrderDetails: (ids: number[]) => Promise<void>;
   bulkAddNotesOrderDetails: (ids: number[], notes: string) => Promise<void>;
+
+  // Hide/Unhide operations
+  bulkHideOrderDetails: (ids: number[], reason: string) => Promise<void>;
+  bulkUnhideOrderDetails: (ids: number[]) => Promise<void>;
 
   // Blacklist operations
   addToBlacklist: (orderDetailId: number, reason?: string) => Promise<void>;
@@ -1236,7 +1240,7 @@ export const useOrders = (): UseOrdersReturn => {
   );
 
   const deleteOrderDetail = useCallback(
-    async (id: number, reason: string): Promise<void> => {
+    async (id: number, reason?: string): Promise<void> => {
       return handleApiCall(async () => {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/order-details/${id}`,
@@ -1274,7 +1278,7 @@ export const useOrders = (): UseOrdersReturn => {
 
   // Bulk operations
   const bulkDeleteOrderDetails = useCallback(
-    async (ids: number[], reason: string): Promise<void> => {
+    async (ids: number[], reason?: string): Promise<void> => {
       return handleApiCall(async () => {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/order-details/bulk-delete`,
@@ -1290,6 +1294,51 @@ export const useOrders = (): UseOrdersReturn => {
 
         if (!res.ok)
           throw new Error(`Failed to bulk delete order details: ${res.status}`);
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
+  // New: bulk hide/unhide APIs
+  const bulkHideOrderDetails = useCallback(
+    async (ids: number[], reason: string): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/hidden/bulk-hide`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids, reason }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to bulk hide order details: ${res.status}`);
+      });
+    },
+    [handleApiCall, getAuthHeaders]
+  );
+
+  const bulkUnhideOrderDetails = useCallback(
+    async (ids: number[]): Promise<void> => {
+      return handleApiCall(async () => {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/hidden/bulk-unhide`,
+          {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ids }),
+          }
+        );
+
+        if (!res.ok)
+          throw new Error(`Failed to bulk unhide order details: ${res.status}`);
       });
     },
     [handleApiCall, getAuthHeaders]
@@ -1976,6 +2025,8 @@ export const useOrders = (): UseOrdersReturn => {
     bulkUpdateOrderDetails,
     bulkExtendOrderDetails,
     bulkAddNotesOrderDetails,
+  bulkHideOrderDetails,
+  bulkUnhideOrderDetails,
 
     // Blacklist operations
     addToBlacklist,
