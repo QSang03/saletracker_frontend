@@ -1,4 +1,5 @@
 "use client";
+
 import { Suspense, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,12 @@ export default function HiddenOrderPage() {
     showAlert("info", "Đã làm mới dữ liệu thành công");
   };
 
+  // ✅ THÊM: Handle reset filter with localStorage clear
+  const handleResetFilter = () => {
+    hiddenOrdersHook.resetFilters();
+    showAlert("info", "Đã xóa tất cả filter và làm mới dữ liệu");
+  };
+
   return (
     <>
       {/* Server Response Alert */}
@@ -37,38 +44,42 @@ export default function HiddenOrderPage() {
           type={alert.type}
           message={alert.message}
           onClose={hideAlert}
-          className="fixed top-4 right-4 z-50 max-w-md shadow-lg"
         />
       )}
 
-      <Card className="w-full">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+          <CardTitle className="text-2xl font-bold flex items-center gap-2">
             👻 Quản lý đơn hàng đã ẩn
           </CardTitle>
-          <Button
-            onClick={handleReload}
-            variant="outline"
-            className="flex items-center gap-2"
-            disabled={hiddenOrdersHook.loading}
-          >
-            {hiddenOrdersHook.loading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-            ) : (
-              "🔄"
-            )}
-            Làm mới
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleReload}
+              disabled={hiddenOrdersHook.loading}
+            >
+              {hiddenOrdersHook.loading ? (
+                "🔄"
+              ) : (
+                "🔄"
+              )}
+              Làm mới
+            </Button>
+            {/* ✅ THÊM: Reset Filter Button */}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleResetFilter}
+              disabled={hiddenOrdersHook.loading}
+            >
+              🗑️ Xóa Filter
+            </Button>
+          </div>
         </CardHeader>
-        
         <CardContent>
-          <Suspense fallback={
-            <div className="flex items-center justify-center p-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-2">Đang tải...</span>
-            </div>
-          }>
-            <HiddenOrderManagement 
+          <Suspense fallback={<div>Đang tải...</div>}>
+            <HiddenOrderManagement
               {...hiddenOrdersHook}
               onAlert={showAlert}
             />

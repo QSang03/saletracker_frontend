@@ -1,36 +1,73 @@
 "use client";
+
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { getAccessToken } from "@/lib/auth";
 
-// ✅ Simplified interface - chỉ 4 filters cần thiết
 interface HiddenOrderFilters {
   page: number;
   pageSize: number;
-  employees: string; // CSV của employee IDs
-  departments: string; // CSV của department IDs
-  status: string; // CSV của statuses
+  employees: string;
+  departments: string;
+  status: string;
   search: string;
-  hiddenDateRange?: { from?: Date; to?: Date }; // Range ngày ẩn
+  hiddenDateRange?: { from?: Date; to?: Date };
   sortField: "quantity" | "unit_price" | "hidden_at" | null;
   sortDirection: "asc" | "desc" | null;
 }
 
-// ✅ LocalStorage helper function - ĐẶT TRƯỚC useState
+// ✅ THÊM: Key cho localStorage
+const STORAGE_KEY = "hiddenOrderFilters";
+
+// ✅ SỬA: Enhanced localStorage helper - lưu ALL filters including page & pageSize
 function loadFiltersFromStorage(): Partial<HiddenOrderFilters> {
   try {
-    const saved = localStorage.getItem("hiddenOrderFilters");
-    return saved ? JSON.parse(saved) : {};
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // ✅ Convert date strings back to Date objects
+      if (parsed.hiddenDateRange) {
+        if (parsed.hiddenDateRange.from) {
+          parsed.hiddenDateRange.from = new Date(parsed.hiddenDateRange.from);
+        }
+        if (parsed.hiddenDateRange.to) {
+          parsed.hiddenDateRange.to = new Date(parsed.hiddenDateRange.to);
+        }
+      }
+      return parsed;
+    }
+    return {};
   } catch {
     return {};
   }
 }
 
+// ✅ THÊM: Helper to save ALL filters to localStorage
+function saveAllFiltersToStorage(filters: HiddenOrderFilters): void {
+  try {
+    const toSave = {
+      ...filters,
+      // ✅ Convert Date objects to strings for storage
+      hiddenDateRange: filters.hiddenDateRange
+        ? {
+            from: filters.hiddenDateRange.from?.toISOString(),
+            to: filters.hiddenDateRange.to?.toISOString(),
+          }
+        : undefined,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch (error) {
+    console.warn("Error saving hidden order filters:", error);
+  }
+}
+
 export function useHiddenOrders() {
+  // ✅ SỬA: Load ALL saved filters including page & pageSize
   const [filters, setFilters] = useState<HiddenOrderFilters>(() => {
     const saved = loadFiltersFromStorage();
     return {
-      page: 1,
-      pageSize: 20,
+      // ✅ THÊM: Restore page & pageSize from localStorage
+      page: saved.page || 1,
+      pageSize: saved.pageSize || 20,
       search: saved.search || "",
       employees: saved.employees || "",
       departments: saved.departments || "",
@@ -39,8 +76,8 @@ export function useHiddenOrders() {
         from: undefined,
         to: undefined,
       },
-      sortField: null,
-      sortDirection: null,
+      sortField: saved.sortField || null,
+      sortDirection: saved.sortDirection || null,
     };
   });
 
@@ -49,7 +86,7 @@ export function useHiddenOrders() {
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [filterOptions, setFilterOptions] = useState<any>({
+  const [filterOptions, setFilterOptions] = useState({
     departments: [],
     products: [],
   });
@@ -57,66 +94,62 @@ export function useHiddenOrders() {
   const filterTimeout = useRef<NodeJS.Timeout | null>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
-  // ✅ LocalStorage persistence
-  const saveFiltersToStorage = useCallback(
-    (filters: Partial<HiddenOrderFilters>) => {
-      try {
-        localStorage.setItem("hiddenOrderFilters", JSON.stringify(filters));
-      } catch (error) {
-        console.warn("Error saving hidden order filters:", error);
-      }
-    },
-    []
-  );
-
-  // ✅ Debounced fetch
-  const debouncedFetch = useCallback((newFilters: HiddenOrderFilters) => {
-    if (filterTimeout.current) clearTimeout(filterTimeout.current);
-    filterTimeout.current = setTimeout(() => {
-      fetchData(newFilters);
-    }, 300);
+  // ✅ SỬA: Di chuyển clearFiltersFromStorage vào trong component
+  const clearFiltersFromStorage = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.warn("Error clearing hidden order filters:", error);
+    }
   }, []);
 
-  // ✅ Simplified fetchData - chỉ 4 parameters
+  // ✅ SỬA: Auto-save ALL filters to localStorage whenever filters change
+  useEffect(() => {
+    saveAllFiltersToStorage(filters);
+  }, [filters]);
+
+  // ✅ SỬA: Fetchdata function - loại bỏ dependency filters để tránh loop
   const fetchData = useCallback(
-    async (currentFilters = filters) => {
+    async (currentFilters?: HiddenOrderFilters) => {
       const token = getAccessToken();
       if (!token) return;
+
+      // ✅ SỬA: Sử dụng filters từ state nếu không có currentFilters
+      const filtersToUse = currentFilters || filters;
 
       setLoading(true);
       setError(null);
 
       try {
         const params = new URLSearchParams();
-        params.set("page", String(currentFilters.page));
-        params.set("pageSize", String(currentFilters.pageSize));
+        params.set("page", String(filtersToUse.page));
+        params.set("pageSize", String(filtersToUse.pageSize));
 
-        // ✅ Chỉ 4 filters cần thiết
-        if (currentFilters.search.trim()) {
-          params.set("search", currentFilters.search.trim());
+        if (filtersToUse.search.trim()) {
+          params.set("search", filtersToUse.search.trim());
         }
-        if (currentFilters.employees)
-          params.set("employees", currentFilters.employees);
-        if (currentFilters.departments)
-          params.set("departments", currentFilters.departments);
-        if (currentFilters.status) params.set("status", currentFilters.status);
-        if (currentFilters.sortField)
-          params.set("sortField", currentFilters.sortField);
-        if (currentFilters.sortDirection)
-          params.set("sortDirection", currentFilters.sortDirection);
+        if (filtersToUse.employees)
+          params.set("employees", filtersToUse.employees);
+        if (filtersToUse.departments)
+          params.set("departments", filtersToUse.departments);
+        if (filtersToUse.status) params.set("status", filtersToUse.status);
+        if (filtersToUse.sortField)
+          params.set("sortField", filtersToUse.sortField);
+        if (filtersToUse.sortDirection)
+          params.set("sortDirection", filtersToUse.sortDirection);
 
         // Hidden date range
         if (
-          currentFilters.hiddenDateRange?.from &&
-          currentFilters.hiddenDateRange?.to
+          filtersToUse.hiddenDateRange?.from &&
+          filtersToUse.hiddenDateRange?.to
         ) {
           params.set(
             "hiddenDateRange",
             JSON.stringify({
-              start: currentFilters.hiddenDateRange.from
+              start: filtersToUse.hiddenDateRange.from
                 .toISOString()
                 .split("T")[0],
-              end: currentFilters.hiddenDateRange.to
+              end: filtersToUse.hiddenDateRange.to
                 .toISOString()
                 .split("T")[0],
             })
@@ -132,7 +165,6 @@ export function useHiddenOrders() {
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
         setRows(Array.isArray(data.data) ? data.data : []);
         setTotal(Number(data.total || 0));
       } catch (e: any) {
@@ -141,10 +173,18 @@ export function useHiddenOrders() {
         setLoading(false);
       }
     },
-    [apiBase, filters]
+    [apiBase] // ✅ SỬA: Chỉ dependency apiBase, không có filters
   );
 
-  // ✅ Load filter options (giữ nguyên)
+  // ✅ Debounced fetch - thêm dependency fetchData
+  const debouncedFetch = useCallback((newFilters: HiddenOrderFilters) => {
+    if (filterTimeout.current) clearTimeout(filterTimeout.current);
+    filterTimeout.current = setTimeout(() => {
+      fetchData(newFilters);
+    }, 300);
+  }, [fetchData]);
+
+  // ✅ Load filter options
   const fetchFilterOptions = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
@@ -162,26 +202,63 @@ export function useHiddenOrders() {
     }
   }, [apiBase]);
 
-  // ✅ Update filters
+  // ✅ SỬA: Update filters - NO auto-save here (handled by useEffect)
   const updateFilters = useCallback(
     (newFilters: Partial<HiddenOrderFilters>) => {
       setFilters((prev) => {
-        const updated = { ...prev, ...newFilters, page: 1 };
-        saveFiltersToStorage(updated);
+        const shouldResetPage = Object.keys(newFilters).some(
+          (key) => key !== "page" && key !== "pageSize"
+        );
+
+        const updated = {
+          ...prev,
+          ...newFilters,
+          page: shouldResetPage ? 1 : newFilters.page || prev.page,
+        };
+
+        // ✅ Auto-save will be handled by useEffect
         debouncedFetch(updated);
         return updated;
       });
     },
-    [saveFiltersToStorage, debouncedFetch]
+    [debouncedFetch]
   );
 
-  // ✅ Initialize
+  // ✅ THÊM: Reset filters function - clear localStorage
+  const resetFilters = useCallback(() => {
+    const defaultFilters: HiddenOrderFilters = {
+      page: 1,
+      pageSize: 20,
+      search: "",
+      employees: "",
+      departments: "",
+      status: "",
+      hiddenDateRange: {
+        from: undefined,
+        to: undefined,
+      },
+      sortField: null,
+      sortDirection: null,
+    };
+
+    // Clear localStorage
+    clearFiltersFromStorage();
+
+    // Reset state
+    setFilters(defaultFilters);
+    setSelectedIds(new Set());
+
+    // Fetch with default filters
+    fetchData(defaultFilters);
+  }, [clearFiltersFromStorage, fetchData]);
+
+  // ✅ Initialize - chỉ gọi 1 lần khi mount
   useEffect(() => {
     fetchData();
     fetchFilterOptions();
-  }, []);
+  }, [fetchFilterOptions]); // ✅ SỬA: Loại bỏ fetchData khỏi dependency
 
-  // ✅ Selection management (giữ nguyên)
+  // ✅ Selection management (keep existing)
   const toggleSelect = useCallback((id: number) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
@@ -204,7 +281,7 @@ export function useHiddenOrders() {
     [rows, selectedIds]
   );
 
-  // ✅ Bulk operations (giữ nguyên)
+  // ✅ Keep existing bulk operations
   const bulkUnhide = useCallback(async () => {
     const token = getAccessToken();
     if (!token || selectedIds.size === 0)
@@ -251,7 +328,7 @@ export function useHiddenOrders() {
         });
 
         if (res.ok) {
-          fetchData(); // Reload data
+          fetchData();
           return { success: true, message: "Đã hiện đơn hàng thành công" };
         } else {
           throw new Error("Lỗi khi hiện đơn hàng");
@@ -263,7 +340,6 @@ export function useHiddenOrders() {
     [apiBase, fetchData]
   );
 
-  // Bulk soft delete operation
   const bulkSoftDelete = useCallback(async () => {
     const token = getAccessToken();
     if (!token || selectedIds.size === 0)
@@ -298,7 +374,6 @@ export function useHiddenOrders() {
     }
   }, [selectedIds, apiBase, fetchData]);
 
-  // Single soft delete operation
   const singleSoftDelete = useCallback(
     async (id: number) => {
       const token = getAccessToken();
@@ -333,22 +408,20 @@ export function useHiddenOrders() {
     total,
     loading,
     error,
-
     // Filters
     filters,
     updateFilters,
     filterOptions,
-
+    // ✅ THÊM: Export reset function
+    resetFilters,
     // Selection
     selectedIds,
     toggleSelect,
     toggleSelectAll,
     isAllSelected,
-
     // Pagination helpers
     setPage: (page: number) => updateFilters({ page }),
     setPageSize: (pageSize: number) => updateFilters({ pageSize }),
-
     // Actions
     bulkUnhide,
     singleUnhide,

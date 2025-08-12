@@ -37,6 +37,7 @@ interface HiddenOrderManagementProps {
     id: number
   ) => Promise<{ success: boolean; message: string }>;
   onAlert: (type: AlertType, message: string) => void;
+  resetFilters?: () => void;
 }
 
 export default function HiddenOrderManagement({
@@ -55,6 +56,7 @@ export default function HiddenOrderManagement({
   bulkSoftDelete,
   singleSoftDelete,
   onAlert,
+  resetFilters = () => {},
 }: HiddenOrderManagementProps) {
   // ✅ THÊM: Current user context
   const { currentUser } = useCurrentUser();
@@ -119,6 +121,15 @@ export default function HiddenOrderManagement({
       page: 1,
       search: newFilters.search || "",
     });
+  };
+
+  const handlePaginatedTableReset = () => {
+    // Reset selections
+    selectedIds.clear();
+    // Gọi resetFilters từ hook để clear localStorage
+    if (typeof resetFilters === "function") {
+      resetFilters();
+    }
   };
 
   // ✅ Handle pagination
@@ -330,6 +341,7 @@ export default function HiddenOrderManagement({
         enableWarningLevelFilter={false}
         enableDateRangeFilter={true}
         enableSingleDateFilter={false}
+        onResetFilter={handlePaginatedTableReset}
         enableZaloLinkStatusFilter={false}
         enablePageSize={true}
         availableDepartments={filterOptions.departments || []}
@@ -573,14 +585,12 @@ export default function HiddenOrderManagement({
                 rows.map((row, index) => {
                   // ✅ THÊM: Check ownership cho từng row
                   const owner = isOwner(row);
-                  
+
                   return (
                     <TableRow
                       key={row.id}
                       className={`group relative transition-all duration-300 border-b border-gray-100 hover:bg-blue-50/50 ${
-                        index % 2 === 0
-                          ? "bg-white"
-                          : "bg-gray-50/50"
+                        index % 2 === 0 ? "bg-white" : "bg-gray-50/50"
                       }`}
                     >
                       <TableCell className="min-w-[80px] text-center py-4 px-6">

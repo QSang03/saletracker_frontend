@@ -74,6 +74,7 @@ export interface DetailedRow {
   id: number;
   orderId: number;
   productId: number | null;
+  productName: string | null;
   status: string;
   quantity: number;
   unit_price: number;
@@ -129,14 +130,19 @@ function buildQuery(params?: StatsParams): string {
   if (departments) sp.set("departments", departments);
   if (products) sp.set("products", products);
   if (status) sp.set("status", status);
+  
   const qs = sp.toString();
   return qs ? `?${qs}` : "";
 }
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const token = getAccessToken();
-  if (!token) throw new Error("No token available");
-
+  
+  if (!token) {
+    console.error('🚨 No token available!');
+    throw new Error("No token available");
+  }
+  
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -145,11 +151,21 @@ async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
     },
     signal,
   });
+  
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    console.error('🚨 Fetch failed - Full details:', {
+      status: res.status,
+      statusText: res.statusText,
+      responseText: text,
+      url: res.url,
+      responseHeaders: Object.fromEntries(res.headers.entries())
+    });
     throw new Error(`Request failed ${res.status}: ${text || res.statusText}`);
   }
-  return res.json();
+  
+  const data = await res.json();
+  return data;
 }
 
 export function useOrderStats() {
@@ -159,13 +175,23 @@ export function useOrderStats() {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
   const call = useCallback(async <T,>(path: string, params?: StatsParams) => {
+    const qs = buildQuery(params);
+    const fullUrl = `${baseUrl}${path}${qs}`;
+    
     setLoading(true);
     setError(null);
     try {
-      const qs = buildQuery(params);
-      const data = await fetchJson<T>(`${baseUrl}${path}${qs}`);
+      const data = await fetchJson<T>(fullUrl);
       return data;
     } catch (e: any) {
+      console.error('🚨 API Error for path:', path);
+      console.error('🚨 Error details:', {
+        message: e?.message,
+        name: e?.name,
+        stack: e?.stack,
+        url: fullUrl,
+        timestamp: new Date().toISOString()
+      });
       setError(e?.message || "Có lỗi xảy ra");
       throw e;
     } finally {
@@ -174,36 +200,51 @@ export function useOrderStats() {
   }, [baseUrl]);
 
   const getOverviewStats = useCallback(
-    (params?: StatsParams) => call<OverviewStatsResponse>("/orders/stats/overview", params),
+    (params?: StatsParams) => {
+      return call<OverviewStatsResponse>("/orders/stats/overview", params);
+    },
     [call]
   );
 
   const getStatusStats = useCallback(
-    (params?: StatsParams) => call<StatusStatsResponse>("/orders/stats/by-status", params),
+    (params?: StatsParams) => {
+      return call<StatusStatsResponse>("/orders/stats/by-status", params);
+    },
     [call]
   );
 
   const getEmployeeStats = useCallback(
-    (params?: StatsParams) => call<EmployeeStatsResponse>("/orders/stats/by-employee", params),
+    (params?: StatsParams) => {
+      return call<EmployeeStatsResponse>("/orders/stats/by-employee", params);
+    },
     [call]
   );
 
   const getCustomerStats = useCallback(
-    (params?: StatsParams) => call<CustomerStatsResponse>("/orders/stats/by-customer", params),
+    (params?: StatsParams) => {
+      return call<CustomerStatsResponse>("/orders/stats/by-customer", params);
+    },
     [call]
   );
 
+  // ✅ THÊM LOG RIÊNG CHO EXPIRED STATS
   const getExpiredTodayStats = useCallback(
-    (params?: StatsParams) => call<ExpiredTodayStatsResponse>("/orders/stats/expired-today", params),
+    (params?: StatsParams) => {
+      const result = call<ExpiredTodayStatsResponse>("/orders/stats/expired-today", params);
+      return result;
+    },
     [call]
   );
 
   const getDetailedStats = useCallback(
-    (params?: StatsParams) => call<DetailedStatsResponse>("/order-details/stats/detailed", params),
+    (params?: StatsParams) => {
+      return call<DetailedStatsResponse>("/order-details/stats/detailed", params);
+    },
     [call]
   );
 
-  return {
+  // ✅ THÊM LOG CHO RETURN OBJECT
+  const returnObject = {
     loading,
     error,
     getOverviewStats,
@@ -213,4 +254,6 @@ export function useOrderStats() {
     getExpiredTodayStats,
     getDetailedStats,
   };
+
+  return returnObject;
 }

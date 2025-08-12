@@ -117,12 +117,12 @@ function getPresetRange(period: Period): DateRange {
   const now = new Date();
   const to = endOfDay(now);
   if (period === "day") {
-  // Last 7 days rolling, skipping Sundays
-  return getLastNDaysExcludingSundays(7, now);
+    // Last 7 days rolling, skipping Sundays
+    return getLastNDaysExcludingSundays(7, now);
   }
   if (period === "week") {
-  // Last 7 days rolling, skipping Sundays
-  return getLastNDaysExcludingSundays(7, now);
+    // Last 7 days rolling, skipping Sundays
+    return getLastNDaysExcludingSundays(7, now);
   }
   // quarter
   const q = Math.floor(now.getMonth() / 3);
@@ -135,16 +135,16 @@ function getPreviousRange(period: Period, current: DateRange): DateRange {
   const to = current.to ? new Date(current.to) : new Date();
   const from = current.from ? new Date(current.from) : new Date();
   if (period === "day") {
-  // Previous window of 7 non-Sunday days before current range
-  const prevEnd = new Date(startOfDay(from));
-  prevEnd.setDate(prevEnd.getDate() - 1);
-  return getLastNDaysExcludingSundays(7, prevEnd);
+    // Previous window of 7 non-Sunday days before current range
+    const prevEnd = new Date(startOfDay(from));
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    return getLastNDaysExcludingSundays(7, prevEnd);
   }
   if (period === "week") {
-  // Previous window of 7 non-Sunday days before current range
-  const prevEnd = new Date(startOfDay(from));
-  prevEnd.setDate(prevEnd.getDate() - 1);
-  return getLastNDaysExcludingSundays(7, prevEnd);
+    // Previous window of 7 non-Sunday days before current range
+    const prevEnd = new Date(startOfDay(from));
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    return getLastNDaysExcludingSundays(7, prevEnd);
   }
   // quarter
   const now = from;
@@ -208,9 +208,10 @@ function groupKeyByPeriod(date: Date, period: Period): string {
     // Label week as Mon-Sat
     const sat = new Date(d);
     sat.setDate(d.getDate() + 5);
-    const fmt = (x: Date) => `${x.getDate().toString().padStart(2, "0")}/${(x.getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}`;
+    const fmt = (x: Date) =>
+      `${x.getDate().toString().padStart(2, "0")}/${(x.getMonth() + 1)
+        .toString()
+        .padStart(2, "0")}`;
     return `Tuần ${fmt(d)}-${fmt(sat)}`;
   }
   const q = Math.floor(start.getMonth() / 3) + 1;
@@ -223,11 +224,11 @@ function getBucketRange(ts: number, period: Period): { from: Date; to: Date } {
     return { from: startOfDay(start), to: endOfDay(start) };
   }
   if (period === "week") {
-  const from = startOfWeekMonday(start);
-  const to = new Date(from);
-  // End at Saturday
-  to.setDate(from.getDate() + 5);
-  return { from, to: endOfDay(to) };
+    const from = startOfWeekMonday(start);
+    const to = new Date(from);
+    // End at Saturday
+    to.setDate(from.getDate() + 5);
+    return { from, to: endOfDay(to) };
   }
   // quarter
   const from = startOfQuarter(start);
@@ -240,6 +241,7 @@ type DetailedRow = {
   id: number | string;
   orderId: number | string;
   productId: number | string | null;
+  productName: string | null;
   status: string;
   quantity: number;
   unit_price: number | string;
@@ -267,15 +269,18 @@ function mapRowsToOrderDetails(rows: DetailedRow[]): OrderDetail[] {
       } as any,
       created_at: r.created_at,
     } as any,
-    product_id: (r.productId != null ? Number(r.productId as any) : null) as any,
+    product_id: (r.productId != null
+      ? Number(r.productId as any)
+      : null) as any,
+    product_name: r.productName || "",
     quantity: r.quantity,
     unit_price: Number(r.unit_price as any),
-  // Keep original extended for mock only; dynamic from API is stored in metadata
+    // Keep original extended for mock only; dynamic from API is stored in metadata
     customer_name: r.customer?.name ?? undefined,
     status: r.status,
     total_price: Number(r.revenue as any),
     created_at: r.created_at,
-  metadata: { dynamicExtended: r.dynamicExtended },
+    metadata: { dynamicExtended: r.dynamicExtended },
   }));
 }
 
@@ -377,7 +382,9 @@ function generateMockData(range: DateRange): OrderDetail[] {
 
 // Main component
 export default function ElegantTransactionsPage() {
-  const { getDetailedStats } = useOrderStats();
+  // ✅ SỬA: Destructure cả getDetailedStats và getExpiredTodayStats ở top level
+  const { getDetailedStats, getExpiredTodayStats } = useOrderStats();
+  
   const [period, setPeriod] = useState<Period>("day");
   const [range, setRange] = useState<DateRange>(() => getPresetRange("day"));
   const [loading, setLoading] = useState(true);
@@ -405,10 +412,17 @@ export default function ElegantTransactionsPage() {
     confirmed: false,
   });
 
+  // ✅ State cho expired stats
+  const [expiredStats, setExpiredStats] = useState<{
+    expiredToday: number;
+    overdue: number;
+  } | null>(null);
+
   useEffect(() => {
     setRange(getPresetRange(period));
   }, [period]);
 
+  // ✅ UseEffect cho detailed stats (giữ nguyên)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -422,13 +436,13 @@ export default function ElegantTransactionsPage() {
           const fmt = (d?: Date) => {
             if (!d) return undefined;
             const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
           };
           return {
-      // Use custom to respect explicit date range on backend
-      period: 'custom' as any,
+            // Use custom to respect explicit date range on backend
+            period: "custom" as any,
             dateFrom: fmt(dateFrom),
             dateTo: fmt(dateTo),
           };
@@ -451,6 +465,7 @@ export default function ElegantTransactionsPage() {
               : new Date(it.created_at as any);
             return !isSunday(created);
           });
+
         setItems(filterSunday(curItems));
         setPrevItems(filterSunday(prevMapped));
       } catch (error) {
@@ -479,7 +494,37 @@ export default function ElegantTransactionsPage() {
     };
   }, [range.from?.getTime(), range.to?.getTime(), period, getDetailedStats]);
 
-  // Enhanced summary calculations
+  // ✅ SỬA: UseEffect cho expired stats - sử dụng function đã có ở top level
+  useEffect(() => {
+    let cancelled = false;
+    
+    console.log('🔍 ======= EXPIRED STATS USEEFFECT STARTING =======');
+    
+    (async () => {
+      try {
+        console.log('🔍 About to call getExpiredTodayStats...');
+        const result = await getExpiredTodayStats({}); // ✅ Dùng function đã có
+        
+        console.log('🔍 getExpiredTodayStats result:', result);
+        
+        if (!cancelled && result) {
+          setExpiredStats({
+            expiredToday: result.totals.expiredToday || 0,
+            overdue: result.totals.overdue || 0,
+          });
+        }
+      } catch (error) {
+        console.error("🚨 Expired stats API failed:", error);
+        if (!cancelled) {
+          setExpiredStats({ expiredToday: 0, overdue: 0 });
+        }
+      }
+    })();
+    
+    return () => { cancelled = true; };
+  }, [getExpiredTodayStats]); // ✅ Dependency đúng
+
+  // Enhanced summary calculations - ✅ XÓA phần tính toán đơn hết hạn
   const summary = useMemo(() => {
     const today = startOfDay(new Date());
     const yesterday = new Date(today);
@@ -494,7 +539,6 @@ export default function ElegantTransactionsPage() {
       countConfirmed = 0,
       gdToday = 0,
       gd1 = 0,
-      gdExpireToday = 0,
       gd2 = 0,
       totalRevenue = 0;
 
@@ -508,10 +552,7 @@ export default function ElegantTransactionsPage() {
       if (createdDay === startOfDay(yesterday).getTime()) gd1++;
       if (createdDay === startOfDay(twoDaysAgo).getTime()) gd2++;
 
-      const dExt =
-        (it as any)?.metadata?.dynamicExtended ??
-        calcDynamicExtended(it.order?.created_at as any, (it.extended as any) || 0);
-      if (dExt === 0) gdExpireToday++;
+      // ✅ XÓA phần tính toán đơn hết hạn
 
       if (it.status === "completed") {
         totalRevenue += Number(it.unit_price || 0) * Number(it.quantity || 1);
@@ -530,11 +571,10 @@ export default function ElegantTransactionsPage() {
       quoted: countQuoted,
       demand: countDemand,
       pending: countPending,
-      // confirmed: countConfirmed,
       gdToday,
       gdYesterday: gd1,
       gd2DaysAgo: gd2,
-      gdExpiredToday: gdExpireToday,
+      gdExpiredToday: 0, // ✅ Set cứng = 0 vì không dùng nữa
       totalRevenue,
       avgOrderValue: countCompleted > 0 ? totalRevenue / countCompleted : 0,
       conversionRate:
@@ -542,6 +582,7 @@ export default function ElegantTransactionsPage() {
     };
   }, [items]);
 
+  // ✅ SỬA: buildSummary cũng loại bỏ tính toán đơn hết hạn
   const buildSummary = (data: OrderDetail[]) => {
     const today = startOfDay(new Date());
     const yesterday = new Date(today);
@@ -556,7 +597,6 @@ export default function ElegantTransactionsPage() {
       countConfirmed = 0,
       gdToday = 0,
       gd1 = 0,
-      gdExpireToday = 0,
       gd2 = 0,
       totalRevenue = 0;
 
@@ -570,10 +610,7 @@ export default function ElegantTransactionsPage() {
       if (createdDay === startOfDay(yesterday).getTime()) gd1++;
       if (createdDay === startOfDay(twoDaysAgo).getTime()) gd2++;
 
-      const dExt =
-        (it as any)?.metadata?.dynamicExtended ??
-        calcDynamicExtended(it.order?.created_at as any, (it.extended as any) || 0);
-      if (dExt === 0) gdExpireToday++;
+      // ✅ XÓA hoàn toàn phần tính toán đơn hết hạn
 
       if (it.status === "completed") {
         totalRevenue += Number(it.unit_price || 0) * Number(it.quantity || 1);
@@ -583,7 +620,6 @@ export default function ElegantTransactionsPage() {
       else if (it.status === "completed") countCompleted++;
       else if (it.status === "quoted") countQuoted++;
       else if (it.status === "pending") countPending++;
-      // confirmed bỏ khỏi hiển thị biểu đồ/chỉ số chính
     }
 
     return {
@@ -592,11 +628,10 @@ export default function ElegantTransactionsPage() {
       quoted: countQuoted,
       demand: countDemand,
       pending: countPending,
-      // confirmed: countConfirmed,
       gdToday,
       gdYesterday: gd1,
       gd2DaysAgo: gd2,
-      gdExpiredToday: gdExpireToday,
+      gdExpiredToday: 0, // ✅ Set cứng = 0 vì không dùng nữa
       totalRevenue,
       avgOrderValue: countCompleted > 0 ? totalRevenue / countCompleted : 0,
       conversionRate:
@@ -768,6 +803,11 @@ export default function ElegantTransactionsPage() {
     });
   }, [items, selectedBar, period]);
 
+  // Log detailRows for debugging
+  // useEffect(() => {
+  //   console.log("🔍 detailRows:", items);
+  // }, [items]);
+
   const pagedDetailRows = useMemo(() => {
     const start = (page - 1) * pageSize;
     return detailRows.slice(start, start + pageSize);
@@ -825,18 +865,27 @@ export default function ElegantTransactionsPage() {
               onValueChange={(v) => v && setPeriod(v as Period)}
               className="rounded-lg border bg-white/80 dark:bg-slate-800/80 p-1 shadow-sm backdrop-blur-sm"
             >
-                <ToggleGroupItem value="day" className="rounded-md text-sm cursor-pointer">
+              <ToggleGroupItem
+                value="day"
+                className="rounded-md text-sm cursor-pointer"
+              >
                 <Calendar className="w-4 h-4 mr-1" />
                 Ngày
-                </ToggleGroupItem>
-                <ToggleGroupItem value="week" className="rounded-md text-sm cursor-pointer">
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="week"
+                className="rounded-md text-sm cursor-pointer"
+              >
                 <Calendar className="w-4 h-4 mr-1" />
                 Tuần
-                </ToggleGroupItem>
-                <ToggleGroupItem value="quarter" className="rounded-md text-sm cursor-pointer">
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="quarter"
+                className="rounded-md text-sm cursor-pointer"
+              >
                 <Calendar className="w-4 h-4 mr-1" />
                 Quý
-                </ToggleGroupItem>
+              </ToggleGroupItem>
             </ToggleGroup>
 
             <DropdownMenu>
@@ -858,8 +907,8 @@ export default function ElegantTransactionsPage() {
                   className="cursor-pointer"
                 >
                   <span className="flex items-center gap-2">
-                  <Target className="w-4 h-4 mr-2" />
-                  Đặt lại khoảng ngày
+                    <Target className="w-4 h-4 mr-2" />
+                    Đặt lại khoảng ngày
                   </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -1046,12 +1095,13 @@ export default function ElegantTransactionsPage() {
                           </motion.div>
 
                           <motion.div variants={itemVariants}>
+                            {/* ✅ SỬA: Dùng data từ API thay vì summary.gdExpiredToday */}
                             <MiniKPI
                               label="Hết hạn hôm nay"
-                              value={summary.gdExpiredToday}
+                              value={expiredStats?.expiredToday || 0}
                               color="red"
                               icon={<Clock className="w-4 h-4" />}
-                              isAlert={summary.gdExpiredToday > 0}
+                              isAlert={(expiredStats?.expiredToday || 0) > 0}
                             />
                           </motion.div>
 
@@ -1248,31 +1298,31 @@ export default function ElegantTransactionsPage() {
                         </motion.div>
                         Thống kê theo nhân viên
                       </CardTitle>
-                        <ToggleGroup
-                          type="single"
-                          value={employeeSort}
-                          onValueChange={(v) => v && setEmployeeSort(v as any)}
-                          className="space-x-3"
-                        >
-                          <ToggleGroupItem
+                      <ToggleGroup
+                        type="single"
+                        value={employeeSort}
+                        onValueChange={(v) => v && setEmployeeSort(v as any)}
+                        className="space-x-3"
+                      >
+                        <ToggleGroupItem
                           value="orders"
                           className="px-4 py-2 rounded-md text-sm cursor-pointer"
-                          >
+                        >
                           Đơn
-                          </ToggleGroupItem>
-                          <ToggleGroupItem
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
                           value="customers"
                           className="px-4 py-2 rounded-md text-sm cursor-pointer"
-                          >
+                        >
                           KH
-                          </ToggleGroupItem>
-                          <ToggleGroupItem
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
                           value="conversion"
                           className="px-4 py-2 rounded-md text-sm cursor-pointer"
-                          >
+                        >
                           Tỉ lệ chốt
-                          </ToggleGroupItem>
-                        </ToggleGroup>
+                        </ToggleGroupItem>
+                      </ToggleGroup>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-6 p-6">
@@ -1382,6 +1432,15 @@ export default function ElegantTransactionsPage() {
                           👨‍💼 Nhân viên
                         </th>
                         <th className="p-3 text-left font-semibold text-sm">
+                          <span className="inline-flex items-center gap-1"></span>
+                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="inline-block align-middle text-indigo-500" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+                            <path d="M7 13L9.5 10.5L12 13L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="7.5" cy="7.5" r="1" fill="currentColor"/>
+                          </svg>
+                          Sản Phẩm
+                        </th>
+                        <th className="p-3 text-left font-semibold text-sm">
                           📊 Trạng thái
                         </th>
                         <th className="p-3 text-right font-semibold text-sm">
@@ -1435,6 +1494,9 @@ export default function ElegantTransactionsPage() {
                               {(od.order?.sale_by as any)?.fullName ||
                                 (od.order?.sale_by as any)?.username ||
                                 "--"}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {od.product_name || "--"}
                             </td>
                             <td className="p-3">
                               <ElegantStatusBadge status={od.status || ""} />
