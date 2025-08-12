@@ -1432,13 +1432,7 @@ export default function ElegantTransactionsPage() {
                           👨‍💼 Nhân viên
                         </th>
                         <th className="p-3 text-left font-semibold text-sm">
-                          <span className="inline-flex items-center gap-1"></span>
-                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="inline-block align-middle text-indigo-500" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.5"/>
-                            <path d="M7 13L9.5 10.5L12 13L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            <circle cx="7.5" cy="7.5" r="1" fill="currentColor"/>
-                          </svg>
-                          Sản Phẩm
+                          📦 Sản Phẩm
                         </th>
                         <th className="p-3 text-left font-semibold text-sm">
                           📊 Trạng thái
