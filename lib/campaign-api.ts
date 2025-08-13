@@ -95,6 +95,22 @@ export const campaignAPI = {
     return response.data;
   },
 
+  // Trong file campaign-api.ts
+  removeCustomerFromCampaign: async (
+    campaignId: string,
+    customerId: string
+  ) => {
+    const response = await api.delete(
+      `/campaigns/${campaignId}/customers/${customerId}`
+    );
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error("Failed to remove customer from campaign");
+    }
+
+    return response.data;
+  },
+
   // Get customers of a campaign with filters
   getCampaignCustomers: async (
     campaignId: string,
@@ -208,7 +224,9 @@ export const campaignAPI = {
   },
 
   // Archive campaign
-  archive: async (id: string): Promise<{ success: boolean; error?: string; data?: Campaign }> => {
+  archive: async (
+    id: string
+  ): Promise<{ success: boolean; error?: string; data?: Campaign }> => {
     const response = await api.patch(`/campaigns/${id}/archive`);
     return response.data;
   },

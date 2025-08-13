@@ -540,11 +540,16 @@ export default function CompleteScheduleApp() {
         slotDate = weekDates[dayIndex];
       }
 
-      const [hours, minutes] = time.split(":").map(Number);
-      const slotDateTime = new Date(slotDate);
-      slotDateTime.setHours(hours, minutes, 0, 0);
+      // Tính thời gian kết thúc của khung giờ
+      const timeIndex = timeSlots.indexOf(time);
+      const endTime = timeSlots[timeIndex + 1] || LAST_SLOT_END;
 
-      return slotDateTime < now;
+      const [endHours, endMinutes] = endTime.split(":").map(Number);
+      const slotEndDateTime = new Date(slotDate);
+      slotEndDateTime.setHours(endHours, endMinutes, 0, 0);
+
+      // Chỉ chặn khi khung giờ đã hoàn toàn kết thúc
+      return slotEndDateTime <= now;
     },
     [getWeekDates]
   );
@@ -1349,7 +1354,7 @@ export default function CompleteScheduleApp() {
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth();
       const currentDate = new Date(year, month, date);
-  const isSunday = currentDate.getDay() === 0;
+      const isSunday = currentDate.getDay() === 0;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1401,7 +1406,7 @@ export default function CompleteScheduleApp() {
       const month = currentMonth.getMonth();
 
       const currentDate = new Date(year, month, date);
-  const isSunday = currentDate.getDay() === 0;
+      const isSunday = currentDate.getDay() === 0;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -1456,7 +1461,7 @@ export default function CompleteScheduleApp() {
       const isCurrentMonth =
         month === currentMonth.getMonth() &&
         year === currentMonth.getFullYear();
-  const isSunday = currentDate.getDay() === 0;
+      const isSunday = currentDate.getDay() === 0;
 
       const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
         date,
@@ -2199,7 +2204,7 @@ export default function CompleteScheduleApp() {
         const probe = new Date(y, m, d.date);
         if (probe.getMonth() !== m) continue;
 
-  const isSunday = probe.getDay() === 0; // ✅ CN = 0
+        const isSunday = probe.getDay() === 0; // ✅ CN = 0
         if (bulkScheduleConfig.skipWeekends && isSunday) continue;
 
         if (bulkScheduleConfig.skipConflicts) {
@@ -2451,10 +2456,10 @@ export default function CompleteScheduleApp() {
                     <SelectContent>
                       <SelectItem value="all">Tất cả</SelectItem>
                       <SelectItem value={ScheduleStatus.ACTIVE}>
-                        Hoạt động
+                        Lịch Đang Hoạt động
                       </SelectItem>
                       <SelectItem value={ScheduleStatus.INACTIVE}>
-                        Tạm dừng
+                        Lịch Đã Xác Nhận
                       </SelectItem>
                       <SelectItem value={ScheduleStatus.EXPIRED}>
                         Đã hết hạn
@@ -2941,7 +2946,10 @@ export default function CompleteScheduleApp() {
                                       : "bg-blue-100 text-blue-800"
                                   }`}
                                 >
-                                  {formatTimeRange(time, timeSlots[timeIndex + 1] || LAST_SLOT_END)}
+                                  {formatTimeRange(
+                                    time,
+                                    timeSlots[timeIndex + 1] || LAST_SLOT_END
+                                  )}
                                   {time >= "12:00" && time < "13:30" && (
                                     <div className="text-xs mt-1">
                                       🍽️ Nghỉ trưa
@@ -3790,11 +3798,11 @@ export default function CompleteScheduleApp() {
                                       className="text-xs"
                                     >
                                       {schedule.status === ScheduleStatus.ACTIVE
-                                        ? "Hoạt động"
+                                        ? "Lịch Đang Hoạt động"
                                         : schedule.status ===
                                           ScheduleStatus.EXPIRED
                                         ? "Hết hạn"
-                                        : "Tạm dừng"}
+                                        : "Lịch Đã Xác Nhận"}
                                     </Badge>
                                   </div>
 

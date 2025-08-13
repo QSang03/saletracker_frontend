@@ -38,7 +38,8 @@ import {
   MessageCircle,
   User,
   AlertCircle,
-  Edit, // ✅ THÊM MỚI: Import Edit icon
+  Edit,
+  Trash,
 } from "lucide-react";
 import { Campaign } from "@/types";
 import { campaignAPI } from "@/lib/campaign-api";
@@ -46,8 +47,9 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import CustomerLogModal, { LogStatus } from "./CampaignCustomerLogModal.tsx";
-import EditCustomerModal from "./EditCustomerModal"; // ✅ THÊM MỚI: Import EditCustomerModal
+import EditCustomerModal from "./EditCustomerModal";
 import { CampaignSocket } from "@/components/socket/CampaignSocket";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 interface CampaignCustomer {
   id: string;
@@ -236,6 +238,12 @@ export default function CampaignCustomersModal({
     new Set()
   );
   const [lastEventTimestamp, setLastEventTimestamp] = useState<number>(0);
+  const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(
+    null
+  );
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [customerToDelete, setCustomerToDelete] =
+    useState<CustomerWithStatus | null>(null);
 
   const getEventKey = (event: any): string => {
     return `${event.ws_type || event.type}_${
@@ -535,6 +543,50 @@ export default function CampaignCustomersModal({
     // Reload customers sau khi edit thành công
     fetchCustomers(searchTerm, statusFilter);
     handleEditModalClose();
+  };
+
+  const handleDeleteCustomer = async (customer: CustomerWithStatus) => {
+    if (!campaign) return;
+
+    // ✅ THAY ĐỔI: Thay vì window.confirm, hiển thị confirm dialog
+    setCustomerToDelete(customer);
+    setShowDeleteConfirm(true);
+  };
+
+  // ✅ THÊM MỚI: Handle confirm delete
+  const handleConfirmDelete = async () => {
+    if (!campaign || !customerToDelete) return;
+
+    try {
+      setDeletingCustomerId(customerToDelete.id);
+
+      // Gọi API xóa customer khỏi campaign
+      await campaignAPI.removeCustomerFromCampaign(
+        campaign.id,
+        customerToDelete.id
+      );
+
+      // Cập nhật local state - loại bỏ customer đã xóa
+      setCustomers((prev) => prev.filter((c) => c.id !== customerToDelete.id));
+
+      toast.success(
+        `Đã xóa khách hàng "${customerToDelete.full_name}" khỏi chiến dịch`
+      );
+    } catch (error) {
+      console.error("Error deleting customer from campaign:", error);
+      toast.error("Không thể xóa khách hàng khỏi chiến dịch");
+    } finally {
+      setDeletingCustomerId(null);
+      setShowDeleteConfirm(false);
+      setCustomerToDelete(null);
+    }
+  };
+
+  // ✅ THÊM MỚI: Handle cancel delete
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setCustomerToDelete(null);
+    setDeletingCustomerId(null);
   };
 
   const handleExportCustomers = async () => {
@@ -1091,27 +1143,77 @@ export default function CampaignCustomersModal({
 
                                       {/* Nút edit - CHỈ hiển thị khi campaign là DRAFT */}
                                       {campaign.status === "draft" && (
-                                        <motion.div
-                                          whileHover={{ scale: 1.1 }}
-                                          whileTap={{ scale: 0.9 }}
-                                        >
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleEditCustomer(customer)
-                                            }
-                                            className="h-8 w-8 p-0"
-                                            title="Chỉnh sửa thông tin khách hàng"
+                                        <>
+                                          <motion.div
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
                                           >
-                                            <motion.div
-                                              whileHover={{ rotate: 5 }}
-                                              transition={{ duration: 0.2 }}
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleEditCustomer(customer)
+                                              }
+                                              className="h-8 w-8 p-0"
+                                              title="Chỉnh sửa thông tin khách hàng"
                                             >
-                                              <Edit className="h-4 w-4" />
-                                            </motion.div>
-                                          </Button>
-                                        </motion.div>
+                                              <motion.div
+                                                whileHover={{ rotate: 5 }}
+                                                transition={{ duration: 0.2 }}
+                                              >
+                                                <Edit className="h-4 w-4" />
+                                              </motion.div>
+                                            </Button>
+                                          </motion.div>
+                                          <motion.div
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                          >
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleDeleteCustomer(customer)
+                                              }
+                                              disabled={
+                                                deletingCustomerId ===
+                                                customer.id
+                                              }
+                                              className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
+                                              title="Xóa khách hàng khỏi chiến dịch"
+                                            >
+                                              <motion.div
+                                                animate={{
+                                                  rotate:
+                                                    deletingCustomerId ===
+                                                    customer.id
+                                                      ? 360
+                                                      : 0,
+                                                  scale:
+                                                    deletingCustomerId ===
+                                                    customer.id
+                                                      ? 0.8
+                                                      : 1,
+                                                }}
+                                                transition={{
+                                                  duration:
+                                                    deletingCustomerId ===
+                                                    customer.id
+                                                      ? 1
+                                                      : 0.2,
+                                                  repeat:
+                                                    deletingCustomerId ===
+                                                    customer.id
+                                                      ? Infinity
+                                                      : 0,
+                                                  ease: "linear",
+                                                }}
+                                              >
+                                                <Trash className="h-4 w-4" />
+                                              </motion.div>
+                                            </Button>
+                                          </motion.div>
+                                        </>
                                       )}
                                     </div>
                                   </TableCell>
@@ -1274,6 +1376,47 @@ export default function CampaignCustomersModal({
         customer={editingCustomer}
         campaignId={campaign?.id || ""}
         onSuccess={handleEditSuccess}
+      />
+
+      {/* ✅ THÊM MỚI: Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Xác nhận xóa khách hàng"
+        message={
+          customerToDelete ? (
+            <div>
+              <p className="mb-3">
+                Bạn có chắc chắn muốn xóa khách hàng này khỏi chiến dịch không?
+              </p>
+              <div className="p-3 bg-red-50 rounded-md text-sm space-y-1 border border-red-200">
+                <div>
+                  <strong>Họ tên:</strong> {customerToDelete.full_name}
+                </div>
+                <div>
+                  <strong>Số điện thoại:</strong>{" "}
+                  {customerToDelete.phone_number}
+                </div>
+                {customerToDelete.salutation && (
+                  <div>
+                    <strong>Xưng hô:</strong> {customerToDelete.salutation}
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-sm text-red-600 pb-3">
+                <strong>Lưu ý:</strong> Thao tác này sẽ xóa khách hàng khỏi
+                chiến dịch.
+              </p>
+            </div>
+          ) : null
+        }
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        confirmText={
+          deletingCustomerId === customerToDelete?.id
+            ? "Đang xóa..."
+            : "Xác nhận xóa"
+        }
+        cancelText="Hủy"
       />
     </>
   );

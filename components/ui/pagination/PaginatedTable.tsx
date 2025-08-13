@@ -90,6 +90,11 @@ interface PaginatedTableProps {
   onResetFilter?: () => void;
   preventEmptyFilterCall?: boolean;
   onDepartmentChange?: (departments: (string | number)[]) => void;
+  // When true, render only the controls (filters + pagination) without a content area
+  controlsOnly?: boolean;
+  // Hide the built-in pager (Prev/Next + page indicator). Useful when embedding this toolbar at the top
+  // and rendering a separate pager at the bottom near the table list.
+  hidePager?: boolean;
 }
 
 export type Filters = {
@@ -155,6 +160,8 @@ export default function PaginatedTable({
   preventEmptyFilterCall = true,
   onDepartmentChange,
   isRestoring = false,
+  controlsOnly = false,
+  hidePager = false,
 }: PaginatedTableProps) {
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
@@ -805,7 +812,7 @@ export default function PaginatedTable({
   }, [pendingPageSize, isRestoring]);
 
   return (
-    <div className="flex flex-col h-full min-h-[500px] space-y-4 w-full">
+    <div className={`flex flex-col w-full space-y-4 ${controlsOnly ? '' : 'h-full min-h-[500px]'}`}>
       <div className="mb-4">
         <div className="grid grid-cols-6 gap-3">
           {enableSearch && (
@@ -1003,47 +1010,50 @@ export default function PaginatedTable({
           Tổng số dòng: <span className="text-red-500">{totalRows}</span>
         </div>
       </div>
+      {!controlsOnly && (
+        <div className="flex-1">
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: currentPageSize }).map((_, idx) => (
+                <Skeleton key={idx} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : (
+            // Khi backend paging, luôn render nguyên vẹn children (không slice/cắt)
+            children
+          )}
+        </div>
+      )}
 
-      <div className="flex-1">
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: currentPageSize }).map((_, idx) => (
-              <Skeleton key={idx} className="h-10 w-full" />
-            ))}
-          </div>
-        ) : (
-          // Khi backend paging, luôn render nguyên vẹn children (không slice/cắt)
-          children
-        )}
-      </div>
-
-      <div className="flex justify-center gap-2 pt-2 mt-2">
-        <Button
-          variant="gradient"
-          size="sm"
-          className={buttonClassNames.prev ?? ""}
-          onClick={() => {
-            goToPage(Math.max(currentPage - 1, 1));
-          }}
-          disabled={currentPage === 1}
-        >
-          Trước
-        </Button>
-        <span className="text-sm px-2 mt-1.5">
-          Trang {currentPage} / {totalPages || 1}
-        </span>
-        <Button
-          variant="gradient"
-          size="sm"
-          className={buttonClassNames.next ?? ""}
-          onClick={() => {
-            goToPage(Math.min(currentPage + 1, totalPages));
-          }}
-          disabled={currentPage >= totalPages}
-        >
-          Sau
-        </Button>
-      </div>
+      {!hidePager && (
+        <div className="flex justify-center gap-2 pt-2 mt-2">
+          <Button
+            variant="gradient"
+            size="sm"
+            className={buttonClassNames.prev ?? ""}
+            onClick={() => {
+              goToPage(Math.max(currentPage - 1, 1));
+            }}
+            disabled={currentPage === 1}
+          >
+            Trước
+          </Button>
+          <span className="text-sm px-2 mt-1.5">
+            Trang {currentPage} / {totalPages || 1}
+          </span>
+          <Button
+            variant="gradient"
+            size="sm"
+            className={buttonClassNames.next ?? ""}
+            onClick={() => {
+              goToPage(Math.min(currentPage + 1, totalPages));
+            }}
+            disabled={currentPage >= totalPages}
+          >
+            Sau
+          </Button>
+        </div>
+      )}
 
       {/* Panel xuất CSV */}
       {canExport && getExportData && (
