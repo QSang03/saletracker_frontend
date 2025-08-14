@@ -607,9 +607,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[120px] text-center">
                   Gia Hạn Cuối
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
-                  Lý Do Gia Hạn
-                </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[140px] text-center">
                   Ghi chú
                 </TableHead>
@@ -657,9 +654,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   </TableCell>
                   <TableCell className="text-right">
                     <Skeleton className="h-4 w-16 rounded ml-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Skeleton className="h-4 w-20 rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 rounded mx-auto" />
@@ -806,12 +800,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[130px] text-center">
                     ⏰ Gia hạn cuối
                   </TableHead>
-
-                  {/* ✅ CẬP NHẬT: Thêm width cụ thể cho cột lý do gia hạn */}
-                  <TableHead className="font-bold text-slate-700 text-sm w-[350px] text-center">
-                    📋 Lý do gia hạn
-                  </TableHead>
-
                   <TableHead className="font-bold text-slate-700 text-sm w-[140px] text-center">
                     📝 Ghi chú
                   </TableHead>
@@ -997,13 +985,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-bold text-green-600 text-sm">
-                              <div className="text-truncate">
-                                {orderDetail.unit_price
-                                  ? Number(
-                                      orderDetail.unit_price
-                                    ).toLocaleString() + "₫"
-                                  : "0₫"}
-                              </div>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="text-truncate cursor-help">
+                                    {orderDetail.unit_price
+                                      ? Number(orderDetail.unit_price).toLocaleString() + "₫"
+                                      : "0₫"}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <span>
+                                    {orderDetail.unit_price
+                                      ? Number(orderDetail.unit_price).toLocaleString(undefined, { maximumFractionDigits: 10 }) + "₫"
+                                      : "0₫"}
+                                  </span>
+                                </TooltipContent>
+                              </Tooltip>
                             </TableCell>
                             <TableCell className="text-center">
                               <span
@@ -1058,33 +1055,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="p-3 text-center w-[120px]">
-                              {orderDetail.extend_reason ? (
-                                <span
-                                  className={`px-2 py-1 rounded-full text-xs font-medium truncate ${
-                                    orderDetail.extend_reason ===
-                                    "hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ"
-                                      ? "bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800 border border-blue-300"
-                                      : "bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-300"
-                                  }`}
-                                >
-                                  {orderDetail.extend_reason ===
-                                  "hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ" ? (
-                                    <>
-                                      🤖 Hệ thống tự gia hạn vào chủ nhật hoặc
-                                      nghỉ lễ
-                                    </>
-                                  ) : (
-                                    <>👤 Chính chủ gia hạn</>
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 text-sm">
-                                  --
-                                </span>
-                              )}
-                            </TableCell>
-
                             <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
                               <TruncatedText
                                 text={orderDetail.notes || "—"}

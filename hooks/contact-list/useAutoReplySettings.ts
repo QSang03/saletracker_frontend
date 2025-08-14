@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { getAccessToken, getUserFromToken } from '@/lib/auth';
 
 export function useAutoReplySettings() {
   const [enabled, setEnabled] = useState(true);
@@ -10,8 +11,20 @@ export function useAutoReplySettings() {
     setLoading(true);
     setError(null);
     try {
-      // Optional: if backend has a settings endpoint; else keep local
-  const { data } = await api.get<{ enabled: boolean } | undefined>('auto-reply/settings');
+      // Try to read from current user (me) endpoint; fallback to settings if exists
+      const token = getAccessToken();
+      const u = token ? getUserFromToken(token) : null;
+      if (u?.id) {
+        try {
+          const { data } = await api.get(`/users/${u.id}`);
+          if (data && typeof data.isAutoReplyEnabled === 'boolean') {
+            setEnabled(!!data.isAutoReplyEnabled);
+            return;
+          }
+        } catch {}
+      }
+      // Fallback legacy
+      const { data } = await api.get<{ enabled: boolean } | undefined>('auto-reply/settings');
       if (data && typeof data.enabled === 'boolean') setEnabled(data.enabled);
     } catch (e: any) {
       // silently ignore if endpoint not available
@@ -20,18 +33,20 @@ export function useAutoReplySettings() {
     }
   }, []);
 
-  const update = useCallback(async (value: boolean, contactIds?: number[] | 'ALL') => {
+  const update = useCallback(async (value: boolean) => {
     setEnabled(value);
     try {
-      // Prefer bulk API if available
-      if (contactIds) {
-        await api.patch('auto-reply/contacts/auto-reply-bulk', { contactIds, enabled: value });
+      const token = getAccessToken();
+      const u = token ? getUserFromToken(token) : null;
+      if (u?.id) {
+        await api.patch(`/users/${u.id}`, { isAutoReplyEnabled: value });
       } else {
         await api.patch('auto-reply/settings', { enabled: value });
       }
     } catch (e) {
-      // rollback only UI; not failing hard
+      // keep current state; server may reject
       setEnabled(prev => prev);
+      throw e;
     }
   }, []);
 

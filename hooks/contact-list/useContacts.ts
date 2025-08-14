@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import type { AutoReplyContact, ContactRole } from "@/types/auto-reply";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { getAccessToken, getUserFromToken } from "@/lib/auth";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export function useContacts() {
   const [contacts, setContacts] = useState<AutoReplyContact[]>([]);
@@ -10,24 +11,33 @@ export function useContacts() {
   const [error, setError] = useState<string | null>(null);
   const { subscribe, unsubscribe, isConnected } = useWebSocketContext();
 
-const fetchContacts = useCallback(
-    async (userId?: number) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const url = userId
-                ? `auto-reply/contacts?userId=${userId}`
-                : "auto-reply/contacts";
-            const { data } = await api.get<AutoReplyContact[]>(url);
-            setContacts(data || []);
-        } catch (e: any) {
-            setError(e?.message || "Failed to load contacts");
-        } finally {
-            setLoading(false);
+  const { currentUser } = useCurrentUser();
+
+  const fetchContacts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Prefer currentUser context; fallback to token
+      let userId: number | undefined = currentUser?.id
+        ? Number(currentUser.id)
+        : undefined;
+      if (!userId) {
+        const token = getAccessToken();
+        if (token) {
+          const u = getUserFromToken(token);
+          if (u?.id) userId = Number(u.id);
         }
-    },
-    []
-);
+      }
+      if (!userId) throw new Error("Missing userId");
+      const url = `auto-reply/contacts?userId=${userId}`;
+      const { data } = await api.get<AutoReplyContact[]>(url);
+      setContacts(data || []);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load contacts");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser?.id]);
 
   const updateRole = useCallback(
     async (contactId: number, role: ContactRole) => {
@@ -53,16 +63,7 @@ const fetchContacts = useCallback(
     []
   );
   useEffect(() => {
-    // Lấy token từ localStorage
-    const token = getAccessToken();
-    let userId: number | undefined = undefined;
-    if (token) {
-      const user = getUserFromToken(token);
-      if (user && user.id) {
-        userId = Number(user.id);
-      }
-    }
-    fetchContacts(userId);
+    fetchContacts();
   }, [fetchContacts]);
 
   // Realtime updates

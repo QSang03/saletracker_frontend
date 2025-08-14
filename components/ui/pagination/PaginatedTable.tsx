@@ -10,13 +10,22 @@ import {
 import { DatePicker } from "@/components/ui/date-picker";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CalendarDays } from "lucide-react";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
 import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PaginatedTableProps {
   emptyText?: string;
@@ -95,6 +104,15 @@ interface PaginatedTableProps {
   // Hide the built-in pager (Prev/Next + page indicator). Useful when embedding this toolbar at the top
   // and rendering a separate pager at the bottom near the table list.
   hidePager?: boolean;
+  // Optional small toggles rendered on the right side of the filter toolbar, each with optional tooltip
+  toggles?: Array<{
+    id: string;
+    label: string;
+    tooltip?: string;
+    checked: boolean;
+    disabled?: boolean;
+    onChange: (checked: boolean) => void;
+  }>;
 }
 
 export type Filters = {
@@ -162,6 +180,7 @@ export default function PaginatedTable({
   isRestoring = false,
   controlsOnly = false,
   hidePager = false,
+  toggles = [],
 }: PaginatedTableProps) {
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
@@ -274,7 +293,7 @@ export default function PaginatedTable({
     () => availableBrands.map((b) => ({ label: b, value: b })),
     [availableBrands]
   );
-  
+
   // Thêm warningLevelOptions
   const warningLevelOptions = useMemo(() => {
     if (!availableWarningLevels || availableWarningLevels.length === 0) {
@@ -297,7 +316,7 @@ export default function PaginatedTable({
       }
     });
   }, [availableWarningLevels]);
-  
+
   const employeeOptions = useMemo(
     () => availableEmployees.map((e) => ({ label: e.label, value: e.value })),
     [availableEmployees]
@@ -323,7 +342,10 @@ export default function PaginatedTable({
       categories: initialFilters?.categories || [],
       brands: initialFilters?.brands || [],
       warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
-      dateRange: initialFilters?.dateRange || { from: undefined, to: undefined },
+      dateRange: initialFilters?.dateRange || {
+        from: undefined,
+        to: undefined,
+      },
       singleDate: initialFilters?.singleDate || undefined, // Không set mặc định
       employees: initialFilters?.employees || [],
     };
@@ -366,22 +388,27 @@ export default function PaginatedTable({
 
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const userModifiedFieldsRef = useRef<Set<keyof Filters>>(new Set()); // Track which fields user modified
-  const previousInitialFiltersRef = useRef<Partial<Filters> | undefined>(undefined);
+  const previousInitialFiltersRef = useRef<Partial<Filters> | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     // Only clear user modifications if initialFilters changed significantly
     // AND it's not just due to API response differences
     if (memoizedInitialFilters && previousInitialFiltersRef.current) {
-      const currentStringified = JSON.stringify(previousInitialFiltersRef.current);
+      const currentStringified = JSON.stringify(
+        previousInitialFiltersRef.current
+      );
       const incomingStringified = JSON.stringify(memoizedInitialFilters);
-      
+
       // More sophisticated comparison - ignore changes that look like API responses
       const significant = currentStringified !== incomingStringified;
-      
+
       if (significant) {
         // Additional check: don't clear if the change is just about preserving user selections
-        const isPreservingUserSelections = userModifiedFieldsRef.current.size > 0;
-        
+        const isPreservingUserSelections =
+          userModifiedFieldsRef.current.size > 0;
+
         if (!isPreservingUserSelections) {
           setHasUserInteracted(false);
           userModifiedFieldsRef.current.clear();
@@ -418,7 +445,10 @@ export default function PaginatedTable({
       setFilters((prev) => {
         // ✅ Force sync nếu đang restore hoặc user chưa tương tác
         if (!hasUserInteracted || isRestoring) {
-          console.log("🔄 Force syncing filters from initialFilters", { isRestoring, hasUserInteracted });
+          console.log("🔄 Force syncing filters from initialFilters", {
+            isRestoring,
+            hasUserInteracted,
+          });
           // Sync tất cả nếu user chưa tương tác hoặc đang restore
           const newFilters = {
             search:
@@ -476,19 +506,31 @@ export default function PaginatedTable({
           let hasChanges = false;
 
           const fieldsToCheck = [
-            'search', 'departments', 'roles', 'statuses', 'zaloLinkStatuses',
-            'categories', 'brands', 'warningLevels', 'dateRange', 'singleDate', 'employees'
+            "search",
+            "departments",
+            "roles",
+            "statuses",
+            "zaloLinkStatuses",
+            "categories",
+            "brands",
+            "warningLevels",
+            "dateRange",
+            "singleDate",
+            "employees",
           ] as (keyof Filters)[];
 
-          fieldsToCheck.forEach(field => {
-            if (!userModifiedFieldsRef.current.has(field) && 
-                memoizedInitialFilters[field] !== undefined) {
+          fieldsToCheck.forEach((field) => {
+            if (
+              !userModifiedFieldsRef.current.has(field) &&
+              memoizedInitialFilters[field] !== undefined
+            ) {
               const currentValue = prev[field];
               const incomingValue = memoizedInitialFilters[field];
-              
+
               // More precise comparison
-              const isDifferent = JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
-              
+              const isDifferent =
+                JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
+
               if (isDifferent) {
                 newFilters[field] = incomingValue as any;
                 hasChanges = true;
@@ -593,11 +635,11 @@ export default function PaginatedTable({
     <K extends keyof Filters>(key: K, value: Filters[K]) => {
       setHasUserInteracted(true); // Mark that user has interacted
       userModifiedFieldsRef.current.add(key); // Track which field was modified
-      
+
       setFilters((prev) => {
         if (prev[key] === value) return prev;
         const next = { ...prev, [key]: value };
-        
+
         debouncedSetFilters(next);
         return next;
       });
@@ -614,12 +656,12 @@ export default function PaginatedTable({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
       setSearchInput(value); // Update UI immediately
-      
+
       // Clear previous timeout
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
-      
+
       // Debounce the actual filter update - ALWAYS fire, even for empty values
       searchTimeoutRef.current = setTimeout(() => {
         updateFilter("search", value); // This will save to localStorage via debouncedSetFilters
@@ -639,7 +681,11 @@ export default function PaginatedTable({
       // Convert 1-based page prop to 0-based internalPage
       const expectedInternalPage = page - 1;
       if (internalPage !== expectedInternalPage) {
-        console.log("🔄 Syncing internalPage from prop:", { page, expectedInternalPage, currentInternalPage: internalPage });
+        console.log("🔄 Syncing internalPage from prop:", {
+          page,
+          expectedInternalPage,
+          currentInternalPage: internalPage,
+        });
         setInternalPage(expectedInternalPage);
       }
     }
@@ -759,13 +805,13 @@ export default function PaginatedTable({
   const handlePageSizeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newSize = Number(e.target.value);
-      
+
       // Validate page size
       if (newSize <= 0 || isNaN(newSize)) {
-        console.warn('Invalid page size:', newSize);
+        console.warn("Invalid page size:", newSize);
         return;
       }
-      
+
       if (isBackendPaging && onPageSizeChange) {
         onPageSizeChange(newSize);
       } else {
@@ -781,7 +827,7 @@ export default function PaginatedTable({
     (newPage: number) => {
       // Ensure page is within valid range
       const validPage = Math.max(1, Math.min(newPage, totalPages));
-      
+
       if (isBackendPaging && onPageChange) {
         onPageChange(validPage);
       } else {
@@ -812,7 +858,11 @@ export default function PaginatedTable({
   }, [pendingPageSize, isRestoring]);
 
   return (
-    <div className={`flex flex-col w-full space-y-4 ${controlsOnly ? '' : 'h-full min-h-[500px]'}`}>
+    <div
+      className={`flex flex-col w-full space-y-4 ${
+        controlsOnly ? "" : "h-full min-h-[500px]"
+      }`}
+    >
       <div className="mb-4">
         <div className="grid grid-cols-6 gap-3">
           {enableSearch && (
@@ -836,7 +886,7 @@ export default function PaginatedTable({
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.departments ?? ""}`}
               placeholder="Phòng ban"
-              value={filters.departments.map(d => d.toString())}
+              value={filters.departments.map((d) => d.toString())}
               options={departmentOptions}
               onChange={handleDepartmentsChange}
             />
@@ -923,11 +973,18 @@ export default function PaginatedTable({
                     {filters.dateRange.from ? (
                       filters.dateRange.to ? (
                         <>
-                          {format(filters.dateRange.from, "dd/MM/yyyy", { locale: vi })} -{" "}
-                          {format(filters.dateRange.to, "dd/MM/yyyy", { locale: vi })}
+                          {format(filters.dateRange.from, "dd/MM/yyyy", {
+                            locale: vi,
+                          })}{" "}
+                          -{" "}
+                          {format(filters.dateRange.to, "dd/MM/yyyy", {
+                            locale: vi,
+                          })}
                         </>
                       ) : (
-                        format(filters.dateRange.from, "dd/MM/yyyy", { locale: vi })
+                        format(filters.dateRange.from, "dd/MM/yyyy", {
+                          locale: vi,
+                        })
                       )
                     ) : (
                       <span>Chọn khoảng thời gian</span>
@@ -941,7 +998,10 @@ export default function PaginatedTable({
                     defaultMonth={filters.dateRange.from}
                     selected={filters.dateRange}
                     onSelect={(dateRange) => {
-                      updateFilter("dateRange", dateRange || { from: undefined, to: undefined });
+                      updateFilter(
+                        "dateRange",
+                        dateRange || { from: undefined, to: undefined }
+                      );
                     }}
                     numberOfMonths={2}
                     locale={vi}
@@ -1009,6 +1069,36 @@ export default function PaginatedTable({
         <div className="mt-4 ml-0.5 text font-medium">
           Tổng số dòng: <span className="text-red-500">{totalRows}</span>
         </div>
+        {/* Right-aligned compact toggles with tooltip */}
+        {toggles && toggles.length > 0 && (
+          <div className="col-span-6 mt-2 flex items-center justify-end gap-4">
+            {toggles.map((tg) => (
+              <div key={tg.id} className="flex items-center gap-2">
+                {tg.tooltip ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs text-gray-600 select-none cursor-help">
+                        {tg.label}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6}>{tg.tooltip}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <span className="text-xs text-gray-600 select-none">
+                    {tg.label}
+                  </span>
+                )}
+                <input
+                  type="checkbox"
+                  className="accent-orange-500 h-4 w-4"
+                  checked={tg.checked}
+                  onChange={(e) => tg.onChange(e.target.checked)}
+                  disabled={tg.disabled}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       {!controlsOnly && (
         <div className="flex-1">

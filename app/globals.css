@@ -1,3 +1,4 @@
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -147,7 +148,8 @@
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 0.5vw;
+  height: 0.8vh;
 }
 ::-webkit-scrollbar-track {
   background: transparent;

@@ -30,6 +30,8 @@ import {
   Zap
 } from 'lucide-react';
 import type { AutoReplyProduct } from '@/types/auto-reply';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { ServerResponseAlert, type AlertType } from '@/components/ui/loading/ServerResponseAlert';
 
 export default function KeywordsModal({ open, onClose }: { open: boolean; onClose: () => void; }) {
   const [products, setProducts] = useState<AutoReplyProduct[]>([]);
@@ -42,6 +44,8 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
   const [applyAllContacts, setApplyAllContacts] = useState(true);
   const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
+  const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; message: React.ReactNode; onConfirm: (() => Promise<void> | void) | null }>({ open: false, title: '', message: '', onConfirm: null });
+  const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
 
   useEffect(() => { 
     if (open) { 
@@ -60,31 +64,36 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
     return n;
   };
 
-  const save = async () => {
-    if (zaloDisabled) return;
-    const productIds = Array.from(selectedProducts);
-    if (!productIds.length || !keyword.trim()) return;
-    if (applyAllContacts) {
-      await createRoute({ 
-        keyword: keyword.trim(), 
-        contactId: null, 
-        routeProducts: productIds.map(pid => ({ productId: pid, priority: 0, active: true })) 
-      });
-    } else {
-      const contactIds = Array.from(selectedContacts);
-      if (!contactIds.length) return;
-      await createBulk({ 
-        keyword: keyword.trim(), 
-        contactIds, 
-        productIds, 
-        defaultPriority: 0, 
-        active: true 
-      });
+  const performSave = async () => {
+    try {
+      if (zaloDisabled) return;
+      const productIds = Array.from(selectedProducts);
+      if (!productIds.length || !keyword.trim()) return;
+      if (applyAllContacts) {
+        await createRoute({ 
+          keyword: keyword.trim(), 
+          contactId: null, 
+          routeProducts: productIds.map(pid => ({ productId: pid, priority: 0, active: true })) 
+        });
+      } else {
+        const contactIds = Array.from(selectedContacts);
+        if (!contactIds.length) return;
+        await createBulk({ 
+          keyword: keyword.trim(), 
+          contactIds, 
+          productIds, 
+          defaultPriority: 0, 
+          active: true 
+        });
+      }
+      setAlert({ type: 'success', message: 'Đã tạo keyword' });
+      setKeyword('');
+      setSelectedProducts(new Set());
+      setSelectedContacts(new Set());
+      onClose();
+    } catch (e: any) {
+      setAlert({ type: 'error', message: e?.message || 'Tạo keyword thất bại' });
     }
-    setKeyword('');
-    setSelectedProducts(new Set());
-    setSelectedContacts(new Set());
-    onClose();
   };
 
   return (
@@ -324,7 +333,7 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
                             <Switch 
                               disabled={zaloDisabled} 
                               checked={r.active} 
-                              onCheckedChange={() => updateRoute(r.routeId, { active: !r.active })}
+                              onCheckedChange={() => setConfirmState({ open: true, title: r.active ? 'Tắt keyword' : 'Bật keyword', message: `Bạn có chắc muốn ${r.active ? 'tắt' : 'bật'} keyword "${r.keyword}"?`, onConfirm: async () => { try { await updateRoute(r.routeId, { active: !r.active }); setAlert({ type: 'success', message: 'Đã cập nhật keyword' }); } catch (e: any) { setAlert({ type: 'error', message: e?.message || 'Cập nhật keyword thất bại' }); } finally { setConfirmState(s => ({ ...s, open: false })); } } })}
                               className="data-[state=checked]:bg-green-500"
                             />
                             {r.active ? (
@@ -338,7 +347,7 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
                           <Button 
                             disabled={zaloDisabled} 
                             variant="ghost" 
-                            onClick={() => deleteRoute(r.routeId)}
+                            onClick={() => setConfirmState({ open: true, title: 'Xóa keyword', message: `Bạn có chắc muốn xóa keyword "${r.keyword}"?`, onConfirm: async () => { try { await deleteRoute(r.routeId); setAlert({ type: 'success', message: 'Đã xóa keyword' }); } catch (e: any) { setAlert({ type: 'error', message: e?.message || 'Xóa keyword thất bại' }); } finally { setConfirmState(s => ({ ...s, open: false })); } } })}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 h-10 px-4 rounded-xl transition-all duration-300"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -393,7 +402,7 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
             </Button>
             <Button 
               disabled={zaloDisabled || !keyword.trim() || selectedProducts.size === 0} 
-              onClick={save}
+              onClick={() => setConfirmState({ open: true, title: 'Tạo keyword', message: `Tạo keyword "${keyword.trim()}"${applyAllContacts ? ' (GLOBAL)' : ''}?`, onConfirm: async () => { await performSave(); setConfirmState(s => ({ ...s, open: false })); } })}
               className="bg-gradient-to-r from-yellow-500 to-green-500 hover:from-yellow-600 hover:to-green-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 group px-10 py-3 h-14 text-base rounded-2xl disabled:opacity-50"
             >
               <Plus className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-300" />
@@ -401,6 +410,17 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
             </Button>
           </div>
         </DialogFooter>
+
+        <ConfirmDialog
+          isOpen={confirmState.open}
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => confirmState.onConfirm?.()}
+          onCancel={() => setConfirmState(s => ({ ...s, open: false }))}
+        />
+        {alert && (
+          <ServerResponseAlert type={alert.type} message={alert.message} onClose={() => setAlert(null)} />
+        )}
 
         {/* Decorative Elements */}
         <div className="absolute top-6 right-6 opacity-15 pointer-events-none">

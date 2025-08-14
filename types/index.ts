@@ -59,6 +59,8 @@ export interface User {
   zaloGender?: string;
   lastOnlineAt?: Date | string;
   server_ip?: string;
+  // Global auto-reply flag per user
+  isAutoReplyEnabled?: boolean;
 }
 
 export interface UserWithPermissions extends User {
