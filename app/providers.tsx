@@ -12,8 +12,14 @@ type Props = {
 };
 
 export function Providers({ children }: Props) {
+  // Force theme to light in localStorage on every render
+  if (typeof window !== "undefined") {
+    localStorage.setItem("theme", "light");
+    document.documentElement.classList.remove("dark");
+    document.documentElement.classList.add("light");
+  }
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <AuthProvider>
         <CurrentUserProvider>
           <TokenRefreshProvider>
