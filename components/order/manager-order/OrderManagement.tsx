@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { OrderDetail } from "@/types";
 import {
   Table,
@@ -8,12 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -184,6 +178,23 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // ✅ Tính toán số dòng hiển thị thực tế
   const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
 
+  // Small global style to prevent hover visual changes on the focused row only
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+      .focused-no-hover:hover, .focused-no-hover:hover > * {
+        background-color: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
+        transform: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   // Existing states
   const [editingDetail, setEditingDetail] = useState<OrderDetail | null>(null);
   const [deletingDetail, setDeletingDetail] = useState<OrderDetail | null>(
@@ -212,6 +223,43 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [selectedOrderIds, setSelectedOrderIds] = useState<
     Set<number | string>
   >(new Set());
+  // ✅ Focused (active) row id - keep highlight until user acts on another row
+  const [focusedRowId, setFocusedRowId] = useState<number | string | null>(
+    null
+  );
+  // ref to temporarily skip clearing when the click originated from an internal handler
+  const skipClearRef = useRef(false);
+  // ref to indicate whether any modal is currently open; used to avoid clearing focus
+  const modalOpenRef = useRef(false);
+
+  // helper to set focus while preventing the global click handler from clearing it immediately
+  const setFocusSafely = (id: number | string | null) => {
+    try {
+      skipClearRef.current = true;
+      setFocusedRowId(id);
+    } finally {
+      // reset on next tick so document click handler (native) can run and not be blocked forever
+      setTimeout(() => {
+        skipClearRef.current = false;
+      }, 0);
+    }
+  };
+
+  // Utility to perform an action while temporarily preventing the global click handler
+  // from clearing focusedRowId. Use for modal open/close flows.
+  const withSkipClear = (
+    fn: () => void,
+    ms: number = 400
+  ) => {
+    skipClearRef.current = true;
+    try {
+      fn();
+    } finally {
+      setTimeout(() => {
+        skipClearRef.current = false;
+      }, ms);
+    }
+  };
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isBulkExtendModalOpen, setIsBulkExtendModalOpen] = useState(false);
   const [isBulkNotesModalOpen, setIsBulkNotesModalOpen] = useState(false);
@@ -240,7 +288,63 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // ✅ Clear selection when orders change (e.g., page change)
   useEffect(() => {
     setSelectedOrderIds(new Set());
+  // Clear focused row when data (page) changes
+  setFocusSafely(null);
   }, [orders]);
+
+  // Clear focusedRowId when clicking outside the currently focused row.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (skipClearRef.current) return;
+  if (modalOpenRef.current) return; // don't clear focus while a modal is open
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      const focusedNode = target.closest("[data-focused-row-id]") as
+        | HTMLElement
+        | null;
+
+      // If clicked inside the focused row, do nothing.
+      if (focusedNode) {
+        const id = focusedNode.getAttribute("data-focused-row-id");
+        if (id !== null && String(focusedRowId) === id) return;
+      }
+
+      // Otherwise clear focus
+  if (focusedRowId !== null) setFocusSafely(null);
+    };
+
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [focusedRowId]);
+
+  // Keep modalOpenRef in sync with modal state flags so the doc click handler
+  // can ignore clicks while modals are open (prevents accidental clearing on modal close)
+  useEffect(() => {
+    modalOpenRef.current = !!(
+      isEditModalOpen ||
+      isDeleteModalOpen ||
+      isHideModalOpen ||
+      isViewModalOpen ||
+      isEditCustomerNameModalOpen ||
+      isAddToBlacklistModalOpen ||
+      isBulkDeleteModalOpen ||
+      isBulkExtendModalOpen ||
+      isBulkNotesModalOpen ||
+      isBulkHideModalOpen
+    );
+  }, [
+    isEditModalOpen,
+    isDeleteModalOpen,
+    isHideModalOpen,
+    isViewModalOpen,
+    isEditCustomerNameModalOpen,
+    isAddToBlacklistModalOpen,
+    isBulkDeleteModalOpen,
+    isBulkExtendModalOpen,
+    isBulkNotesModalOpen,
+    isBulkHideModalOpen,
+  ]);
 
   // ✅ Handle select all/deselect all
   const handleSelectAll = () => {
@@ -249,11 +353,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       const newSelected = new Set(selectedOrderIds);
       safeOrders.forEach((order) => newSelected.delete(order.id));
       setSelectedOrderIds(newSelected);
+  // If user toggles select-all header, clear focused row to avoid confusion
+  setFocusSafely(null);
     } else {
       // Select all on current page
       const newSelected = new Set(selectedOrderIds);
       safeOrders.forEach((order) => newSelected.add(order.id));
       setSelectedOrderIds(newSelected);
+  // If user toggles select-all header, clear focused row to avoid confusion
+  setFocusSafely(null);
     }
   };
 
@@ -266,6 +374,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       newSelected.add(orderId);
     }
     setSelectedOrderIds(newSelected);
+  // Mark this row as focused when user interacts with its checkbox
+  setFocusSafely(orderId);
   };
 
   // ✅ Bulk action handlers
@@ -310,29 +420,33 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   const handleEditClick = (orderDetail: OrderDetail) => {
+  setFocusSafely(orderDetail.id);
     setEditingDetail(orderDetail);
-    setIsEditModalOpen(true);
+    withSkipClear(() => setIsEditModalOpen(true));
   };
 
   const handleDeleteClick = (orderDetail: OrderDetail) => {
+  setFocusSafely(orderDetail.id);
     setDeletingDetail(orderDetail);
-    setIsDeleteModalOpen(true);
+    withSkipClear(() => setIsDeleteModalOpen(true));
   };
 
   const handleHideClick = (orderDetail: OrderDetail) => {
+  setFocusSafely(orderDetail.id);
     setHidingDetail(orderDetail);
-    setIsHideModalOpen(true);
+    withSkipClear(() => setIsHideModalOpen(true));
   };
 
   const handleViewClick = (orderDetail: OrderDetail) => {
+  setFocusSafely(orderDetail.id);
     setViewingDetail(orderDetail);
-    setIsViewModalOpen(true);
+    withSkipClear(() => setIsViewModalOpen(true));
   };
 
   const handleEditSave = (data: Partial<OrderDetail>) => {
     if (editingDetail && onEdit) {
       onEdit(editingDetail, data);
-      setIsEditModalOpen(false);
+  withSkipClear(() => setIsEditModalOpen(false));
       setEditingDetail(null);
     }
   };
@@ -340,7 +454,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleDeleteConfirm = (reason?: string) => {
     if (deletingDetail && onDelete) {
       onDelete(deletingDetail, reason);
-      setIsDeleteModalOpen(false);
+  withSkipClear(() => setIsDeleteModalOpen(false));
       setDeletingDetail(null);
     }
   };
@@ -348,28 +462,28 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleHideConfirm = (reason: string) => {
     if (hidingDetail && onHide) {
       onHide(hidingDetail, reason);
-      setIsHideModalOpen(false);
+  withSkipClear(() => setIsHideModalOpen(false));
       setHidingDetail(null);
     }
   };
 
   const handleEditCancel = () => {
-    setIsEditModalOpen(false);
+  withSkipClear(() => setIsEditModalOpen(false));
     setEditingDetail(null);
   };
 
   const handleDeleteCancel = () => {
-    setIsDeleteModalOpen(false);
+  withSkipClear(() => setIsDeleteModalOpen(false));
     setDeletingDetail(null);
   };
 
   const handleHideCancel = () => {
-    setIsHideModalOpen(false);
+  withSkipClear(() => setIsHideModalOpen(false));
     setHidingDetail(null);
   };
 
   const handleViewCancel = () => {
-    setIsViewModalOpen(false);
+  withSkipClear(() => setIsViewModalOpen(false));
     setViewingDetail(null);
   };
 
@@ -401,6 +515,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // ✅ Function để handle single click tên khách hàng (edit)
   const handleCustomerNameEdit = (orderDetail: OrderDetail) => {
+  setFocusSafely(orderDetail.id);
     setEditingCustomerName(orderDetail);
     setIsEditCustomerNameModalOpen(true);
   };
@@ -419,12 +534,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // ✅ Function để handle cancel customer name edit
   const handleCustomerNameCancel = () => {
-    setIsEditCustomerNameModalOpen(false);
+  withSkipClear(() => setIsEditCustomerNameModalOpen(false));
     setEditingCustomerName(null);
   };
 
   // ✅ Blacklist handlers
   const handleAddToBlacklistClick = (orderDetail: OrderDetail) => {
+  setFocusSafely(orderDetail.id);
     setAddingToBlacklist(orderDetail);
     setIsAddToBlacklistModalOpen(true);
   };
@@ -432,13 +548,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleAddToBlacklistConfirm = (reason?: string) => {
     if (addingToBlacklist && onAddToBlacklist) {
       onAddToBlacklist(addingToBlacklist, reason);
-      setIsAddToBlacklistModalOpen(false);
+  withSkipClear(() => setIsAddToBlacklistModalOpen(false));
       setAddingToBlacklist(null);
     }
   };
 
   const handleAddToBlacklistCancel = () => {
-    setIsAddToBlacklistModalOpen(false);
+  withSkipClear(() => setIsAddToBlacklistModalOpen(false));
     setAddingToBlacklist(null);
   };
 
@@ -830,7 +946,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   displayOrders.map((orderDetail, index) => (
                     <TableRow
                       key={orderDetail.id || index}
-                      className={getRowClassName(orderDetail, index)}
+                      {...(focusedRowId === orderDetail.id
+                        ? { "data-focused-row-id": String(orderDetail.id) }
+                        : {})}
+                      className={`${getRowClassName(
+                        orderDetail,
+                        index
+                      )} ${
+                        focusedRowId === orderDetail.id
+                          ? "focused-no-hover ring-2 ring-indigo-300 shadow-lg bg-amber-300"
+                          : ""
+                      }`}
                     >
                       {(() => {
                         const owner = isOwner(orderDetail);
@@ -941,11 +1067,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               <div className="flex items-center justify-center gap-1">
                                 <div
                                   className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
-                                  onDoubleClick={() =>
+                                  onDoubleClick={() => {
+                                    // Set focus to this row when user double-clicks customer name
+                                    setFocusSafely(orderDetail.id);
                                     handleCustomerNameClick(
                                       orderDetail.customer_name || ""
-                                    )
-                                  }
+                                    );
+                                  }}
                                   title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
                                 >
                                   <TruncatedText
@@ -1242,7 +1370,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
       {/* Messages Modal */}
       {viewingDetail && (
-        <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <Dialog
+          open={isViewModalOpen}
+          onOpenChange={(v: boolean) => withSkipClear(() => setIsViewModalOpen(v))}
+        >
           <DialogContent
             className="max-w-7xl max-h-[90vh] p-0 overflow-hidden border-0 bg-transparent"
             style={{ width: "90vw", minWidth: 1000 }}
@@ -1656,7 +1787,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkDeleteModal
         selectedOrders={selectedOrders}
         isOpen={isBulkDeleteModalOpen}
-        onClose={() => setIsBulkDeleteModalOpen(false)}
+  onClose={() => withSkipClear(() => setIsBulkDeleteModalOpen(false))}
         onConfirm={handleBulkDeleteConfirm}
         loading={loading}
       />
@@ -1664,7 +1795,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkExtendModal
         selectedOrders={selectedOrders}
         isOpen={isBulkExtendModalOpen}
-        onClose={() => setIsBulkExtendModalOpen(false)}
+  onClose={() => withSkipClear(() => setIsBulkExtendModalOpen(false))}
         onConfirm={handleBulkExtendConfirm}
         loading={loading}
       />
@@ -1672,7 +1803,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkNotesModal
         selectedOrders={selectedOrders}
         isOpen={isBulkNotesModalOpen}
-        onClose={() => setIsBulkNotesModalOpen(false)}
+  onClose={() => withSkipClear(() => setIsBulkNotesModalOpen(false))}
         onConfirm={handleBulkNotesConfirm}
         loading={loading}
       />
@@ -1680,12 +1811,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkHideModal
         selectedOrders={selectedOrders}
         isOpen={isBulkHideModalOpen}
-        onClose={() => setIsBulkHideModalOpen(false)}
+    onClose={() => withSkipClear(() => setIsBulkHideModalOpen(false))}
         onConfirm={(reason: string) => {
           if (onBulkHide && selectedOrders.length > 0) {
             onBulkHide(selectedOrders, reason);
             setSelectedOrderIds(new Set());
-            setIsBulkHideModalOpen(false);
+      withSkipClear(() => setIsBulkHideModalOpen(false));
           }
         }}
         loading={loading}
