@@ -118,6 +118,18 @@ const calculateDynamicExtended = (
   }
 };
 
+// ✅ Helper: Định dạng ngày giờ theo chuẩn Việt Nam: HH:mm:ss dd/MM/yyyy
+const formatVietnamDateTime = (date: Date): string => {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const dd = pad(date.getDate());
+  const mm = pad(date.getMonth() + 1);
+  const yyyy = date.getFullYear();
+  const HH = pad(date.getHours());
+  const MM = pad(date.getMinutes());
+  const SS = pad(date.getSeconds());
+  return `${HH}:${MM}:${SS} ${dd}/${mm}/${yyyy}`;
+};
+
 // ✅ Component để hiển thị text với tooltip khi cần thiết
 const TruncatedText: React.FC<{
   text: string;
@@ -247,10 +259,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // Utility to perform an action while temporarily preventing the global click handler
   // from clearing focusedRowId. Use for modal open/close flows.
-  const withSkipClear = (
-    fn: () => void,
-    ms: number = 400
-  ) => {
+  const withSkipClear = (fn: () => void, ms: number = 400) => {
     skipClearRef.current = true;
     try {
       fn();
@@ -288,21 +297,21 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // ✅ Clear selection when orders change (e.g., page change)
   useEffect(() => {
     setSelectedOrderIds(new Set());
-  // Clear focused row when data (page) changes
-  setFocusSafely(null);
+    // Clear focused row when data (page) changes
+    setFocusSafely(null);
   }, [orders]);
 
   // Clear focusedRowId when clicking outside the currently focused row.
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (skipClearRef.current) return;
-  if (modalOpenRef.current) return; // don't clear focus while a modal is open
+      if (modalOpenRef.current) return; // don't clear focus while a modal is open
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
-      const focusedNode = target.closest("[data-focused-row-id]") as
-        | HTMLElement
-        | null;
+      const focusedNode = target.closest(
+        "[data-focused-row-id]"
+      ) as HTMLElement | null;
 
       // If clicked inside the focused row, do nothing.
       if (focusedNode) {
@@ -311,7 +320,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       }
 
       // Otherwise clear focus
-  if (focusedRowId !== null) setFocusSafely(null);
+      if (focusedRowId !== null) setFocusSafely(null);
     };
 
     document.addEventListener("click", onDocClick);
@@ -353,15 +362,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       const newSelected = new Set(selectedOrderIds);
       safeOrders.forEach((order) => newSelected.delete(order.id));
       setSelectedOrderIds(newSelected);
-  // If user toggles select-all header, clear focused row to avoid confusion
-  setFocusSafely(null);
+      // If user toggles select-all header, clear focused row to avoid confusion
+      setFocusSafely(null);
     } else {
       // Select all on current page
       const newSelected = new Set(selectedOrderIds);
       safeOrders.forEach((order) => newSelected.add(order.id));
       setSelectedOrderIds(newSelected);
-  // If user toggles select-all header, clear focused row to avoid confusion
-  setFocusSafely(null);
+      // If user toggles select-all header, clear focused row to avoid confusion
+      setFocusSafely(null);
     }
   };
 
@@ -374,8 +383,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       newSelected.add(orderId);
     }
     setSelectedOrderIds(newSelected);
-  // Mark this row as focused when user interacts with its checkbox
-  setFocusSafely(orderId);
+    // Mark this row as focused when user interacts with its checkbox
+    setFocusSafely(orderId);
   };
 
   // ✅ Bulk action handlers
@@ -420,25 +429,25 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   const handleEditClick = (orderDetail: OrderDetail) => {
-  setFocusSafely(orderDetail.id);
+    setFocusSafely(orderDetail.id);
     setEditingDetail(orderDetail);
     withSkipClear(() => setIsEditModalOpen(true));
   };
 
   const handleDeleteClick = (orderDetail: OrderDetail) => {
-  setFocusSafely(orderDetail.id);
+    setFocusSafely(orderDetail.id);
     setDeletingDetail(orderDetail);
     withSkipClear(() => setIsDeleteModalOpen(true));
   };
 
   const handleHideClick = (orderDetail: OrderDetail) => {
-  setFocusSafely(orderDetail.id);
+    setFocusSafely(orderDetail.id);
     setHidingDetail(orderDetail);
     withSkipClear(() => setIsHideModalOpen(true));
   };
 
   const handleViewClick = (orderDetail: OrderDetail) => {
-  setFocusSafely(orderDetail.id);
+    setFocusSafely(orderDetail.id);
     setViewingDetail(orderDetail);
     withSkipClear(() => setIsViewModalOpen(true));
   };
@@ -446,7 +455,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleEditSave = (data: Partial<OrderDetail>) => {
     if (editingDetail && onEdit) {
       onEdit(editingDetail, data);
-  withSkipClear(() => setIsEditModalOpen(false));
+      withSkipClear(() => setIsEditModalOpen(false));
       setEditingDetail(null);
     }
   };
@@ -454,7 +463,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleDeleteConfirm = (reason?: string) => {
     if (deletingDetail && onDelete) {
       onDelete(deletingDetail, reason);
-  withSkipClear(() => setIsDeleteModalOpen(false));
+      withSkipClear(() => setIsDeleteModalOpen(false));
       setDeletingDetail(null);
     }
   };
@@ -462,28 +471,28 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleHideConfirm = (reason: string) => {
     if (hidingDetail && onHide) {
       onHide(hidingDetail, reason);
-  withSkipClear(() => setIsHideModalOpen(false));
+      withSkipClear(() => setIsHideModalOpen(false));
       setHidingDetail(null);
     }
   };
 
   const handleEditCancel = () => {
-  withSkipClear(() => setIsEditModalOpen(false));
+    withSkipClear(() => setIsEditModalOpen(false));
     setEditingDetail(null);
   };
 
   const handleDeleteCancel = () => {
-  withSkipClear(() => setIsDeleteModalOpen(false));
+    withSkipClear(() => setIsDeleteModalOpen(false));
     setDeletingDetail(null);
   };
 
   const handleHideCancel = () => {
-  withSkipClear(() => setIsHideModalOpen(false));
+    withSkipClear(() => setIsHideModalOpen(false));
     setHidingDetail(null);
   };
 
   const handleViewCancel = () => {
-  withSkipClear(() => setIsViewModalOpen(false));
+    withSkipClear(() => setIsViewModalOpen(false));
     setViewingDetail(null);
   };
 
@@ -515,7 +524,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // ✅ Function để handle single click tên khách hàng (edit)
   const handleCustomerNameEdit = (orderDetail: OrderDetail) => {
-  setFocusSafely(orderDetail.id);
+    setFocusSafely(orderDetail.id);
     setEditingCustomerName(orderDetail);
     setIsEditCustomerNameModalOpen(true);
   };
@@ -534,13 +543,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // ✅ Function để handle cancel customer name edit
   const handleCustomerNameCancel = () => {
-  withSkipClear(() => setIsEditCustomerNameModalOpen(false));
+    withSkipClear(() => setIsEditCustomerNameModalOpen(false));
     setEditingCustomerName(null);
   };
 
   // ✅ Blacklist handlers
   const handleAddToBlacklistClick = (orderDetail: OrderDetail) => {
-  setFocusSafely(orderDetail.id);
+    setFocusSafely(orderDetail.id);
     setAddingToBlacklist(orderDetail);
     setIsAddToBlacklistModalOpen(true);
   };
@@ -548,13 +557,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleAddToBlacklistConfirm = (reason?: string) => {
     if (addingToBlacklist && onAddToBlacklist) {
       onAddToBlacklist(addingToBlacklist, reason);
-  withSkipClear(() => setIsAddToBlacklistModalOpen(false));
+      withSkipClear(() => setIsAddToBlacklistModalOpen(false));
       setAddingToBlacklist(null);
     }
   };
 
   const handleAddToBlacklistCancel = () => {
-  withSkipClear(() => setIsAddToBlacklistModalOpen(false));
+    withSkipClear(() => setIsAddToBlacklistModalOpen(false));
     setAddingToBlacklist(null);
   };
 
@@ -949,10 +958,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       {...(focusedRowId === orderDetail.id
                         ? { "data-focused-row-id": String(orderDetail.id) }
                         : {})}
-                      className={`${getRowClassName(
-                        orderDetail,
-                        index
-                      )} ${
+                      className={`${getRowClassName(orderDetail, index)} ${
                         focusedRowId === orderDetail.id
                           ? "focused-no-hover ring-2 ring-indigo-300 shadow-lg bg-amber-300"
                           : ""
@@ -1117,14 +1123,20 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 <TooltipTrigger asChild>
                                   <div className="text-truncate cursor-help">
                                     {orderDetail.unit_price
-                                      ? Number(orderDetail.unit_price).toLocaleString() + "₫"
+                                      ? Number(
+                                          orderDetail.unit_price
+                                        ).toLocaleString() + "₫"
                                       : "0₫"}
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <span>
                                     {orderDetail.unit_price
-                                      ? Number(orderDetail.unit_price).toLocaleString(undefined, { maximumFractionDigits: 10 }) + "₫"
+                                      ? Number(
+                                          orderDetail.unit_price
+                                        ).toLocaleString(undefined, {
+                                          maximumFractionDigits: 10,
+                                        }) + "₫"
                                       : "0₫"}
                                   </span>
                                 </TooltipContent>
@@ -1273,22 +1285,32 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   </Tooltip>
                                 </POrderDynamic>
 
-        <POrderDynamic action="update">
+                                <POrderDynamic action="update">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button
-                                        onClick={() => owner && handleHideClick(orderDetail)}
+                                        onClick={() =>
+                                          owner && handleHideClick(orderDetail)
+                                        }
                                         variant="outline"
                                         size="sm"
                                         className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition-colors"
                                         disabled={!owner}
-                                        title={owner ? "Ẩn" : "Chỉ chủ sở hữu được ẩn"}
+                                        title={
+                                          owner
+                                            ? "Ẩn"
+                                            : "Chỉ chủ sở hữu được ẩn"
+                                        }
                                       >
-          <EyeOff className="h-3 w-3" />
+                                        <EyeOff className="h-3 w-3" />
                                       </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p>{owner ? "Ẩn" : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}</p>
+                                      <p>
+                                        {owner
+                                          ? "Ẩn"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </POrderDynamic>
@@ -1372,7 +1394,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       {viewingDetail && (
         <Dialog
           open={isViewModalOpen}
-          onOpenChange={(v: boolean) => withSkipClear(() => setIsViewModalOpen(v))}
+          onOpenChange={(v: boolean) =>
+            withSkipClear(() => setIsViewModalOpen(v))
+          }
         >
           <DialogContent
             className="max-w-7xl max-h-[90vh] p-0 overflow-hidden border-0 bg-transparent"
@@ -1424,7 +1448,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       <Sparkles className="w-5 h-5 drop-shadow-lg" />
                     </div>
 
-                    <DialogTitle></DialogTitle>
+                    <DialogTitle className="sr-only">Xem tin nhắn</DialogTitle>
 
                     {/* Enhanced customer info */}
                     <div className="relative flex items-center justify-between">
@@ -1434,7 +1458,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           <div className="absolute inset-0 bg-white rounded-full animate-ping opacity-20"></div>
                           <div className="relative w-14 h-14 bg-gradient-to-br from-white/30 to-white/10 rounded-full flex items-center justify-center backdrop-blur-sm border-3 border-white/50 shadow-2xl group-hover:scale-110 transition-transform duration-300">
                             <span className="text-lg font-bold text-white drop-shadow-lg">
-                              {viewingDetail.customer_name?.charAt(0) || "K"}
+                              {viewingDetail?.customer_name?.charAt(0) || "K"}
                             </span>
                           </div>
                           {/* Online indicator */}
@@ -1443,12 +1467,51 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
                         <div className="space-y-1">
                           <h3 className="font-bold text-lg text-white drop-shadow-md">
-                            {viewingDetail.customer_name || "Khách hàng"}
+                            {viewingDetail?.customer_name || "Khách hàng"}
                           </h3>
-                          <p className="text-sm text-cyan-100 font-medium flex items-center gap-2">
-                            <Hash className="w-4 h-4" />
-                            Mã đơn: {viewingDetail.id}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <p className="text-sm text-cyan-100 font-medium flex items-center gap-2">
+                              <Hash className="w-4 h-4" />
+                              Mã đơn: {viewingDetail?.id ?? "N/A"}
+                            </p>
+
+                            {/* Conversation type badge (Nhóm chat / Cá Nhân) */}
+                            {(() => {
+                              // Normalize metadata (support string or object) and new format
+                              let md: any = viewingDetail?.metadata as any;
+                              if (typeof md === "string") {
+                                try {
+                                  md = JSON.parse(md);
+                                } catch {
+                                  md = {};
+                                }
+                              }
+                              const legacyType = md?.conversation_type as
+                                | string
+                                | undefined;
+                              const newIsGroup = md?.conversation_info
+                                ?.is_group as boolean | undefined;
+                              const type =
+                                legacyType ??
+                                (typeof newIsGroup === "boolean"
+                                  ? newIsGroup
+                                    ? "group"
+                                    : "private"
+                                  : undefined);
+                              if (!type) return null;
+                              const label =
+                                type === "group"
+                                  ? "Nhóm chat"
+                                  : type === "private"
+                                  ? "Cá Nhân"
+                                  : "Không xác định";
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-white/20 text-white/90 border border-white/30">
+                                  {label}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
 
@@ -1457,8 +1520,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           <User className="w-4 h-4 text-cyan-200" />
                           <p className="text-sm text-cyan-100 font-medium">
                             Sale:{" "}
-                            {viewingDetail.order?.sale_by?.fullName ||
-                              viewingDetail.order?.sale_by?.username ||
+                            {viewingDetail?.order?.sale_by?.fullName ||
+                              viewingDetail?.order?.sale_by?.username ||
                               "N/A"}
                           </p>
                         </div>
@@ -1480,7 +1543,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                       className="absolute inset-0"
                       style={{
                         backgroundImage: `radial-gradient(circle at 25% 25%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), 
-                               radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.1) 0%, transparent 50%)`,
+                         radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.1) 0%, transparent 50%)`,
                       }}
                     ></div>
                   </div>
@@ -1489,89 +1552,211 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <div className="flex-1 p-6 overflow-y-auto space-y-6 relative z-10 scrollbar-hide hover:scrollbar-show">
                     {(() => {
                       try {
-                        // Parse content_lq from metadata
-                        const metadata = viewingDetail.metadata || {};
-                        const contentLq = metadata.content_lq || "";
-
-                        if (!contentLq) {
-                          return (
-                            <div className="flex justify-center items-center h-full">
-                              <div className="text-center">
-                                {/* Enhanced empty state */}
-                                <div className="relative mb-6">
-                                  <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-full flex items-center justify-center mx-auto shadow-2xl">
-                                    <div className="relative">
-                                      <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-20"></div>
-                                      <MessageCircle className="relative w-12 h-12 text-blue-500 animate-pulse" />
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="text-xl font-semibold text-gray-600 mb-2">
-                                  Không có tin nhắn nào
-                                </div>
-                                <div className="text-sm text-gray-400">
-                                  Cuộc trò chuyện sẽ hiển thị tại đây
-                                </div>
-                              </div>
-                            </div>
-                          );
+                        // Normalize metadata (support string or object)
+                        let metadata: any = viewingDetail.metadata ?? {};
+                        if (typeof metadata === "string") {
+                          try {
+                            metadata = JSON.parse(metadata);
+                          } catch {
+                            metadata = {};
+                          }
                         }
 
-                        // Split messages by [CUSTOMER] and [SALE] tags
+                        // Unified message model used by UI
                         interface Message {
                           type: "customer" | "sale";
                           text: string;
                           time: string;
                           index: number;
+                          messageId?: number | string;
+                          senderName?: string;
+                          // Quoted/replied message support
+                          isQuoted?: boolean;
+                          quotedMessageId?: number | string | null;
+                          quotedSenderName?: string | null;
+                          quotedText?: string;
                         }
 
-                        const messages: Message[] = [];
-                        const lines = contentLq.split("\n");
+                        let messages: Message[] = [];
 
-                        lines.forEach((line: string, index: number) => {
-                          const customerMatch = line.match(
-                            /\[CUSTOMER\]\s*(.+?)\s*\((\d+:\d+)\)/
-                          );
-                          const saleMatch = line.match(
-                            /\[SALE\]\s*(.+?)\s*\((\d+:\d+)\)/
-                          );
+                        // Common fallback names
+                        const saleDisplayName =
+                          viewingDetail?.order?.sale_by?.fullName ||
+                          viewingDetail?.order?.sale_by?.username ||
+                          "Sale";
+                        const customerDisplayName =
+                          viewingDetail?.customer_name ||
+                          metadata?.conversation_info?.conversation_name ||
+                          "Khách";
 
-                          if (customerMatch) {
+                        // New format: metadata.messages (array)
+                        if (Array.isArray(metadata.messages)) {
+                          const rawMessages = metadata.messages as any[];
+                          // First pass: build base messages
+                          messages = rawMessages.map((m: any, i: number) => {
+                            let text = "";
                             try {
-                              const messageData = JSON.parse(customerMatch[1]);
-                              messages.push({
-                                type: "customer",
-                                text: messageData.text || "",
-                                time: customerMatch[2] || "",
-                                index: index,
-                              });
-                            } catch (e) {
-                              messages.push({
-                                type: "customer",
-                                text: customerMatch[1] || "",
-                                time: customerMatch[2] || "",
-                                index: index,
-                              });
+                              const parsed =
+                                typeof m.content === "string"
+                                  ? JSON.parse(m.content)
+                                  : m.content;
+                              text = parsed?.text ?? String(m.content ?? "");
+                            } catch {
+                              text = String(m.content ?? "");
                             }
-                          } else if (saleMatch) {
+                            let time = "";
                             try {
-                              const messageData = JSON.parse(saleMatch[1]);
-                              messages.push({
-                                type: "sale",
-                                text: messageData.text || "",
-                                time: saleMatch[2] || "",
-                                index: index,
-                              });
-                            } catch (e) {
-                              messages.push({
-                                type: "sale",
-                                text: saleMatch[1] || "",
-                                time: saleMatch[2] || "",
-                                index: index,
-                              });
+                              const d = new Date(m.timestamp);
+                              if (!isNaN(d.getTime())) {
+                                time = formatVietnamDateTime(d);
+                              }
+                            } catch {
+                              time = "";
                             }
+                            const type: Message["type"] =
+                              m.role?.toString().toUpperCase() === "SALE"
+                                ? "sale"
+                                : "customer";
+                            const senderName =
+                              m.sender_name?.toString?.() ||
+                              (type === "sale"
+                                ? saleDisplayName
+                                : customerDisplayName);
+                            const isQuoted =
+                              Boolean(m.is_quoted_message) ||
+                              m.quoted_message_id != null;
+                            const quotedMessageId = m.quoted_message_id ?? null;
+                            const quotedSenderName =
+                              m.quoted_sender_name?.toString?.() ?? null;
+                            return {
+                              type,
+                              text,
+                              time,
+                              index: i,
+                              messageId: m.message_id,
+                              senderName,
+                              isQuoted,
+                              quotedMessageId,
+                              quotedSenderName,
+                            };
+                          });
+
+                          // Second pass: resolve quoted text by referenced message_id
+                          try {
+                            const messageLookup = new Map<
+                              string,
+                              { text: string; senderName?: string }
+                            >();
+                            for (const msg of messages) {
+                              if (
+                                msg.messageId !== undefined &&
+                                msg.messageId !== null
+                              ) {
+                                messageLookup.set(String(msg.messageId), {
+                                  text: msg.text,
+                                  senderName: msg.senderName,
+                                });
+                              }
+                            }
+                            messages = messages.map((msg) => {
+                              if (msg.quotedMessageId != null) {
+                                const entry = messageLookup.get(
+                                  String(msg.quotedMessageId)
+                                );
+                                if (entry) {
+                                  return {
+                                    ...msg,
+                                    quotedText: entry.text,
+                                    quotedSenderName:
+                                      msg.quotedSenderName ||
+                                      entry.senderName ||
+                                      null,
+                                  };
+                                }
+                              }
+                              return msg;
+                            });
+                          } catch {}
+                        } else {
+                          // Legacy format: metadata.content_lq (string with [CUSTOMER]/[SALE] lines)
+                          const contentLq = metadata.content_lq || "";
+
+                          if (!contentLq) {
+                            return (
+                              <div className="flex justify-center items-center h-full">
+                                <div className="text-center">
+                                  {/* Enhanced empty state */}
+                                  <div className="relative mb-6">
+                                    <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-full flex items-center justify-center mx-auto shadow-2xl">
+                                      <div className="relative">
+                                        <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-20"></div>
+                                        <MessageCircle className="relative w-12 h-12 text-blue-500 animate-pulse" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="text-xl font-semibold text-gray-600 mb-2">
+                                    Không có tin nhắn nào
+                                  </div>
+                                  <div className="text-sm text-gray-400">
+                                    Cuộc trò chuyện sẽ hiển thị tại đây
+                                  </div>
+                                </div>
+                              </div>
+                            );
                           }
-                        });
+
+                          const lines = contentLq.split("\n");
+                          lines.forEach((line: string, index: number) => {
+                            const customerMatch = line.match(
+                              /\[CUSTOMER\]\s*(.+?)\s*\((\d+:\d+)\)/
+                            );
+                            const saleMatch = line.match(
+                              /\[SALE\]\s*(.+?)\s*\((\d+:\d+)\)/
+                            );
+
+                            if (customerMatch) {
+                              try {
+                                const messageData = JSON.parse(
+                                  customerMatch[1]
+                                );
+                                messages.push({
+                                  type: "customer",
+                                  text: messageData.text || "",
+                                  time: customerMatch[2] || "",
+                                  index,
+                                  senderName: customerDisplayName,
+                                });
+                              } catch (e) {
+                                messages.push({
+                                  type: "customer",
+                                  text: customerMatch[1] || "",
+                                  time: customerMatch[2] || "",
+                                  index,
+                                  senderName: customerDisplayName,
+                                });
+                              }
+                            } else if (saleMatch) {
+                              try {
+                                const messageData = JSON.parse(saleMatch[1]);
+                                messages.push({
+                                  type: "sale",
+                                  text: messageData.text || "",
+                                  time: saleMatch[2] || "",
+                                  index,
+                                  senderName: saleDisplayName,
+                                });
+                              } catch (e) {
+                                messages.push({
+                                  type: "sale",
+                                  text: saleMatch[1] || "",
+                                  time: saleMatch[2] || "",
+                                  index,
+                                  senderName: saleDisplayName,
+                                });
+                              }
+                            }
+                          });
+                        }
 
                         if (messages.length === 0) {
                           return (
@@ -1595,7 +1780,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             if (message.type === "customer") {
                               return (
                                 <div
-                                  key={`customer-${index}`}
+                                  key={`customer-${message.messageId ?? index}`}
                                   className="flex items-start space-x-4 animate-fadeInLeft group"
                                   style={{ animationDelay: `${index * 0.1}s` }}
                                 >
@@ -1614,11 +1799,57 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   </div>
 
                                   <div className="flex flex-col space-y-2 max-w-md lg:max-w-lg">
-                                    {/* Enhanced message bubble */}
+                                    {/* Enhanced message bubble - ALWAYS on top and clear */}
                                     <div className="relative group/message">
                                       <div className="absolute inset-0 bg-gradient-to-br from-white to-blue-50 rounded-2xl blur opacity-30 group-hover/message:opacity-50 transition-opacity duration-300"></div>
-                                      <div className="relative bg-white/90 backdrop-blur-sm p-4 rounded-2xl rounded-tl-md shadow-lg border border-white/50 group-hover/message:shadow-xl group-hover/message:scale-[1.02] transition-all duration-300">
-                                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                                      <div className="relative bg-white/95 backdrop-blur-sm p-4 rounded-2xl rounded-tl-md shadow-lg border-2 border-blue-100/50 group-hover/message:shadow-2xl group-hover/message:scale-[1.02] transition-all duration-300">
+                                        {/* Quoted message preview (INSIDE main bubble, at top, muted) */}
+                                        {message.isQuoted && (
+                                          <div className="mb-3 pb-3 border-b border-gray-200/60">
+                                            {/* Muted quoted message container */}
+                                            <div className="relative overflow-hidden rounded-lg bg-gray-50/70 border border-gray-200/40 p-3">
+                                              {/* Overlay to make it more muted */}
+                                              <div className="absolute inset-0 bg-white/40 pointer-events-none"></div>
+
+                                              {/* Quote indicator line */}
+                                              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-300 to-blue-400 opacity-60"></div>
+
+                                              <div className="relative pl-3">
+                                                {/* Quoted sender info - muted */}
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full opacity-50"></div>
+                                                  <span className="text-xs font-medium text-gray-500/80">
+                                                    Trả lời{" "}
+                                                    {message.quotedSenderName ||
+                                                      "tin nhắn"}
+                                                  </span>
+                                                  {message.quotedMessageId !==
+                                                    undefined &&
+                                                    message.quotedMessageId !==
+                                                      null && (
+                                                      <span className="text-[10px] text-gray-400 bg-gray-100/80 px-1.5 py-0.5 rounded opacity-70">
+                                                        #
+                                                        {String(
+                                                          message.quotedMessageId
+                                                        )}
+                                                      </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Quoted message content - heavily muted */}
+                                                <div className="text-xs text-gray-400/90 line-clamp-2 whitespace-pre-wrap opacity-75 italic">
+                                                  "
+                                                  {message.quotedText ||
+                                                    "(Không xem được nội dung)"}
+                                                  "
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Main message content - PROMINENT */}
+                                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-medium">
                                           <EmojiRenderer
                                             text={message.text.replace(
                                               /\\n/g,
@@ -1627,16 +1858,21 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                             renderMode="image"
                                           />
                                         </p>
+
                                         {/* Message tail */}
-                                        <div className="absolute -left-2 top-4 w-4 h-4 bg-white/90 transform rotate-45 border-l border-t border-white/50"></div>
+                                        <div className="absolute -left-2 top-4 w-4 h-4 bg-white/95 transform rotate-45 border-l-2 border-t-2 border-blue-100/50"></div>
                                       </div>
                                     </div>
 
-                                    {/* Enhanced timestamp */}
+                                    {/* Enhanced timestamp with sender name */}
                                     <div className="flex items-center gap-2 ml-4">
                                       <Clock className="w-3 h-3 text-gray-400" />
                                       <span className="text-xs text-gray-500 font-medium">
-                                        {message.time}
+                                        {message.senderName
+                                          ? `${message.senderName} • ${
+                                              message.time || ""
+                                            }`
+                                          : message.time}
                                       </span>
                                       <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse"></div>
                                     </div>
@@ -1646,15 +1882,61 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             } else {
                               return (
                                 <div
-                                  key={`sale-${index}`}
+                                  key={`sale-${message.messageId ?? index}`}
                                   className="flex items-start space-x-4 justify-end animate-fadeInRight group"
                                   style={{ animationDelay: `${index * 0.1}s` }}
                                 >
                                   <div className="flex flex-col space-y-2 max-w-md lg:max-w-lg">
-                                    {/* Enhanced sale message bubble */}
+                                    {/* Enhanced sale message bubble - ALWAYS on top and clear */}
                                     <div className="relative group/message">
                                       <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl blur opacity-30 group-hover/message:opacity-50 transition-opacity duration-300"></div>
-                                      <div className="relative bg-gradient-to-br from-blue-500 to-cyan-600 text-white p-4 rounded-2xl rounded-tr-md shadow-lg group-hover/message:shadow-xl group-hover/message:scale-[1.02] transition-all duration-300">
+                                      <div className="relative bg-gradient-to-br from-blue-500 to-cyan-600 text-white p-4 rounded-2xl rounded-tr-md shadow-lg border border-blue-400/30 group-hover/message:shadow-2xl group-hover/message:scale-[1.02] transition-all duration-300">
+                                        {/* Quoted message preview (INSIDE main bubble, at top, muted) */}
+                                        {message.isQuoted && (
+                                          <div className="mb-3 pb-3 border-b border-white/20">
+                                            {/* Muted quoted message container */}
+                                            <div className="relative overflow-hidden rounded-lg bg-black/10 border border-white/20 p-3">
+                                              {/* Overlay to make it more muted */}
+                                              <div className="absolute inset-0 bg-black/10 pointer-events-none"></div>
+
+                                              {/* Quote indicator line */}
+                                              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-cyan-300 to-cyan-200 opacity-70"></div>
+
+                                              <div className="relative pl-3">
+                                                {/* Quoted sender info - muted */}
+                                                <div className="flex items-center gap-2 mb-1.5 justify-end">
+                                                  {message.quotedMessageId !==
+                                                    undefined &&
+                                                    message.quotedMessageId !==
+                                                      null && (
+                                                      <span className="text-[10px] text-cyan-200/70 bg-white/10 px-1.5 py-0.5 rounded">
+                                                        #
+                                                        {String(
+                                                          message.quotedMessageId
+                                                        )}
+                                                      </span>
+                                                    )}
+                                                  <span className="text-xs font-medium text-white/70">
+                                                    Trả lời{" "}
+                                                    {message.quotedSenderName ||
+                                                      "tin nhắn"}
+                                                  </span>
+                                                  <div className="w-1.5 h-1.5 bg-cyan-300 rounded-full opacity-60"></div>
+                                                </div>
+
+                                                {/* Quoted message content - heavily muted */}
+                                                <div className="text-xs text-white/60 line-clamp-2 whitespace-pre-wrap text-right italic">
+                                                  "
+                                                  {message.quotedText ||
+                                                    "(Không xem được nội dung)"}
+                                                  "
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Main message content - PROMINENT */}
                                         <p className="text-sm whitespace-pre-wrap leading-relaxed font-medium">
                                           <EmojiRenderer
                                             text={message.text.replace(
@@ -1664,19 +1946,24 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                             renderMode="image"
                                           />
                                         </p>
+
                                         {/* Message tail */}
                                         <div className="absolute -right-2 top-4 w-4 h-4 bg-gradient-to-br from-blue-500 to-cyan-600 transform rotate-45"></div>
 
-                                        {/* Shimmer effect - ĐÃ SỬA LỖI */}
+                                        {/* Shimmer effect */}
                                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/message:translate-x-full transition-transform duration-1000 rounded-2xl"></div>
                                       </div>
                                     </div>
 
-                                    {/* Enhanced timestamp */}
+                                    {/* Enhanced timestamp with sender name */}
                                     <div className="flex items-center gap-2 mr-4 justify-end">
                                       <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
                                       <span className="text-xs text-gray-500 font-medium">
-                                        {message.time}
+                                        {message.senderName
+                                          ? `${message.senderName} • ${
+                                              message.time || ""
+                                            }`
+                                          : message.time}
                                       </span>
                                       <CheckCircle className="w-3 h-3 text-blue-500" />
                                     </div>
@@ -1767,7 +2054,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         size="sm"
                         className="group relative overflow-hidden flex items-center gap-2 px-4 py-2 text-base font-medium border-2 border-gray-300 hover:border-red-400 bg-white/80 hover:bg-red-50 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 ease-out backdrop-blur-sm"
                       >
-                        {/* Shimmer effect - ĐÃ SỬA LỖI */}
+                        {/* Shimmer effect */}
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-100/50 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                         <span className="flex items-center gap-2">
                           <X className="w-4 h-4 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
@@ -1787,7 +2074,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkDeleteModal
         selectedOrders={selectedOrders}
         isOpen={isBulkDeleteModalOpen}
-  onClose={() => withSkipClear(() => setIsBulkDeleteModalOpen(false))}
+        onClose={() => withSkipClear(() => setIsBulkDeleteModalOpen(false))}
         onConfirm={handleBulkDeleteConfirm}
         loading={loading}
       />
@@ -1795,7 +2082,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkExtendModal
         selectedOrders={selectedOrders}
         isOpen={isBulkExtendModalOpen}
-  onClose={() => withSkipClear(() => setIsBulkExtendModalOpen(false))}
+        onClose={() => withSkipClear(() => setIsBulkExtendModalOpen(false))}
         onConfirm={handleBulkExtendConfirm}
         loading={loading}
       />
@@ -1803,7 +2090,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkNotesModal
         selectedOrders={selectedOrders}
         isOpen={isBulkNotesModalOpen}
-  onClose={() => withSkipClear(() => setIsBulkNotesModalOpen(false))}
+        onClose={() => withSkipClear(() => setIsBulkNotesModalOpen(false))}
         onConfirm={handleBulkNotesConfirm}
         loading={loading}
       />
@@ -1811,12 +2098,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       <BulkHideModal
         selectedOrders={selectedOrders}
         isOpen={isBulkHideModalOpen}
-    onClose={() => withSkipClear(() => setIsBulkHideModalOpen(false))}
+        onClose={() => withSkipClear(() => setIsBulkHideModalOpen(false))}
         onConfirm={(reason: string) => {
           if (onBulkHide && selectedOrders.length > 0) {
             onBulkHide(selectedOrders, reason);
             setSelectedOrderIds(new Set());
-      withSkipClear(() => setIsBulkHideModalOpen(false));
+            withSkipClear(() => setIsBulkHideModalOpen(false));
           }
         }}
         loading={loading}
