@@ -2005,7 +2005,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                         )}
 
                                         {/* Main message content - PROMINENT */}
-                                        <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-medium">
+                                        <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-medium">
                                           {message.contentType === "image" && message.imageUrl ? (
                                             <div>
                                               <img src={message.imageThumb || message.imageUrl} alt={message.imageCaption || "image"} className="max-w-full rounded-lg shadow-sm" />
@@ -2061,7 +2061,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                               renderMode="image"
                                             />
                                           )}
-                                        </p>
+                                        </div>
 
                                         {/* Message tail */}
                                         <div className="absolute -left-2 top-4 w-4 h-4 bg-white/95 transform rotate-45 border-l-2 border-t-2 border-blue-100/50"></div>
@@ -2141,7 +2141,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                         )}
 
                                         {/* Main message content - PROMINENT */}
-                                        <p className="text-sm whitespace-pre-wrap leading-relaxed font-medium">
+                                        <div className="text-sm whitespace-pre-wrap leading-relaxed font-medium">
                                           {message.contentType === "image" && message.imageUrl ? (
                                             <div>
                                               <img src={message.imageThumb || message.imageUrl} alt={message.imageCaption || "image"} className="max-w-full rounded-lg shadow-sm ml-auto" />
@@ -2197,7 +2197,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                               renderMode="image"
                                             />
                                           )}
-                                        </p>
+                                        </div>
 
                                         {/* Message tail */}
                                         <div className="absolute -right-2 top-4 w-4 h-4 bg-gradient-to-br from-blue-500 to-cyan-600 transform rotate-45"></div>
