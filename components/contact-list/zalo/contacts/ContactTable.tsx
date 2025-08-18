@@ -2,6 +2,7 @@
 import React from "react";
 import { AutoReplyContact, ContactRole } from "@/types/auto-reply";
 import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
+import { useSalePersonas } from "@/hooks/contact-list/useSalePersonas";
 import AllowedProductsModal from "./modals/AllowedProductsModal";
 import ContactKeywordsModal from "./modals/ContactKeywordsModal";
 import ContactProfileModal from "./modals/ContactProfileModal";
@@ -48,6 +49,7 @@ import {
 } from "@/components/ui/hover-card";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { api } from "@/lib/api";
 import {
   Users,
   Package,
@@ -91,10 +93,17 @@ export const ContactTable: React.FC<Props> = ({
     error,
     updateRole,
     toggleAutoReply,
+  fetchContacts,
   } = useContactsPaginated();
   const { currentUser } = useCurrentUser();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
   const controlsDisabled = zaloDisabled || !globalAutoReplyEnabled;
+
+  // Personas for selection per contact
+  const { personas, loading: personasLoading, fetchPersonas } = useSalePersonas(true);
+
+  const isRestrictedRole = (role: ContactRole) =>
+    role === ContactRole.SUPPLIER || role === ContactRole.INTERNAL;
 
   const [contactIdForProducts, setContactIdForProducts] = React.useState<
     number | null
@@ -164,6 +173,20 @@ export const ContactTable: React.FC<Props> = ({
     setContactNameForToggle(contactName);
     setPendingToggleValue(newValue);
     setConfirmDialogOpen(true);
+  };
+
+  // Assign persona to a contact
+  const handleAssignPersona = async (contactId: number, personaId: number | null) => {
+    try {
+      await api.patch(`auto-reply/contacts/${contactId}/persona`, {
+        personaId,
+      });
+      // Refresh current page to reflect assignedPersona
+      fetchContacts();
+      setAlert({ type: "success", message: personaId ? "Đã gán persona" : "Đã bỏ gán persona" });
+    } catch (e: any) {
+      setAlert({ type: "error", message: e?.message || "Gán persona thất bại" });
+    }
   };
 
   // Handle confirm toggle
@@ -309,6 +332,18 @@ export const ContactTable: React.FC<Props> = ({
     return (page - 1) * pageSize + index + 1;
   };
 
+  // Listen for personas changes emitted by PersonasManagerModal and refresh
+  // local personas and contacts so UI updates immediately without full page reload
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      fetchPersonas();
+      // also refresh contacts so assignedPersona reflects new items
+      fetchContacts();
+    };
+    window.addEventListener("personas:changed", handler as EventListener);
+    return () => window.removeEventListener("personas:changed", handler as EventListener);
+  }, [fetchPersonas, fetchContacts]);
+
   // Check if should show empty state
   const showEmptyState = !loading && total === 0;
 
@@ -392,6 +427,12 @@ export const ContactTable: React.FC<Props> = ({
                           <div className="flex items-center justify-center gap-2">
                             <UserPlus className="w-3 h-3" />
                             Vai trò
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <UserCheck className="w-3 h-3" />
+                            Persona
                           </div>
                         </TableHead>
                         <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
@@ -498,15 +539,61 @@ export const ContactTable: React.FC<Props> = ({
                               </Select>
                             </TableCell>
 
+                            {/* Persona selection per contact */}
+              <TableCell className="text-center px-4 py-3">
+                              <Select
+                                value={c.assignedPersona?.personaId ? String(c.assignedPersona.personaId) : "none"}
+                                onValueChange={(val) =>
+                                  handleAssignPersona(
+                                    c.contactId,
+                                    val === "none" ? null : Number(val)
+                                  )
+                                }
+                disabled={isRestrictedRole(c.role) || zaloDisabled}
+                              >
+                                <SelectTrigger className="w-[180px] mx-auto h-8 rounded-lg border hover:border-purple-300 transition-colors duration-300">
+                                  <SelectValue placeholder="Chọn persona">
+                                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg">
+                                      <UserCheck className="w-3 h-3" />
+                                      <span className="font-medium text-xs">
+                                        {c.assignedPersona?.name || "Chưa chọn"}
+                                      </span>
+                                    </div>
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className="rounded-lg border-0 shadow-xl">
+                                  <SelectItem key="none" value="none" className="rounded-lg my-0.5">
+                                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg">
+                                      <span className="font-medium text-xs text-gray-600">Chưa chọn</span>
+                                    </div>
+                                  </SelectItem>
+                                  {personas.map((p) => (
+                                    <SelectItem key={p.personaId} value={String(p.personaId)} className="rounded-lg my-0.5">
+                                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg">
+                                        <span className="font-medium text-xs">{p.name}</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+
                             {/* Auto-Reply Toggle with Confirmation */}
                             <TableCell className="text-center px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="flex items-center gap-2">
+                                      {(!c.assignedPersona || !c.assignedPersona.personaId) && (
+                                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                      )}
                                       <Switch
                                         checked={c.autoReplyOn}
-                                        disabled={controlsDisabled}
+                                        disabled={
+                                          controlsDisabled ||
+                                          !c.assignedPersona?.personaId ||
+                                          isRestrictedRole(c.role)
+                                        }
                                         onCheckedChange={(v) =>
                                           handleToggleAutoReply(
                                             c.contactId,
@@ -526,11 +613,17 @@ export const ContactTable: React.FC<Props> = ({
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>
-                                      {c.autoReplyOn
-                                        ? "Tắt tự động trả lời cho liên hệ này"
-                                        : "Bật tự động trả lời cho liên hệ này"}
-                                    </p>
+                                    {isRestrictedRole(c.role) ? (
+                                      <p>Liên hệ thuộc nhóm không áp dụng auto-reply</p>
+                                    ) : (!c.assignedPersona || !c.assignedPersona.personaId) ? (
+                                      <p>Cần chọn Persona trước khi bật auto-reply</p>
+                                    ) : (
+                                      <p>
+                                        {c.autoReplyOn
+                                          ? "Tắt tự động trả lời cho liên hệ này"
+                                          : "Bật tự động trả lời cho liên hệ này"}
+                                      </p>
+                                    )}
                                   </TooltipContent>
                                 </Tooltip>
                               </div>
@@ -623,7 +716,7 @@ export const ContactTable: React.FC<Props> = ({
                                     className="w-56 rounded-xl shadow-xl border-0 bg-white/95 backdrop-blur-sm"
                                   >
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled}
+                                      disabled={zaloDisabled || isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForProducts(c.contactId)
                                       }
@@ -643,7 +736,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </DropdownMenuItem>
 
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled}
+                                      disabled={zaloDisabled || isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForKeywords(c.contactId)
                                       }
@@ -663,7 +756,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </DropdownMenuItem>
 
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled}
+                                      disabled={zaloDisabled || isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForProfile(c.contactId)
                                       }
@@ -683,6 +776,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </DropdownMenuItem>
 
                                     <DropdownMenuItem
+                                      disabled={isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForLogs(c.contactId)
                                       }
@@ -753,6 +847,10 @@ export const ContactTable: React.FC<Props> = ({
             open={contactIdForKeywords !== null}
             onClose={() => setContactIdForKeywords(null)}
             contactId={contactIdForKeywords}
+            disabled={(() => {
+              const c = contacts.find(x => x.contactId === contactIdForKeywords);
+              return !!c && isRestrictedRole(c.role);
+            })()}
           />
         )}
         {contactIdForProfile !== null && (

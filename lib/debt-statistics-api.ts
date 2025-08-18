@@ -23,6 +23,24 @@ export interface AgingData {
   range?: string; // Add range property from API
 }
 
+export interface PayLaterDelayItem {
+  range: string;
+  count: number;
+  amount: number;
+}
+
+export interface ContactResponseItem {
+  status: string;
+  customers: number;
+}
+
+export interface ContactDetailItem {
+  customer_code: string;
+  customer_name: string;
+  employee_code_raw?: string;
+  latest_time?: string | Date;
+}
+
 export interface TrendData {
   date: string;
   name: string;
@@ -142,6 +160,38 @@ class DebtStatisticsAPI {
     const response = await api.get(`${this.baseUrl}/trends`, { params: filters });
     this.setCacheData(cacheKey, response.data);
     return response.data;
+  }
+
+  async getPayLaterDelay(filters: StatisticsFilters & { buckets?: string } = {}): Promise<PayLaterDelayItem[]> {
+    const cacheKey = this.getCacheKey('pay-later-delay', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const response = await api.get(`${this.baseUrl}/pay-later-delay`, { params: filters });
+    this.setCacheData(cacheKey, response.data || []);
+    return response.data || [];
+  }
+
+  async getContactResponses(filters: StatisticsFilters & { by?: 'customer' | 'invoice' } = {}): Promise<ContactResponseItem[]> {
+    const params = { by: 'customer', ...filters };
+    const cacheKey = this.getCacheKey('contact-responses', params);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const response = await api.get(`${this.baseUrl}/contact-responses`, { params });
+    this.setCacheData(cacheKey, response.data || []);
+    return response.data || [];
+  }
+
+  async getContactDetails(params: { date: string; responseStatus: string; page?: number; limit?: number; employeeCode?: string; customerCode?: string; }): Promise<{ data: ContactDetailItem[]; total: number; page: number; limit: number; totalPages: number; }> {
+    const cacheKey = this.getCacheKey('contact-details', params);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const response = await api.get(`${this.baseUrl}/contact-details`, { params });
+    const data = response.data || { data: [], total: 0, page: params.page || 1, limit: params.limit || 50, totalPages: 0 };
+    this.setCacheData(cacheKey, data);
+    return data;
   }
 
   async getEmployeePerformance(filters: StatisticsFilters = {}): Promise<EmployeePerformance[]> {

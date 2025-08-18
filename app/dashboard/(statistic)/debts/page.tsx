@@ -34,11 +34,16 @@ import {
   DebtListResponse,
   getDetailedDebtsByDate
 } from "@/lib/debt-statistics-api";
+import type { PayLaterDelayItem, ContactResponseItem, ContactDetailItem } from "@/lib/debt-statistics-api";
 import { api } from "@/lib/api";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useDebounce } from "@/hooks/useDebounce";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { BarChart as RBarChart, Bar as RBar, XAxis as RXAxis, YAxis as RYAxis, CartesianGrid as RCartesianGrid, ResponsiveContainer as RResponsiveContainer, Tooltip as RTooltip } from "recharts";
 
 interface ChartDataItem {
   name: string;
@@ -199,6 +204,18 @@ const DebtStatisticsDashboard: React.FC = () => {
   const [agingData, setAgingData] = useState<AgingData[]>([]);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [employeeData, setEmployeeData] = useState<EmployeePerformance[]>([]);
+  const [payLaterDelayData, setPayLaterDelayData] = useState<PayLaterDelayItem[]>([]);
+  const [contactResponses, setContactResponses] = useState<ContactResponseItem[]>([]);
+
+  // Contact details modal state
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [contactModalTitle, setContactModalTitle] = useState<string>("");
+  const [contactDetails, setContactDetails] = useState<ContactDetailItem[]>([]);
+  const [contactPage, setContactPage] = useState(1);
+  const [contactLimit, setContactLimit] = useState(50);
+  const [contactTotal, setContactTotal] = useState(0);
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactStatusFilter, setContactStatusFilter] = useState<string>("");
 
   // Use ref to track if initial fetch is done and prevent duplicate calls
   const initialFetchDone = useRef(false);
@@ -236,11 +253,13 @@ const DebtStatisticsDashboard: React.FC = () => {
         if (!silent) setLoading(true);
         lastFetchParams.current = paramsKey;
 
-        const [overviewRes, agingRes, trendsRes, employeeRes] = await Promise.all([
+        const [overviewRes, agingRes, trendsRes, employeeRes, payLaterRes, responsesRes] = await Promise.all([
           debtStatisticsAPI.getOverview(debouncedFilters),
           debtStatisticsAPI.getAgingAnalysis(debouncedFilters),
           debtStatisticsAPI.getTrends(debouncedFilters),
           debtStatisticsAPI.getEmployeePerformance(debouncedFilters),
+          debtStatisticsAPI.getPayLaterDelay({ ...debouncedFilters, buckets: '7,14,30' }),
+          debtStatisticsAPI.getContactResponses({ ...debouncedFilters, by: 'customer' }),
         ]);
 
         if (isComponentMounted.current) {
@@ -249,6 +268,8 @@ const DebtStatisticsDashboard: React.FC = () => {
           setAgingData(agingRes);
           setTrendData(trendsRes);
           setEmployeeData(employeeRes);
+          setPayLaterDelayData(payLaterRes || []);
+          setContactResponses(responsesRes || []);
           initialFetchDone.current = true;
         }
       });
@@ -460,6 +481,86 @@ const DebtStatisticsDashboard: React.FC = () => {
     setModalOpen(true);
     fetchDebtsForModal(category, dateFromChart);
   }, [fetchDebtsForModal]);
+
+  // Helper: parse bucket label like "1-7" or ">30" into min/max days
+  const parseBucketLabel = (label: string): { minDays?: number; maxDays?: number } => {
+    if (!label) return {};
+    const trimmed = label.trim();
+    if (trimmed.startsWith('>')) {
+      const n = parseInt(trimmed.replace('>', '').trim(), 10);
+      if (!Number.isNaN(n)) return { minDays: n + 1 };
+      return {};
+    }
+    const parts = trimmed.split('-');
+    if (parts.length === 2) {
+      const a = parseInt(parts[0].trim(), 10);
+      const b = parseInt(parts[1].trim(), 10);
+      return {
+        minDays: Number.isNaN(a) ? undefined : a,
+        maxDays: Number.isNaN(b) ? undefined : b,
+      };
+    }
+    return {};
+  };
+
+  // Drilldown for PayLater buckets
+  const handlePayLaterBucketClick = useCallback(async (bucket: { range?: string; label?: string }) => {
+    try {
+      setSelectedCategory('pay_later');
+      setModalOpen(true);
+      setLoadingModalData(true);
+      const lbl = bucket.range || bucket.label || '';
+      const { minDays, maxDays } = parseBucketLabel(lbl);
+      const today = new Date();
+      const toDate = range?.to ? range.to : today;
+      const targetDate = toDate as Date;
+      const dateStr = targetDate.toISOString().split('T')[0];
+      const resp = await api.get('/debt-statistics/detailed', {
+        params: {
+          date: dateStr,
+          mode: 'payLater',
+          minDays,
+          maxDays,
+          page: 1,
+          limit: 1000,
+        }
+      });
+      const respData = resp.data;
+      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
+      setSelectedDebts(debts);
+    } catch (e) {
+      setSelectedDebts([]);
+    } finally {
+      setLoadingModalData(false);
+    }
+  }, [range]);
+
+  // Contact details modal loader
+  const loadContactDetails = useCallback(async (status: string, pageNum: number, limitNum: number) => {
+    setContactLoading(true);
+    try {
+      const toDate = range?.to ? range.to : new Date();
+      const dateStr = (toDate as Date).toISOString().split('T')[0];
+      const res = await debtStatisticsAPI.getContactDetails({ date: dateStr, responseStatus: status, page: pageNum, limit: limitNum });
+      setContactDetails(res.data || []);
+      setContactTotal(res.total || 0);
+      setContactPage(res.page || pageNum);
+      setContactLimit(res.limit || limitNum);
+    } catch {
+      setContactDetails([]);
+      setContactTotal(0);
+    } finally {
+      setContactLoading(false);
+    }
+  }, [range]);
+
+  const handleResponseBarClick = useCallback((item: ContactResponseItem) => {
+    const status = item.status;
+    setContactStatusFilter(status);
+    setContactModalTitle(`Khách theo trạng thái: ${status}`);
+    setContactModalOpen(true);
+    loadContactDetails(status, 1, contactLimit);
+  }, [contactLimit, loadContactDetails]);
 
   const getCategoryDisplayName = useCallback((category: string): string => {
     const categoryMap: Record<string, string> = {
@@ -708,14 +809,30 @@ const DebtStatisticsDashboard: React.FC = () => {
               />
             </TabsContent>
 
-            {/* TabsContent cho các mục mới, cần cập nhật logic hiển thị phù hợp nếu có */}
+            {/* Phân tích trễ hẹn */}
             <TabsContent value="promise_not_met">
-              {/* TODO: Thêm component hoặc nội dung cho "Khách đã hẹn nhưng không đúng hẹn" */}
-              <div className="p-4">Nội dung cho khách đã hẹn nhưng không đúng hẹn.</div>
+              <AgingChart
+                data={(payLaterDelayData || []).map((i) => ({ count: i.count, amount: i.amount, label: i.range, range: i.range }))}
+                loading={loading}
+                onBarClick={(data) => handlePayLaterBucketClick(data)}
+              />
             </TabsContent>
+
+            {/* Phân tích khách hàng đã trả lời */}
             <TabsContent value="customer_responded">
-              {/* TODO: Thêm component hoặc nội dung cho "Khách hàng đã trả lời" */}
-              <div className="p-4">Nội dung cho khách hàng đã trả lời.</div>
+              <div className="p-4">
+                <div className="h-80 w-full">
+                  <RResponsiveContainer width="100%" height="100%">
+                    <RBarChart data={contactResponses} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <RXAxis dataKey="status" angle={-30} textAnchor="end" height={60} />
+                      <RYAxis />
+                      <RTooltip formatter={(value: any) => [value, 'Số KH']} />
+                      <RBar dataKey="customers" fill="#3b82f6" onClick={(d: any) => d && d.payload && handleResponseBarClick(d.payload)} className="cursor-pointer" />
+                    </RBarChart>
+                  </RResponsiveContainer>
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
 
@@ -731,6 +848,59 @@ const DebtStatisticsDashboard: React.FC = () => {
             debts={selectedDebts}
             loading={loadingModalData}
           />
+
+          {/* Contact Details Modal */}
+          <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
+            <DialogContent className="!max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>{contactModalTitle}</DialogTitle>
+              </DialogHeader>
+              <div className="mt-2">
+                {contactLoading ? (
+                  <div className="py-12 text-center text-muted-foreground">Đang tải...</div>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mã KH</TableHead>
+                          <TableHead>Tên KH</TableHead>
+                          <TableHead>Mã NV</TableHead>
+                          <TableHead>Thời điểm gần nhất</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {contactDetails.map((c, idx) => (
+                          <TableRow key={`${c.customer_code}-${idx}`}>
+                            <TableCell>{c.customer_code}</TableCell>
+                            <TableCell>{c.customer_name || '-'}</TableCell>
+                            <TableCell>{c.employee_code_raw || '-'}</TableCell>
+                            <TableCell>{c.latest_time ? new Date(c.latest_time).toLocaleString('vi-VN') : '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                        {contactDetails.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Không có dữ liệu</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+              {/* Pagination */}
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">Tổng: {contactTotal}</div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={contactPage <= 1} onClick={() => loadContactDetails(contactStatusFilter, 1, contactLimit)}>Đầu</Button>
+                  <Button variant="outline" size="sm" disabled={contactPage <= 1} onClick={() => loadContactDetails(contactStatusFilter, contactPage - 1, contactLimit)}>Trước</Button>
+                  <span className="text-sm">Trang {contactPage} / {Math.max(1, Math.ceil(contactTotal / contactLimit))}</span>
+                  <Button variant="outline" size="sm" disabled={contactPage >= Math.ceil(contactTotal / contactLimit)} onClick={() => loadContactDetails(contactStatusFilter, contactPage + 1, contactLimit)}>Tiếp</Button>
+                  <Button variant="outline" size="sm" disabled={contactPage >= Math.ceil(contactTotal / contactLimit)} onClick={() => loadContactDetails(contactStatusFilter, Math.ceil(contactTotal / contactLimit), contactLimit)}>Cuối</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </main>

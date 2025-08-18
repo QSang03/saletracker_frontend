@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import ContactTable from "@/components/contact-list/zalo/contacts/ContactTable";
-import PersonaModal from "@/components/contact-list/zalo/persona/PersonaModal";
+import PersonasManagerModal from "@/components/contact-list/zalo/persona/PersonasManagerModal";
 import { useAutoReplySettings } from "@/hooks/contact-list/useAutoReplySettings";
 import SaleProductsModal from "@/components/contact-list/zalo/products/SaleProductsModal";
 import KeywordsModal from "@/components/contact-list/zalo/keywords/KeywordsModal";
@@ -31,9 +31,9 @@ import {
 
 export default function AutoReplyPage() {
   const { currentUser } = useCurrentUser();
-  const [personaOpen, setPersonaOpen] = useState(false);
   const [saleProductsOpen, setSaleProductsOpen] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
+  const [personasManagerOpen, setPersonasManagerOpen] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [pendingToggleValue, setPendingToggleValue] = useState<boolean | null>(null);
 
@@ -188,12 +188,12 @@ export default function AutoReplyPage() {
                   <Button
                     variant="outline"
                     disabled={zaloDisabled}
-                    onClick={() => setPersonaOpen(true)}
+                    onClick={() => setPersonasManagerOpen(true)}
                     className="group hover:shadow-md transition-all duration-300 border-purple-200 hover:border-purple-300 hover:bg-purple-50 h-10"
                   >
                     <span className="flex items-center gap-2">
                       <User className="w-4 h-4 mr-2 text-purple-500 group-hover:scale-110 transition-transform duration-300" />
-                      <span className="text-sm">Persona</span>
+                      <span className="text-sm">Personas</span>
                     </span>
                   </Button>
                 </div>
@@ -241,10 +241,6 @@ export default function AutoReplyPage() {
         </Card>
 
         {/* Modals */}
-        <PersonaModal
-          open={personaOpen}
-          onClose={() => setPersonaOpen(false)}
-        />
         <SaleProductsModal
           open={saleProductsOpen}
           onClose={() => setSaleProductsOpen(false)}
@@ -253,6 +249,7 @@ export default function AutoReplyPage() {
           open={keywordsOpen}
           onClose={() => setKeywordsOpen(false)}
         />
+  <PersonasManagerModal open={personasManagerOpen} onClose={() => setPersonasManagerOpen(false)} />
 
         {/* Confirm Dialog */}
         <ConfirmDialog

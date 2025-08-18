@@ -1,62 +1,157 @@
 "use client";
-import React, { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
-import { useContacts } from '@/hooks/contact-list/useContacts';
-import { useKeywordRoutes } from '@/hooks/contact-list/useKeywordRoutes';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { useCurrentUser } from '@/contexts/CurrentUserContext';
-import { 
-  Key, 
-  Users, 
-  ShoppingCart, 
-  Sparkles,
-  Check,
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { api } from "@/lib/api";
+import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
+import { ContactRole } from "@/types/auto-reply";
+import { useKeywordRoutes } from "@/hooks/contact-list/useKeywordRoutes";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  TooltipProvider,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import KeywordsAccordionDialog from "./KeywordsAccordionDialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import {
+  Key,
+  Users,
   X,
   Globe,
   UserCheck,
-  Tags,
   Plus,
   Search,
-  List,
-  Trash2,
-  Eye,
-  EyeOff,
-  Target,
-  Zap
-} from 'lucide-react';
-import type { AutoReplyProduct } from '@/types/auto-reply';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import { ServerResponseAlert, type AlertType } from '@/components/ui/loading/ServerResponseAlert';
+  CheckCircle,
+  Circle,
+  User,
+  Info,
+  Filter,
+  RefreshCw,
+  UserPlus,
+  PlusCircle,
+  Database,
+} from "lucide-react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import {
+  ServerResponseAlert,
+  type AlertType,
+} from "@/components/ui/loading/ServerResponseAlert";
+import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
+import RenameKeywordDialog from "./RenameKeywordDialog";
 
-export default function KeywordsModal({ open, onClose }: { open: boolean; onClose: () => void; }) {
-  const [products, setProducts] = useState<AutoReplyProduct[]>([]);
-  const { contacts, fetchContacts } = useContacts();
-  const { routes, fetchRoutes, createRoute, createBulk, updateRoute, deleteRoute } = useKeywordRoutes(undefined);
+export default function KeywordsModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const {
+    items: contacts,
+    total: contactsTotal,
+    page: contactsPage,
+    pageSize: contactsPageSize,
+    setPage: setContactsPage,
+    setPageSize: setContactsPageSize,
+    search: contactsSearch,
+    setSearch: setContactsSearch,
+    fetchContacts,
+  } = useContactsPaginated();
+  const {
+    routes,
+    fetchRoutes,
+    createRoute,
+    createBulk,
+    updateRoute,
+    deleteRoute,
+    renameAll,
+    setActiveAll,
+    deleteAll,
+  } = useKeywordRoutes(undefined);
+  const isRestrictedRole = (role: ContactRole) =>
+    role === ContactRole.SUPPLIER || role === ContactRole.INTERNAL;
   const { currentUser } = useCurrentUser();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
 
-  const [keyword, setKeyword] = useState('');
-  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
+  const [keyword, setKeyword] = useState("");
   const [applyAllContacts, setApplyAllContacts] = useState(true);
-  const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
-  const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; message: React.ReactNode; onConfirm: (() => Promise<void> | void) | null }>({ open: false, title: '', message: '', onConfirm: null });
-  const [alert, setAlert] = useState<{ type: AlertType; message: string } | null>(null);
+  const [selectedContacts, setSelectedContacts] = useState<Set<number>>(
+    new Set()
+  );
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: React.ReactNode;
+    onConfirm: (() => Promise<void> | void) | null;
+  }>({ open: false, title: "", message: "", onConfirm: null });
+  const [alert, setAlert] = useState<{
+    type: AlertType;
+    message: string;
+  } | null>(null);
+  const [contactMap, setContactMap] = useState<Map<number, string>>(new Map());
+  const [renameState, setRenameState] = useState<{
+    open: boolean;
+    keyword: string | null;
+  }>({ open: false, keyword: null });
+  const [selectedByKeyword, setSelectedByKeyword] = useState<
+    Record<string, Set<number>>
+  >({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("create");
+  const [openAccordionModal, setOpenAccordionModal] = useState(false);
 
-  useEffect(() => { 
-    if (open) { 
-      // Load all products once for selection
-      api.get<AutoReplyProduct[]>('auto-reply/products')
-        .then(({ data }) => setProducts(data || []))
-        .catch(() => setProducts([]));
-      fetchContacts(); 
-      fetchRoutes(); 
-    } 
-  }, [open, fetchContacts, fetchRoutes]);
+  // Auto switch to contacts tab when global is turned off
+  useEffect(() => {
+    if (!applyAllContacts && activeTab === "create") {
+      setActiveTab("contacts");
+    } else if (applyAllContacts && activeTab === "contacts") {
+      setActiveTab("create");
+    }
+  }, [applyAllContacts]);
+
+  useEffect(() => {
+    if (open) {
+      setIsLoading(true);
+      Promise.all([
+        fetchRoutes(),
+        fetchContacts(),
+        currentUser?.id &&
+          api
+            .get("auto-reply/contacts", {
+              params: { userId: currentUser.id, mine: "1" },
+            })
+            .then(({ data }) => {
+              const m = new Map<number, string>();
+              (data || []).forEach((c: any) => m.set(c.contactId, c.name));
+              setContactMap(m);
+            })
+            .catch(() => setContactMap(new Map())),
+      ]).finally(() => setIsLoading(false));
+    }
+  }, [open, fetchContacts, fetchRoutes, currentUser?.id]);
 
   const toggle = (set: Set<number>, id: number) => {
     const n = new Set(set);
@@ -64,375 +159,775 @@ export default function KeywordsModal({ open, onClose }: { open: boolean; onClos
     return n;
   };
 
+  // ✅ FIXED: Close confirmState after performSave completes
   const performSave = async () => {
     try {
+      setIsLoading(true);
       if (zaloDisabled) return;
-      const productIds = Array.from(selectedProducts);
-      if (!productIds.length || !keyword.trim()) return;
+      if (!keyword.trim()) return;
+
       if (applyAllContacts) {
-        await createRoute({ 
-          keyword: keyword.trim(), 
-          contactId: null, 
-          routeProducts: productIds.map(pid => ({ productId: pid, priority: 0, active: true })) 
-        });
+        await createRoute(
+          { keyword: keyword.trim(), contactId: null, routeProducts: [] },
+          { userId: currentUser?.id }
+        );
       } else {
         const contactIds = Array.from(selectedContacts);
-        if (!contactIds.length) return;
-        await createBulk({ 
-          keyword: keyword.trim(), 
-          contactIds, 
-          productIds, 
-          defaultPriority: 0, 
-          active: true 
+        if (!contactIds.length) {
+          setAlert({
+            type: "warning" as any,
+            message: "Vui lòng chọn ít nhất 1 khách hàng",
+          });
+          return;
+        }
+        await createBulk({
+          keyword: keyword.trim(),
+          contactIds,
+          productIds: [],
+          defaultPriority: 0,
+          active: true,
         });
       }
-      setAlert({ type: 'success', message: 'Đã tạo keyword' });
-      setKeyword('');
-      setSelectedProducts(new Set());
+
+      setAlert({
+        type: "success",
+        message:
+          "✅ Đã tạo keyword thành công! Bạn có thể gán sản phẩm trong phần chi tiết.",
+      });
+      setKeyword("");
       setSelectedContacts(new Set());
-      onClose();
     } catch (e: any) {
-      setAlert({ type: 'error', message: e?.message || 'Tạo keyword thất bại' });
+      setAlert({
+        type: "error",
+        message: e?.message || "Không thể tạo keyword. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsLoading(false);
+      // ✅ FIXED: Close confirmState after save completes
+      setConfirmState({ open: false, title: "", message: "", onConfirm: null });
     }
   };
 
+  const grouped = React.useMemo(() => {
+    const map = new Map<string, typeof routes>();
+    for (const r of routes) {
+      const key = r.keyword;
+      if (!map.has(key)) map.set(key, [] as any);
+      (map.get(key) as any).push(r);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [routes]);
+
+  const toggleSelect = (kw: string, routeId: number) => {
+    setSelectedByKeyword((prev) => {
+      const copy = { ...prev };
+      const set = new Set(copy[kw] ?? new Set<number>());
+      set.has(routeId) ? set.delete(routeId) : set.add(routeId);
+      copy[kw] = set;
+      return copy;
+    });
+  };
+
+  const toggleSelectAllInGroup = (kw: string, ids: number[]) => {
+    setSelectedByKeyword((prev) => {
+      const set = new Set(prev[kw] ?? new Set<number>());
+      const allSelected = ids.length > 0 && ids.every((id) => set.has(id));
+      const next = new Set<number>(set);
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return { ...prev, [kw]: next };
+    });
+  };
+
+  // ✅ UPDATED: Keep parent alert for accordion dialog compatibility
+  const bulkSetActive = async (kw: string, ids: number[], active: boolean) => {
+    setIsLoading(true);
+    try {
+      for (const id of ids) {
+        await updateRoute(id, { active });
+      }
+      // Note: KeywordsAccordionDialog will handle its own alerts now
+      // This is kept for any direct usage in parent
+      setAlert({
+        type: "success",
+        message: `✅ Đã ${active ? "bật" : "tắt"} ${
+          ids.length
+        } keyword thành công`,
+      });
+    } catch (e: any) {
+      setAlert({
+        type: "error",
+        message: "Có lỗi xảy ra khi cập nhật. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ✅ UPDATED: Keep parent alert for accordion dialog compatibility
+  const bulkDelete = async (kw: string, ids: number[]) => {
+    setIsLoading(true);
+    try {
+      for (const id of ids) {
+        await deleteRoute(id);
+      }
+      // Note: KeywordsAccordionDialog will handle its own alerts now
+      // This is kept for any direct usage in parent
+      setAlert({
+        type: "success",
+        message: `✅ Đã xóa ${ids.length} keyword thành công`,
+      });
+    } catch (e: any) {
+      setAlert({
+        type: "error",
+        message: "Có lỗi xảy ra khi xóa. Vui lòng thử lại.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const stats = useMemo(() => {
+    const totalKeywords = grouped.length;
+    return { totalKeywords };
+  }, [grouped]);
+
+  const availableContacts = useMemo(() => {
+    return contacts.filter((c) => !isRestrictedRole(c.role));
+  }, [contacts]);
+
+  const handleSelectAllContacts = useCallback(() => {
+    const allSelected =
+      availableContacts.length > 0 &&
+      availableContacts.every((c) => selectedContacts.has(c.contactId));
+
+    setSelectedContacts((prev) => {
+      const set = new Set(prev);
+      if (allSelected) {
+        availableContacts.forEach((c) => set.delete(c.contactId));
+      } else {
+        availableContacts.forEach((c) => set.add(c.contactId));
+      }
+      return set;
+    });
+  }, [availableContacts, selectedContacts]);
+
+  const handleToggleContact = useCallback(
+    (contactId: number) => {
+      if (zaloDisabled || isLoading) return;
+      setSelectedContacts((prev) => toggle(prev, contactId));
+    },
+    [zaloDisabled, isLoading]
+  );
+
+  const handleRefreshData = useCallback(async () => {
+    setContactsLoading(true);
+    try {
+      await Promise.all([fetchRoutes(), fetchContacts()]);
+    } finally {
+      setContactsLoading(false);
+    }
+  }, [fetchRoutes, fetchContacts]);
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="!max-w-[95vw] xl:!max-w-[90vw] 2xl:!max-w-[85vw] max-h-[95vh] overflow-hidden bg-gradient-to-br from-yellow-50/95 via-white/95 to-green-50/95 backdrop-blur-xl border-0 shadow-2xl">
-        {/* Decorative Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/3 via-green-500/3 to-blue-500/3 pointer-events-none"></div>
-        
-        <DialogHeader className="relative pb-8">
-          <div className="flex items-center gap-6 mb-6">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-yellow-500 to-green-500 rounded-3xl blur-sm opacity-40 animate-pulse"></div>
-              <div className="relative bg-gradient-to-r from-yellow-500 to-green-500 p-4 rounded-3xl">
-                <Key className="w-8 h-8 text-white" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <DialogTitle className="text-3xl xl:text-4xl font-bold bg-gradient-to-r from-yellow-600 to-green-600 bg-clip-text text-transparent mb-2">
-                Keywords cho Sale
-              </DialogTitle>
-              <p className="text-gray-500 text-lg leading-relaxed">Thiết lập từ khóa để tự động gợi ý sản phẩm phù hợp</p>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 relative">
-          {/* Keyword Input & Products Section */}
-          <div className="xl:col-span-2 relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/8 to-green-500/8 rounded-[2rem] blur-xl group-hover:blur-2xl transition-all duration-500"></div>
-            <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-[2rem] shadow-xl overflow-hidden">
-              {/* Header with Keyword Input */}
-              <div className="bg-gradient-to-r from-yellow-500 to-green-500 px-8 py-6">
-                <div className="flex items-center gap-6 mb-4">
-                  <div className="flex items-center gap-3">
-                    <Search className="w-6 h-6 text-white" />
-                    <span className="font-semibold text-white text-lg">Thiết lập Keywords</span>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col lg:flex-row gap-4">
-                  {/* Keyword Input */}
-                  <div className="flex-1 relative">
-                    <Input
-                      disabled={zaloDisabled}
-                      value={keyword}
-                      onChange={e => setKeyword(e.target.value)}
-                      placeholder="Nhập từ khóa (VD: iphone, laptop, túi xách...)"
-                      className="h-12 bg-white/90 border-0 rounded-2xl text-base px-12 placeholder:text-gray-400"
-                    />
-                    <Target className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-yellow-600" />
-                  </div>
-                  
-                  {/* Global Switch */}
-                  <div className="flex items-center gap-3 bg-white/25 rounded-2xl px-5 py-3">
-                    <Switch 
-                      disabled={zaloDisabled} 
-                      checked={applyAllContacts} 
-                      onCheckedChange={(v) => setApplyAllContacts(!!v)}
-                      className="data-[state=checked]:bg-emerald-500"
-                    />
-                    <span className="text-white text-base font-medium flex items-center gap-2">
-                      {applyAllContacts ? <Globe className="w-5 h-5" /> : <UserCheck className="w-5 h-5" />}
-                      {applyAllContacts ? 'Áp dụng GLOBAL' : 'Chọn khách hàng'}
-                    </span>
-                  </div>
+    <TooltipProvider>
+      <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+        <DialogContent className="!max-w-[70vw] h-[85vh] flex flex-col bg-white/95 backdrop-blur-sm border shadow-2xl">
+          {/* Simplified Header */}
+          <DialogHeader className="relative pb-4 flex-shrink-0">
+            <div className="flex items-center gap-4 pr-12">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-md opacity-20 animate-pulse"></div>
+                <div className="relative bg-gradient-to-r from-blue-500 to-purple-500 p-3 rounded-2xl shadow-lg">
+                  <Key className="w-6 h-6 text-white" />
                 </div>
               </div>
-
-              {/* Products Content */}
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <ShoppingCart className="w-5 h-5 text-green-600" />
-                  <span className="font-semibold text-gray-800 text-lg">Chọn sản phẩm gợi ý</span>
-                  <div className="ml-auto bg-green-100 rounded-full px-3 py-1">
-                    <span className="text-green-700 text-sm font-medium">{selectedProducts.size}/{products.length}</span>
-                  </div>
-                </div>
-                
-                <div className="max-h-[45vh] overflow-auto rounded-2xl border border-gray-200/50">
-                  <Table>
-                    <TableHeader className="bg-gray-50/60 sticky top-0 z-10">
-                      <TableRow className="border-b-2 border-gray-200/50">
-                        <TableHead className="text-center w-20 h-14">
-                          <div className="flex items-center justify-center">
-                            <Check className="w-5 h-5 text-green-500" />
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold text-gray-700 text-base h-14">
-                          <div className="flex items-center gap-3">
-                            <Tags className="w-5 h-5" />
-                            Mã sản phẩm
-                          </div>
-                        </TableHead>
-                        <TableHead className="font-semibold text-gray-700 text-base h-14">Tên sản phẩm</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {products.map(p => (
-                        <TableRow 
-                          key={p.productId}
-                          className={`hover:bg-green-50/60 transition-colors duration-200 h-16 cursor-pointer ${
-                            selectedProducts.has(p.productId) ? 'bg-green-50/40 border-l-4 border-l-green-500' : ''
-                          }`}
-                          onClick={() => !zaloDisabled && setSelectedProducts(prev => toggle(prev, p.productId))}
-                        >
-                          <TableCell className="text-center py-4">
-                            <Checkbox 
-                              disabled={zaloDisabled} 
-                              checked={selectedProducts.has(p.productId)} 
-                              onCheckedChange={() => setSelectedProducts(prev => toggle(prev, p.productId))}
-                              className="data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500 w-5 h-5" 
-                            />
-                          </TableCell>
-                          <TableCell className="font-mono text-base font-medium text-green-600 py-4">{p.code}</TableCell>
-                          <TableCell className="font-medium text-base py-4 leading-relaxed">{p.name}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-xl font-bold text-slate-800 mb-2">
+                  Quản lý Keywords
+                </DialogTitle>
+                <p className="text-slate-600 text-sm leading-relaxed">
+                  Thiết lập từ khóa để tự động gợi ý sản phẩm phù hợp cho khách
+                  hàng
+                </p>
+              </div>
+              {/* Moved management button here for easier access */}
+              <div className="absolute right-4 top-4">
+                <Button
+                  onClick={() => setOpenAccordionModal(true)}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-9 text-sm"
+                >
+                  <span className="flex items-center gap-2">
+                    <Database className="w-4 h-4 mr-1" />
+                    Quản lý Keywords
+                    <Badge
+                      variant="secondary"
+                      className="ml-2 bg-red-400 text-white"
+                    >
+                      {stats.totalKeywords}
+                    </Badge>
+                  </span>
+                </Button>
               </div>
             </div>
-          </div>
+            <Separator className="mt-4" />
+          </DialogHeader>
 
-          {/* Contacts Section */}
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/8 to-purple-500/8 rounded-[2rem] blur-xl group-hover:blur-2xl transition-all duration-500"></div>
-            <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-[2rem] shadow-xl overflow-hidden">
-              {/* Header */}
-              <div className="bg-gradient-to-r from-blue-500 to-purple-500 px-6 py-6">
-                <div className="flex items-center gap-3">
-                  <Users className="w-6 h-6 text-white" />
-                  <span className="font-semibold text-white text-lg">Chọn khách hàng</span>
-                </div>
-              </div>
+          <div className="flex-1 overflow-hidden min-h-0 p-1">
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="h-full flex flex-col"
+            >
+              {/* Tabs List */}
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100 p-1 rounded-lg">
+                <TabsTrigger
+                  value="create"
+                  className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200 text-sm"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span className="font-medium">Tạo Keywords</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="contacts"
+                  disabled={applyAllContacts}
+                  className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Users className="w-4 h-4" />
+                  <span className="font-medium">Chọn khách hàng</span>
+                  {selectedContacts.size > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="ml-1 bg-blue-100 text-blue-700"
+                    >
+                      {selectedContacts.size}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
 
-              {/* Content */}
-              {!applyAllContacts ? (
-                <div className="p-6">
-                  <div className="max-h-[45vh] overflow-auto rounded-2xl border border-gray-200/50">
-                    <Table>
-                      <TableHeader className="bg-gray-50/60 sticky top-0 z-10">
-                        <TableRow className="border-b-2 border-gray-200/50">
-                          <TableHead className="text-center w-20 h-14">
-                            <div className="flex items-center justify-center">
-                              <Check className="w-5 h-5 text-green-500" />
-                            </div>
-                          </TableHead>
-                          <TableHead className="font-semibold text-gray-700 text-base h-14">Tên khách hàng</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {contacts.map(c => (
-                          <TableRow 
-                            key={c.contactId}
-                            className={`hover:bg-blue-50/60 transition-colors duration-200 h-16 cursor-pointer ${
-                              selectedContacts.has(c.contactId) ? 'bg-blue-50/40 border-l-4 border-l-blue-500' : ''
-                            }`}
-                            onClick={() => !zaloDisabled && setSelectedContacts(prev => toggle(prev, c.contactId))}
-                          >
-                            <TableCell className="text-center py-4">
-                              <Checkbox 
-                                disabled={zaloDisabled} 
-                                checked={selectedContacts.has(c.contactId)} 
-                                onCheckedChange={() => setSelectedContacts(prev => toggle(prev, c.contactId))}
-                                className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-5 h-5" 
-                              />
-                            </TableCell>
-                            <TableCell className="font-medium text-base py-4">{c.name}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-12 text-center">
-                  <div className="mx-auto w-20 h-20 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center mb-6">
-                    <Globe className="w-10 h-10 text-white" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Áp dụng Global</h3>
-                  <p className="text-gray-600 text-sm leading-relaxed">Keywords sẽ áp dụng cho tất cả khách hàng</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Existing Routes Section */}
-        <div className="mt-8 relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/8 to-pink-500/8 rounded-[2rem] blur-xl group-hover:blur-2xl transition-all duration-500"></div>
-          <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-[2rem] shadow-xl overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-8 py-6">
-              <div className="flex items-center gap-4">
-                <List className="w-6 h-6 text-white" />
-                <span className="font-semibold text-white text-lg">Danh sách Keywords hiện có</span>
-                <div className="ml-auto bg-white/25 rounded-full px-4 py-2">
-                  <span className="text-white text-sm font-medium">{routes.length} keywords</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6">
-              <div className="max-h-80 overflow-auto rounded-2xl border border-gray-200/50">
-                <Table>
-                  <TableHeader className="bg-gray-50/60 sticky top-0 z-10">
-                    <TableRow className="border-b-2 border-gray-200/50">
-                      <TableHead className="font-semibold text-gray-700 text-base h-14">
-                        <div className="flex items-center gap-2">
-                          <Key className="w-5 h-5" />
-                          Keyword
+              {/* Tab Content - Tạo Keywords */}
+              <TabsContent
+                value="create"
+                className="flex-1 overflow-y-auto mt-0"
+              >
+                <div className="grid grid-cols-1 gap-6 h-full">
+                  <Card className="shadow-sm border-slate-200 bg-white">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Plus className="w-4 h-4 text-blue-600" />
+                        Tạo keyword mới
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-slate-700">
+                          Từ khóa
+                        </label>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
+                          <Input
+                            disabled={zaloDisabled || isLoading}
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                            placeholder="VD: iphone, laptop, túi xách..."
+                            className="pl-9 h-9 bg-white border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm"
+                          />
                         </div>
-                      </TableHead>
-                      <TableHead className="text-center font-semibold text-gray-700 text-base h-14">Phạm vi</TableHead>
-                      <TableHead className="text-center font-semibold text-gray-700 text-base h-14">Trạng thái</TableHead>
-                      <TableHead className="text-center font-semibold text-gray-700 text-base h-14">Thao tác</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {routes.map(r => (
-                      <TableRow key={r.routeId} className="hover:bg-purple-50/30 transition-colors duration-200 h-16">
-                        <TableCell className="font-medium text-base py-4">{r.keyword}</TableCell>
-                        <TableCell className="text-center py-4">
-                          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                            r.contactId === null 
-                              ? 'bg-emerald-100 text-emerald-700' 
-                              : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {r.contactId === null ? <Globe className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                            {r.contactId === null ? 'GLOBAL' : `Contact #${r.contactId}`}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center py-4">
-                          <div className="flex items-center justify-center">
-                            <Switch 
-                              disabled={zaloDisabled} 
-                              checked={r.active} 
-                              onCheckedChange={() => setConfirmState({ open: true, title: r.active ? 'Tắt keyword' : 'Bật keyword', message: `Bạn có chắc muốn ${r.active ? 'tắt' : 'bật'} keyword "${r.keyword}"?`, onConfirm: async () => { try { await updateRoute(r.routeId, { active: !r.active }); setAlert({ type: 'success', message: 'Đã cập nhật keyword' }); } catch (e: any) { setAlert({ type: 'error', message: e?.message || 'Cập nhật keyword thất bại' }); } finally { setConfirmState(s => ({ ...s, open: false })); } } })}
-                              className="data-[state=checked]:bg-green-500"
-                            />
-                            {r.active ? (
-                              <Eye className="w-4 h-4 text-green-500 ml-2" />
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-50 to-blue-50/50 rounded-lg border border-slate-200 transition-all duration-200 hover:shadow-sm">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`p-1 rounded-lg shadow-sm transition-all duration-200 ${
+                              applyAllContacts
+                                ? "bg-green-100 shadow-green-200/50"
+                                : "bg-blue-100 shadow-blue-200/50"
+                            }`}
+                          >
+                            {applyAllContacts ? (
+                              <Globe className="w-4 h-4 text-green-600" />
                             ) : (
-                              <EyeOff className="w-4 h-4 text-gray-400 ml-2" />
+                              <Users className="w-4 h-4 text-blue-600" />
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="text-center py-4">
-                          <Button 
-                            disabled={zaloDisabled} 
-                            variant="ghost" 
-                            onClick={() => setConfirmState({ open: true, title: 'Xóa keyword', message: `Bạn có chắc muốn xóa keyword "${r.keyword}"?`, onConfirm: async () => { try { await deleteRoute(r.routeId); setAlert({ type: 'success', message: 'Đã xóa keyword' }); } catch (e: any) { setAlert({ type: 'error', message: e?.message || 'Xóa keyword thất bại' }); } finally { setConfirmState(s => ({ ...s, open: false })); } } })}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-10 px-4 rounded-xl transition-all duration-300"
+                          <div>
+                            <div className="font-semibold text-sm text-slate-800">
+                              {applyAllContacts
+                                ? "Áp dụng cho tất cả"
+                                : "Chọn khách hàng"}
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              {applyAllContacts
+                                ? "Keywords sẽ áp dụng cho toàn bộ khách hàng"
+                                : `${selectedContacts.size} khách hàng đã chọn`}
+                            </div>
+                          </div>
+                        </div>
+                        <Switch
+                          disabled={zaloDisabled || isLoading}
+                          checked={applyAllContacts}
+                          onCheckedChange={setApplyAllContacts}
+                          className="data-[state=checked]:bg-green-500 transition-all duration-200"
+                        />
+                      </div>
+
+                      <div className="flex items-start gap-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                        <Info className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-xs text-blue-700">
+                          {applyAllContacts
+                            ? "Keyword sẽ áp dụng global cho tất cả khách hàng"
+                            : "Chuyển sang tab 'Chọn khách hàng' để chọn khách hàng cần áp dụng keyword"}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* Tab Content - Chọn khách hàng */}
+              <TabsContent
+                value="contacts"
+                className="flex-1 overflow-y-auto mt-0"
+              >
+                <Card className="h-full shadow-sm border-slate-200 bg-white">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center justify-between text-base">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4 text-blue-600" />
+                        Chọn khách hàng áp dụng keyword
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className={`transition-all duration-200 text-xs ${
+                            selectedContacts.size > 0
+                              ? "bg-blue-100 text-blue-700 shadow-sm"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          <UserPlus className="w-3 h-3 mr-1" />
+                          {selectedContacts.size}/{availableContacts.length}
+                        </Badge>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleRefreshData}
+                              disabled={contactsLoading || isLoading}
+                              className="h-7 w-7 p-0 hover:bg-blue-50"
+                            >
+                              <RefreshCw
+                                className={`w-3 h-3 text-blue-600 ${
+                                  contactsLoading ? "animate-spin" : ""
+                                }`}
+                              />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Làm mới danh sách</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-4 overflow-hidden">
+                    <div className="h-full flex flex-col space-y-4">
+                      {/* Quick Actions */}
+                      <div className="flex items-center justify-between p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1 bg-blue-100 rounded-lg">
+                            <Filter className="w-3 h-3 text-blue-600" />
+                          </div>
+                          <span className="text-xs font-medium text-slate-700">
+                            Thao tác nhanh
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleSelectAllContacts}
+                            disabled={
+                              zaloDisabled ||
+                              isLoading ||
+                              availableContacts.length === 0
+                            }
+                            className="h-7 text-xs px-2 hover:bg-blue-100 text-blue-700 font-medium"
                           >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Xóa
+                            <span className="flex items-center gap-2">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              {availableContacts.length > 0 &&
+                              availableContacts.every((c) =>
+                                selectedContacts.has(c.contactId)
+                              )
+                                ? "Bỏ chọn tất cả"
+                                : "Chọn tất cả"}
+                            </span>
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </div>
-        </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedContacts(new Set())}
+                            disabled={
+                              zaloDisabled ||
+                              isLoading ||
+                              selectedContacts.size === 0
+                            }
+                            className="h-7 text-xs px-2 hover:bg-red-50 text-red-600 font-medium"
+                          >
+                            <span className="flex items-center gap-2">
+                              <X className="w-3 h-3 mr-1" />
+                              Xóa chọn
+                            </span>
+                          </Button>
+                        </div>
+                      </div>
 
-        {/* Stats Summary */}
-        <div className="flex justify-center gap-6 my-6">
-          <div className="bg-white/85 backdrop-blur-sm rounded-3xl px-6 py-4 shadow-lg border border-white/60">
-            <div className="flex items-center gap-3 text-base">
-              <div className="w-4 h-4 bg-yellow-500 rounded-full animate-pulse"></div>
-              <span className="text-gray-600">Keyword:</span>
-              <span className="font-bold text-yellow-600">{keyword || 'Chưa nhập'}</span>
-            </div>
+                      {/* Contacts Table - FIXED */}
+                      <div className="flex-1 border border-slate-200 rounded-lg bg-white overflow-hidden">
+                        {contactsLoading ? (
+                          <div className="flex flex-col items-center justify-center h-full p-8">
+                            <div className="relative">
+                              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                            </div>
+                            <div className="text-sm font-medium text-slate-600 mb-2">
+                              Đang tải danh sách khách hàng...
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              Vui lòng chờ trong giây lát
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="h-full overflow-y-auto p-3">
+                            <PaginatedTable
+                              enableSearch
+                              enablePageSize
+                              page={contactsPage}
+                              total={contactsTotal}
+                              pageSize={contactsPageSize}
+                              onPageChange={setContactsPage}
+                              onPageSizeChange={setContactsPageSize}
+                              onFilterChange={(f) =>
+                                setContactsSearch(f.search || "")
+                              }
+                            >
+                              <Table>
+                                <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                                  <TableRow className="border-b border-slate-200">
+                                    <TableHead className="w-10 h-10">
+                                      <Checkbox
+                                        disabled={
+                                          zaloDisabled ||
+                                          isLoading ||
+                                          availableContacts.length === 0
+                                        }
+                                        checked={
+                                          availableContacts.length > 0 &&
+                                          availableContacts.every((c) =>
+                                            selectedContacts.has(c.contactId)
+                                          )
+                                        }
+                                        onCheckedChange={
+                                          handleSelectAllContacts
+                                        }
+                                        className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-4 h-4"
+                                      />
+                                    </TableHead>
+                                    <TableHead className="font-semibold text-xs text-slate-700">
+                                      <div className="flex items-center gap-1">
+                                        <User className="w-3 h-3" />
+                                        Tên khách hàng
+                                      </div>
+                                    </TableHead>
+                                    <TableHead className="w-16 text-center font-semibold text-xs text-slate-700">
+                                      Trạng thái
+                                    </TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {availableContacts.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell
+                                        colSpan={3}
+                                        className="text-center py-6"
+                                      >
+                                        <div className="flex flex-col items-center gap-2">
+                                          <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                                            <Users className="w-5 h-5 text-slate-400" />
+                                          </div>
+                                          <div>
+                                            <div className="text-sm font-medium text-slate-600 mb-1">
+                                              Không có khách hàng nào
+                                            </div>
+                                            <div className="text-xs text-slate-500">
+                                              Danh sách khách hàng trống hoặc
+                                              tất cả đều có role bị hạn chế
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : (
+                                    availableContacts.map((contact) => {
+                                      const isSelected = selectedContacts.has(
+                                        contact.contactId
+                                      );
+                                      return (
+                                        <TableRow
+                                          key={contact.contactId}
+                                          className={`cursor-pointer transition-all duration-200 hover:bg-slate-50 ${
+                                            isSelected
+                                              ? "bg-blue-50 border-l-4 border-l-blue-500"
+                                              : ""
+                                          }`}
+                                          onClick={() =>
+                                            handleToggleContact(
+                                              contact.contactId
+                                            )
+                                          }
+                                        >
+                                          <TableCell className="py-2">
+                                            <Checkbox
+                                              disabled={
+                                                zaloDisabled || isLoading
+                                              }
+                                              checked={isSelected}
+                                              onCheckedChange={() =>
+                                                handleToggleContact(
+                                                  contact.contactId
+                                                )
+                                              }
+                                              onClick={(e) =>
+                                                e.stopPropagation()
+                                              }
+                                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-4 h-4"
+                                            />
+                                          </TableCell>
+                                          <TableCell className="py-2">
+                                            <div className="flex items-center gap-2">
+                                              <div
+                                                className={`w-7 h-7 rounded-md flex items-center justify-center transition-all duration-200 ${
+                                                  isSelected
+                                                    ? "bg-blue-500 shadow-sm"
+                                                    : "bg-slate-100"
+                                                }`}
+                                              >
+                                                <User
+                                                  className={`w-3 h-3 ${
+                                                    isSelected
+                                                      ? "text-white"
+                                                      : "text-slate-500"
+                                                  }`}
+                                                />
+                                              </div>
+                                              <div>
+                                                <div
+                                                  className={`font-medium text-sm transition-colors ${
+                                                    isSelected
+                                                      ? "text-blue-900"
+                                                      : "text-slate-900"
+                                                  }`}
+                                                >
+                                                  {contact.name}
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                  ID: {contact.contactId}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="py-2 text-center">
+                                            {isSelected ? (
+                                              <CheckCircle className="w-4 h-4 text-green-500 mx-auto" />
+                                            ) : (
+                                              <Circle className="w-4 h-4 text-slate-300 mx-auto" />
+                                            )}
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </PaginatedTable>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </div>
-          <div className="bg-white/85 backdrop-blur-sm rounded-3xl px-6 py-4 shadow-lg border border-white/60">
-            <div className="flex items-center gap-3 text-base">
-              <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-gray-600">Sản phẩm:</span>
-              <span className="font-bold text-green-600">{selectedProducts.size}</span>
-            </div>
-          </div>
-          {!applyAllContacts && (
-            <div className="bg-white/85 backdrop-blur-sm rounded-3xl px-6 py-4 shadow-lg border border-white/60">
-              <div className="flex items-center gap-3 text-base">
-                <div className="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
-                <span className="text-gray-600">Khách hàng:</span>
-                <span className="font-bold text-blue-600">{selectedContacts.size}</span>
+
+          <DialogFooter className="flex-shrink-0 border-t border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between w-full text-xs">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></div>
+                  <span>
+                    Keyword:{" "}
+                    <span className="font-medium text-slate-800">
+                      {keyword || "Chưa nhập"}
+                    </span>
+                  </span>
+                </div>
+                {!applyAllContacts && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span>
+                      Khách hàng:{" "}
+                      <span className="font-medium text-slate-800">
+                        {selectedContacts.size}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></div>
+                  <span>
+                    Tab:{" "}
+                    <span className="font-medium text-slate-800">
+                      {activeTab === "create"
+                        ? "Tạo keyword"
+                        : "Chọn khách hàng"}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="px-4 hover:bg-slate-50 transition-all duration-200 h-9 text-sm"
+                  disabled={isLoading}
+                >
+                  Đóng
+                </Button>
+
+                <Button
+                  disabled={
+                    zaloDisabled ||
+                    !keyword.trim() ||
+                    isLoading ||
+                    (!applyAllContacts && selectedContacts.size === 0)
+                  }
+                  onClick={() =>
+                    setConfirmState({
+                      open: true,
+                      title: "Tạo keyword",
+                      message: (
+                        <div className="space-y-2">
+                          <p>
+                            Tạo keyword{" "}
+                            <span className="font-semibold">
+                              "{keyword.trim()}"
+                            </span>
+                            {applyAllContacts
+                              ? " (GLOBAL)"
+                              : ` cho ${selectedContacts.size} khách hàng`}
+                            ?
+                          </p>
+                          <p className="text-sm text-slate-600">
+                            Sản phẩm sẽ được gán sau trong phần chi tiết.
+                          </p>
+                        </div>
+                      ),
+                      onConfirm: performSave, // ✅ FIXED: Direct function reference
+                    })
+                  }
+                  className="px-6 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-9 text-sm"
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Đang tạo...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Plus className="w-4 h-4" />
+                      Tạo Keyword
+                    </div>
+                  )}
+                </Button>
               </div>
             </div>
+          </DialogFooter>
+
+          {/* ✅ UPDATED: KeywordsAccordionDialog with clean props */}
+          <KeywordsAccordionDialog
+            open={openAccordionModal}
+            onClose={() => setOpenAccordionModal(false)}
+            grouped={grouped}
+            selectedByKeyword={selectedByKeyword}
+            toggleSelect={toggleSelect}
+            toggleSelectAllInGroup={toggleSelectAllInGroup}
+            bulkSetActive={bulkSetActive}
+            bulkDelete={bulkDelete}
+            setRenameState={setRenameState}
+            setConfirmState={setConfirmState}
+            contactMap={contactMap}
+            zaloDisabled={zaloDisabled}
+            isLoading={isLoading}
+            updateRoute={updateRoute}
+            deleteRoute={deleteRoute}
+            setIsLoading={setIsLoading}
+            setAlert={setAlert} // ✅ Keep for compatibility (child will use local alert)
+            currentUser={currentUser}
+          />
+
+          <ConfirmDialog
+            isOpen={confirmState.open}
+            title={confirmState.title}
+            message={confirmState.message}
+            onConfirm={() => confirmState.onConfirm?.()}
+            onCancel={() => setConfirmState((s) => ({ ...s, open: false }))}
+          />
+
+          <RenameKeywordDialog
+            open={renameState.open}
+            keyword={renameState.keyword ?? ""}
+            onClose={() => setRenameState({ open: false, keyword: null })}
+            onSubmit={async (newKw) => {
+              const oldKw = renameState.keyword ?? "";
+              setConfirmState({
+                open: true,
+                title: "Đổi tên keyword",
+                message: `Đổi "${oldKw}" thành "${newKw}" cho tất cả liên hệ?`,
+                onConfirm: async () => {
+                  try {
+                    setIsLoading(true);
+                    await renameAll(oldKw, newKw, currentUser?.id);
+                    setAlert({
+                      type: "success",
+                      message: "✅ Đã đổi tên keyword thành công",
+                    });
+                  } catch (e: any) {
+                    setAlert({
+                      type: "error",
+                      message: e?.message || "Có lỗi xảy ra khi đổi tên",
+                    });
+                  } finally {
+                    setIsLoading(false);
+                    setConfirmState((s) => ({ ...s, open: false }));
+                  }
+                },
+              });
+            }}
+          />
+
+          {/* ✅ Parent ServerResponseAlert for main modal actions */}
+          {alert && (
+            <ServerResponseAlert
+              type={alert.type}
+              message={alert.message}
+              onClose={() => setAlert(null)}
+            />
           )}
-        </div>
-
-        <DialogFooter className="relative pt-8">
-          <div className="flex gap-6 w-full justify-end">
-            <Button 
-              variant="outline" 
-              onClick={onClose}
-              className="bg-white/60 hover:bg-white border-gray-200 hover:shadow-lg transition-all duration-300 px-8 py-3 h-14 text-base rounded-2xl"
-            >
-              <X className="w-5 h-5 mr-3" />
-              Đóng
-            </Button>
-            <Button 
-              disabled={zaloDisabled || !keyword.trim() || selectedProducts.size === 0} 
-              onClick={() => setConfirmState({ open: true, title: 'Tạo keyword', message: `Tạo keyword "${keyword.trim()}"${applyAllContacts ? ' (GLOBAL)' : ''}?`, onConfirm: async () => { await performSave(); setConfirmState(s => ({ ...s, open: false })); } })}
-              className="bg-gradient-to-r from-yellow-500 to-green-500 hover:from-yellow-600 hover:to-green-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 group px-10 py-3 h-14 text-base rounded-2xl disabled:opacity-50"
-            >
-              <Plus className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform duration-300" />
-              Tạo Keyword
-            </Button>
-          </div>
-        </DialogFooter>
-
-        <ConfirmDialog
-          isOpen={confirmState.open}
-          title={confirmState.title}
-          message={confirmState.message}
-          onConfirm={() => confirmState.onConfirm?.()}
-          onCancel={() => setConfirmState(s => ({ ...s, open: false }))}
-        />
-        {alert && (
-          <ServerResponseAlert type={alert.type} message={alert.message} onClose={() => setAlert(null)} />
-        )}
-
-        {/* Decorative Elements */}
-        <div className="absolute top-6 right-6 opacity-15 pointer-events-none">
-          <div className="flex gap-2">
-            <Sparkles className="w-8 h-8 text-yellow-500 animate-pulse" />
-            <Key className="w-6 h-6 text-green-500 animate-bounce" />
-          </div>
-        </div>
-        <div className="absolute bottom-6 left-6 opacity-8 pointer-events-none">
-          <Zap className="w-8 h-8 text-purple-500 animate-pulse" />
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </TooltipProvider>
   );
 }

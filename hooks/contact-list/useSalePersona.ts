@@ -10,11 +10,12 @@ export function useSalePersona() {
   const { currentUser } = useCurrentUser();
 
   const fetchPersona = useCallback(async () => {
+    if (!currentUser?.id) return; // Wait until user is available
     setLoading(true);
     setError(null);
     try {
-      const userId = currentUser?.id;
-      const qs = userId ? `?userId=${userId}` : '';
+      const userId = currentUser.id;
+      const qs = `?userId=${userId}`;
       const { data } = await api.get<SalesPersona>(`auto-reply/persona/me${qs}`);
       setPersona(data ?? null);
     } catch (e: any) {
@@ -25,6 +26,7 @@ export function useSalePersona() {
   }, [currentUser?.id]);
 
   const upsertPersona = useCallback(async (payload: Partial<SalesPersona> & { userId?: number }) => {
+    if (!currentUser?.id && !payload.userId) throw new Error('Missing userId');
     setLoading(true);
     setError(null);
     try {

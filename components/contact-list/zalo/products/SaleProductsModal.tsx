@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useSaleProducts } from "@/hooks/contact-list/useSaleProducts";
 import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
+import { ContactRole } from "@/types/auto-reply";
 import { api } from "@/lib/api";
 import {
   Dialog,
@@ -85,6 +86,7 @@ export default function SaleProductsModal({
   } = useContactsPaginated();
   const { currentUser } = useCurrentUser();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
+  const isRestrictedRole = (role: ContactRole) => role === ContactRole.SUPPLIER || role === ContactRole.INTERNAL;
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(
     new Set()
   );
@@ -113,9 +115,11 @@ export default function SaleProductsModal({
     products.length > 0 && products.every((p) => selectedProducts.has(p.productId));
 
   // 🎯 Check if all contacts are selected (when not applying to all)
+  // Only consider selectable contacts (exclude restricted roles)
+  const selectableContacts = contactItems.filter((c) => !isRestrictedRole(c.role));
   const allContactsSelected =
-    contactItems.length > 0 &&
-    contactItems.every((c) => selectedContacts.has(c.contactId));
+    selectableContacts.length > 0 &&
+    selectableContacts.every((c) => selectedContacts.has(c.contactId));
 
   // 🎯 Toggle all products on current page
   const toggleAllProducts = () => {
@@ -138,18 +142,18 @@ export default function SaleProductsModal({
 
   // 🎯 Toggle all contacts
   const toggleAllContacts = () => {
-    if (allContactsSelected) {
+  if (allContactsSelected) {
       // Unselect all contacts on current page
       setSelectedContacts((prev) => {
         const set = new Set(prev);
-        contactItems.forEach((c) => set.delete(c.contactId));
+    selectableContacts.forEach((c) => set.delete(c.contactId));
         return set;
       });
     } else {
       // Select all contacts on current page
       setSelectedContacts((prev) => {
         const set = new Set(prev);
-        contactItems.forEach((c) => set.add(c.contactId));
+    selectableContacts.forEach((c) => set.add(c.contactId));
         return set;
       });
     }
@@ -164,7 +168,7 @@ export default function SaleProductsModal({
 
   // Reset preselect flag when modal closes
   useEffect(() => {
-    if (!open) preselectedRef.current = false;
+  if (!open) preselectedRef.current = false;
   }, [open]);
 
   // Preselect globally active products once per open
@@ -201,37 +205,57 @@ export default function SaleProductsModal({
       const userId = currentUser?.id;
       if (!userId) throw new Error("Thiếu userId");
 
-      // Fetch current active allowed products for this user
+      // Fetch current active allowed products for this user, scoped to allowed contacts
       if (applyAllContacts) {
-        // Use flat list for performance
-        const { data: currentActiveFlat } = await api.get<number[]>(
-          `auto-reply/allowed-products/mine?userId=${userId}&flat=1`
+        // 1) Fetch all my contacts and filter out restricted roles
+        const { data: allContacts } = await api.get<{ contactId: number; role: ContactRole }[]>(
+          `auto-reply/contacts`,
+          { params: { userId } }
         );
-        const currentSet = new Set<number>(currentActiveFlat || []);
+        const allowedIds = (allContacts || [])
+          .filter((c) => !isRestrictedRole(c.role as any))
+          .map((c) => Number(c.contactId));
+        const allowedIdsSet = new Set<number>(allowedIds);
+        if (allowedIds.length === 0) {
+          setAlert({ type: "warning", message: "Không có khách hàng hợp lệ để áp dụng" });
+          return;
+        }
+        // 2) Get full pairs and filter to allowed contacts
+        const { data: pairs } = await api.get<
+          { contactId: number; productId: number }[]
+        >(`auto-reply/allowed-products/mine?userId=${userId}`);
+        const currentSet = new Set<number>();
+        (pairs || []).forEach((p) => {
+          if (allowedIdsSet.has(Number(p.contactId))) {
+            currentSet.add(Number(p.productId));
+          }
+        });
         const selectedSet = new Set<number>(selectedProductIds);
-        const toDisable = Array.from(currentSet).filter(
-          (id) => !selectedSet.has(id)
-        );
+        const toDisable = Array.from(currentSet).filter((id) => !selectedSet.has(id));
 
-        // Ensure all selected are enabled across ALL contacts
+        // 3) Apply bulk updates only to allowed contacts
         if (selectedProductIds.length > 0) {
           await api.post(`auto-reply/allowed-products/bulk?userId=${userId}`, {
-            contactIds: "ALL",
+            contactIds: allowedIds,
             productIds: selectedProductIds,
             active: true,
           });
         }
-        // Disable deselected
         if (toDisable.length > 0) {
           await api.post(`auto-reply/allowed-products/bulk?userId=${userId}`, {
-            contactIds: "ALL",
+            contactIds: allowedIds,
             productIds: toDisable,
             active: false,
           });
         }
       } else {
-  const contactIds = Array.from(selectedContacts);
-        if (!contactIds.length) {
+        const contactIds = Array.from(selectedContacts);
+        // Remove restricted contacts defensively
+        const filtered = contactIds.filter((cid) => {
+          const c = contactItems.find((x) => x.contactId === cid);
+          return c && !isRestrictedRole(c.role);
+        });
+        if (!filtered.length) {
           setAlert({
             type: "warning",
             message: "Chọn ít nhất 1 liên hệ để áp dụng",
@@ -245,7 +269,7 @@ export default function SaleProductsModal({
             productId: number;
           }[]
         >(`auto-reply/allowed-products/mine?userId=${userId}`);
-        const selectedContactsSet = new Set<number>(contactIds);
+  const selectedContactsSet = new Set<number>(filtered);
         const currentSet = new Set<number>();
         (pairs || []).forEach((p) => {
           if (selectedContactsSet.has(Number(p.contactId))) {
@@ -257,16 +281,16 @@ export default function SaleProductsModal({
           (id) => !selectedSet.has(id)
         );
         // Enable all selected across the chosen contacts
-        if (selectedProductIds.length > 0) {
+    if (selectedProductIds.length > 0) {
           await api.post(`auto-reply/allowed-products/bulk?userId=${userId}`, {
-            contactIds,
+      contactIds: filtered,
             productIds: selectedProductIds,
             active: true,
           });
         }
         if (toDisable.length > 0) {
           await api.post(`auto-reply/allowed-products/bulk?userId=${userId}`, {
-            contactIds,
+      contactIds: filtered,
             productIds: toDisable,
             active: false,
           });

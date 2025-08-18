@@ -135,9 +135,13 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[650px] p-0 overflow-hidden border-0 bg-transparent">
-        {/* Floating background particles */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <DialogContent className="max-w-[60vw] max-h-[90vh] p-0 border-0 bg-transparent">
+        {/* hide native scrollbars but keep scrolling functional */}
+        <style>{`.no-scrollbar::-webkit-scrollbar{display:none} .no-scrollbar{-ms-overflow-style:none; scrollbar-width:none;}`}</style>
+        {/* Scrollable wrapper (vertical) */}
+        <div className="max-h-[80vh] overflow-y-auto no-scrollbar">
+          {/* Floating background particles */}
+          <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-4 left-6 text-orange-300 animate-pulse">
             <Star className="w-2 h-2 opacity-60" />
           </div>
@@ -161,8 +165,8 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Main modal container with stunning effects */}
-        <div className="relative p-1 bg-gradient-to-r from-orange-500 via-amber-500 to-red-500 rounded-3xl animate-gradient-shift">
+          {/* Main modal container with stunning effects */}
+          <div className="relative p-1 bg-gradient-to-r from-orange-500 via-amber-500 to-red-500 rounded-3xl animate-gradient-shift">
           <div className="relative bg-gradient-to-br from-white via-orange-50 to-yellow-50 backdrop-blur-xl rounded-3xl shadow-2xl">
             {/* Header with enhanced design */}
             <DialogHeader className="relative p-8 pb-4">
@@ -451,6 +455,7 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
                 </div>
               </div>
             )}
+          </div>
           </div>
         </div>
       </DialogContent>

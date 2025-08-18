@@ -74,7 +74,8 @@ const AddToBlacklistModal: React.FC<AddToBlacklistModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[650px] p-0 overflow-hidden border-0 bg-transparent">
+      <DialogContent className="!max-w-[30vw] max-h-[95vh] p-0 overflow-auto border-0 bg-transparent no-scrollbar-modal" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+        <style>{`.no-scrollbar-modal { -ms-overflow-style: none; scrollbar-width: none; } .no-scrollbar-modal::-webkit-scrollbar { display: none; }`}</style>
         {/* Floating background particles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-4 left-6 text-purple-300 animate-pulse">
