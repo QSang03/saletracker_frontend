@@ -1575,6 +1575,40 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           quotedMessageId?: number | string | null;
                           quotedSenderName?: string | null;
                           quotedText?: string;
+                          // Media / content type support
+                          contentType?:
+                            | "text"
+                            | "image"
+                            | "video"
+                            | "file"
+                            | "system"
+                            | "location"
+                            | "link"
+                            | "sticker"
+                            | "contact"
+                            | "call";
+                          // payload depending on type
+                          imageUrl?: string;
+                          imageCaption?: string;
+                          imageThumb?: string;
+                          videoUrl?: string;
+                          videoThumb?: string;
+                          fileUrl?: string;
+                          fileName?: string;
+                          fileSize?: number;
+                          fileExtension?: string;
+                          systemAction?: string | null;
+                          systemOriginal?: any;
+                          locationName?: string;
+                          locationLat?: string | number;
+                          locationLng?: string | number;
+                          linkUrl?: string;
+                          linkTitle?: string;
+                          stickerUrl?: string;
+                          contactName?: string;
+                          contactAvatar?: string;
+                          callType?: string;
+                          callDuration?: number;
                         }
 
                         let messages: Message[] = [];
@@ -1628,6 +1662,88 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             const quotedMessageId = m.quoted_message_id ?? null;
                             const quotedSenderName =
                               m.quoted_sender_name?.toString?.() ?? null;
+
+                            // media/content detection
+                            let contentType: Message["contentType"] = "text";
+                            let imageUrl: string | undefined;
+                            let imageCaption: string | undefined;
+                            let imageThumb: string | undefined;
+                            let videoUrl: string | undefined;
+                            let videoThumb: string | undefined;
+                            let fileUrl: string | undefined;
+                            let fileName: string | undefined;
+                            let fileSize: number | undefined;
+                            let fileExtension: string | undefined;
+                            let systemAction: string | null = null;
+                            let systemOriginal: any = null;
+                            let locationName: string | undefined;
+                            let locationLat: string | number | undefined;
+                            let locationLng: string | number | undefined;
+                            let linkUrl: string | undefined;
+                            let linkTitle: string | undefined;
+                            let stickerUrl: string | undefined;
+                            let contactName: string | undefined;
+                            let contactAvatar: string | undefined;
+                            let callType: string | undefined;
+                            let callDuration: number | undefined;
+
+                            try {
+                              const p =
+                                typeof m.content === "string"
+                                  ? JSON.parse(m.content)
+                                  : m.content;
+                              if (p && typeof p === "object") {
+                                const t = (
+                                  (p.type || p.content_type || p.msg_type || "") + ""
+                                ).toString().toLowerCase();
+                                if (t.includes("image") || p.imageUrl || p.image_url || p.url) {
+                                  contentType = "image";
+                                  imageUrl = p.imageUrl || p.image_url || p.url || p.image?.url;
+                                  imageThumb = p.thumbnailUrl || p.thumbnail || p.thumb || p.image?.thumbnailUrl;
+                                  imageCaption = p.caption || p.title || p.text || p.description;
+                                } else if (t.includes("video") || p.videoUrl || p.video_url) {
+                                  contentType = "video";
+                                  videoUrl = p.videoUrl || p.video_url || p.url || p.video?.url;
+                                  videoThumb = p.thumbnailUrl || p.thumbnail || p.thumb || p.video?.thumbnailUrl;
+                                  imageCaption = p.caption || p.title || p.text || p.description;
+                                } else if (t.includes("file") || p.fileUrl || p.file_url || p.fileName) {
+                                  contentType = "file";
+                                  fileUrl = p.fileUrl || p.file_url || p.url;
+                                  fileName = p.fileName || p.name || p.title;
+                                  fileSize = p.fileSize || p.size || p.file_size;
+                                  fileExtension = p.fileExtension || p.ext || p.file_extension;
+                                } else if (t.includes("system") || p.action || p.system_action) {
+                                  contentType = "system";
+                                  systemAction = p.action || p.system_action || null;
+                                  systemOriginal = p;
+                                } else if (t.includes("location") || (p.latitude && p.longitude)) {
+                                  contentType = "location";
+                                  locationName = p.locationName || p.title || p.name || p.description;
+                                  locationLat = p.latitude || p.lat;
+                                  locationLng = p.longitude || p.lng || p.lon;
+                                } else if (t.includes("link") || p.url) {
+                                  contentType = "link";
+                                  linkUrl = p.url || p.linkUrl;
+                                  linkTitle = p.title || p.text || p.description;
+                                  imageThumb = p.thumbnailUrl || p.thumbnail;
+                                } else if (t.includes("sticker") || p.stickerUrl || p.sticker_id) {
+                                  contentType = "sticker";
+                                  stickerUrl = p.stickerUrl || p.sticker_url || p.thumbnail || p.url;
+                                } else if (t.includes("contact") || p.contactName || p.contactId) {
+                                  contentType = "contact";
+                                  contactName = p.contactName || p.name || p.title;
+                                  contactAvatar = p.contactAvatar || p.avatar || p.image;
+                                } else if (t.includes("call") || p.callType) {
+                                  contentType = "call";
+                                  callType = p.callType || p.type;
+                                  callDuration = p.duration || p.callDuration || p.call_duration;
+                                }
+                                if (!text) text = p.text ?? text;
+                              }
+                            } catch (e) {
+                              // ignore parse errors
+                            }
+
                             return {
                               type,
                               text,
@@ -1638,6 +1754,28 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               isQuoted,
                               quotedMessageId,
                               quotedSenderName,
+                              contentType,
+                              imageUrl,
+                              imageCaption,
+                              imageThumb,
+                              videoUrl,
+                              videoThumb,
+                              fileUrl,
+                              fileName,
+                              fileSize,
+                              fileExtension,
+                              systemAction,
+                              systemOriginal,
+                              locationName,
+                              locationLat,
+                              locationLng,
+                              linkUrl,
+                              linkTitle,
+                              stickerUrl,
+                              contactName,
+                              contactAvatar,
+                              callType,
+                              callDuration,
                             };
                           });
 
@@ -1850,13 +1988,61 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
                                         {/* Main message content - PROMINENT */}
                                         <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-medium">
-                                          <EmojiRenderer
-                                            text={message.text.replace(
-                                              /\\n/g,
-                                              "\n"
-                                            )}
-                                            renderMode="image"
-                                          />
+                                          {message.contentType === "image" && message.imageUrl ? (
+                                            <div>
+                                              <img src={message.imageThumb || message.imageUrl} alt={message.imageCaption || "image"} className="max-w-full rounded-lg shadow-sm" />
+                                              {message.imageCaption && <div className="text-xs text-gray-500 mt-1">{message.imageCaption}</div>}
+                                            </div>
+                                          ) : message.contentType === "video" && message.videoUrl ? (
+                                            <div className="relative">
+                                              <img src={message.videoThumb || message.imageThumb || message.videoUrl} alt={message.imageCaption || "video"} className="max-w-full rounded-lg shadow-sm" />
+                                              <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="w-12 h-12 bg-white/80 rounded-full flex items-center justify-center">
+                                                  <svg className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                                </div>
+                                              </div>
+                                              {message.imageCaption && <div className="text-xs text-gray-500 mt-1">{message.imageCaption}</div>}
+                                            </div>
+                                          ) : message.contentType === "file" && message.fileUrl ? (
+                                            <div className="flex items-center gap-3">
+                                              <div className="px-3 py-2 bg-gray-100 rounded-md">
+                                                <svg className="w-6 h-6 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                              </div>
+                                              <div className="flex-1">
+                                                <div className="font-medium">{message.fileName || 'Tệp tin'}</div>
+                                                <a href={message.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600">Tải tệp</a>
+                                              </div>
+                                            </div>
+                                          ) : message.contentType === "system" ? (
+                                            <div className="text-xs text-gray-600 italic">Hệ thống: {message.systemAction || JSON.stringify(message.systemOriginal)}</div>
+                                          ) : message.contentType === "location" && message.locationLat ? (
+                                            <div>
+                                              <div className="font-medium">{message.locationName || 'Vị trí'}</div>
+                                              <a href={`https://www.google.com/maps?q=${message.locationLat},${message.locationLng}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600">Xem trên bản đồ</a>
+                                            </div>
+                                          ) : message.contentType === "link" && message.linkUrl ? (
+                                            <div className="border rounded-lg p-2 bg-white">
+                                              <div className="font-medium text-sm text-blue-700">{message.linkTitle || message.linkUrl}</div>
+                                              <a href={message.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600">{message.linkUrl}</a>
+                                            </div>
+                                          ) : message.contentType === "sticker" && message.stickerUrl ? (
+                                            <div><img src={message.stickerUrl} alt="sticker" className="w-28 h-28 object-contain"/></div>
+                                          ) : message.contentType === "contact" && message.contactName ? (
+                                            <div className="flex items-center gap-3">
+                                              <img src={message.contactAvatar} className="w-10 h-10 rounded-full" />
+                                              <div>
+                                                <div className="font-medium">{message.contactName}</div>
+                                                {message.contactAvatar && <div className="text-xs text-gray-500">Ảnh liên hệ</div>}
+                                              </div>
+                                            </div>
+                                          ) : message.contentType === "call" ? (
+                                            <div className="text-sm">Cuộc gọi ({message.callType || 'voice'}), thời lượng: {message.callDuration ?? 0}s</div>
+                                          ) : (
+                                            <EmojiRenderer
+                                              text={message.text.replace(/\\n/g, "\n")}
+                                              renderMode="image"
+                                            />
+                                          )}
                                         </p>
 
                                         {/* Message tail */}
@@ -1938,13 +2124,61 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
                                         {/* Main message content - PROMINENT */}
                                         <p className="text-sm whitespace-pre-wrap leading-relaxed font-medium">
-                                          <EmojiRenderer
-                                            text={message.text.replace(
-                                              /\\n/g,
-                                              "\n"
-                                            )}
-                                            renderMode="image"
-                                          />
+                                          {message.contentType === "image" && message.imageUrl ? (
+                                            <div>
+                                              <img src={message.imageThumb || message.imageUrl} alt={message.imageCaption || "image"} className="max-w-full rounded-lg shadow-sm ml-auto" />
+                                              {message.imageCaption && <div className="text-xs text-gray-200 mt-1 text-right">{message.imageCaption}</div>}
+                                            </div>
+                                          ) : message.contentType === "video" && message.videoUrl ? (
+                                            <div className="relative">
+                                              <img src={message.videoThumb || message.imageThumb || message.videoUrl} alt={message.imageCaption || "video"} className="max-w-full rounded-lg shadow-sm ml-auto" />
+                                              <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                                                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                                </div>
+                                              </div>
+                                              {message.imageCaption && <div className="text-xs text-gray-200 mt-1 text-right">{message.imageCaption}</div>}
+                                            </div>
+                                          ) : message.contentType === "file" && message.fileUrl ? (
+                                            <div className="flex items-center gap-3 justify-end">
+                                              <div className="px-3 py-2 bg-slate-700 text-white rounded-md">
+                                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                              </div>
+                                              <div className="text-right">
+                                                <div className="font-medium text-white">{message.fileName || 'Tệp tin'}</div>
+                                                <a href={message.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-cyan-200">Tải tệp</a>
+                                              </div>
+                                            </div>
+                                          ) : message.contentType === "system" ? (
+                                            <div className="text-xs text-white italic">Hệ thống: {message.systemAction || JSON.stringify(message.systemOriginal)}</div>
+                                          ) : message.contentType === "location" && message.locationLat ? (
+                                            <div>
+                                              <div className="font-medium text-white">{message.locationName || 'Vị trí'}</div>
+                                              <a href={`https://www.google.com/maps?q=${message.locationLat},${message.locationLng}`} target="_blank" rel="noreferrer" className="text-xs text-cyan-200">Xem trên bản đồ</a>
+                                            </div>
+                                          ) : message.contentType === "link" && message.linkUrl ? (
+                                            <div className="border rounded-lg p-2 bg-gradient-to-r from-white/10 to-white/5 text-white">
+                                              <div className="font-medium text-sm text-cyan-200">{message.linkTitle || message.linkUrl}</div>
+                                              <a href={message.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-cyan-200">{message.linkUrl}</a>
+                                            </div>
+                                          ) : message.contentType === "sticker" && message.stickerUrl ? (
+                                            <div><img src={message.stickerUrl} alt="sticker" className="w-28 h-28 object-contain ml-auto"/></div>
+                                          ) : message.contentType === "contact" && message.contactName ? (
+                                            <div className="flex items-center gap-3 justify-end">
+                                              <img src={message.contactAvatar} className="w-10 h-10 rounded-full" />
+                                              <div className="text-right">
+                                                <div className="font-medium text-white">{message.contactName}</div>
+                                                {message.contactAvatar && <div className="text-xs text-cyan-200">Ảnh liên hệ</div>}
+                                              </div>
+                                            </div>
+                                          ) : message.contentType === "call" ? (
+                                            <div className="text-sm text-white">Cuộc gọi ({message.callType || 'voice'}), thời lượng: {message.callDuration ?? 0}s</div>
+                                          ) : (
+                                            <EmojiRenderer
+                                              text={message.text.replace(/\\n/g, "\n")}
+                                              renderMode="image"
+                                            />
+                                          )}
                                         </p>
 
                                         {/* Message tail */}
