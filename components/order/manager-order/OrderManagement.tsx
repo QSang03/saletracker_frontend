@@ -1634,7 +1634,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 typeof m.content === "string"
                                   ? JSON.parse(m.content)
                                   : m.content;
-                              text = parsed?.text ?? String(m.content ?? "");
+                              if (parsed == null) {
+                                text = String(m.content ?? "");
+                              } else if (typeof parsed === "string") {
+                                text = parsed;
+                              } else if (typeof parsed.text === "string") {
+                                text = parsed.text;
+                              } else if (parsed.text && typeof parsed.text === "object") {
+                                // prefer nested title/text when text is an object
+                                text = parsed.text.title ?? parsed.text.text ?? JSON.stringify(parsed.text);
+                              } else {
+                                text = parsed.title ?? parsed.caption ?? parsed.description ?? String(m.content ?? "");
+                              }
                             } catch {
                               text = String(m.content ?? "");
                             }
@@ -1738,7 +1749,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   callType = p.callType || p.type;
                                   callDuration = p.duration || p.callDuration || p.call_duration;
                                 }
-                                if (!text) text = p.text ?? text;
+                                if (!text) {
+                                  if (typeof p.text === "string") text = p.text;
+                                  else if (p.text && typeof p.text === "object") {
+                                    text = p.text.title ?? p.text.text ?? JSON.stringify(p.text);
+                                  } else {
+                                    text = p.title ?? p.caption ?? p.description ?? text;
+                                  }
+                                }
                               }
                             } catch (e) {
                               // ignore parse errors
