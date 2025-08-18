@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { OrderDetail } from "@/types";
 import {
   Table,
@@ -85,7 +91,7 @@ interface OrderManagementProps {
   loading?: boolean;
 }
 
-// ✅ Function tính toán extended động - đã sửa lỗi TypeScript
+// Function tính toán extended động
 const calculateDynamicExtended = (
   createdAt: string | Date | undefined,
   originalExtended: number
@@ -118,7 +124,7 @@ const calculateDynamicExtended = (
   }
 };
 
-// ✅ Helper: Định dạng ngày giờ theo chuẩn Việt Nam: HH:mm:ss dd/MM/yyyy
+// Helper: Định dạng ngày giờ theo chuẩn Việt Nam: HH:mm:ss dd/MM/yyyy
 const formatVietnamDateTime = (date: Date): string => {
   const pad = (n: number) => n.toString().padStart(2, "0");
   const dd = pad(date.getDate());
@@ -130,7 +136,7 @@ const formatVietnamDateTime = (date: Date): string => {
   return `${HH}:${MM}:${SS} ${dd}/${mm}/${yyyy}`;
 };
 
-// ✅ Component để hiển thị text với tooltip khi cần thiết
+// Component để hiển thị text với tooltip khi cần thiết
 const TruncatedText: React.FC<{
   text: string;
   maxLength?: number;
@@ -187,7 +193,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     [currentUser?.id]
   );
 
-  // ✅ Tính toán số dòng hiển thị thực tế
+  // Tính toán số dòng hiển thị thực tế
   const actualRowCount = Math.min(safeOrders.length, expectedRowCount);
 
   // Small global style to prevent hover visual changes on the focused row only
@@ -219,23 +225,23 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isHideModalOpen, setIsHideModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
-  // ✅ Customer name edit states
+  // Customer name edit states
   const [editingCustomerName, setEditingCustomerName] =
     useState<OrderDetail | null>(null);
   const [isEditCustomerNameModalOpen, setIsEditCustomerNameModalOpen] =
     useState(false);
 
-  // ✅ Blacklist states
+  // Blacklist states
   const [addingToBlacklist, setAddingToBlacklist] =
     useState<OrderDetail | null>(null);
   const [isAddToBlacklistModalOpen, setIsAddToBlacklistModalOpen] =
     useState(false);
 
-  // ✅ Bulk selection states
+  // Bulk selection states
   const [selectedOrderIds, setSelectedOrderIds] = useState<
     Set<number | string>
   >(new Set());
-  // ✅ Focused (active) row id - keep highlight until user acts on another row
+  // Focused (active) row id - keep highlight until user acts on another row
   const [focusedRowId, setFocusedRowId] = useState<number | string | null>(
     null
   );
@@ -243,6 +249,97 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const skipClearRef = useRef(false);
   // ref to indicate whether any modal is currently open; used to avoid clearing focus
   const modalOpenRef = useRef(false);
+
+  // ✅ FIXED: Draggable Messages Modal states với state quản lý khởi tạo
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
+  const [modalPos, setModalPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [modalSize, setModalSize] = useState<{ w: number; h: number }>({
+    w: 0,
+    h: 0,
+  });
+  const [isModalInitialized, setIsModalInitialized] = useState(false); // ✅ THÊM state này
+
+  // ✅ FIXED: Center modal on open and reset on close - SỬA BẰNG useLayoutEffect
+  useLayoutEffect(() => {
+    if (!isViewModalOpen) {
+      setIsDraggingModal(false);
+      setModalPos(null); // reset position when closed
+      setIsModalInitialized(false); // ✅ Reset khi đóng modal
+      return;
+    }
+
+    // ✅ CHỈ khởi tạo vị trí khi modal chưa được khởi tạo
+    if (!isModalInitialized) {
+      // ✅ Delay để đảm bảo modal đã render xong
+      const id = setTimeout(() => {
+        const el = modalRef.current;
+        if (!el) {
+          // Nếu chưa có element, thử lại sau
+          return;
+        }
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        // ✅ Lấy kích thước thực tế sau khi render
+        const rect = el.getBoundingClientRect();
+        const w = rect.width > 0 ? rect.width : Math.min(0.9 * vw, 1200);
+        const h = rect.height > 0 ? rect.height : Math.min(0.9 * vh, 700);
+
+        setModalSize({ w, h });
+
+        // ✅ Tính vị trí trung tâm chính xác
+        const x = Math.max(8, Math.round((vw - w) / 2));
+        const y = Math.max(8, Math.round((vh - h) / 2));
+
+        // ✅ CHỈ set vị trí nếu modal chưa được khởi tạo
+        setModalPos({ x, y });
+        setIsModalInitialized(true);
+      }, 150); // ✅ Tăng delay từ 0ms lên 150ms
+
+      return () => clearTimeout(id);
+    }
+  }, [isViewModalOpen, isModalInitialized]); // ✅ THÊM isModalInitialized vào dependencies
+
+  // Handle dragging (allow off-screen)
+  useEffect(() => {
+    if (!isDraggingModal) return;
+    const onMove = (e: PointerEvent) => {
+      const nextX = e.clientX - dragOffsetRef.current.x;
+      const nextY = e.clientY - dragOffsetRef.current.y;
+      setModalPos({ x: nextX, y: nextY });
+    };
+    const onUp = () => {
+      setIsDraggingModal(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isDraggingModal, modalSize]);
+
+  // Keep current position on resize (no clamping to viewport)
+  useEffect(() => {
+    const onResize = () => {
+      // Do nothing; allow modal to remain wherever the user dragged it
+      // Optionally, could keep it partially in view, but user requested full freedom
+    };
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [modalPos, modalSize, isViewModalOpen, isModalInitialized]);
 
   // helper to set focus while preventing the global click handler from clearing it immediately
   const setFocusSafely = (id: number | string | null) => {
@@ -274,18 +371,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isBulkNotesModalOpen, setIsBulkNotesModalOpen] = useState(false);
   const [isBulkHideModalOpen, setIsBulkHideModalOpen] = useState(false);
 
-  // ✅ Get selected orders
+  // Get selected orders
   const selectedOrders = useMemo(() => {
     return safeOrders.filter((order) => selectedOrderIds.has(order.id));
   }, [safeOrders, selectedOrderIds]);
 
-  // ✅ Check if all orders on current page are selected
+  // Check if all orders on current page are selected
   const isAllSelected = useMemo(() => {
     if (safeOrders.length === 0) return false;
     return safeOrders.every((order) => selectedOrderIds.has(order.id));
   }, [safeOrders, selectedOrderIds]);
 
-  // ✅ Check if some orders are selected (for indeterminate state)
+  // Check if some orders are selected (for indeterminate state)
   const isSomeSelected = useMemo(() => {
     if (safeOrders.length === 0) return false;
     return (
@@ -294,7 +391,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     );
   }, [safeOrders, selectedOrderIds, isAllSelected]);
 
-  // ✅ Clear selection when orders change (e.g., page change)
+  // Clear selection when orders change (e.g., page change)
   useEffect(() => {
     setSelectedOrderIds(new Set());
     // Clear focused row when data (page) changes
@@ -355,7 +452,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     isBulkHideModalOpen,
   ]);
 
-  // ✅ Handle select all/deselect all
+  // Handle select all/deselect all
   const handleSelectAll = () => {
     if (isAllSelected) {
       // Deselect all on current page
@@ -374,7 +471,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-  // ✅ Handle individual selection
+  // Handle individual selection
   const handleSelectOrder = (orderId: number | string) => {
     const newSelected = new Set(selectedOrderIds);
     if (newSelected.has(orderId)) {
@@ -387,7 +484,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setFocusSafely(orderId);
   };
 
-  // ✅ Bulk action handlers
+  // Bulk action handlers
   const handleBulkDelete = () => {
     setIsBulkDeleteModalOpen(true);
   };
@@ -496,7 +593,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setViewingDetail(null);
   };
 
-  // ✅ Function để handle sort - 3 trạng thái: desc -> asc -> null
+  // Function để handle sort - 3 trạng thái: desc -> asc -> null
   const handleSort = (field: "quantity" | "unit_price" | "created_at") => {
     if (!onSort) return;
 
@@ -515,21 +612,21 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-  // ✅ Function để handle click vào tên khách hàng (double click = search)
+  // Function để handle click vào tên khách hàng (double click = search)
   const handleCustomerNameClick = (customerName: string) => {
     if (onSearch && customerName && customerName.trim() !== "N/A") {
       onSearch(customerName.trim());
     }
   };
 
-  // ✅ Function để handle single click tên khách hàng (edit)
+  // Function để handle single click tên khách hàng (edit)
   const handleCustomerNameEdit = (orderDetail: OrderDetail) => {
     setFocusSafely(orderDetail.id);
     setEditingCustomerName(orderDetail);
     setIsEditCustomerNameModalOpen(true);
   };
 
-  // ✅ Function để handle save customer name
+  // Function để handle save customer name
   const handleCustomerNameSave = (
     orderDetail: OrderDetail,
     newCustomerName: string
@@ -541,13 +638,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-  // ✅ Function để handle cancel customer name edit
+  // Function để handle cancel customer name edit
   const handleCustomerNameCancel = () => {
     withSkipClear(() => setIsEditCustomerNameModalOpen(false));
     setEditingCustomerName(null);
   };
 
-  // ✅ Blacklist handlers
+  // Blacklist handlers
   const handleAddToBlacklistClick = (orderDetail: OrderDetail) => {
     setFocusSafely(orderDetail.id);
     setAddingToBlacklist(orderDetail);
@@ -567,10 +664,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setAddingToBlacklist(null);
   };
 
-  // ✅ Data được sort từ backend, không cần sort ở frontend nữa
+  // Data được sort từ backend, không cần sort ở frontend nữa
   const displayOrders = safeOrders;
 
-  // ✅ Function để render sort icon
+  // Function để render sort icon
   const renderSortIcon = (field: "quantity" | "unit_price" | "created_at") => {
     if (currentSortField !== field) {
       return null; // Không hiển thị icon nếu không phải cột đang sort
@@ -636,7 +733,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
-  // ✅ Sửa đổi getRowClassName để sử dụng extended động
+  // Sửa đổi getRowClassName để sử dụng extended động
   const getRowClassName = (orderDetail: OrderDetail, index: number) => {
     const dynamicExtended = calculateDynamicExtended(
       orderDetail.created_at,
@@ -741,7 +838,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* ✅ CHỈ tạo skeleton theo actualRowCount, không phải expectedRowCount */}
+              {/* CHỈ tạo skeleton theo actualRowCount, không phải expectedRowCount */}
               {Array.from({ length: actualRowCount }).map((_, index) => (
                 <TableRow
                   key={`skeleton-${index}`}
@@ -849,7 +946,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       `}</style>
 
       <div className="space-y-2">
-        {/* ✅ Bulk Actions */}
+        {/* Bulk Actions */}
         <BulkActions
           selectedOrders={selectedOrders}
           onBulkDelete={handleBulkDelete}
@@ -865,7 +962,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
             <Table className="min-w-[1800px] table-fixed bg-white">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
-                  {/* ✅ Checkbox column */}
+                  {/* Checkbox column */}
                   <TableHead className="font-bold text-slate-700 text-sm w-[40px] text-center left-0 bg-slate-100">
                     <Checkbox
                       checked={isAllSelected}
@@ -889,11 +986,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   </TableHead>
                   <TableHead
                     className="font-bold text-slate-700 text-sm w-[120px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
-                    onDoubleClick={() => handleSort("created_at")} // ✅ THÊM handler
+                    onDoubleClick={() => handleSort("created_at")}
                     title="Double-click để sắp xếp"
                   >
-                    📅 Thời gian{renderSortIcon("created_at")}{" "}
-                    {/* ✅ THÊM icon */}
+                    📅 Thời gian{renderSortIcon("created_at")}
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">
                     👤 Nhân viên
@@ -921,7 +1017,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[120px] text-center">
                     📊 Trạng thái
                   </TableHead>
-                  {/* ✅ CẬP NHẬT: Thêm width cụ thể cho cột thời gian gia hạn cuối */}
                   <TableHead className="font-bold text-slate-700 text-sm w-[130px] text-center">
                     ⏰ Gia hạn cuối
                   </TableHead>
@@ -950,7 +1045,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   </TableRow>
                 )}
 
-                {/* ✅ CHỈ hiển thị data thật có, KHÔNG tạo empty rows */}
+                {/* CHỈ hiển thị data thật có, KHÔNG tạo empty rows */}
                 {displayOrders.length > 0 &&
                   displayOrders.map((orderDetail, index) => (
                     <TableRow
@@ -968,7 +1063,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         const owner = isOwner(orderDetail);
                         return (
                           <>
-                            {/* ✅ Checkbox cell */}
+                            {/* Checkbox cell */}
                             <TableCell className="text-center left-0 bg-inherit">
                               <Checkbox
                                 checked={selectedOrderIds.has(orderDetail.id)}
@@ -988,7 +1083,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 #{orderDetail.id || "N/A"}
                               </div>
                             </TableCell>
-                            {/* ✅ Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
+                            {/* Sửa đổi phần hiển thị extended để sử dụng giá trị động */}
                             <TableCell className="text-center">
                               {(() => {
                                 const dynamicExtended =
@@ -1353,7 +1448,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                     </TableRow>
                   ))}
 
-                {/* ✅ LOẠI BỎ: Không tạo empty rows nữa */}
+                {/* LOẠI BỎ: Không tạo empty rows nữa */}
               </TableBody>
             </Table>
           </div>
@@ -1390,7 +1485,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         />
       )}
 
-      {/* Messages Modal */}
+      {/* ✅ FIXED: Messages Modal với logic vị trí modal được sửa */}
       {viewingDetail && (
         <Dialog
           open={isViewModalOpen}
@@ -1399,8 +1494,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           }
         >
           <DialogContent
-            className="max-w-7xl max-h-[90vh] p-0 overflow-hidden border-0 bg-transparent"
-            style={{ width: "90vw", minWidth: 1000 }}
+            ref={modalRef}
+            className={`max-w-7xl max-h-[90vh] p-0 overflow-hidden border-0 bg-transparent translate-x-0 translate-y-0 ${
+              isDraggingModal ? "ring-2 ring-blue-300 shadow-2xl" : ""
+            }`}
+            style={{
+              width: "90vw",
+              minWidth: 1000,
+              position: "fixed",
+              // ✅ CHỈ sử dụng modalPos khi đã khởi tạo xong
+              left: modalPos && isModalInitialized ? modalPos.x : "50%",
+              top: modalPos && isModalInitialized ? modalPos.y : "50%",
+              // ✅ CHỈ bỏ transform khi đã khởi tạo xong
+              transform:
+                modalPos && isModalInitialized
+                  ? "none"
+                  : "translate(-50%, -50%)",
+              cursor: isDraggingModal ? "grabbing" : undefined,
+              // ✅ Thêm transition mượt mà
+              transition: isDraggingModal ? "none" : "all 0.2s ease-out",
+            }}
           >
             {/* Floating background particles */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -1438,10 +1551,52 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
               <div className="relative bg-gradient-to-br from-white via-blue-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden">
                 {/* Enhanced Header */}
                 <DialogHeader className="relative p-0 m-0">
-                  <div className="relative p-6 bg-gradient-to-br from-blue-600 via-cyan-600 to-indigo-600 text-white overflow-hidden">
+                  <div
+                    className={`relative p-6 bg-gradient-to-br from-blue-600 via-cyan-600 to-indigo-600 text-white overflow-hidden select-none ${
+                      isDraggingModal ? "cursor-grabbing" : "cursor-grab"
+                    }`}
+                    onPointerDown={(e) => {
+                      if (e.button !== 0) return; // ✅ CHỈ left click
+                      if (!modalRef.current) return;
+                      const rect = modalRef.current.getBoundingClientRect();
+                      setModalSize({ w: rect.width, h: rect.height });
+                      const startX = e.clientX;
+                      const startY = e.clientY;
+                      const currentX = modalPos?.x ?? rect.left;
+                      const currentY = modalPos?.y ?? rect.top;
+                      dragOffsetRef.current = {
+                        x: startX - currentX,
+                        y: startY - currentY,
+                      };
+                      setIsDraggingModal(true);
+                    }}
+                    onDoubleClick={() => {
+                      // Re-center on viewport
+                      const vw = window.innerWidth;
+                      const vh = window.innerHeight;
+                      const w = modalSize.w || Math.min(0.9 * vw, 1200);
+                      const h = modalSize.h || Math.min(0.9 * vh, 700);
+                      const x = Math.round((vw - w) / 2);
+                      const y = Math.round((vh - h) / 2);
+                      setModalPos({ x, y });
+                    }}
+                  >
                     {/* Header background effects */}
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-indigo-500/20 animate-pulse"></div>
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 to-blue-400 animate-shimmer"></div>
+
+                    {/* ✅ Drag grip dots indicator */}
+                    <div
+                      className="absolute left-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-80"
+                      aria-hidden
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/70"></span>
+                    </div>
 
                     {/* Floating sparkles in header */}
                     <div className="absolute top-4 right-6 text-cyan-300 animate-bounce">
@@ -1640,15 +1795,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 text = parsed;
                               } else if (typeof parsed.text === "string") {
                                 text = parsed.text;
-                              } else if (parsed.text && typeof parsed.text === "object") {
+                              } else if (
+                                parsed.text &&
+                                typeof parsed.text === "object"
+                              ) {
                                 // prefer nested title/text when text is an object
-                                text = parsed.text.title ?? parsed.text.text ?? JSON.stringify(parsed.text);
+                                text =
+                                  parsed.text.title ??
+                                  parsed.text.text ??
+                                  JSON.stringify(parsed.text);
                               } else {
-                                text = parsed.title ?? parsed.caption ?? parsed.description ?? String(m.content ?? "");
+                                text =
+                                  parsed.title ??
+                                  parsed.caption ??
+                                  parsed.description ??
+                                  String(m.content ?? "");
                               }
                             } catch {
                               text = String(m.content ?? "");
                             }
+
                             let time = "";
                             try {
                               const d = new Date(m.timestamp);
@@ -1705,56 +1871,143 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   : m.content;
                               if (p && typeof p === "object") {
                                 const t = (
-                                  (p.type || p.content_type || p.msg_type || "") + ""
-                                ).toString().toLowerCase();
-                                if (t.includes("image") || p.imageUrl || p.image_url || p.url) {
+                                  (p.type ||
+                                    p.content_type ||
+                                    p.msg_type ||
+                                    "") + ""
+                                )
+                                  .toString()
+                                  .toLowerCase();
+                                if (
+                                  t.includes("image") ||
+                                  p.imageUrl ||
+                                  p.image_url ||
+                                  p.url
+                                ) {
                                   contentType = "image";
-                                  imageUrl = p.imageUrl || p.image_url || p.url || p.image?.url;
-                                  imageThumb = p.thumbnailUrl || p.thumbnail || p.thumb || p.image?.thumbnailUrl;
-                                  imageCaption = p.caption || p.title || p.text || p.description;
-                                } else if (t.includes("video") || p.videoUrl || p.video_url) {
+                                  imageUrl =
+                                    p.imageUrl ||
+                                    p.image_url ||
+                                    p.url ||
+                                    p.image?.url;
+                                  imageThumb =
+                                    p.thumbnailUrl ||
+                                    p.thumbnail ||
+                                    p.thumb ||
+                                    p.image?.thumbnailUrl;
+                                  imageCaption =
+                                    p.caption ||
+                                    p.title ||
+                                    p.text ||
+                                    p.description;
+                                } else if (
+                                  t.includes("video") ||
+                                  p.videoUrl ||
+                                  p.video_url
+                                ) {
                                   contentType = "video";
-                                  videoUrl = p.videoUrl || p.video_url || p.url || p.video?.url;
-                                  videoThumb = p.thumbnailUrl || p.thumbnail || p.thumb || p.video?.thumbnailUrl;
-                                  imageCaption = p.caption || p.title || p.text || p.description;
-                                } else if (t.includes("file") || p.fileUrl || p.file_url || p.fileName) {
+                                  videoUrl =
+                                    p.videoUrl ||
+                                    p.video_url ||
+                                    p.url ||
+                                    p.video?.url;
+                                  videoThumb =
+                                    p.thumbnailUrl ||
+                                    p.thumbnail ||
+                                    p.thumb ||
+                                    p.video?.thumbnailUrl;
+                                  imageCaption =
+                                    p.caption ||
+                                    p.title ||
+                                    p.text ||
+                                    p.description;
+                                } else if (
+                                  t.includes("file") ||
+                                  p.fileUrl ||
+                                  p.file_url ||
+                                  p.fileName
+                                ) {
                                   contentType = "file";
                                   fileUrl = p.fileUrl || p.file_url || p.url;
                                   fileName = p.fileName || p.name || p.title;
-                                  fileSize = p.fileSize || p.size || p.file_size;
-                                  fileExtension = p.fileExtension || p.ext || p.file_extension;
-                                } else if (t.includes("system") || p.action || p.system_action) {
+                                  fileSize =
+                                    p.fileSize || p.size || p.file_size;
+                                  fileExtension =
+                                    p.fileExtension ||
+                                    p.ext ||
+                                    p.file_extension;
+                                } else if (
+                                  t.includes("system") ||
+                                  p.action ||
+                                  p.system_action
+                                ) {
                                   contentType = "system";
-                                  systemAction = p.action || p.system_action || null;
+                                  systemAction =
+                                    p.action || p.system_action || null;
                                   systemOriginal = p;
-                                } else if (t.includes("location") || (p.latitude && p.longitude)) {
+                                } else if (
+                                  t.includes("location") ||
+                                  (p.latitude && p.longitude)
+                                ) {
                                   contentType = "location";
-                                  locationName = p.locationName || p.title || p.name || p.description;
+                                  locationName =
+                                    p.locationName ||
+                                    p.title ||
+                                    p.name ||
+                                    p.description;
                                   locationLat = p.latitude || p.lat;
                                   locationLng = p.longitude || p.lng || p.lon;
                                 } else if (t.includes("link") || p.url) {
                                   contentType = "link";
                                   linkUrl = p.url || p.linkUrl;
-                                  linkTitle = p.title || p.text || p.description;
+                                  linkTitle =
+                                    p.title || p.text || p.description;
                                   imageThumb = p.thumbnailUrl || p.thumbnail;
-                                } else if (t.includes("sticker") || p.stickerUrl || p.sticker_id) {
+                                } else if (
+                                  t.includes("sticker") ||
+                                  p.stickerUrl ||
+                                  p.sticker_id
+                                ) {
                                   contentType = "sticker";
-                                  stickerUrl = p.stickerUrl || p.sticker_url || p.thumbnail || p.url;
-                                } else if (t.includes("contact") || p.contactName || p.contactId) {
+                                  stickerUrl =
+                                    p.stickerUrl ||
+                                    p.sticker_url ||
+                                    p.thumbnail ||
+                                    p.url;
+                                } else if (
+                                  t.includes("contact") ||
+                                  p.contactName ||
+                                  p.contactId
+                                ) {
                                   contentType = "contact";
-                                  contactName = p.contactName || p.name || p.title;
-                                  contactAvatar = p.contactAvatar || p.avatar || p.image;
+                                  contactName =
+                                    p.contactName || p.name || p.title;
+                                  contactAvatar =
+                                    p.contactAvatar || p.avatar || p.image;
                                 } else if (t.includes("call") || p.callType) {
                                   contentType = "call";
                                   callType = p.callType || p.type;
-                                  callDuration = p.duration || p.callDuration || p.call_duration;
+                                  callDuration =
+                                    p.duration ||
+                                    p.callDuration ||
+                                    p.call_duration;
                                 }
                                 if (!text) {
                                   if (typeof p.text === "string") text = p.text;
-                                  else if (p.text && typeof p.text === "object") {
-                                    text = p.text.title ?? p.text.text ?? JSON.stringify(p.text);
+                                  else if (
+                                    p.text &&
+                                    typeof p.text === "object"
+                                  ) {
+                                    text =
+                                      p.text.title ??
+                                      p.text.text ??
+                                      JSON.stringify(p.text);
                                   } else {
-                                    text = p.title ?? p.caption ?? p.description ?? text;
+                                    text =
+                                      p.title ??
+                                      p.caption ??
+                                      p.description ??
+                                      text;
                                   }
                                 }
                               }
@@ -2006,58 +2259,175 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
                                         {/* Main message content - PROMINENT */}
                                         <div className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-medium">
-                                          {message.contentType === "image" && message.imageUrl ? (
+                                          {message.contentType === "image" &&
+                                          message.imageUrl ? (
                                             <div>
-                                              <img src={message.imageThumb || message.imageUrl} alt={message.imageCaption || "image"} className="max-w-full rounded-lg shadow-sm" />
-                                              {message.imageCaption && <div className="text-xs text-gray-500 mt-1">{message.imageCaption}</div>}
+                                              <img
+                                                src={
+                                                  message.imageThumb ||
+                                                  message.imageUrl
+                                                }
+                                                alt={
+                                                  message.imageCaption ||
+                                                  "image"
+                                                }
+                                                className="max-w-full rounded-lg shadow-sm"
+                                              />
+                                              {message.imageCaption && (
+                                                <div className="text-xs text-gray-500 mt-1">
+                                                  {message.imageCaption}
+                                                </div>
+                                              )}
                                             </div>
-                                          ) : message.contentType === "video" && message.videoUrl ? (
+                                          ) : message.contentType === "video" &&
+                                            message.videoUrl ? (
                                             <div className="relative">
-                                              <img src={message.videoThumb || message.imageThumb || message.videoUrl} alt={message.imageCaption || "video"} className="max-w-full rounded-lg shadow-sm" />
+                                              <img
+                                                src={
+                                                  message.videoThumb ||
+                                                  message.imageThumb ||
+                                                  message.videoUrl
+                                                }
+                                                alt={
+                                                  message.imageCaption ||
+                                                  "video"
+                                                }
+                                                className="max-w-full rounded-lg shadow-sm"
+                                              />
                                               <div className="absolute inset-0 flex items-center justify-center">
                                                 <div className="w-12 h-12 bg-white/80 rounded-full flex items-center justify-center">
-                                                  <svg className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                                  <svg
+                                                    className="w-6 h-6 text-blue-600"
+                                                    viewBox="0 0 24 24"
+                                                    fill="currentColor"
+                                                  >
+                                                    <path d="M8 5v14l11-7z" />
+                                                  </svg>
                                                 </div>
                                               </div>
-                                              {message.imageCaption && <div className="text-xs text-gray-500 mt-1">{message.imageCaption}</div>}
+                                              {message.imageCaption && (
+                                                <div className="text-xs text-gray-500 mt-1">
+                                                  {message.imageCaption}
+                                                </div>
+                                              )}
                                             </div>
-                                          ) : message.contentType === "file" && message.fileUrl ? (
+                                          ) : message.contentType === "file" &&
+                                            message.fileUrl ? (
                                             <div className="flex items-center gap-3">
                                               <div className="px-3 py-2 bg-gray-100 rounded-md">
-                                                <svg className="w-6 h-6 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                <svg
+                                                  className="w-6 h-6 text-gray-700"
+                                                  viewBox="0 0 24 24"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                >
+                                                  <path
+                                                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                  />
+                                                </svg>
                                               </div>
                                               <div className="flex-1">
-                                                <div className="font-medium">{message.fileName || 'Tệp tin'}</div>
-                                                <a href={message.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600">Tải tệp</a>
+                                                <div className="font-medium">
+                                                  {message.fileName ||
+                                                    "Tệp tin"}
+                                                </div>
+                                                <a
+                                                  href={message.fileUrl}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="text-xs text-blue-600"
+                                                >
+                                                  Tải tệp
+                                                </a>
                                               </div>
                                             </div>
-                                          ) : message.contentType === "system" ? (
-                                            <div className="text-xs text-gray-600 italic">Hệ thống: {message.systemAction || JSON.stringify(message.systemOriginal)}</div>
-                                          ) : message.contentType === "location" && message.locationLat ? (
+                                          ) : message.contentType ===
+                                            "system" ? (
+                                            <div className="text-xs text-gray-600 italic">
+                                              Hệ thống:{" "}
+                                              {message.systemAction ||
+                                                JSON.stringify(
+                                                  message.systemOriginal
+                                                )}
+                                            </div>
+                                          ) : message.contentType ===
+                                              "location" &&
+                                            message.locationLat ? (
                                             <div>
-                                              <div className="font-medium">{message.locationName || 'Vị trí'}</div>
-                                              <a href={`https://www.google.com/maps?q=${message.locationLat},${message.locationLng}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600">Xem trên bản đồ</a>
+                                              <div className="font-medium">
+                                                {message.locationName ||
+                                                  "Vị trí"}
+                                              </div>
+                                              <a
+                                                href={`https://www.google.com/maps?q=${message.locationLat},${message.locationLng}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-xs text-blue-600"
+                                              >
+                                                Xem trên bản đồ
+                                              </a>
                                             </div>
-                                          ) : message.contentType === "link" && message.linkUrl ? (
+                                          ) : message.contentType === "link" &&
+                                            message.linkUrl ? (
                                             <div className="border rounded-lg p-2 bg-white">
-                                              <div className="font-medium text-sm text-blue-700">{message.linkTitle || message.linkUrl}</div>
-                                              <a href={message.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600">{message.linkUrl}</a>
+                                              <div className="font-medium text-sm text-blue-700">
+                                                {message.linkTitle ||
+                                                  message.linkUrl}
+                                              </div>
+                                              <a
+                                                href={message.linkUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-xs text-blue-600"
+                                              >
+                                                {message.linkUrl}
+                                              </a>
                                             </div>
-                                          ) : message.contentType === "sticker" && message.stickerUrl ? (
-                                            <div><img src={message.stickerUrl} alt="sticker" className="w-28 h-28 object-contain"/></div>
-                                          ) : message.contentType === "contact" && message.contactName ? (
+                                          ) : message.contentType ===
+                                              "sticker" &&
+                                            message.stickerUrl ? (
+                                            <div>
+                                              <img
+                                                src={message.stickerUrl}
+                                                alt="sticker"
+                                                className="w-28 h-28 object-contain"
+                                              />
+                                            </div>
+                                          ) : message.contentType ===
+                                              "contact" &&
+                                            message.contactName ? (
                                             <div className="flex items-center gap-3">
-                                              <img src={message.contactAvatar} className="w-10 h-10 rounded-full" />
+                                              <img
+                                                src={message.contactAvatar}
+                                                className="w-10 h-10 rounded-full"
+                                              />
                                               <div>
-                                                <div className="font-medium">{message.contactName}</div>
-                                                {message.contactAvatar && <div className="text-xs text-gray-500">Ảnh liên hệ</div>}
+                                                <div className="font-medium">
+                                                  {message.contactName}
+                                                </div>
+                                                {message.contactAvatar && (
+                                                  <div className="text-xs text-gray-500">
+                                                    Ảnh liên hệ
+                                                  </div>
+                                                )}
                                               </div>
                                             </div>
                                           ) : message.contentType === "call" ? (
-                                            <div className="text-sm">Cuộc gọi ({message.callType || 'voice'}), thời lượng: {message.callDuration ?? 0}s</div>
+                                            <div className="text-sm">
+                                              Cuộc gọi (
+                                              {message.callType || "voice"}),
+                                              thời lượng:{" "}
+                                              {message.callDuration ?? 0}s
+                                            </div>
                                           ) : (
                                             <EmojiRenderer
-                                              text={message.text.replace(/\\n/g, "\n")}
+                                              text={message.text.replace(
+                                                /\\n/g,
+                                                "\n"
+                                              )}
                                               renderMode="image"
                                             />
                                           )}
@@ -2142,58 +2512,175 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
                                         {/* Main message content - PROMINENT */}
                                         <div className="text-sm whitespace-pre-wrap leading-relaxed font-medium">
-                                          {message.contentType === "image" && message.imageUrl ? (
+                                          {message.contentType === "image" &&
+                                          message.imageUrl ? (
                                             <div>
-                                              <img src={message.imageThumb || message.imageUrl} alt={message.imageCaption || "image"} className="max-w-full rounded-lg shadow-sm ml-auto" />
-                                              {message.imageCaption && <div className="text-xs text-gray-200 mt-1 text-right">{message.imageCaption}</div>}
+                                              <img
+                                                src={
+                                                  message.imageThumb ||
+                                                  message.imageUrl
+                                                }
+                                                alt={
+                                                  message.imageCaption ||
+                                                  "image"
+                                                }
+                                                className="max-w-full rounded-lg shadow-sm ml-auto"
+                                              />
+                                              {message.imageCaption && (
+                                                <div className="text-xs text-gray-200 mt-1 text-right">
+                                                  {message.imageCaption}
+                                                </div>
+                                              )}
                                             </div>
-                                          ) : message.contentType === "video" && message.videoUrl ? (
+                                          ) : message.contentType === "video" &&
+                                            message.videoUrl ? (
                                             <div className="relative">
-                                              <img src={message.videoThumb || message.imageThumb || message.videoUrl} alt={message.imageCaption || "video"} className="max-w-full rounded-lg shadow-sm ml-auto" />
+                                              <img
+                                                src={
+                                                  message.videoThumb ||
+                                                  message.imageThumb ||
+                                                  message.videoUrl
+                                                }
+                                                alt={
+                                                  message.imageCaption ||
+                                                  "video"
+                                                }
+                                                className="max-w-full rounded-lg shadow-sm ml-auto"
+                                              />
                                               <div className="absolute inset-0 flex items-center justify-center">
                                                 <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                                                  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                                  <svg
+                                                    className="w-6 h-6 text-white"
+                                                    viewBox="0 0 24 24"
+                                                    fill="currentColor"
+                                                  >
+                                                    <path d="M8 5v14l11-7z" />
+                                                  </svg>
                                                 </div>
                                               </div>
-                                              {message.imageCaption && <div className="text-xs text-gray-200 mt-1 text-right">{message.imageCaption}</div>}
+                                              {message.imageCaption && (
+                                                <div className="text-xs text-gray-200 mt-1 text-right">
+                                                  {message.imageCaption}
+                                                </div>
+                                              )}
                                             </div>
-                                          ) : message.contentType === "file" && message.fileUrl ? (
+                                          ) : message.contentType === "file" &&
+                                            message.fileUrl ? (
                                             <div className="flex items-center gap-3 justify-end">
                                               <div className="px-3 py-2 bg-slate-700 text-white rounded-md">
-                                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                <svg
+                                                  className="w-6 h-6"
+                                                  viewBox="0 0 24 24"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                >
+                                                  <path
+                                                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                                                    strokeWidth="1.5"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                  />
+                                                </svg>
                                               </div>
                                               <div className="text-right">
-                                                <div className="font-medium text-white">{message.fileName || 'Tệp tin'}</div>
-                                                <a href={message.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-cyan-200">Tải tệp</a>
+                                                <div className="font-medium text-white">
+                                                  {message.fileName ||
+                                                    "Tệp tin"}
+                                                </div>
+                                                <a
+                                                  href={message.fileUrl}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="text-xs text-cyan-200"
+                                                >
+                                                  Tải tệp
+                                                </a>
                                               </div>
                                             </div>
-                                          ) : message.contentType === "system" ? (
-                                            <div className="text-xs text-white italic">Hệ thống: {message.systemAction || JSON.stringify(message.systemOriginal)}</div>
-                                          ) : message.contentType === "location" && message.locationLat ? (
+                                          ) : message.contentType ===
+                                            "system" ? (
+                                            <div className="text-xs text-white italic">
+                                              Hệ thống:{" "}
+                                              {message.systemAction ||
+                                                JSON.stringify(
+                                                  message.systemOriginal
+                                                )}
+                                            </div>
+                                          ) : message.contentType ===
+                                              "location" &&
+                                            message.locationLat ? (
                                             <div>
-                                              <div className="font-medium text-white">{message.locationName || 'Vị trí'}</div>
-                                              <a href={`https://www.google.com/maps?q=${message.locationLat},${message.locationLng}`} target="_blank" rel="noreferrer" className="text-xs text-cyan-200">Xem trên bản đồ</a>
+                                              <div className="font-medium text-white">
+                                                {message.locationName ||
+                                                  "Vị trí"}
+                                              </div>
+                                              <a
+                                                href={`https://www.google.com/maps?q=${message.locationLat},${message.locationLng}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-xs text-cyan-200"
+                                              >
+                                                Xem trên bản đồ
+                                              </a>
                                             </div>
-                                          ) : message.contentType === "link" && message.linkUrl ? (
+                                          ) : message.contentType === "link" &&
+                                            message.linkUrl ? (
                                             <div className="border rounded-lg p-2 bg-gradient-to-r from-white/10 to-white/5 text-white">
-                                              <div className="font-medium text-sm text-cyan-200">{message.linkTitle || message.linkUrl}</div>
-                                              <a href={message.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-cyan-200">{message.linkUrl}</a>
+                                              <div className="font-medium text-sm text-cyan-200">
+                                                {message.linkTitle ||
+                                                  message.linkUrl}
+                                              </div>
+                                              <a
+                                                href={message.linkUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-xs text-cyan-200"
+                                              >
+                                                {message.linkUrl}
+                                              </a>
                                             </div>
-                                          ) : message.contentType === "sticker" && message.stickerUrl ? (
-                                            <div><img src={message.stickerUrl} alt="sticker" className="w-28 h-28 object-contain ml-auto"/></div>
-                                          ) : message.contentType === "contact" && message.contactName ? (
+                                          ) : message.contentType ===
+                                              "sticker" &&
+                                            message.stickerUrl ? (
+                                            <div>
+                                              <img
+                                                src={message.stickerUrl}
+                                                alt="sticker"
+                                                className="w-28 h-28 object-contain ml-auto"
+                                              />
+                                            </div>
+                                          ) : message.contentType ===
+                                              "contact" &&
+                                            message.contactName ? (
                                             <div className="flex items-center gap-3 justify-end">
-                                              <img src={message.contactAvatar} className="w-10 h-10 rounded-full" />
+                                              <img
+                                                src={message.contactAvatar}
+                                                className="w-10 h-10 rounded-full"
+                                              />
                                               <div className="text-right">
-                                                <div className="font-medium text-white">{message.contactName}</div>
-                                                {message.contactAvatar && <div className="text-xs text-cyan-200">Ảnh liên hệ</div>}
+                                                <div className="font-medium text-white">
+                                                  {message.contactName}
+                                                </div>
+                                                {message.contactAvatar && (
+                                                  <div className="text-xs text-cyan-200">
+                                                    Ảnh liên hệ
+                                                  </div>
+                                                )}
                                               </div>
                                             </div>
                                           ) : message.contentType === "call" ? (
-                                            <div className="text-sm text-white">Cuộc gọi ({message.callType || 'voice'}), thời lượng: {message.callDuration ?? 0}s</div>
+                                            <div className="text-sm text-white">
+                                              Cuộc gọi (
+                                              {message.callType || "voice"}),
+                                              thời lượng:{" "}
+                                              {message.callDuration ?? 0}s
+                                            </div>
                                           ) : (
                                             <EmojiRenderer
-                                              text={message.text.replace(/\\n/g, "\n")}
+                                              text={message.text.replace(
+                                                /\\n/g,
+                                                "\n"
+                                              )}
                                               renderMode="image"
                                             />
                                           )}
@@ -2322,7 +2809,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         </Dialog>
       )}
 
-      {/* ✅ Bulk Action Modals */}
+      {/* Bulk Action Modals */}
       <BulkDeleteModal
         selectedOrders={selectedOrders}
         isOpen={isBulkDeleteModalOpen}
@@ -2361,7 +2848,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         loading={loading}
       />
 
-      {/* ✅ Customer name edit modal */}
+      {/* Customer name edit modal */}
       <EditCustomerNameModal
         orderDetail={editingCustomerName}
         isOpen={isEditCustomerNameModalOpen}
@@ -2370,7 +2857,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         loading={loading}
       />
 
-      {/* ✅ Add to Blacklist modal */}
+      {/* Add to Blacklist modal */}
       <AddToBlacklistModal
         orderDetail={addingToBlacklist}
         isOpen={isAddToBlacklistModalOpen}
