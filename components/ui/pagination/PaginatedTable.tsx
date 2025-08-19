@@ -40,6 +40,8 @@ interface PaginatedTableProps {
   enableDateRangeFilter?: boolean;
   enableSingleDateFilter?: boolean;
   enablePageSize?: boolean;
+  // Hiển thị input "đi tới trang"
+  enableGoToPage?: boolean;
   availableDepartments?:
     | string[]
     | { value: number | string; label: string }[] // ✅ Support cả number và string
@@ -140,6 +142,7 @@ export default function PaginatedTable({
   // Thêm các props mới
   enableZaloLinkStatusFilter,
   enableCategoriesFilter,
+  enableGoToPage = false,
   availableZaloLinkStatuses = [
     { value: 0, label: "Chưa liên kết" },
     { value: 1, label: "Đã liên kết" },
@@ -857,6 +860,25 @@ export default function PaginatedTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPageSize, isRestoring]);
 
+  // State cho input "đi tới trang"
+  const [gotoPageInput, setGotoPageInput] = useState<string>("");
+  useEffect(() => {
+    // Đồng bộ input mỗi khi currentPage thay đổi bên ngoài
+    setGotoPageInput(String(currentPage || 1));
+  }, [currentPage]);
+
+  const commitGotoPage = useCallback(() => {
+    const raw = gotoPageInput.trim();
+    if (!raw) return;
+    const parsed = Number(raw);
+    if (isNaN(parsed)) return;
+    // Clamp về khoảng hợp lệ
+    const target = Math.max(1, Math.min(parsed, totalPages));
+    if (target !== currentPage) {
+      goToPage(target);
+    }
+  }, [gotoPageInput, totalPages, currentPage, goToPage]);
+
   return (
     <div
       className={`flex flex-col w-full space-y-4 ${
@@ -1116,31 +1138,145 @@ export default function PaginatedTable({
       )}
 
       {!hidePager && (
-        <div className="flex justify-center gap-2 pt-2 mt-2">
+        <div className="flex justify-center items-center gap-3 pt-4 mt-4 p-4 bg-gradient-to-r from-purple-50 via-pink-50 to-indigo-50 rounded-2xl shadow-lg backdrop-blur-sm border border-white/20">
+          {/* Previous Button */}
           <Button
             variant="gradient"
             size="sm"
-            className={buttonClassNames.prev ?? ""}
+            className={`
+      ${buttonClassNames.prev ?? ""} 
+      group relative overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 
+      hover:from-purple-600 hover:to-pink-600 text-white font-semibold
+      transform transition-all duration-300 ease-out hover:scale-105 hover:shadow-xl
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+      px-6 py-2 rounded-full border-0
+      before:absolute before:inset-0 before:bg-white before:opacity-0 
+      before:transition-opacity before:duration-300 hover:before:opacity-10
+    `}
             onClick={() => {
               goToPage(Math.max(currentPage - 1, 1));
             }}
             disabled={currentPage === 1}
           >
-            Trước
+            <span className="flex items-center gap-2">
+              <svg
+                className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Trước
+            </span>
           </Button>
-          <span className="text-sm px-2 mt-1.5">
-            Trang {currentPage} / {totalPages || 1}
-          </span>
+
+          {/* Page Indicator with Animation */}
+          <div className="flex items-center gap-3 px-4 py-2 bg-white/80 backdrop-blur-md rounded-full shadow-inner border border-gray-200/50">
+            <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              Trang
+            </span>
+            <div className="relative">
+              <span className="text-lg font-bold text-gray-800 px-3 py-1 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full">
+                {currentPage}
+              </span>
+              <div className="absolute -inset-1 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full blur opacity-30 animate-pulse"></div>
+            </div>
+            <span className="text-gray-400 font-medium">/</span>
+            <span className="text-lg font-semibold text-gray-600">
+              {totalPages || 1}
+            </span>
+          </div>
+
+          {/* Go to Page Section */}
+          {enableGoToPage && (
+            <div className="flex items-center gap-3 p-2 bg-white/60 backdrop-blur-md rounded-xl border border-white/30 shadow-sm">
+              <Input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={gotoPageInput}
+                onChange={(e) => setGotoPageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    commitGotoPage();
+                  }
+                }}
+                className="
+          w-20 h-9 text-center text-sm font-semibold
+          bg-white/90 border-2 border-purple-200 rounded-lg
+          focus:border-purple-400 focus:ring-2 focus:ring-purple-200
+          transition-all duration-300 focus:scale-105
+          placeholder-gray-400
+        "
+                placeholder="Trang"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={commitGotoPage}
+                disabled={totalPages <= 1}
+                className="
+          group bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold
+          hover:from-indigo-600 hover:to-purple-600 border-0 px-4 py-2 rounded-lg
+          transform transition-all duration-300 hover:scale-105 hover:shadow-lg
+          disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+        "
+              >
+                <span className="flex items-center gap-1">
+                  Đến
+                  <svg
+                    className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+              </Button>
+            </div>
+          )}
+
+          {/* Next Button */}
           <Button
             variant="gradient"
             size="sm"
-            className={buttonClassNames.next ?? ""}
+            className={`
+      ${buttonClassNames.next ?? ""} 
+      group relative overflow-hidden bg-gradient-to-r from-indigo-500 to-purple-500 
+      hover:from-indigo-600 hover:to-purple-600 text-white font-semibold
+      transform transition-all duration-300 ease-out hover:scale-105 hover:shadow-xl
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+      px-6 py-2 rounded-full border-0
+      before:absolute before:inset-0 before:bg-white before:opacity-0 
+      before:transition-opacity before:duration-300 hover:before:opacity-10
+    `}
             onClick={() => {
               goToPage(Math.min(currentPage + 1, totalPages));
             }}
             disabled={currentPage >= totalPages}
           >
-            Sau
+            <span className="flex items-center gap-2">
+              Sau
+              <svg
+                className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </span>
           </Button>
         </div>
       )}

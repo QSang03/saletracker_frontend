@@ -842,26 +842,20 @@ const DebtStatisticsDashboard: React.FC = () => {
                       const todayStr = new Date().toISOString().split('T')[0];
                       const fromStr = (fromDate as Date).toISOString().split('T')[0];
                       const toStr = (toDate as Date).toISOString().split('T')[0];
-                      const tryDates: string[] = [];
-                      if (fromStr <= todayStr && toStr >= todayStr) tryDates.push(todayStr);
-                      if (!tryDates.includes(toStr)) tryDates.push(toStr);
-                      if (!tryDates.includes(fromStr)) tryDates.push(fromStr);
-                      let debts: Debt[] = [];
-                      for (const dateStr of tryDates) {
-                        const resp = await api.get('/debt-statistics/detailed', {
-                          params: {
-                            date: dateStr,
-                            mode: 'overdue',
-                            minDays,
-                            maxDays,
-                            page: 1,
-                            limit: 1000,
-                          }
-                        });
-                        const respData = resp.data;
-                        debts = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
-                        if (debts.length > 0) break;
-                      }
+                      // Use range to match chart summary scope to avoid count/detail mismatch
+                      const resp = await api.get('/debt-statistics/detailed', {
+                        params: {
+                          from: fromStr,
+                          to: toStr,
+                          mode: 'overdue',
+                          minDays,
+                          maxDays,
+                          page: 1,
+                          limit: 1000,
+                        }
+                      });
+                      const respData = resp.data;
+                      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
                       setSelectedDebts(debts);
                     } catch {
                       setSelectedDebts([]);

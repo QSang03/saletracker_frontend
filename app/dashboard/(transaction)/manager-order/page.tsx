@@ -686,6 +686,7 @@ function ManagerOrderContent() {
             enableCategoriesFilter={true} // Sử dụng cho products
             enableWarningLevelFilter={true} // Thêm warning level filter
             enablePageSize={true}
+            enableGoToPage={true}
             availableStatuses={statusOptions}
             availableEmployees={filteredEmployeeOptions}
             availableDepartments={departmentOptions}
