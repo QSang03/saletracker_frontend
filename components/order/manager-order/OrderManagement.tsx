@@ -843,9 +843,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[80px] text-center">
                   Gia hạn
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
-                  Thời gian
-                </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[140px] text-center">
                   Thời gian bắt đầu
                 </TableHead>
@@ -896,9 +893,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-12 rounded mx-auto" />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Skeleton className="h-4 w-24 rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-28 rounded mx-auto" />
@@ -1041,13 +1035,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[80px] text-center">
                     ⏰ Gia hạn
                   </TableHead>
-                  <TableHead
+                  {/* <TableHead
                     className="font-bold text-slate-700 text-sm w-[120px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
                     onDoubleClick={() => handleSort("created_at")}
                     title="Double-click để sắp xếp"
                   >
                     📅 Thời gian{renderSortIcon("created_at")}
-                  </TableHead>
+                  </TableHead> */}
                   <TableHead className="font-bold text-slate-700 text-sm w-[150px] text-center">
                     🕐 TG bắt đầu
                   </TableHead>
@@ -1178,7 +1172,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 );
                               })()}
                             </TableCell>
-                            <TableCell className="text-center text-slate-600 text-sm">
+                            {/* <TableCell className="text-center text-slate-600 text-sm">
                               <div className="flex flex-col">
                                 {orderDetail.created_at ? (
                                   typeof orderDetail.created_at === "string" ? (
@@ -1218,7 +1212,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   <div>""</div>
                                 )}
                               </div>
-                            </TableCell>
+                            </TableCell> */}
                             {/* Thời gian bắt đầu dựa theo metadata.messages[0].timestamp */}
                             <TableCell className="text-center text-slate-600 text-sm">
                               {(() => {
