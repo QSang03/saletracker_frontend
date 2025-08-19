@@ -43,27 +43,40 @@ const EditCustomerNameModal: React.FC<EditCustomerNameModalProps> = ({
 
   // ✅ Check if this order detail has customer_id in metadata for bulk update warning
   const hasCustomerId = useMemo(() => {
-    if (!orderDetail?.metadata) return false;
+
+    if (!orderDetail?.metadata) {
+      return false;
+    }
     try {
       const metadata = orderDetail.metadata;
-      return !!metadata.customer_id;
+      const exists = !!metadata.customer_id;
+      return exists;
     } catch (error) {
+      console.error("[hasCustomerId] error parsing metadata:", error);
       return false;
     }
   }, [orderDetail?.metadata]);
 
   const getCustomerInfo = useMemo(() => {
-    if (!orderDetail?.metadata) return null;
+
+    if (!orderDetail?.metadata) {
+      return null;
+    }
     try {
       const metadata = orderDetail.metadata;
-      return {
+      const info = {
         customerId: metadata.customer_id,
-        conversationType: metadata.conversation_type,
+        conversationType: metadata.conversation_info?.is_group,
       };
+      return info;
     } catch (error) {
+      console.error("[getCustomerInfo] error parsing metadata:", error);
       return null;
     }
   }, [orderDetail?.metadata]);
+
+  useEffect(() => {
+  }, [hasCustomerId, getCustomerInfo, customerName]);
 
   useEffect(() => {
     if (orderDetail) {

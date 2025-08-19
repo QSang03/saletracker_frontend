@@ -1180,8 +1180,7 @@ export const useOrders = (): UseOrdersReturn => {
             const metadata = orderDetail.metadata;
             const customerId = metadata.customer_id;
             const conversationType = metadata.conversation_info.is_group;
-
-            if (customerId && conversationType) {
+            if (customerId && conversationType !== undefined) {
               let apiUrl = "";
               let payload = {};
 
