@@ -337,7 +337,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         // ✅ CHỈ set vị trí nếu modal chưa được khởi tạo
         setModalPos({ x, y });
         setIsModalInitialized(true);
-      }, 150); // ✅ Tăng delay từ 0ms lên 150ms
+      }, 10); // ✅ Tăng delay từ 0ms lên 2000ms
 
       return () => clearTimeout(id);
     }
