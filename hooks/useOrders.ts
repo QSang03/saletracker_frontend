@@ -1179,18 +1179,18 @@ export const useOrders = (): UseOrdersReturn => {
           try {
             const metadata = orderDetail.metadata;
             const customerId = metadata.customer_id;
-            const conversationType = metadata.conversation_type;
+            const conversationType = metadata.conversation_info.is_group;
 
             if (customerId && conversationType) {
               let apiUrl = "";
               let payload = {};
 
-              if (conversationType === "private") {
+              if (conversationType === false) {
                 apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/contacts/zalo-id/${customerId}`;
                 payload = {
                   display_name: customerName,
                 };
-              } else if (conversationType === "group") {
+              } else if (conversationType === true) {
                 apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/conversations/zalo-id/${customerId}`;
                 payload = {
                   conversation_name: customerName,
