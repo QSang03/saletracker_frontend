@@ -60,6 +60,7 @@ import BulkExtendModal from "./BulkExtendModal";
 import BulkNotesModal from "./BulkNotesModal";
 import HideOrderDetailModal from "./HideOrderDetailModal";
 import BulkHideModal from "./BulkHideModal";
+import ViewNotesHistoryModal from "./ViewNotesHistoryModal";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -262,6 +263,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isHideModalOpen, setIsHideModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  // Notes history modal
+  const [notesHistoryDetail, setNotesHistoryDetail] = useState<OrderDetail | null>(null);
+  const [isNotesHistoryOpen, setIsNotesHistoryOpen] = useState(false);
 
   // Customer name edit states
   const [editingCustomerName, setEditingCustomerName] =
@@ -475,7 +479,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       isBulkDeleteModalOpen ||
       isBulkExtendModalOpen ||
       isBulkNotesModalOpen ||
-      isBulkHideModalOpen
+      isBulkHideModalOpen ||
+      isNotesHistoryOpen
     );
   }, [
     isEditModalOpen,
@@ -488,6 +493,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     isBulkExtendModalOpen,
     isBulkNotesModalOpen,
     isBulkHideModalOpen,
+    isNotesHistoryOpen,
   ]);
 
   // Handle select all/deselect all
@@ -1399,11 +1405,34 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               )}
                             </TableCell>
                             <TableCell className="text-center text-slate-600 italic hover:text-slate-800 transition-colors text-sm px-3">
-                              <TruncatedText
-                                text={orderDetail.notes || "—"}
-                                maxLength={18}
-                                className="text-wrap leading-relaxed"
-                              />
+                              <div className="flex items-center justify-between gap-2">
+                                <TruncatedText
+                                  text={orderDetail.notes || "—"}
+                                  maxLength={18}
+                                  className="text-wrap leading-relaxed"
+                                />
+                                {/* Eye icon to open notes history modal; placed in notes column for vertical alignment */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 hover:bg-slate-100 shrink-0"
+                                      onClick={() => {
+                                        setFocusSafely(orderDetail.id);
+                                        setNotesHistoryDetail(orderDetail);
+                                        setIsNotesHistoryOpen(true);
+                                      }}
+                                      aria-label="Xem lịch sử ghi chú"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Xem lịch sử ghi chú</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center space-x-1">
@@ -1562,6 +1591,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Notes history modal (global) */}
+      {notesHistoryDetail && (
+        <ViewNotesHistoryModal
+          orderDetail={notesHistoryDetail}
+          isOpen={isNotesHistoryOpen}
+          onClose={() => setIsNotesHistoryOpen(false)}
+        />
+      )}
 
       {editingDetail && (
         <EditOrderDetailModal
@@ -1733,6 +1771,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             {viewingDetail?.customer_name || "Khách hàng"}
                           </h3>
                           <div className="flex items-center gap-3">
+                          {/* Notes history modal is rendered globally at the bottom to avoid duplication */}
+
                             <p className="text-sm text-cyan-100 font-medium flex items-center gap-2">
                               <Hash className="w-4 h-4" />
                               Mã đơn: {viewingDetail?.id ?? "N/A"}

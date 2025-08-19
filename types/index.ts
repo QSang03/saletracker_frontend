@@ -208,6 +208,12 @@ export interface OrderDetail {
   extend_reason?: 'hệ thống tự gia hạn vào chủ nhật hoặc nghỉ lễ' | 'chính chủ gia hạn';
   note?: string;
   notes?: string;
+  // Lịch sử thay đổi ghi chú
+  notes_history?: Array<{
+    user_id: number | null;
+    content: string;
+    changed_at: string; // ISO string
+  }>;
   reason?: string;
   zaloMessageId?: string;
   metadata?: Record<string, any>;
