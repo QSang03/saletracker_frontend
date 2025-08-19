@@ -71,6 +71,7 @@ import {
   Coffee,
   UtensilsCrossed,
   Sunset,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -255,6 +256,20 @@ export default function CampaignModal({
   const [uploadedCustomers, setUploadedCustomers] = useState<
     Array<{ phone_number: string; full_name: string; salutation?: string }>
   >([]);
+  // Lazy-load list state for customers tab
+  const [visibleCount, setVisibleCount] = useState(50);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  // Inline add/edit states
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerSalutation, setNewCustomerSalutation] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    phone_number: string;
+    full_name: string;
+    salutation?: string;
+  } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -583,12 +598,17 @@ export default function CampaignModal({
           selectedType === CampaignType.DAILY_KM
             ? startTime && endTime
             : selectedType === CampaignType.THREE_DAY_KM
-            ? Array.isArray(selectedDays)
-              ? selectedDays.length > 0 && timeOfDay
-              : selectedDays && timeOfDay
+            ? // ✅ Bắt buộc chọn đúng 3 ngày (adjacent) và có giờ gửi
+              Array.isArray(selectedDays)
+              ? selectedDays.length === 3 && timeOfDay
+              : false
             : selectedType === CampaignType.WEEKLY_SP ||
               selectedType === CampaignType.WEEKLY_BBG
-            ? selectedDays && timeOfDay
+            ? // ✅ Bắt buộc chọn ít nhất 1 ngày trong tuần và có giờ gửi
+              (Array.isArray(selectedDays)
+                ? selectedDays.length > 0
+                : typeof selectedDays === "number" && selectedDays > 0) &&
+              Boolean(timeOfDay)
             : false)))
   );
 
@@ -782,6 +802,132 @@ export default function CampaignModal({
     }
   }, [mode, initialData, open, totalSteps, loadCampaignData]);
 
+  // Normalize phone helper (VN): keep digits, convert leading 84 to 0
+  const normalizePhone = useCallback((p: string) => {
+    return (p || "").replace(/\D/g, "").replace(/^84(?=\d{8,})/, "0");
+  }, []);
+
+  // Reset lazy list when customers change or when entering customers tab
+  useEffect(() => {
+    setVisibleCount((prev) => Math.min(50, uploadedCustomers.length || 50));
+  }, [uploadedCustomers]);
+
+  useEffect(() => {
+    if (currentTab !== "customers") return;
+    const sentinel = loadMoreRef.current;
+    if (!sentinel) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            setVisibleCount((prev) =>
+              Math.min(prev + 100, uploadedCustomers.length)
+            );
+          }
+        });
+      },
+      { root: listContainerRef.current, threshold: 0.1 }
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [currentTab, uploadedCustomers.length]);
+
+  // Add or update a customer with duplicate handling
+  const handleAddCustomer = useCallback(() => {
+    const phone = newCustomerPhone.trim();
+    const name = newCustomerName.trim();
+    const salutation = newCustomerSalutation.trim();
+
+    if (!phone || !name) {
+      setAlertSafe({ type: "error", message: "Vui lòng nhập SĐT và Tên" });
+      return;
+    }
+    // basic phone check
+    const clean = phone.replace(/\s/g, "");
+    if (!/^[0-9+\-\s()]{8,15}$/.test(clean)) {
+      setAlertSafe({ type: "error", message: "Số điện thoại không hợp lệ" });
+      return;
+    }
+
+    const norm = normalizePhone(phone);
+    const idx = uploadedCustomers.findIndex(
+      (c) => normalizePhone(c.phone_number) === norm
+    );
+    if (idx >= 0) {
+      // Update existing record with new data
+      setUploadedCustomers((prev) => {
+        const next = [...prev];
+        next[idx] = { phone_number: phone, full_name: name, salutation };
+        return next;
+      });
+      setAlertSafe({ type: "info", message: "Đã cập nhật khách hàng trùng SĐT" });
+    } else {
+      // Prepend new record
+      setUploadedCustomers((prev) => [
+        { phone_number: phone, full_name: name, salutation },
+        ...prev,
+      ]);
+      setAlertSafe({ type: "success", message: "Đã thêm khách hàng" });
+    }
+    setNewCustomerPhone("");
+    setNewCustomerName("");
+    setNewCustomerSalutation("");
+  }, [newCustomerPhone, newCustomerName, newCustomerSalutation, uploadedCustomers, normalizePhone, setAlertSafe]);
+
+  const startEditCustomer = useCallback(
+    (index: number) => {
+      const c = uploadedCustomers[index];
+      setEditingIndex(index);
+      setEditDraft({ ...c });
+    },
+    [uploadedCustomers]
+  );
+
+  const cancelEditCustomer = useCallback(() => {
+    setEditingIndex(null);
+    setEditDraft(null);
+  }, []);
+
+  const saveEditCustomer = useCallback(() => {
+    if (editingIndex === null || !editDraft) return;
+    const phone = (editDraft.phone_number || "").trim();
+    const name = (editDraft.full_name || "").trim();
+    if (!phone || !name) {
+      setAlertSafe({ type: "error", message: "Vui lòng nhập SĐT và Tên" });
+      return;
+    }
+    const clean = phone.replace(/\s/g, "");
+    if (!/^[0-9+\-\s()]{8,15}$/.test(clean)) {
+      setAlertSafe({ type: "error", message: "Số điện thoại không hợp lệ" });
+      return;
+    }
+
+    const norm = normalizePhone(phone);
+    const dupIdx = uploadedCustomers.findIndex(
+      (c, i) => i !== editingIndex && normalizePhone(c.phone_number) === norm
+    );
+
+    setUploadedCustomers((prev) => {
+      const next = [...prev];
+      if (dupIdx >= 0) {
+        // Merge: update the duplicate row and remove the editing row
+        next[dupIdx] = { ...next[dupIdx], ...editDraft, phone_number: phone };
+        next.splice(editingIndex, 1);
+      } else {
+        next[editingIndex] = { ...editDraft, phone_number: phone };
+      }
+      return next;
+    });
+
+    if (dupIdx >= 0) {
+      setAlertSafe({ type: "info", message: "Đã gộp vào khách hàng cùng SĐT" });
+    } else {
+      setAlertSafe({ type: "success", message: "Đã lưu chỉnh sửa" });
+    }
+    setEditingIndex(null);
+    setEditDraft(null);
+  }, [editingIndex, editDraft, uploadedCustomers, normalizePhone, setAlertSafe]);
+
   // Enhanced day selection logic - memoized
   const handleDaySelectionChange = useCallback(
     (days: number | number[]) => {
@@ -924,6 +1070,10 @@ export default function CampaignModal({
             • Thử tải file mẫu và làm lại
             • Đảm bảo file không bị hỏng`,
           });
+          const inp = document.getElementById(
+            "customer-upload"
+          ) as HTMLInputElement | null;
+          if (inp) inp.value = "";
           return false;
         }
 
@@ -942,6 +1092,10 @@ export default function CampaignModal({
 
             💡 Vui lòng kiểm tra lại file và thử lại!`,
           });
+          const inp = document.getElementById(
+            "customer-upload"
+          ) as HTMLInputElement | null;
+          if (inp) inp.value = "";
           return false;
         }
 
@@ -984,6 +1138,122 @@ export default function CampaignModal({
 
             💡 Vui lòng tải file mẫu và làm theo đúng định dạng!`,
           });
+          const inp = document.getElementById(
+            "customer-upload"
+          ) as HTMLInputElement | null;
+          if (inp) inp.value = "";
+          return false;
+        }
+
+        const normalizePhone = (p: string) =>
+          (p || "").replace(/\D/g, "").replace(/^84(?=\d{8,})/, "0"); // replace leading 84 -> 0 for VN numbers
+
+        // Parse customer data
+        const rawCustomers = lines
+          .slice(1)
+          .map((line) => {
+            const columns = line.split(",");
+            const fullName =
+              fullNameIdx >= 0 ? columns[fullNameIdx]?.trim() || "" : "";
+            const phoneNumber =
+              phoneNumberIdx >= 0 ? columns[phoneNumberIdx]?.trim() || "" : "";
+            const salutation =
+              salutationIdx >= 0 ? columns[salutationIdx]?.trim() || "" : "";
+
+            return {
+              phone_number: phoneNumber,
+              full_name: fullName,
+              salutation,
+            };
+          })
+          .filter((customer) => customer.phone_number && customer.full_name);
+
+        if (rawCustomers.length === 0) {
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không có dữ liệu hợp lệ!
+
+          📋 Excel: ${
+            originalExcelError instanceof Error
+              ? originalExcelError.message
+              : "Không đọc được"
+          }
+          📋 CSV: Có dữ liệu nhưng không hợp lệ
+
+          💡 Vui lòng kiểm tra:
+          • Các dòng dữ liệu có đầy đủ thông tin không?
+          • Định dạng số điện thoại và tên có chính xác không?`,
+          });
+          const inp = document.getElementById(
+            "customer-upload"
+          ) as HTMLInputElement | null;
+          if (inp) inp.value = "";
+          return false;
+        }
+
+        // Detect duplicates inside file and against existing uploadedCustomers
+        const seenInFile = new Map<string, number>(); // normPhone -> count
+        const duplicatesInFile: string[] = [];
+        const uniqueByNorm: Map<
+          string,
+          { phone_number: string; full_name: string; salutation?: string }
+        > = new Map();
+
+        for (const c of rawCustomers) {
+          const norm = normalizePhone(c.phone_number);
+          if (!norm) continue;
+          const prev = seenInFile.get(norm) || 0;
+          seenInFile.set(norm, prev + 1);
+          if (prev + 1 > 1) {
+            duplicatesInFile.push(norm);
+          } else {
+            uniqueByNorm.set(norm, c);
+          }
+        }
+
+        // Existing normalized phones (to check duplicates against current state)
+        const existingNormSet = new Set(
+          uploadedCustomers.map((c) => normalizePhone(c.phone_number))
+        );
+        const duplicatesAgainstExisting: string[] = [];
+        const uniqueCustomers: Array<{
+          phone_number: string;
+          full_name: string;
+          salutation?: string;
+        }> = [];
+
+        for (const [norm, c] of uniqueByNorm.entries()) {
+          if (existingNormSet.has(norm)) {
+            duplicatesAgainstExisting.push(norm);
+          } else {
+            uniqueCustomers.push(c);
+          }
+        }
+
+        if (uniqueCustomers.length === 0) {
+          // Nothing to add
+          const messages: string[] = [];
+          if (duplicatesInFile.length > 0)
+            messages.push(
+              `• ${
+                new Set(duplicatesInFile).size
+              } số điện thoại trùng lặp trong file`
+            );
+          if (duplicatesAgainstExisting.length > 0)
+            messages.push(
+              `• ${duplicatesAgainstExisting.length} số điện thoại đã tồn tại trong danh sách`
+            );
+
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không có bản ghi mới để import. Tất cả bản ghi đều trùng lặp hoặc không hợp lệ.\n\n${messages.join(
+              "\n"
+            )}\n\n💡 Vui lòng sửa file và thử lại.`,
+          });
+          const inp = document.getElementById(
+            "customer-upload"
+          ) as HTMLInputElement | null;
+          if (inp) inp.value = "";
           return false;
         }
 
@@ -1023,11 +1293,19 @@ export default function CampaignModal({
             • Các dòng dữ liệu có đầy đủ thông tin không?
             • Định dạng số điện thoại và tên có chính xác không?`,
           });
+          const inp = document.getElementById(
+            "customer-upload"
+          ) as HTMLInputElement | null;
+          if (inp) inp.value = "";
           return false;
         }
 
         setUploadedCustomers(csvCustomers);
 
+        const inp = document.getElementById(
+          "customer-upload"
+        ) as HTMLInputElement | null;
+        if (inp) inp.value = "";
         // ✅ DELAY QUAN TRỌNG ĐỂ ĐẢM BẢO CUSTOMERS ĐÃ ĐƯỢC SET XONG
         await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -1044,6 +1322,38 @@ export default function CampaignModal({
           }
 
           💡 Khuyến nghị: Sử dụng file Excel (.xlsx) để có hiệu suất tốt hơn!`,
+        });
+        const parts: string[] = [];
+        parts.push(
+          `✅ Import thành công ${uniqueCustomers.length} khách hàng từ CSV`
+        );
+
+        if (duplicatesInFile.length > 0) {
+          parts.push(
+            `⚠️ Bỏ qua ${
+              new Set(duplicatesInFile).size
+            } số trùng trong file (ví dụ: ${Array.from(
+              new Set(duplicatesInFile)
+            )
+              .slice(0, 3)
+              .join(", ")})`
+          );
+        }
+        if (duplicatesAgainstExisting.length > 0) {
+          parts.push(
+            `⚠️ Bỏ qua ${
+              duplicatesAgainstExisting.length
+            } số đã tồn tại trong danh sách (ví dụ: ${duplicatesAgainstExisting
+              .slice(0, 3)
+              .join(", ")})`
+          );
+        }
+
+        setAlertSafe({
+          type: "warning",
+          message: `${parts.join(
+            "\n\n"
+          )}\n\nℹ️ Nếu bạn muốn import tất cả (bao gồm trùng), hãy xoá các số trùng trong hệ thống trước khi upload.`,
         });
         return true;
       } catch (error) {
@@ -1064,6 +1374,10 @@ export default function CampaignModal({
           • Thử tải file mẫu và làm lại
           • Liên hệ hỗ trợ nếu vẫn lỗi`,
         });
+        const inp = document.getElementById(
+          "customer-upload"
+        ) as HTMLInputElement | null;
+        if (inp) inp.value = "";
         return false;
       }
     },
@@ -1077,7 +1391,6 @@ export default function CampaignModal({
         return;
       }
 
-      // ✅ VALIDATION FILE TRƯỚC KHI XỬ LÝ
       const maxSize = 10 * 1024 * 1024; // 10MB
       const allowedTypes = [
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
@@ -1155,7 +1468,6 @@ export default function CampaignModal({
           salutation?: string;
         }> = [];
 
-        // ✅ KIỂM TRA WORKSHEET CÓ DỮ LIỆU KHÔNG
         if (worksheet.rowCount <= 1) {
           setAlertSafe({
             type: "error",
@@ -1173,7 +1485,6 @@ export default function CampaignModal({
           return;
         }
 
-        // Read headers
         const headerRow = worksheet.getRow(1);
         let fullNameCol = 0,
           phoneNumberCol = 0,
@@ -1188,7 +1499,6 @@ export default function CampaignModal({
           if (value === "NGƯỜI LIÊN HỆ") salutationCol = colNumber;
         });
 
-        // Check required headers
         const missingHeaders: string[] = [];
         if (!fullNameCol) missingHeaders.push("TÊN KHÁCH HÀNG");
         if (!phoneNumberCol) missingHeaders.push("SỐ ĐIỆN THOẠI");
@@ -1228,15 +1538,18 @@ export default function CampaignModal({
           return;
         }
 
-        // Read data with progress tracking
-        // Read data with progress tracking
+        const normalizePhone = (p: string) =>
+          (p || "").replace(/\D/g, "").replace(/^84(?=\d{8,})/, "0");
+
         let validCustomers = 0;
         let invalidRows: string[] = [];
         let processedRows = 0;
-        const totalDataRows = worksheet.rowCount - 1; // Excluding header
+
+        const seenNorm = new Map<string, number>();
+        const duplicatesInFile: string[] = [];
 
         worksheet.eachRow((row, rowNumber) => {
-          if (rowNumber === 1) return; // Skip header row
+          if (rowNumber === 1) return;
 
           processedRows++;
           const fullName =
@@ -1247,21 +1560,17 @@ export default function CampaignModal({
             ? row.getCell(salutationCol).value?.toString().trim() || ""
             : "";
 
-          // ✅ VALIDATION DỮ LIỆU CHI TIẾT VÀ CHẶT CHẼ HƠN
           const validationErrors = [];
 
-          // Kiểm tra tên khách hàng (bắt buộc và không được chỉ là khoảng trắng)
           if (!fullName || fullName.length === 0) {
             validationErrors.push("Tên khách hàng trống");
           } else if (fullName.length < 2) {
             validationErrors.push("Tên khách hàng quá ngắn");
           }
 
-          // Kiểm tra số điện thoại (bắt buộc và phải hợp lệ)
           if (!phoneNumber || phoneNumber.length === 0) {
             validationErrors.push("Số điện thoại trống");
           } else {
-            // Validate phone number format (nâng cấp)
             const cleanPhone = phoneNumber.replace(/\s/g, "");
             if (!/^[0-9+\-\s()]{8,15}$/.test(cleanPhone)) {
               validationErrors.push("SĐT không hợp lệ");
@@ -1273,12 +1582,20 @@ export default function CampaignModal({
           }
 
           if (validationErrors.length === 0) {
-            customers.push({
-              phone_number: phoneNumber,
-              full_name: fullName,
-              salutation,
-            });
-            validCustomers++;
+            const norm = normalizePhone(phoneNumber);
+            const prev = seenNorm.get(norm) || 0;
+            seenNorm.set(norm, prev + 1);
+            if (prev + 1 > 1) {
+              duplicatesInFile.push(norm);
+              invalidRows.push(`Dòng ${rowNumber}: SĐT trùng lặp trong file`);
+            } else {
+              customers.push({
+                phone_number: phoneNumber,
+                full_name: fullName,
+                salutation,
+              });
+              validCustomers++;
+            }
           } else {
             invalidRows.push(
               `Dòng ${rowNumber}: ${validationErrors.join(", ")}`
@@ -1312,42 +1629,92 @@ export default function CampaignModal({
           return;
         }
 
-        setUploadedCustomers(customers);
+        const existingNormSet = new Set(
+          uploadedCustomers.map((c) => normalizePhone(c.phone_number))
+        );
+        const uniqueCustomers: Array<{
+          phone_number: string;
+          full_name: string;
+          salutation?: string;
+        }> = [];
+        const duplicatesAgainstExisting: string[] = [];
 
-        // ✅ DELAY ĐỂ ĐẢM BẢO CUSTOMERS ĐÃ ĐƯỢC SET
+        for (const c of customers) {
+          const norm = normalizePhone(c.phone_number);
+          if (existingNormSet.has(norm)) {
+            duplicatesAgainstExisting.push(norm);
+          } else {
+            uniqueCustomers.push(c);
+          }
+        }
+
+        if (uniqueCustomers.length === 0) {
+          setAlertSafe({
+            type: "error",
+            message: `❌ Không có bản ghi mới để import. Tất cả bản ghi hợp lệ trong file đều trùng với danh sách hiện tại hoặc trùng nội bộ file.
+
+          ⚠️ Trùng nội bộ file: ${new Set(duplicatesInFile).size}
+          ⚠️ Trùng với danh sách hiện tại: ${duplicatesAgainstExisting.length}
+
+          💡 Vui lòng sửa file và thử lại.`,
+          });
+          event.target.value = "";
+          return;
+        }
+
+        // Append unique customers (không overwrite)
+        setUploadedCustomers((prev) => [...prev, ...uniqueCustomers]);
+
+        // Clear input so same file can be re-selected later
+        event.target.value = "";
+
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        if (invalidRows.length > 0) {
+        if (
+          invalidRows.length > 0 ||
+          duplicatesInFile.length > 0 ||
+          duplicatesAgainstExisting.length > 0
+        ) {
+          const parts: string[] = [];
+          parts.push(
+            `✅ Import thành công: ${uniqueCustomers.length} khách hàng`
+          );
+          if (invalidRows.length > 0) {
+            parts.push(
+              `⚠️ Bỏ qua ${invalidRows.length} dòng lỗi:\n${invalidRows
+                .slice(0, 3)
+                .join("\n")}`
+            );
+          }
+          if (new Set(duplicatesInFile).size > 0) {
+            parts.push(
+              `⚠️ Bỏ qua ${
+                new Set(duplicatesInFile).size
+              } số trùng trong file ( ${Array.from(
+                new Set(duplicatesInFile)
+              )
+                .slice(0, 3)
+                .join(", ")})`
+            );
+          }
+          if (duplicatesAgainstExisting.length > 0) {
+            parts.push(
+              `⚠️ Bỏ qua ${
+                duplicatesAgainstExisting.length
+              } số đã tồn tại trong danh sách ( ${duplicatesAgainstExisting
+                .slice(0, 3)
+                .join(", ")})`
+            );
+          }
+
           setAlertSafe({
             type: "warning",
-            message: `⚠️ Import thành công với cảnh báo!
-
-            ✅ Import thành công: ${validCustomers} khách hàng
-            ⚠️ Bỏ qua: ${invalidRows.length} dòng lỗi
-            📊 Tỷ lệ thành công: ${Math.round(
-              (validCustomers / (validCustomers + invalidRows.length)) * 100
-            )}%
-
-            🔍 Chi tiết dòng lỗi:
-            ${invalidRows.slice(0, 3).join("\n")}
-            ${
-              invalidRows.length > 3
-                ? `\n... và ${invalidRows.length - 3} dòng khác`
-                : ""
-            }
-
-            💡 Bạn có thể tiếp tục hoặc sửa lỗi và import lại.`,
+            message: parts.join("\n\n"),
           });
         } else {
           setAlertSafe({
             type: "success",
-            message: `🎉 Import Excel thành công!
-
-            ✅ Đã import: ${validCustomers} khách hàng
-            📊 Tỷ lệ thành công: 100%
-            📋 File: ${file.name}
-
-            🚀 Sẵn sàng để tạo chiến dịch!`,
+            message: `🎉 Import Excel thành công! ✅ Đã import: ${uniqueCustomers.length} khách hàng`,
           });
         }
       } catch (error) {
@@ -1357,13 +1724,12 @@ export default function CampaignModal({
         try {
           const csvSuccess = await handleCSVFallback(file, error);
 
-          // ✅ CHỈ RESET INPUT KHI CSV FALLBACK THẤT BẠI
+          // Reset input only if CSV fallback also failed; if CSV success, handler already clears input
           if (!csvSuccess) {
             event.target.value = "";
           }
         } catch (fallbackError) {
           console.error("💥 [CSV FALLBACK] Also failed:", fallbackError);
-          // Reset states khi cả Excel và CSV đều fail
           setCustomerFile(null);
           setUploadedCustomers([]);
           event.target.value = "";
@@ -1388,8 +1754,389 @@ export default function CampaignModal({
         }
       }
     },
-    [handleCSVFallback, setAlertSafe]
+    [handleCSVFallback, setAlertSafe, uploadedCustomers]
   );
+
+  // const handleCustomerFileUpload = useCallback(
+  //   async (event: React.ChangeEvent<HTMLInputElement>) => {
+  //     const file = event.target.files?.[0];
+  //     if (!file) {
+  //       return;
+  //     }
+
+  //     // ✅ VALIDATION FILE TRƯỚC KHI XỬ LÝ
+  //     const maxSize = 10 * 1024 * 1024; // 10MB
+  //     const allowedTypes = [
+  //       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  //       "application/vnd.ms-excel", // .xls
+  //       "text/csv",
+  //       "application/csv",
+  //     ];
+
+  //     if (file.size > maxSize) {
+  //       setAlertSafe({
+  //         type: "error",
+  //         message: `❌ File quá lớn!
+
+  //         📊 Kích thước file: ${(file.size / 1024 / 1024).toFixed(2)}MB
+  //         📊 Giới hạn cho phép: 10MB
+
+  //         💡 Vui lòng:
+  //         • Giảm số lượng khách hàng trong file
+  //         • Nén file trước khi upload
+  //         • Chia nhỏ file thành nhiều phần`,
+  //       });
+  //       event.target.value = "";
+  //       return;
+  //     }
+
+  //     if (
+  //       !allowedTypes.includes(file.type) &&
+  //       !file.name.toLowerCase().match(/\.(xlsx|xls|csv)$/)
+  //     ) {
+  //       setAlertSafe({
+  //         type: "error",
+  //         message: `❌ Định dạng file không được hỗ trợ!
+
+  //         📋 File hiện tại: ${file.type || "Không xác định"}
+  //         📋 Tên file: ${file.name}
+
+  //         ✅ Định dạng được hỗ trợ:
+  //         • Excel (.xlsx, .xls)
+  //         • CSV (.csv)
+
+  //         💡 Vui lòng chọn file đúng định dạng!`,
+  //       });
+  //       event.target.value = "";
+  //       return;
+  //     }
+
+  //     setCustomerFile(file);
+
+  //     try {
+  //       const workbook = new ExcelJS.Workbook();
+  //       const arrayBuffer = await file.arrayBuffer();
+
+  //       await workbook.xlsx.load(arrayBuffer);
+
+  //       const worksheet = workbook.getWorksheet(1);
+  //       if (!worksheet) {
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: `❌ Không tìm thấy worksheet trong file Excel!
+
+  //           📋 File: ${file.name}
+  //           📋 Loại: ${file.type}
+
+  //           💡 Vui lòng:
+  //           • Đảm bảo file Excel có ít nhất 1 sheet
+  //           • Thử mở file bằng Excel để kiểm tra
+  //           • Tải file mẫu và làm theo đúng định dạng`,
+  //         });
+  //         event.target.value = "";
+  //         return;
+  //       }
+  //       const customers: Array<{
+  //         phone_number: string;
+  //         full_name: string;
+  //         salutation?: string;
+  //       }> = [];
+
+  //       // ✅ KIỂM TRA WORKSHEET CÓ DỮ LIỆU KHÔNG
+  //       if (worksheet.rowCount <= 1) {
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: `❌ Worksheet trống!
+
+  //           📋 File: ${file.name}
+  //           📋 Số dòng: ${worksheet.rowCount}
+
+  //           💡 Vui lòng:
+  //           • Đảm bảo file có dữ liệu (ít nhất 2 dòng)
+  //           • Dòng 1: Tiêu đề cột
+  //           • Dòng 2+: Dữ liệu khách hàng`,
+  //         });
+  //         event.target.value = "";
+  //         return;
+  //       }
+
+  //       // Read headers
+  //       const headerRow = worksheet.getRow(1);
+  //       let fullNameCol = 0,
+  //         phoneNumberCol = 0,
+  //         salutationCol = 0;
+  //       const foundHeaders: string[] = [];
+
+  //       headerRow.eachCell((cell, colNumber) => {
+  //         const value = cell.value?.toString().trim().toUpperCase();
+  //         foundHeaders.push(value || `CỘT ${colNumber}`);
+  //         if (value === "TÊN KHÁCH HÀNG") fullNameCol = colNumber;
+  //         if (value === "SỐ ĐIỆN THOẠI") phoneNumberCol = colNumber;
+  //         if (value === "NGƯỜI LIÊN HỆ") salutationCol = colNumber;
+  //       });
+
+  //       // Check required headers
+  //       const missingHeaders: string[] = [];
+  //       if (!fullNameCol) missingHeaders.push("TÊN KHÁCH HÀNG");
+  //       if (!phoneNumberCol) missingHeaders.push("SỐ ĐIỆN THOẠI");
+
+  //       if (missingHeaders.length > 0) {
+  //         const safeHeaders = foundHeaders.filter(
+  //           (h) =>
+  //             h &&
+  //             h !== "[OBJECT OBJECT]" &&
+  //             !h.includes("[object") &&
+  //             h.length > 0
+  //         );
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: `❌ Sai định dạng header! Thiếu cột: ${missingHeaders.join(
+  //             ", "
+  //           )}
+
+  //           📋 File: ${file.name}
+  //           ${
+  //             safeHeaders.length > 0
+  //               ? `🔍 Header hiện tại: ${safeHeaders.join(", ")}`
+  //               : "🔍 Không đọc được header"
+  //           }
+
+  //           ✅ Header cần có:
+  //           • TÊN KHÁCH HÀNG (bắt buộc)
+  //           • SỐ ĐIỆN THOẠI (bắt buộc)
+  //           • NGƯỜI LIÊN HỆ (tùy chọn)
+
+  //           💡 Vui lòng:
+  //           • Tải file mẫu để xem định dạng chuẩn
+  //           • Đảm bảo dòng đầu tiên là tiêu đề cột
+  //           • Sử dụng chính xác tên cột như trên`,
+  //         });
+  //         event.target.value = "";
+  //         return;
+  //       }
+
+  //       const normalizePhone = (p: string) =>
+  //         (p || "").replace(/\D/g, "").replace(/^84(?=\d{8,})/, "0");
+
+  //       // Read data with progress tracking
+  //       // Read data with progress tracking
+  //       let validCustomers = 0;
+  //       let invalidRows: string[] = [];
+  //       let processedRows = 0;
+  //       const totalDataRows = worksheet.rowCount - 1; // Excluding header
+
+  //       const seenNorm = new Map<string, number>();
+  //       const duplicatesInFile: string[] = [];
+
+  //       worksheet.eachRow((row, rowNumber) => {
+  //         if (rowNumber === 1) return; // Skip header row
+
+  //         processedRows++;
+  //         const fullName =
+  //           row.getCell(fullNameCol).value?.toString().trim() || "";
+  //         const phoneNumber =
+  //           row.getCell(phoneNumberCol).value?.toString().trim() || "";
+  //         const salutation = salutationCol
+  //           ? row.getCell(salutationCol).value?.toString().trim() || ""
+  //           : "";
+
+  //         // ✅ VALIDATION DỮ LIỆU CHI TIẾT VÀ CHẶT CHẼ HƠN
+  //         const validationErrors = [];
+
+  //         // Kiểm tra tên khách hàng (bắt buộc và không được chỉ là khoảng trắng)
+  //         if (!fullName || fullName.length === 0) {
+  //           validationErrors.push("Tên khách hàng trống");
+  //         } else if (fullName.length < 2) {
+  //           validationErrors.push("Tên khách hàng quá ngắn");
+  //         }
+
+  //         // Kiểm tra số điện thoại (bắt buộc và phải hợp lệ)
+  //         if (!phoneNumber || phoneNumber.length === 0) {
+  //           validationErrors.push("Số điện thoại trống");
+  //         } else {
+  //           // Validate phone number format (nâng cấp)
+  //           const cleanPhone = phoneNumber.replace(/\s/g, "");
+  //           if (!/^[0-9+\-\s()]{8,15}$/.test(cleanPhone)) {
+  //             validationErrors.push("SĐT không hợp lệ");
+  //           } else if (cleanPhone.length < 8) {
+  //             validationErrors.push("SĐT quá ngắn");
+  //           } else if (cleanPhone.length > 15) {
+  //             validationErrors.push("SĐT quá dài");
+  //           }
+  //         }
+
+  //         if (validationErrors.length === 0) {
+  //           const norm = normalizePhone(phoneNumber);
+  //           const prev = seenNorm.get(norm) || 0;
+  //           seenNorm.set(norm, prev + 1);
+  //           if (prev + 1 > 1) {
+  //             duplicatesInFile.push(norm);
+  //             // still count as processed but do not push duplicates now
+  //             invalidRows.push(`Dòng ${rowNumber}: SĐT trùng lặp trong file`);
+  //           } else {
+  //             customers.push({
+  //               phone_number: phoneNumber,
+  //               full_name: fullName,
+  //               salutation,
+  //             });
+  //             validCustomers++;
+  //           }
+  //         } else {
+  //           invalidRows.push(
+  //             `Dòng ${rowNumber}: ${validationErrors.join(", ")}`
+  //           );
+  //         }
+  //       });
+
+  //       if (customers.length === 0) {
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: `❌ Không có dữ liệu hợp lệ!
+
+  //           📊 Tổng số dòng xử lý: ${processedRows}
+  //           📊 Dòng hợp lệ: 0
+  //           📊 Dòng lỗi: ${invalidRows.length}
+
+  //           🔍 Chi tiết lỗi:
+  //           ${invalidRows.slice(0, 5).join("\n")}
+  //           ${
+  //             invalidRows.length > 5
+  //               ? `\n... và ${invalidRows.length - 5} dòng khác`
+  //               : ""
+  //           }
+
+  //           💡 Vui lòng:
+  //           • Kiểm tra dữ liệu trong file
+  //           • Đảm bảo có đủ thông tin Tên và SĐT
+  //           • Kiểm tra định dạng số điện thoại`,
+  //         });
+  //         event.target.value = "";
+  //         return;
+  //       }
+
+  //       const existingNormSet = new Set(
+  //         uploadedCustomers.map((c) => normalizePhone(c.phone_number))
+  //       );
+  //       const uniqueCustomers: Array<{
+  //         phone_number: string;
+  //         full_name: string;
+  //         salutation?: string;
+  //       }> = [];
+  //       const duplicatesAgainstExisting: string[] = [];
+
+  //       for (const c of customers) {
+  //         const norm = normalizePhone(c.phone_number);
+  //         if (existingNormSet.has(norm)) {
+  //           duplicatesAgainstExisting.push(norm);
+  //         } else {
+  //           uniqueCustomers.push(c);
+  //         }
+  //       }
+
+  //       if (uniqueCustomers.length === 0) {
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: `❌ Không có bản ghi mới để import. Tất cả bản ghi hợp lệ trong file đều trùng với danh sách hiện tại hoặc trùng nội bộ file.
+
+  //         ⚠️ Trùng nội bộ file: ${new Set(duplicatesInFile).size}
+  //         ⚠️ Trùng với danh sách hiện tại: ${duplicatesAgainstExisting.length}
+
+  //         💡 Vui lòng sửa file và thử lại.`,
+  //         });
+  //         event.target.value = "";
+  //         return;
+  //       }
+
+  //       setUploadedCustomers(customers);
+
+  //       // ✅ DELAY ĐỂ ĐẢM BẢO CUSTOMERS ĐÃ ĐƯỢC SET
+  //       await new Promise((resolve) => setTimeout(resolve, 100));
+
+  //       if (
+  //         invalidRows.length > 0 ||
+  //         duplicatesInFile.length > 0 ||
+  //         duplicatesAgainstExisting.length > 0
+  //       ) {
+  //         const parts: string[] = [];
+  //         parts.push(
+  //           `✅ Import thành công: ${uniqueCustomers.length} khách hàng`
+  //         );
+  //         if (invalidRows.length > 0) {
+  //           parts.push(
+  //             `⚠️ Bỏ qua ${invalidRows.length} dòng lỗi:\n${invalidRows
+  //               .slice(0, 3)
+  //               .join("\n")}`
+  //           );
+  //         }
+  //         if (new Set(duplicatesInFile).size > 0) {
+  //           parts.push(
+  //             `⚠️ Bỏ qua ${
+  //               new Set(duplicatesInFile).size
+  //             } số trùng trong file ( ${Array.from(new Set(duplicatesInFile))
+  //               .slice(0, 3)
+  //               .join(", ")})`
+  //           );
+  //         }
+  //         if (duplicatesAgainstExisting.length > 0) {
+  //           parts.push(
+  //             `⚠️ Bỏ qua ${
+  //               duplicatesAgainstExisting.length
+  //             } số đã tồn tại trong danh sách ( ${duplicatesAgainstExisting
+  //               .slice(0, 3)
+  //               .join(", ")})`
+  //           );
+  //         }
+
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: parts.join("\n\n"),
+  //         });
+  //       } else {
+  //         setAlertSafe({
+  //           type: "success",
+  //           message: `🎉 Import Excel thành công! ✅ Đã import: ${uniqueCustomers.length} khách hàng`,
+  //         });
+  //       }
+  //     } catch (error) {
+  //       console.error("💥 [FILE UPLOAD] Excel processing failed:", error);
+  //       await new Promise((resolve) => setTimeout(resolve, 200));
+
+  //       try {
+  //         const csvSuccess = await handleCSVFallback(file, error);
+
+  //         // ✅ CHỈ RESET INPUT KHI CSV FALLBACK THẤT BẠI
+  //         if (!csvSuccess) {
+  //           event.target.value = "";
+  //         }
+  //       } catch (fallbackError) {
+  //         console.error("💥 [CSV FALLBACK] Also failed:", fallbackError);
+  //         // Reset states khi cả Excel và CSV đều fail
+  //         setCustomerFile(null);
+  //         setUploadedCustomers([]);
+  //         event.target.value = "";
+  //         setAlertSafe({
+  //           type: "error",
+  //           message: `❌ Không thể xử lý file!
+
+  //           📋 Excel: ${
+  //             error instanceof Error ? error.message : "Không đọc được"
+  //           }
+  //           📋 CSV: ${
+  //             fallbackError instanceof Error
+  //               ? fallbackError.message
+  //               : "Không xử lý được"
+  //           }
+
+  //           💡 Vui lòng:
+  //           • Kiểm tra file có bị hỏng không
+  //           • Thử tải file mẫu và làm lại
+  //           • Liên hệ hỗ trợ nếu vẫn lỗi`,
+  //         });
+  //       }
+  //     }
+  //   },
+  //   [handleCSVFallback, setAlertSafe]
+  // );
 
   const getBasicInfoErrors = useCallback((): string[] => {
     const errors: string[] = [];
@@ -1529,6 +2276,12 @@ export default function CampaignModal({
       selectedType === CampaignType.WEEKLY_SP ||
       selectedType === CampaignType.WEEKLY_BBG
     ) {
+      const hasWeeklyDaySelected = Array.isArray(selectedDays)
+        ? selectedDays.length > 0
+        : typeof selectedDays === "number" && selectedDays > 0;
+      if (!hasWeeklyDaySelected) {
+        errors.push("📅 Chưa chọn ngày trong tuần để gửi");
+      }
       if (!selectedDays) errors.push("📅 Chưa chọn ngày trong tuần để gửi");
       if (!timeOfDay) errors.push("🕐 Thời gian gửi trong ngày chưa được chọn");
 
@@ -4178,6 +4931,10 @@ export default function CampaignModal({
                                         onClick={() => {
                                           setCustomerFile(null);
                                           setUploadedCustomers([]);
+                                          const inp = document.getElementById(
+                                            "customer-upload"
+                                          ) as HTMLInputElement | null;
+                                          if (inp) inp.value = "";
                                         }}
                                         className="text-red-600 hover:bg-red-50"
                                       >
@@ -4229,79 +4986,130 @@ export default function CampaignModal({
                                         </motion.div>
                                       </div>
                                     </motion.div>
-                                    <div className="max-h-48 overflow-y-auto">
+                                    {/* Inline add new customer */}
+                                    <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 bg-white/60">
+                                      <Input
+                                        placeholder="Số điện thoại"
+                                        value={newCustomerPhone}
+                                        onChange={(e) => setNewCustomerPhone(e.target.value)}
+                                        className="h-8 text-sm"
+                                      />
+                                      <Input
+                                        placeholder="Tên khách hàng"
+                                        value={newCustomerName}
+                                        onChange={(e) => setNewCustomerName(e.target.value)}
+                                        className="h-8 text-sm"
+                                      />
+                                      <Input
+                                        placeholder="Xưng hô (tùy chọn)"
+                                        value={newCustomerSalutation}
+                                        onChange={(e) => setNewCustomerSalutation(e.target.value)}
+                                        className="h-8 text-sm"
+                                      />
+                                      <Button size="sm" onClick={handleAddCustomer} className="h-8">
+                                        Thêm
+                                      </Button>
+                                    </div>
+                                    <div
+                                      ref={listContainerRef}
+                                      className="max-h-64 overflow-y-auto"
+                                    >
                                       <AnimatePresence>
                                         {uploadedCustomers
-                                          .slice(0, 10)
-                                          .map((customer, index) => (
-                                            <motion.div
-                                              key={index}
-                                              initial={{ opacity: 0, y: 10 }}
-                                              animate={{ opacity: 1, y: 0 }}
-                                              exit={{ opacity: 0, y: -10 }}
-                                              transition={{
-                                                delay: 0.5 + index * 0.05,
-                                                duration: 0.3,
-                                              }}
-                                              whileHover={{
-                                                backgroundColor: "#f9fafb",
-                                                scale: 1.005,
-                                              }}
-                                              className="grid grid-cols-3 gap-4 px-4 py-2 border-b border-gray-100 cursor-default"
-                                            >
+                                          .slice(0, visibleCount)
+                                          .map((customer, index) => {
+                                            const isEditing = editingIndex === index;
+                                            return (
                                               <motion.div
-                                                className="text-sm font-mono"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{
-                                                  delay: 0.6 + index * 0.05,
-                                                }}
+                                                key={index}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -10 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="grid grid-cols-3 gap-4 px-4 py-2 border-b border-gray-100 items-center"
                                               >
-                                                {customer.phone_number}
+                                                <div className="text-sm font-mono">
+                                                  {isEditing ? (
+                                                    <Input
+                                                      value={editDraft?.phone_number || ""}
+                                                      onChange={(e) =>
+                                                        setEditDraft((prev) => ({
+                                                          ...(prev || { phone_number: "", full_name: "" }),
+                                                          phone_number: e.target.value,
+                                                        }))
+                                                      }
+                                                      className="h-8 text-sm"
+                                                    />
+                                                  ) : (
+                                                    customer.phone_number
+                                                  )}
+                                                </div>
+                                                <div className="text-sm font-medium">
+                                                  {isEditing ? (
+                                                    <Input
+                                                      value={editDraft?.full_name || ""}
+                                                      onChange={(e) =>
+                                                        setEditDraft((prev) => ({
+                                                          ...(prev || { phone_number: "", full_name: "" }),
+                                                          full_name: e.target.value,
+                                                        }))
+                                                      }
+                                                      className="h-8 text-sm"
+                                                    />
+                                                  ) : (
+                                                    customer.full_name
+                                                  )}
+                                                </div>
+                                                <div className="text-sm text-gray-600 flex items-center gap-2">
+                                                  {isEditing ? (
+                                                    <>
+                                                      <Input
+                                                        value={editDraft?.salutation || ""}
+                                                        onChange={(e) =>
+                                                          setEditDraft((prev) => ({
+                                                            ...(prev || { phone_number: "", full_name: "" }),
+                                                            salutation: e.target.value,
+                                                          }))
+                                                        }
+                                                        className="h-8 text-sm"
+                                                      />
+                                                      <Button size="sm" variant="outline" className="h-8" onClick={saveEditCustomer}>
+                                                        Lưu
+                                                      </Button>
+                                                      <Button size="sm" variant="ghost" className="h-8" onClick={cancelEditCustomer}>
+                                                        Hủy
+                                                      </Button>
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <span>{customer.salutation || "--"}</span>
+                                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEditCustomer(index)}>
+                                                        <Pencil className="h-4 w-4" />
+                                                      </Button>
+                                                    </>
+                                                  )}
+                                                </div>
                                               </motion.div>
-                                              <motion.div
-                                                className="text-sm font-medium"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{
-                                                  delay: 0.7 + index * 0.05,
-                                                }}
-                                              >
-                                                {customer.full_name}
-                                              </motion.div>
-                                              <motion.div
-                                                className="text-sm text-gray-600"
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                transition={{
-                                                  delay: 0.8 + index * 0.05,
-                                                }}
-                                              >
-                                                {customer.salutation || "--"}
-                                              </motion.div>
-                                            </motion.div>
-                                          ))}
+                                            );
+                                          })}
+                                        {visibleCount < uploadedCustomers.length && (
+                                          <div ref={loadMoreRef} className="p-3 text-center text-xs text-gray-500">
+                                            Đang tải thêm...
+                                          </div>
+                                        )}
                                       </AnimatePresence>
                                     </div>
-                                    {uploadedCustomers.length > 10 && (
+                                    {uploadedCustomers.length > visibleCount && (
                                       <motion.div
                                         className="bg-gray-50 px-4 py-2 text-center text-sm text-gray-600"
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        transition={{ delay: 1 }}
                                       >
                                         <motion.span
-                                          animate={{
-                                            scale: [1, 1.05, 1],
-                                          }}
-                                          transition={{
-                                            duration: 2,
-                                            repeat: Infinity,
-                                            ease: "easeInOut",
-                                          }}
+                                          animate={{ scale: [1, 1.05, 1] }}
+                                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                                         >
-                                          ... và {uploadedCustomers.length - 10}{" "}
-                                          khách hàng khác
+                                          Hiển thị {visibleCount}/{uploadedCustomers.length} khách hàng
                                         </motion.span>
                                       </motion.div>
                                     )}

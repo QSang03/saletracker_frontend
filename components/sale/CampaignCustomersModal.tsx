@@ -80,8 +80,8 @@ interface CampaignCustomersModalProps {
 }
 
 const LOG_STATUS_CONFIG = {
-  [LogStatus.PENDING]: {
-    label: "Chờ gửi",
+  [LogStatus.PENDING || null]: {
+    label: "Chưa gửi",
     variant: "outline" as const,
     color: "bg-yellow-50 text-yellow-700 border-yellow-200",
     icon: Clock,
@@ -460,9 +460,14 @@ export default function CampaignCustomersModal({
     }
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter(
-        (customer) => customer.status === statusFilter
-      );
+      // Treat "pending" filter as both explicit pending status and missing/null status
+      if (statusFilter === "pending") {
+        filtered = filtered.filter(
+          (customer) => customer.status === statusFilter || customer.status == null
+        );
+      } else {
+        filtered = filtered.filter((customer) => customer.status === statusFilter);
+      }
     }
 
     setFilteredCustomers(filtered);
@@ -812,7 +817,7 @@ export default function CampaignCustomersModal({
                         placeholder="Tìm kiếm theo tên, số điện thoại... (tìm kiếm local)"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                        className="h-9 pl-10 transition-all duration-200 focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
 
@@ -825,7 +830,7 @@ export default function CampaignCustomersModal({
                           value={statusFilter}
                           onValueChange={handleStatusFilterChange}
                         >
-                          <SelectTrigger className="w-40">
+                          <SelectTrigger className="h-10 w-40">
                             <motion.div
                               animate={{ rotate: [0, 10, -10, 0] }}
                               transition={{
@@ -840,7 +845,7 @@ export default function CampaignCustomersModal({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Tất cả</SelectItem>
-                            <SelectItem value="pending">Chờ gửi</SelectItem>
+                            <SelectItem value="pending">Chưa gửi</SelectItem>
                             <SelectItem value="sent">Đã gửi</SelectItem>
                             <SelectItem value="failed">Gửi lỗi</SelectItem>
                             <SelectItem value="customer_replied">
@@ -863,6 +868,7 @@ export default function CampaignCustomersModal({
                         <Button
                           variant="outline"
                           size="sm"
+                          className="h-9"
                           onClick={() =>
                             fetchCustomers(searchTerm, statusFilter)
                           }
@@ -888,9 +894,28 @@ export default function CampaignCustomersModal({
                         <Button
                           variant="outline"
                           size="sm"
+                          className="h-9"
+                          onClick={() => {
+                            setSearchTerm("");
+                            setStatusFilter("all");
+                            fetchCustomers("", "all");
+                          }}
+                          disabled={!searchTerm && statusFilter === "all"}
+                        >
+                          <span className="inline-block">Xóa bộ lọc</span>
+                        </Button>
+                      </motion.div>
+
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 hover:bg-green-50 hover:border-green-200 transition-all duration-200"
                           onClick={handleExportCustomers}
                           disabled={loading || customers.length === 0}
-                          className="hover:bg-green-50 hover:border-green-200 transition-all duration-200"
                         >
                           <motion.div
                             animate={{
