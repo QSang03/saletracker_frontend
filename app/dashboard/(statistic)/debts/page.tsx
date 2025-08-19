@@ -812,16 +812,63 @@ const DebtStatisticsDashboard: React.FC = () => {
                 data={agingData}
                 loading={loading}
                 onBarClick={(data) => {
-                  console.log('🔍 [Dashboard] AgingChart bar clicked:', data);
-                  
-                  // For aging chart, we want to show all debts in that age range
-                  // Since aging data doesn't directly correspond to debt status,
-                  // we'll show all debts and let the user filter by the range
-                  
-                  // We can use a generic category or create a special one for aging
-                  const category = 'aging'; // Special category for aging drill-down
-                  
-                  handleChartClick(data, category);
+                  // Map aging range label to overdue drill‑down params
+                  const label = (data as any)?.range || (data as any)?.label || (data as any)?.name || '';
+                  const parse = (lbl: string) => {
+                    const t = lbl.trim();
+                    if (t.startsWith('>')) {
+                      const n = parseInt(t.replace('>', '').replace(' ngày', '').trim(), 10);
+                      return { minDays: (Number.isNaN(n) ? undefined : n + 1), maxDays: undefined };
+                    }
+                    const cleaned = t.replace(' ngày', '');
+                    const parts = cleaned.split('-');
+                    if (parts.length === 2) {
+                      const a = parseInt(parts[0].trim(), 10);
+                      const b = parseInt(parts[1].trim(), 10);
+                      return { minDays: Number.isNaN(a) ? undefined : a, maxDays: Number.isNaN(b) ? undefined : b };
+                    }
+                    return {} as any;
+                  };
+                  const { minDays, maxDays } = parse(label);
+
+                  setSelectedCategory('aging');
+                  setModalOpen(true);
+                  setLoadingModalData(true);
+                  (async () => {
+                    try {
+                      const now = new Date();
+                      const fromDate = range?.from ? range.from : now;
+                      const toDate = range?.to ? range.to : now;
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const fromStr = (fromDate as Date).toISOString().split('T')[0];
+                      const toStr = (toDate as Date).toISOString().split('T')[0];
+                      const tryDates: string[] = [];
+                      if (fromStr <= todayStr && toStr >= todayStr) tryDates.push(todayStr);
+                      if (!tryDates.includes(toStr)) tryDates.push(toStr);
+                      if (!tryDates.includes(fromStr)) tryDates.push(fromStr);
+                      let debts: Debt[] = [];
+                      for (const dateStr of tryDates) {
+                        const resp = await api.get('/debt-statistics/detailed', {
+                          params: {
+                            date: dateStr,
+                            mode: 'overdue',
+                            minDays,
+                            maxDays,
+                            page: 1,
+                            limit: 1000,
+                          }
+                        });
+                        const respData = resp.data;
+                        debts = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
+                        if (debts.length > 0) break;
+                      }
+                      setSelectedDebts(debts);
+                    } catch {
+                      setSelectedDebts([]);
+                    } finally {
+                      setLoadingModalData(false);
+                    }
+                  })();
                 }}
               />
             </TabsContent>
