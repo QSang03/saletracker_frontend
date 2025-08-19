@@ -505,28 +505,45 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Drilldown for PayLater buckets
   const handlePayLaterBucketClick = useCallback(async (bucket: { range?: string; label?: string }) => {
+    setSelectedCategory('pay_later');
+    setModalOpen(true);
+    setLoadingModalData(true);
     try {
-      setSelectedCategory('pay_later');
-      setModalOpen(true);
-      setLoadingModalData(true);
       const lbl = bucket.range || bucket.label || '';
       const { minDays, maxDays } = parseBucketLabel(lbl);
-      const today = new Date();
-      const toDate = range?.to ? range.to : today;
-      const targetDate = toDate as Date;
-      const dateStr = targetDate.toISOString().split('T')[0];
-      const resp = await api.get('/debt-statistics/detailed', {
-        params: {
-          date: dateStr,
-          mode: 'payLater',
-          minDays,
-          maxDays,
-          page: 1,
-          limit: 1000,
-        }
-      });
-      const respData = resp.data;
-      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
+      const now = new Date();
+      const fromDate = range?.from ? range.from : now;
+      const toDate = range?.to ? range.to : now;
+      const todayStr = new Date().toISOString().split('T')[0];
+      const fromStr = (fromDate as Date).toISOString().split('T')[0];
+      const toStr = (toDate as Date).toISOString().split('T')[0];
+
+      // Prefer today if inside range
+      const tryDates: string[] = [];
+      if (fromStr <= todayStr && toStr >= todayStr) {
+        tryDates.push(todayStr);
+      }
+      // Also try the selected 'to' date (range end)
+      if (!tryDates.includes(toStr)) tryDates.push(toStr);
+      // Finally try the 'from' date as a fallback
+      if (!tryDates.includes(fromStr)) tryDates.push(fromStr);
+
+      let debts: Debt[] = [];
+      for (const dateStr of tryDates) {
+        const resp = await api.get('/debt-statistics/detailed', {
+          params: {
+            date: dateStr,
+            mode: 'payLater',
+            minDays,
+            maxDays,
+            page: 1,
+            limit: 1000,
+          }
+        });
+        const respData = resp.data;
+        debts = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
+        if (debts.length > 0) break;
+      }
       setSelectedDebts(debts);
     } catch (e) {
       setSelectedDebts([]);

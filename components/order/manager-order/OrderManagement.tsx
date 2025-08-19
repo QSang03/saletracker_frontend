@@ -136,6 +136,44 @@ const formatVietnamDateTime = (date: Date): string => {
   return `${HH}:${MM}:${SS} ${dd}/${mm}/${yyyy}`;
 };
 
+// Helper: Lấy thời gian bắt đầu/kết thúc từ metadata.messages
+const getConversationStartEnd = (
+  metadata: unknown
+): { start: Date | null; end: Date | null } => {
+  try {
+    let md: any = metadata ?? {};
+    if (typeof md === "string") {
+      try {
+        md = JSON.parse(md);
+      } catch {
+        md = {};
+      }
+    }
+
+    const messages = Array.isArray(md?.messages) ? md.messages : null;
+    if (!messages || messages.length === 0) return { start: null, end: null };
+
+    // Một số metadata có thể không được sắp xếp, nên lấy min/max theo timestamp
+    let start: Date | null = null;
+    let end: Date | null = null;
+    for (const m of messages) {
+      let ts: Date | null = null;
+      try {
+        if (m?.timestamp) {
+          const d = new Date(m.timestamp);
+          if (!isNaN(d.getTime())) ts = d;
+        }
+      } catch {}
+      if (!ts) continue;
+      if (!start || ts < start) start = ts;
+      if (!end || ts > end) end = ts;
+    }
+    return { start, end };
+  } catch {
+    return { start: null, end: null };
+  }
+};
+
 // Component để hiển thị text với tooltip khi cần thiết
 const TruncatedText: React.FC<{
   text: string;
@@ -793,7 +831,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     return (
       <div className="space-y-2">
         <div className="overflow-x-auto scrollbar-hide">
-          <Table className="min-w-[1750px] table-fixed">
+          <Table className="min-w-[1750px] table-auto [&_th]:px-3 [&_td]:px-3 [&_th]:py-2.5 [&_td]:py-2.5 [&_th]:align-middle [&_td]:align-middle">
             <TableHeader>
               <TableRow className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                 <TableHead className="font-bold text-gray-700 w-[50px] text-center">
@@ -808,10 +846,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[120px] text-center">
                   Thời gian
                 </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[140px] text-center">
+                  Thời gian bắt đầu
+                </TableHead>
+                <TableHead className="font-bold text-gray-700 w-[140px] text-center">
+                  Thời gian kết thúc
+                </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[120px] text-center">
                   Nhân viên
                 </TableHead>
-                <TableHead className="font-bold text-gray-700 w-[120px] text-center">
+                <TableHead className="font-bold text-gray-700 w-[120px] text-left">
                   Khách hàng
                 </TableHead>
                 <TableHead className="font-bold text-gray-700 w-[400px] text-center">
@@ -855,6 +899,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-24 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-28 rounded mx-auto" />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-28 rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 rounded mx-auto" />
@@ -943,6 +993,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           word-break: break-word;
           hyphens: auto;
         }
+
+        .customer-two-line {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
       `}</style>
 
       <div className="space-y-2">
@@ -959,7 +1016,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
         <div className="relative">
           <div className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200">
-            <Table className="min-w-[1800px] table-fixed bg-white">
+            <Table className="min-w-[1800px] table-auto bg-white [&_th]:px-3 [&_td]:px-3 [&_th]:py-2.5 [&_td]:py-2.5 [&_th]:align-middle [&_td]:align-middle">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
                   {/* Checkbox column */}
@@ -991,13 +1048,19 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   >
                     📅 Thời gian{renderSortIcon("created_at")}
                   </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[150px] text-center">
+                    🕐 TG bắt đầu
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-700 text-sm w-[150px] text-center">
+                    🕔 TG kết thúc
+                  </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">
                     👤 Nhân viên
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">
+                  <TableHead className="font-bold text-slate-700 text-sm min-w-[220px] max-w-[720px] text-center">
                     🏪 Khách hàng
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[300px] text-center">
+                  <TableHead className="font-bold text-slate-700 text-sm min-w-[220px] max-w-[720px] text-center">
                     🛍️ Mặt hàng
                   </TableHead>
                   <TableHead
@@ -1061,6 +1124,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                     >
                       {(() => {
                         const owner = isOwner(orderDetail);
+                        // customer name handling: if >20 chars, use smaller font and allow up to 2 lines
+                        const custName = orderDetail.customer_name || "--";
+                        const isCustLong = custName.length > 20;
                         return (
                           <>
                             {/* Checkbox cell */}
@@ -1153,6 +1219,52 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 )}
                               </div>
                             </TableCell>
+                            {/* Thời gian bắt đầu dựa theo metadata.messages[0].timestamp */}
+                            <TableCell className="text-center text-slate-600 text-sm">
+                              {(() => {
+                                const { start } = getConversationStartEnd(
+                                  orderDetail.metadata
+                                );
+                                if (!start) return <span className="text-gray-400">--</span>;
+                                return (
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-blue-600">
+                                      {start.toLocaleTimeString("vi-VN", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        second: "2-digit",
+                                      })}
+                                    </span>
+                                    <span className="text-xs text-slate-500">
+                                      {start.toLocaleDateString("vi-VN")}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
+                            {/* Thời gian kết thúc dựa theo metadata.messages[last].timestamp */}
+                            <TableCell className="text-center text-slate-600 text-sm">
+                              {(() => {
+                                const { end } = getConversationStartEnd(
+                                  orderDetail.metadata
+                                );
+                                if (!end) return <span className="text-gray-400">--</span>;
+                                return (
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-emerald-600">
+                                      {end.toLocaleTimeString("vi-VN", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        second: "2-digit",
+                                      })}
+                                    </span>
+                                    <span className="text-xs text-slate-500">
+                                      {end.toLocaleDateString("vi-VN")}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell className="text-center font-medium text-purple-700 text-sm">
                               <TruncatedText
                                 text={
@@ -1164,7 +1276,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 className="text-truncate"
                               />
                             </TableCell>
-                            <TableCell className="text-center font-medium text-green-700 text-sm">
+                            <TableCell className="text-left font-medium text-green-700 text-sm min-w-[220px] max-w-[720px]">
                               <div className="flex items-center justify-center gap-1">
                                 <div
                                   className="cursor-pointer hover:bg-green-50 rounded px-1 py-1 transition-colors flex-1"
@@ -1177,11 +1289,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   }}
                                   title="Double-click để tìm kiếm tất cả đơn của khách hàng này"
                                 >
-                                  <TruncatedText
-                                    text={orderDetail.customer_name || "--"}
-                                    maxLength={12}
-                                    className="text-truncate"
-                                  />
+                                  <div
+                                    className={`text-left leading-tight break-words ${
+                                      isCustLong ? "text-xs customer-two-line" : "text-sm"
+                                    }`}
+                                  >
+                                    {custName}
+                                  </div>
                                 </div>
                                 <Button
                                   size="sm"
@@ -1201,10 +1315,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 </Button>
                               </div>
                             </TableCell>
-                            <TableCell className="text-left text-slate-600 hover:text-slate-800 transition-colors">
+                            <TableCell className="text-center text-slate-600 min-w-[220px] max-w-[720px] hover:text-slate-800 transition-colors">
                               <TruncatedText
                                 text={orderDetail.raw_item || "N/A"}
-                                maxLength={55}
+                                maxLength={45}
                                 className="text-wrap leading-relaxed"
                               />
                             </TableCell>
