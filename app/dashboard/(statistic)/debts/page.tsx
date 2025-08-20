@@ -417,12 +417,16 @@ const DebtStatisticsDashboard: React.FC = () => {
           break;
       }
       const response = await api.get('/debt-statistics/detailed', { params: baseParams });
-      
-      // Process the response data
+
+      // Process the response data (support both paginated and raw array)
       let filteredData: Debt[] = [];
       if (response && response.data) {
-        filteredData = response.data;
-        console.log('📊 [fetchDebtsForModal] Got data:', filteredData.length, 'items');
+        if (Array.isArray(response.data?.data)) {
+          filteredData = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          filteredData = response.data as Debt[];
+        }
+        console.log('📊 [fetchDebtsForModal] Got data:', (filteredData || []).length, 'items');
       } else {
         console.warn('⚠️ [fetchDebtsForModal] No data in response:', response);
       }
@@ -474,6 +478,20 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Build daily grouped datasets
   const agingLabels = useMemo(() => ['1-30', '31-60', '61-90', '>90'], []);
+  // Pre-compute full date list in range (skip Sundays) so charts show zeros when no data
+  const selectedDates = useMemo(() => {
+    const dates: string[] = [];
+    const start = range?.from ? new Date(range.from) : undefined;
+    const end = range?.to ? new Date(range.to) : undefined;
+    if (!start || !end) return dates;
+    const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    for (let d = s; d <= e; d = new Date(d.getTime() + 24 * 60 * 60 * 1000)) {
+      if (d.getDay() === 0) continue; // skip Sunday
+      dates.push(d.toISOString().split('T')[0]);
+    }
+    return dates;
+  }, [range?.from?.toDateString(), range?.to?.toDateString()]);
   const agingDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
     const src = Array.isArray(agingDaily) ? agingDaily : (agingDaily ? [agingDaily as any] : []);
@@ -483,8 +501,20 @@ const DebtStatisticsDashboard: React.FC = () => {
       const row = map.get(key);
       row[i.range] = (row[i.range] || 0) + i.count;
     });
-    return Array.from(map.values());
-  }, [agingDaily]);
+    // Ensure every selected date exists and buckets are zero-filled
+    const rows = selectedDates.map((date) => {
+      const base: any = { name: date };
+      agingLabels.forEach((lbl) => { base[lbl] = 0; });
+      const existing = map.get(date);
+      if (existing) {
+        agingLabels.forEach((lbl) => {
+          if (typeof existing[lbl] === 'number') base[lbl] = existing[lbl];
+        });
+      }
+      return base;
+    });
+    return rows;
+  }, [agingDaily, selectedDates, agingLabels]);
 
   const payLaterLabels = useMemo(() => {
     const set = new Set<string>();
@@ -498,7 +528,8 @@ const DebtStatisticsDashboard: React.FC = () => {
       const start = parseInt(parts[0], 10);
       return isNaN(start) ? 500 : start;
     };
-    return arr.sort((a, b) => order(a) - order(b));
+    const sorted = arr.sort((a, b) => order(a) - order(b));
+    return sorted.length > 0 ? sorted : ['1-7', '8-14', '15-30', '>30'];
   }, [payLaterDaily]);
   const payLaterDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
@@ -509,10 +540,31 @@ const DebtStatisticsDashboard: React.FC = () => {
       const row = map.get(key);
       row[i.range] = (row[i.range] || 0) + i.count;
     });
-    return Array.from(map.values());
-  }, [payLaterDaily]);
+    const rows = selectedDates.map((date) => {
+      const base: any = { name: date };
+      payLaterLabels.forEach((lbl) => { base[lbl] = 0; });
+      const existing = map.get(date);
+      if (existing) {
+        payLaterLabels.forEach((lbl) => {
+          if (typeof existing[lbl] === 'number') base[lbl] = existing[lbl];
+        });
+      }
+      return base;
+    });
+    return rows;
+  }, [payLaterDaily, selectedDates, payLaterLabels]);
 
+  // Response statuses (English keys for API, localized in tooltip)
   const responseStatuses = useMemo(() => ['Debt Reported', 'First Reminder', 'Second Reminder', 'Customer Responded'], []);
+  const responseStatusVi = useMemo(() => ({
+    'Debt Reported': 'Đã gửi báo nợ',
+    'First Reminder': 'Nhắc lần 1',
+    'Second Reminder': 'Nhắc lần 2',
+    'Customer Responded': 'Khách đã trả lời',
+    'Not Sent': 'Chưa gửi',
+    'Error Send': 'Gửi lỗi',
+    'Sent But Not Verified': 'Đã gửi, chưa xác minh',
+  } as Record<string, string>), []);
   const responsesDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
     const src = Array.isArray(responsesDaily) ? responsesDaily : (responsesDaily ? [responsesDaily as any] : []);
@@ -522,8 +574,19 @@ const DebtStatisticsDashboard: React.FC = () => {
       const row = map.get(key);
       row[i.status] = (row[i.status] || 0) + i.customers;
     });
-    return Array.from(map.values());
-  }, [responsesDaily]);
+    const rows = selectedDates.map((date) => {
+      const base: any = { name: date };
+      responseStatuses.forEach((st) => { base[st] = 0; });
+      const existing = map.get(date);
+      if (existing) {
+        responseStatuses.forEach((st) => {
+          if (typeof existing[st] === 'number') base[st] = existing[st];
+        });
+      }
+      return base;
+    });
+    return rows;
+  }, [responsesDaily, selectedDates, responseStatuses]);
 
   // Click handlers for daily charts
   const handleAgingDailyClick = useCallback(async (label: string, entry: any, _index: number) => {
@@ -590,7 +653,13 @@ const DebtStatisticsDashboard: React.FC = () => {
     setContactModalOpen(true);
     setContactLoading(true);
     try {
-      const res = await debtStatisticsAPI.getContactDetails({ date: dateStr, responseStatus: status, page: 1, limit: contactLimit });
+      const res = await debtStatisticsAPI.getContactDetails({
+        date: dateStr,
+        responseStatus: status,
+        mode: 'events',
+        page: 1,
+        limit: contactLimit,
+      });
       setContactDetails(res.data || []);
       setContactTotal(res.total || 0);
       setContactPage(res.page || 1);
@@ -920,13 +989,17 @@ const DebtStatisticsDashboard: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="aging">
-              {/* Daily stacked columns */}
-              <div className="p-4">
+              {/* Daily stacked columns with title/description to match overview */}
+              <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Biểu đồ thống kê công nợ quá hạn</h2>
+                  <p className="text-sm text-gray-600 mt-1">Theo dõi tình hình công nợ qua các khoảng thời gian</p>
+                </div>
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                    <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
                       <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" tickLine={false} axisLine={false} height={20} />
+                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
                       <RYAxis />
                       <RTooltip />
                       {agingLabels.map((k, idx) => (
@@ -943,13 +1016,16 @@ const DebtStatisticsDashboard: React.FC = () => {
 
             {/* Phân tích trễ hẹn */}
             <TabsContent value="promise_not_met">
-              {/* Daily stacked columns */}
-              <div className="p-4">
+              <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Biểu đồ thống kê trễ hẹn</h2>
+                  <p className="text-sm text-gray-600 mt-1">Theo dõi tình hình công nợ qua các khoảng thời gian</p>
+                </div>
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                    <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
                       <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" tickLine={false} axisLine={false} height={20} />
+                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
                       <RYAxis />
                       <RTooltip />
                       {payLaterLabels.map((k, idx) => (
@@ -966,17 +1042,20 @@ const DebtStatisticsDashboard: React.FC = () => {
 
             {/* Phân tích khách hàng đã trả lời */}
             <TabsContent value="customer_responded">
-              {/* Daily stacked columns */}
-              <div className="p-4">
+              <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
+                <div className="mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">Biểu đồ thống kê khách đã trả lời</h2>
+                  <p className="text-sm text-gray-600 mt-1">Theo dõi tình hình công nợ qua các khoảng thời gian</p>
+                </div>
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                    <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
                       <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" tickLine={false} axisLine={false} height={20} />
+                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
                       <RYAxis />
-                      <RTooltip />
+                      <RTooltip formatter={(value: any, name: any) => [value, (responseStatusVi as any)[String(name)] || String(name)]} />
                       {responseStatuses.map((k, idx) => (
-                        <RBar key={`resp-daily-${k}`} dataKey={k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />
+                        <RBar key={`resp-daily-${k}`} dataKey={k} name={responseStatusVi[k] || k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />
                       ))}
                     </RBarChart>
                   </RResponsiveContainer>
@@ -1000,19 +1079,14 @@ const DebtStatisticsDashboard: React.FC = () => {
             loading={loadingModalData}
           />
 
-          {/* Contact Details Modal */}
-          <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
-            <DialogContent className="!max-w-6xl p-0 overflow-hidden">
-              {/* Reuse DebtModal look & feel */}
-              <DebtModal
-                isOpen={true}
-                onClose={() => setContactModalOpen(false)}
-                category={contactModalTitle || 'Khách đã trả lời'}
-                debts={Array.isArray(contactDetails) ? (contactDetails as any) : ([] as any)}
-                loading={contactLoading}
-              />
-            </DialogContent>
-          </Dialog>
+          {/* Contact Details Modal using the unified DebtModal component */}
+          <DebtModal
+            isOpen={contactModalOpen}
+            onClose={() => setContactModalOpen(false)}
+            category={contactModalTitle || 'Khách đã trả lời'}
+            debts={Array.isArray(contactDetails) ? (contactDetails as any) : ([] as any)}
+            loading={contactLoading}
+          />
         </div>
       </div>
     </main>
