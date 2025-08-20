@@ -34,6 +34,26 @@ export interface ContactResponseItem {
   customers: number;
 }
 
+export interface AgingDailyItem {
+  date: string;
+  range: string; // '1-30' | '31-60' | '61-90' | '>90'
+  count: number;
+  amount: number;
+}
+
+export interface PayLaterDailyItem {
+  date: string;
+  range: string; // e.g. '1-7' | '8-14' | '15-30' | '>30'
+  count: number;
+  amount: number;
+}
+
+export interface ContactResponseDailyItem {
+  date: string;
+  status: string;
+  customers: number;
+}
+
 export interface ContactDetailItem {
   customer_code: string;
   customer_name: string;
@@ -192,6 +212,38 @@ class DebtStatisticsAPI {
     const data = response.data || { data: [], total: 0, page: params.page || 1, limit: params.limit || 50, totalPages: 0 };
     this.setCacheData(cacheKey, data);
     return data;
+  }
+
+  // Daily series endpoints
+  async getAgingDaily(filters: StatisticsFilters = {}): Promise<AgingDailyItem[]> {
+    const cacheKey = this.getCacheKey('aging-daily', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const response = await api.get(`${this.baseUrl}/aging-daily`, { params: filters });
+    this.setCacheData(cacheKey, response.data || []);
+    return response.data || [];
+  }
+
+  async getPayLaterDelayDaily(filters: StatisticsFilters & { buckets?: string } = {}): Promise<PayLaterDailyItem[]> {
+    const cacheKey = this.getCacheKey('pay-later-delay-daily', filters);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const response = await api.get(`${this.baseUrl}/pay-later-delay-daily`, { params: filters });
+    this.setCacheData(cacheKey, response.data || []);
+    return response.data || [];
+  }
+
+  async getContactResponsesDaily(filters: StatisticsFilters & { by?: 'customer' | 'invoice' } = {}): Promise<ContactResponseDailyItem[]> {
+    const params = { by: 'customer', ...filters } as any;
+    const cacheKey = this.getCacheKey('contact-responses-daily', params);
+    const cached = this.getCachedData(cacheKey);
+    if (cached) return cached;
+
+    const response = await api.get(`${this.baseUrl}/contact-responses-daily`, { params });
+    this.setCacheData(cacheKey, response.data || []);
+    return response.data || [];
   }
 
   async getEmployeePerformance(filters: StatisticsFilters = {}): Promise<EmployeePerformance[]> {

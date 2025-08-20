@@ -34,7 +34,7 @@ import {
   DebtListResponse,
   getDetailedDebtsByDate
 } from "@/lib/debt-statistics-api";
-import type { PayLaterDelayItem, ContactResponseItem, ContactDetailItem } from "@/lib/debt-statistics-api";
+import type { PayLaterDelayItem, ContactResponseItem, ContactDetailItem, AgingDailyItem, PayLaterDailyItem, ContactResponseDailyItem } from "@/lib/debt-statistics-api";
 import { api } from "@/lib/api";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -206,6 +206,10 @@ const DebtStatisticsDashboard: React.FC = () => {
   const [employeeData, setEmployeeData] = useState<EmployeePerformance[]>([]);
   const [payLaterDelayData, setPayLaterDelayData] = useState<PayLaterDelayItem[]>([]);
   const [contactResponses, setContactResponses] = useState<ContactResponseItem[]>([]);
+  // Daily series states
+  const [agingDaily, setAgingDaily] = useState<AgingDailyItem[]>([]);
+  const [payLaterDaily, setPayLaterDaily] = useState<PayLaterDailyItem[]>([]);
+  const [responsesDaily, setResponsesDaily] = useState<ContactResponseDailyItem[]>([]);
 
   // Contact details modal state
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -253,13 +257,16 @@ const DebtStatisticsDashboard: React.FC = () => {
         if (!silent) setLoading(true);
         lastFetchParams.current = paramsKey;
 
-        const [overviewRes, agingRes, trendsRes, employeeRes, payLaterRes, responsesRes] = await Promise.all([
+        const [overviewRes, agingRes, trendsRes, employeeRes, payLaterRes, responsesRes, agingDailyRes, payLaterDailyRes, responsesDailyRes] = await Promise.all([
           debtStatisticsAPI.getOverview(debouncedFilters),
           debtStatisticsAPI.getAgingAnalysis(debouncedFilters),
           debtStatisticsAPI.getTrends(debouncedFilters),
           debtStatisticsAPI.getEmployeePerformance(debouncedFilters),
           debtStatisticsAPI.getPayLaterDelay({ ...debouncedFilters, buckets: '7,14,30' }),
           debtStatisticsAPI.getContactResponses({ ...debouncedFilters, by: 'customer' }),
+          debtStatisticsAPI.getAgingDaily(debouncedFilters),
+          debtStatisticsAPI.getPayLaterDelayDaily({ ...debouncedFilters, buckets: '7,14,30' }),
+          debtStatisticsAPI.getContactResponsesDaily({ ...debouncedFilters, by: 'customer' }),
         ]);
 
         if (isComponentMounted.current) {
@@ -270,6 +277,9 @@ const DebtStatisticsDashboard: React.FC = () => {
           setEmployeeData(employeeRes);
           setPayLaterDelayData(payLaterRes || []);
           setContactResponses(responsesRes || []);
+          setAgingDaily(agingDailyRes || []);
+          setPayLaterDaily(payLaterDailyRes || []);
+          setResponsesDaily(responsesDailyRes || []);
           initialFetchDone.current = true;
         }
       });
@@ -481,6 +491,136 @@ const DebtStatisticsDashboard: React.FC = () => {
     setModalOpen(true);
     fetchDebtsForModal(category, dateFromChart);
   }, [fetchDebtsForModal]);
+
+  // Build daily grouped datasets
+  const agingLabels = useMemo(() => ['1-30', '31-60', '61-90', '>90'], []);
+  const agingDailyChartData = useMemo(() => {
+    const map = new Map<string, any>();
+    agingDaily.forEach((i) => {
+      const key = i.date;
+      if (!map.has(key)) map.set(key, { name: key });
+      const row = map.get(key);
+      row[i.range] = (row[i.range] || 0) + i.count;
+    });
+    return Array.from(map.values());
+  }, [agingDaily]);
+
+  const payLaterLabels = useMemo(() => {
+    const set = new Set<string>();
+    payLaterDaily.forEach((i) => set.add(i.range));
+    const arr = Array.from(set);
+    // Try to keep expected order 1-7, 8-14, 15-30, >30 if available
+    const order = (label: string) => {
+      if (label.startsWith('>')) return 999;
+      const parts = label.split('-');
+      const start = parseInt(parts[0], 10);
+      return isNaN(start) ? 500 : start;
+    };
+    return arr.sort((a, b) => order(a) - order(b));
+  }, [payLaterDaily]);
+  const payLaterDailyChartData = useMemo(() => {
+    const map = new Map<string, any>();
+    payLaterDaily.forEach((i) => {
+      const key = i.date;
+      if (!map.has(key)) map.set(key, { name: key });
+      const row = map.get(key);
+      row[i.range] = (row[i.range] || 0) + i.count;
+    });
+    return Array.from(map.values());
+  }, [payLaterDaily]);
+
+  const responseStatuses = useMemo(() => ['Debt Reported', 'First Reminder', 'Second Reminder', 'Customer Responded'], []);
+  const responsesDailyChartData = useMemo(() => {
+    const map = new Map<string, any>();
+    responsesDaily.forEach((i) => {
+      const key = i.date;
+      if (!map.has(key)) map.set(key, { name: key });
+      const row = map.get(key);
+      row[i.status] = (row[i.status] || 0) + i.customers;
+    });
+    return Array.from(map.values());
+  }, [responsesDaily]);
+
+  // Click handlers for daily charts
+  const handleAgingDailyClick = useCallback(async (bar: any) => {
+    const dateStr = bar?.payload?.name;
+    const label: string = bar?.dataKey;
+    if (!dateStr || !label) return;
+    const parse = (lbl: string) => {
+      const t = lbl.trim();
+      if (t.startsWith('>')) {
+        const n = parseInt(t.replace('>', '').trim(), 10);
+        return { minDays: isNaN(n) ? undefined : n + 1, maxDays: undefined };
+      }
+      const parts = t.split('-');
+      if (parts.length === 2) {
+        const a = parseInt(parts[0].trim(), 10);
+        const b = parseInt(parts[1].trim(), 10);
+        return { minDays: isNaN(a) ? undefined : a, maxDays: isNaN(b) ? undefined : b };
+      }
+      return {} as any;
+    };
+    const { minDays, maxDays } = parse(label);
+    setSelectedCategory('aging');
+    setModalOpen(true);
+    setLoadingModalData(true);
+    try {
+      const resp = await api.get('/debt-statistics/detailed', {
+        params: { date: dateStr, mode: 'overdue', minDays, maxDays, page: 1, all: true, limit: 100000 },
+      });
+      const respData = resp.data;
+      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : Array.isArray(respData) ? respData : [];
+      setSelectedDebts(debts);
+    } catch {
+      setSelectedDebts([]);
+    } finally {
+      setLoadingModalData(false);
+    }
+  }, []);
+
+  const handlePayLaterDailyClick = useCallback(async (bar: any) => {
+    const dateStr = bar?.payload?.name;
+    const label: string = bar?.dataKey;
+    if (!dateStr || !label) return;
+    const { minDays, maxDays } = parseBucketLabel(label);
+    setSelectedCategory('promise_not_met');
+    setModalOpen(true);
+    setLoadingModalData(true);
+    try {
+      const resp = await api.get('/debt-statistics/detailed', {
+        params: { date: dateStr, mode: 'payLater', minDays, maxDays, page: 1, all: true, limit: 100000 },
+      });
+      const respData = resp.data;
+      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : Array.isArray(respData) ? respData : [];
+      setSelectedDebts(debts);
+    } catch {
+      setSelectedDebts([]);
+    } finally {
+      setLoadingModalData(false);
+    }
+  }, []);
+
+  const handleResponseDailyClick = useCallback(async (bar: any) => {
+    const dateStr = bar?.payload?.name;
+    const status: string = bar?.dataKey;
+    if (!dateStr || !status) return;
+    setContactStatusFilter(status);
+    setContactModalTitle(`Khách theo trạng thái: ${status} (${dateStr})`);
+    setContactModalOpen(true);
+    setContactLoading(true);
+    try {
+      const res = await debtStatisticsAPI.getContactDetails({ date: dateStr, responseStatus: status, page: 1, limit: contactLimit });
+      setContactDetails(res.data || []);
+      setContactTotal(res.total || 0);
+      setContactPage(res.page || 1);
+      setContactLimit(res.limit || contactLimit);
+    } catch {
+      setContactDetails([]);
+      setContactTotal(0);
+    } finally {
+      setContactLoading(false);
+    }
+  }, [contactLimit]);
 
   // Helper: parse bucket label like "1-7" or ">30" into min/max days
   const parseBucketLabel = (label: string): { minDays?: number; maxDays?: number } => {
@@ -799,6 +939,25 @@ const DebtStatisticsDashboard: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="aging">
+              {/* Daily stacked columns */}
+              <div className="p-4">
+                <div className="h-80 w-full">
+                  <RResponsiveContainer width="100%" height="100%">
+                    <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
+                      <RYAxis />
+                      <RTooltip />
+                      {agingLabels.map((k, idx) => (
+                        <RBar key={`aging-daily-${k}`} dataKey={k} stackId="a" fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
+                          className="cursor-pointer" onClick={handleAgingDailyClick} />
+                      ))}
+                    </RBarChart>
+                  </RResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Legacy single-distribution chart */}
               <AgingChart
                 data={agingData}
                 loading={loading}
@@ -862,6 +1021,25 @@ const DebtStatisticsDashboard: React.FC = () => {
 
             {/* Phân tích trễ hẹn */}
             <TabsContent value="promise_not_met">
+              {/* Daily stacked columns */}
+              <div className="p-4">
+                <div className="h-80 w-full">
+                  <RResponsiveContainer width="100%" height="100%">
+                    <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
+                      <RYAxis />
+                      <RTooltip />
+                      {payLaterLabels.map((k, idx) => (
+                        <RBar key={`pl-daily-${k}`} dataKey={k} stackId="a" fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
+                          className="cursor-pointer" onClick={handlePayLaterDailyClick} />
+                      ))}
+                    </RBarChart>
+                  </RResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Legacy one-shot buckets */}
               <AgingChart
                 data={(payLaterDelayData || []).map((i) => ({ count: i.count, amount: i.amount, label: i.range, range: i.range }))}
                 loading={loading}
@@ -871,6 +1049,24 @@ const DebtStatisticsDashboard: React.FC = () => {
 
             {/* Phân tích khách hàng đã trả lời */}
             <TabsContent value="customer_responded">
+              {/* Daily stacked columns */}
+              <div className="p-4">
+                <div className="h-80 w-full">
+                  <RResponsiveContainer width="100%" height="100%">
+                    <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
+                      <RYAxis />
+                      <RTooltip />
+                      {responseStatuses.map((k, idx) => (
+                        <RBar key={`resp-daily-${k}`} dataKey={k} stackId="a" fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={handleResponseDailyClick} />
+                      ))}
+                    </RBarChart>
+                  </RResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Legacy aggregated responses */}
               <div className="p-4">
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
