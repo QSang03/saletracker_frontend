@@ -378,7 +378,7 @@ const DebtStatisticsDashboard: React.FC = () => {
       // Don't use circuit breaker for modal - it should work independently
       const modalFilters: DebtListFilters = {
         ...debouncedFilters,
-        limit: 1000 // Get reasonable amount for modal
+        limit: 100000,
       };
 
       // Default to today
@@ -505,7 +505,7 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Drilldown for PayLater buckets
   const handlePayLaterBucketClick = useCallback(async (bucket: { range?: string; label?: string }) => {
-    setSelectedCategory('pay_later');
+    setSelectedCategory('promise_not_met');
     setModalOpen(true);
     setLoadingModalData(true);
     try {
@@ -514,36 +514,24 @@ const DebtStatisticsDashboard: React.FC = () => {
       const now = new Date();
       const fromDate = range?.from ? range.from : now;
       const toDate = range?.to ? range.to : now;
-      const todayStr = new Date().toISOString().split('T')[0];
       const fromStr = (fromDate as Date).toISOString().split('T')[0];
       const toStr = (toDate as Date).toISOString().split('T')[0];
 
-      // Prefer today if inside range
-      const tryDates: string[] = [];
-      if (fromStr <= todayStr && toStr >= todayStr) {
-        tryDates.push(todayStr);
-      }
-      // Also try the selected 'to' date (range end)
-      if (!tryDates.includes(toStr)) tryDates.push(toStr);
-      // Finally try the 'from' date as a fallback
-      if (!tryDates.includes(fromStr)) tryDates.push(fromStr);
-
-      let debts: Debt[] = [];
-      for (const dateStr of tryDates) {
-        const resp = await api.get('/debt-statistics/detailed', {
-          params: {
-            date: dateStr,
-            mode: 'payLater',
-            minDays,
-            maxDays,
-            page: 1,
-            limit: 1000,
-          }
-        });
-        const respData = resp.data;
-        debts = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
-        if (debts.length > 0) break;
-      }
+      // Use range-based details so counts match range aggregation
+      const resp = await api.get('/debt-statistics/detailed', {
+        params: {
+          from: fromStr,
+          to: toStr,
+          mode: 'payLater',
+          minDays,
+          maxDays,
+          page: 1,
+          all: true,
+          limit: 100000,
+        }
+      });
+      const respData = resp.data;
+      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
       setSelectedDebts(debts);
     } catch (e) {
       setSelectedDebts([]);
@@ -584,7 +572,7 @@ const DebtStatisticsDashboard: React.FC = () => {
       'paid': 'Đã thanh toán',
       'pay_later': 'Khách hẹn trả',
       'no_information_available': 'Chưa có thông tin',
-      'aging': 'Phân tích độ tuổi nợ'
+      'aging': 'Ngày quá hạn'
     };
     return categoryMap[category] || category;
   }, []);
@@ -614,7 +602,8 @@ const DebtStatisticsDashboard: React.FC = () => {
     const baseParams: any = {
       date: dateStr,
       page: filters.page || 1,
-      limit: filters.limit || 1000
+      all: true,
+      limit: 100000
     };
 
     // Map category to appropriate API parameters
@@ -659,7 +648,7 @@ const DebtStatisticsDashboard: React.FC = () => {
       data: [],
       total: 0,
       page: 1,
-      limit: filters.limit || 1000,
+      limit: 100000,
       totalPages: 0
     };
   };
@@ -789,7 +778,7 @@ const DebtStatisticsDashboard: React.FC = () => {
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Tổng quan</TabsTrigger>
               <TabsTrigger value="aging">Phân tích nợ quá hạn</TabsTrigger>
-              <TabsTrigger value="promise_not_met">Phân tích trễ hẹn</TabsTrigger>
+              <TabsTrigger value="promise_not_met">Phân tích ngày trễ hẹn</TabsTrigger>
               <TabsTrigger value="customer_responded">Phân tích khách hàng đã trả lời</TabsTrigger>
             </TabsList>
 
@@ -851,7 +840,8 @@ const DebtStatisticsDashboard: React.FC = () => {
                           minDays,
                           maxDays,
                           page: 1,
-                          limit: 1000,
+                          all: true,
+                          limit: 100000,
                         }
                       });
                       const respData = resp.data;
