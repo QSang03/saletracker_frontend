@@ -408,13 +408,16 @@ const DebtStatisticsDashboard: React.FC = () => {
           baseParams.status = 'no_information_available'; break;
       }
 
+      console.log('🔍 [fetchDebtsForModal] API call params:', baseParams);
       const response = await api.get('/debt-statistics/detailed', { params: baseParams });
+      console.log('🔍 [fetchDebtsForModal] API response:', response.data);
 
       const filteredData: Debt[] =
         Array.isArray(response?.data?.data) ? response.data.data :
         Array.isArray(response?.data) ? response.data :
         [];
 
+      console.log('🔍 [fetchDebtsForModal] Filtered data count:', filteredData.length);
       if (isComponentMounted.current) setSelectedDebts(filteredData);
     } catch (error) {
       console.error('❌ Error in fetchDebtsForModal:', error);
@@ -438,7 +441,7 @@ const DebtStatisticsDashboard: React.FC = () => {
     if (typeof p2 === 'string') category = p2;
   }
 
-  // Lấy ngày từ nhiều “điểm” có thể có của Recharts
+  // Lấy ngày từ nhiều "điểm" có thể có của Recharts
   let dateFromChart: string | undefined;
   const payload = (data && (data.payload ?? data)) || {};
   const candidates = [
@@ -448,12 +451,20 @@ const DebtStatisticsDashboard: React.FC = () => {
     (data as any)?.activeLabel, // một số chart set trường này
   ];
 
+  console.log('🔍 [handleChartClick] Debug candidates:', {
+    p1, p2, data, payload, candidates
+  });
+
   for (const c of candidates) {
     if (typeof c === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c)) {
       dateFromChart = c;
       break;
     }
   }
+
+  console.log('🔍 [handleChartClick] Final result:', {
+    dateFromChart, category
+  });
 
   // Không rơi về hôm nay nữa — nếu không bắt được ngày thì hủy drilldown
   if (!dateFromChart) {
