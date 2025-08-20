@@ -391,52 +391,32 @@ const DebtStatisticsDashboard: React.FC = () => {
         limit: 100000,
       };
 
-      // Default to today
-      let targetDate = new Date();
+      // Determine target date string without timezone drift
+      const targetDateStr = typeof dateFromChart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateFromChart)
+        ? dateFromChart
+        : (new Date()).toISOString().split('T')[0];
 
-      // If dateFromChart is provided, use it instead of current date filters
-      if (dateFromChart) {
-        
-        try {
-          // Handle different date formats that might come from chart
-          let chartDate: Date;
-          
-          // Check if it's already a valid date string
-          if (typeof dateFromChart === 'string') {
-            // Try parsing as-is first
-            chartDate = new Date(dateFromChart);
-            
-            // If invalid, try to parse as DD/MM/YYYY format (common in Vietnamese format)
-            if (isNaN(chartDate.getTime()) && dateFromChart.includes('/')) {
-              const parts = dateFromChart.split('/');
-              if (parts.length === 3) {
-                // Assume DD/MM/YYYY format and convert to YYYY-MM-DD
-                const [day, month, year] = parts;
-                chartDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
-              }
-            }
-            
-            // If still invalid, try other common formats
-            if (isNaN(chartDate.getTime())) {
-              console.warn('⚠️ Could not parse dateFromChart:', dateFromChart);
-              chartDate = new Date(); // Fallback to today
-            }
-          } else {
-            chartDate = new Date(); // Fallback to today
-          }
-          
-          targetDate = chartDate;
-          
-          const dateStr = chartDate.toISOString().split('T')[0];
-          modalFilters.from = dateStr;
-          modalFilters.to = dateStr;
-        } catch (error) {
-          console.error('❌ Error parsing dateFromChart:', error);
-        }
+      // Directly call detailed API with explicit date
+      const baseParams: any = {
+        date: targetDateStr,
+        page: 1,
+        all: true,
+        limit: 100000,
+      };
+      switch (category) {
+        case 'paid':
+          baseParams.status = 'paid';
+          break;
+        case 'promised':
+        case 'pay_later':
+          baseParams.status = 'pay_later';
+          break;
+        case 'no_info':
+        case 'no_information_available':
+          baseParams.status = 'no_information_available';
+          break;
       }
-      
-      // Use the smart logic to get data from appropriate source
-      const response = await getDetailedDebtsByDate(modalFilters, category, targetDate);
+      const response = await api.get('/debt-statistics/detailed', { params: baseParams });
       
       // Process the response data
       let filteredData: Debt[] = [];
@@ -542,9 +522,8 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, [responsesDaily]);
 
   // Click handlers for daily charts
-  const handleAgingDailyClick = useCallback(async (bar: any) => {
-    const dateStr = bar?.payload?.name;
-    const label: string = bar?.dataKey;
+  const handleAgingDailyClick = useCallback(async (label: string, entry: any, _index: number) => {
+    const dateStr = entry?.payload?.name;
     if (!dateStr || !label) return;
     const parse = (lbl: string) => {
       const t = lbl.trim();
@@ -578,9 +557,8 @@ const DebtStatisticsDashboard: React.FC = () => {
     }
   }, []);
 
-  const handlePayLaterDailyClick = useCallback(async (bar: any) => {
-    const dateStr = bar?.payload?.name;
-    const label: string = bar?.dataKey;
+  const handlePayLaterDailyClick = useCallback(async (label: string, entry: any, _index: number) => {
+    const dateStr = entry?.payload?.name;
     if (!dateStr || !label) return;
     const { minDays, maxDays } = parseBucketLabel(label);
     setSelectedCategory('promise_not_met');
@@ -600,9 +578,8 @@ const DebtStatisticsDashboard: React.FC = () => {
     }
   }, []);
 
-  const handleResponseDailyClick = useCallback(async (bar: any) => {
-    const dateStr = bar?.payload?.name;
-    const status: string = bar?.dataKey;
+  const handleResponseDailyClick = useCallback(async (status: string, entry: any, index: number) => {
+    const dateStr = entry?.payload?.name;
     if (!dateStr || !status) return;
     setContactStatusFilter(status);
     setContactModalTitle(`Khách theo trạng thái: ${status} (${dateStr})`);
@@ -950,7 +927,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <RTooltip />
                       {agingLabels.map((k, idx) => (
                         <RBar key={`aging-daily-${k}`} dataKey={k} fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
-                          className="cursor-pointer" onClick={handleAgingDailyClick} />
+                          className="cursor-pointer" onClick={(data, index) => { void handleAgingDailyClick(k, data, index); }} />
                       ))}
                     </RBarChart>
                   </RResponsiveContainer>
@@ -973,7 +950,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <RTooltip />
                       {payLaterLabels.map((k, idx) => (
                         <RBar key={`pl-daily-${k}`} dataKey={k} fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
-                          className="cursor-pointer" onClick={handlePayLaterDailyClick} />
+                          className="cursor-pointer" onClick={(data, index) => { void handlePayLaterDailyClick(k, data, index); }} />
                       ))}
                     </RBarChart>
                   </RResponsiveContainer>
@@ -995,7 +972,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <RYAxis />
                       <RTooltip />
                       {responseStatuses.map((k, idx) => (
-                        <RBar key={`resp-daily-${k}`} dataKey={k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={handleResponseDailyClick} />
+                        <RBar key={`resp-daily-${k}`} dataKey={k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />
                       ))}
                     </RBarChart>
                   </RResponsiveContainer>
