@@ -227,12 +227,13 @@ const DebtStatisticsDashboard: React.FC = () => {
   const fetchingRef = useRef(false);
 
   // Memoize expensive operations
+  const toVNDate = useCallback((d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }), []);
   const filters = useMemo(() => {
     const apiFilters: StatisticsFilters = {};
-    if (range?.from) apiFilters.from = range.from.toISOString().split('T')[0];
-    if (range?.to) apiFilters.to = range.to.toISOString().split('T')[0];
+    if (range?.from) apiFilters.from = toVNDate(range.from as Date);
+    if (range?.to) apiFilters.to = toVNDate(range.to as Date);
     return apiFilters;
-  }, [range?.from?.toDateString(), range?.to?.toDateString()]); // Use dateString instead of getTime for better performance
+  }, [range?.from?.toDateString(), range?.to?.toDateString(), toVNDate]); // Use dateString instead of getTime for better performance
 
   // Debounce filters to prevent too many API calls
   const debouncedFilters = useDebounce(filters, 500); // Increase debounce to 500ms
@@ -392,9 +393,14 @@ const DebtStatisticsDashboard: React.FC = () => {
       };
 
       // Determine target date string without timezone drift
-      const targetDateStr = typeof dateFromChart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateFromChart)
-        ? dateFromChart
-        : (new Date()).toISOString().split('T')[0];
+      let targetDateStr: string;
+      if (typeof dateFromChart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateFromChart)) {
+        targetDateStr = dateFromChart;
+      } else {
+        // If no valid date from chart, use today but log warning
+        targetDateStr = (new Date()).toISOString().split('T')[0];
+        console.warn('⚠️ [fetchDebtsForModal] No valid date from chart, using today:', { dateFromChart, targetDateStr });
+      }
 
       // Directly call detailed API with explicit date
       const baseParams: any = {
@@ -451,12 +457,16 @@ const DebtStatisticsDashboard: React.FC = () => {
     // Extract date from chart data - data could be from Bar or RadialBar
     let dateFromChart: string | undefined;
     
+    console.log('🔍 [handleChartClick] Raw data:', data);
+    
     if (data && data.payload) {
       // For Bar chart, data has payload with name (date)
       dateFromChart = data.payload.name;
+      console.log('🔍 [handleChartClick] Using payload.name:', dateFromChart);
     } else if (data && data.name) {
       // For RadialBar chart, data has name directly
       dateFromChart = data.name;
+      console.log('🔍 [handleChartClick] Using data.name:', dateFromChart);
     }
     
     // Additional fallback checks
@@ -466,10 +476,13 @@ const DebtStatisticsDashboard: React.FC = () => {
       for (const field of possibleDateFields) {
         if (data[field]) {
           dateFromChart = data[field];
+          console.log('🔍 [handleChartClick] Using fallback field:', field, dateFromChart);
           break;
         }
       }
     }
+    
+    console.log('🔍 [handleChartClick] Final dateFromChart:', dateFromChart, 'for category:', category);
     
     setSelectedCategory(category);
     setModalOpen(true);
@@ -488,7 +501,7 @@ const DebtStatisticsDashboard: React.FC = () => {
     const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
     for (let d = s; d <= e; d = new Date(d.getTime() + 24 * 60 * 60 * 1000)) {
       if (d.getDay() === 0) continue; // skip Sunday
-      dates.push(d.toISOString().split('T')[0]);
+      dates.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }));
     }
     return dates;
   }, [range?.from?.toDateString(), range?.to?.toDateString()]);
@@ -660,10 +673,16 @@ const DebtStatisticsDashboard: React.FC = () => {
         page: 1,
         limit: contactLimit,
       });
-      setContactDetails(res.data || []);
-      setContactTotal(res.total || 0);
-      setContactPage(res.page || 1);
-      setContactLimit(res.limit || contactLimit);
+      const payload = res as any;
+      const data: ContactDetailItem[] = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload)
+        ? (payload as ContactDetailItem[])
+        : [];
+      setContactDetails(data);
+      setContactTotal(payload?.total || data.length || 0);
+      setContactPage(payload?.page || 1);
+      setContactLimit(payload?.limit || contactLimit);
     } catch {
       setContactDetails([]);
       setContactTotal(0);
@@ -1079,14 +1098,89 @@ const DebtStatisticsDashboard: React.FC = () => {
             loading={loadingModalData}
           />
 
-          {/* Contact Details Modal using the unified DebtModal component */}
-          <DebtModal
-            isOpen={contactModalOpen}
-            onClose={() => setContactModalOpen(false)}
-            category={contactModalTitle || 'Khách đã trả lời'}
-            debts={Array.isArray(contactDetails) ? (contactDetails as any) : ([] as any)}
-            loading={contactLoading}
-          />
+          {/* Contact Details Modal - Custom for ContactDetailItem structure */}
+          <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
+            <DialogContent className="max-w-6xl max-h-[80vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>{contactModalTitle || 'Khách đã trả lời'}</DialogTitle>
+              </DialogHeader>
+              
+              <div className="flex-1 overflow-auto">
+                {contactLoading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <LoadingSpinner size={32} />
+                    <span className="ml-2">Đang tải dữ liệu...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">{contactTotal}</div>
+                        <div className="text-sm text-gray-600">Tổng số khách hàng</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {Array.isArray(contactDetails) ? contactDetails.length : 0}
+                        </div>
+                        <div className="text-sm text-gray-600">Hiển thị</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {contactStatusFilter || 'Tất cả'}
+                        </div>
+                        <div className="text-sm text-gray-600">Trạng thái</div>
+                      </div>
+                    </div>
+
+                    {/* Contact Details Table */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>STT</TableHead>
+                            <TableHead>Mã khách hàng</TableHead>
+                            <TableHead>Tên khách hàng</TableHead>
+                            <TableHead>Mã nhân viên</TableHead>
+                            <TableHead>Thời gian cập nhật</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Array.isArray(contactDetails) && contactDetails.length > 0 ? (
+                            contactDetails.map((contact, index) => (
+                              <TableRow key={index}>
+                                <TableCell>{index + 1}</TableCell>
+                                <TableCell className="font-mono text-sm">
+                                  {contact.customer_code || '-'}
+                                </TableCell>
+                                <TableCell>{contact.customer_name || '-'}</TableCell>
+                                <TableCell className="font-mono text-sm">
+                                  {contact.employee_code_raw || '-'}
+                                </TableCell>
+                                <TableCell>
+                                  {contact.latest_time ? (
+                                    new Date(contact.latest_time).toLocaleString('vi-VN', {
+                                      timeZone: 'Asia/Ho_Chi_Minh'
+                                    })
+                                  ) : '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                Không có dữ liệu
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </main>

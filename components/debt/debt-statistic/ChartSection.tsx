@@ -66,7 +66,11 @@ const BarChartComponent = React.memo<{ data: ChartDataItem[]; onChartClick: any;
                 dataKey={key}
                 fill={chartConfig[key].color}
                 radius={[4, 4, 0, 0]}
-                onClick={(d) => onChartClick(d, key)}
+                onClick={(d, index) => {
+                  // d is the bar data, but we need the full row data
+                  const fullRowData = memoizedData[index];
+                  onChartClick(fullRowData, key);
+                }}
                 className="cursor-pointer hover:opacity-80"
                 isAnimationActive={false}
                 animationDuration={0}

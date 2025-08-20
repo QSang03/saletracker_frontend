@@ -1,12 +1,5 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +11,7 @@ import {
   User,
   FileText,
   MessageSquare,
-  AlertTriangle, // ✅ Changed from Package to AlertTriangle
+  AlertTriangle,
   Save,
   X,
   Loader2,
@@ -27,7 +20,7 @@ import {
   CheckCircle2,
   Lock,
   Sparkles,
-  Bell, // ✅ Added Bell icon
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -51,7 +44,7 @@ export default function ContactProfileModal({
   const [form, setForm] = useState({
     notes: "",
     toneHints: "",
-    aovThreshold: "", // ✅ Keep the same field name for backend compatibility
+    aovThreshold: "",
   });
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -76,6 +69,26 @@ export default function ContactProfileModal({
       });
     }
   }, [profile]);
+
+  // Handle ESC key and body scroll
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) {
+        onClose();
+      }
+    };
+
+    if (open) {
+      document.addEventListener('keydown', handleEscape);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [open, onClose]);
 
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
@@ -127,17 +140,21 @@ export default function ContactProfileModal({
     }
   };
 
+  if (!open) return null;
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!v) onClose();
-      }}
-    >
-      <DialogContent className="!max-w-3xl !max-h-[90vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl">
-        {/* ✅ Enhanced Header */}
-        <DialogHeader className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
-          <DialogTitle className="flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0" 
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className="relative !max-w-3xl w-full !max-h-[90vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl rounded-xl animate-fadeIn">
+        {/* Enhanced Header */}
+        <div className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
+          <div className="flex items-center justify-between">
             <motion.div
               className="flex items-center gap-4"
               initial={{ opacity: 0, x: -20 }}
@@ -157,33 +174,43 @@ export default function ContactProfileModal({
               </div>
             </motion.div>
 
-            <motion.div
-              className="flex items-center gap-3"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-            >
-              {zaloDisabled ? (
-                <Badge variant="destructive" className="gap-1">
-                  <Lock className="w-3 h-3" />
-                  Chỉ đọc
-                </Badge>
-              ) : (
-                <Badge
-                  variant="secondary"
-                  className="bg-green-100 text-green-700 gap-1"
-                >
-                  <CheckCircle2 className="w-3 h-3" />
-                  Có thể chỉnh sửa
-                </Badge>
-              )}
-            </motion.div>
-          </DialogTitle>
-        </DialogHeader>
+            <div className="flex items-center gap-3">
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              >
+                {zaloDisabled ? (
+                  <Badge variant="destructive" className="gap-1">
+                    <Lock className="w-3 h-3" />
+                    Chỉ đọc
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    className="bg-green-100 text-green-700 gap-1"
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    Có thể chỉnh sửa
+                  </Badge>
+                )}
+              </motion.div>
+              
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                disabled={saving}
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+          </div>
+        </div>
 
-        {/* ✅ Main Content */}
+        {/* Main Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          {/* ✅ Loading State */}
+          {/* Loading State */}
           <AnimatePresence>
             {loading && (
               <motion.div
@@ -202,7 +229,7 @@ export default function ContactProfileModal({
             )}
           </AnimatePresence>
 
-          {/* ✅ Error State */}
+          {/* Error State */}
           <AnimatePresence>
             {error && (
               <motion.div
@@ -219,7 +246,7 @@ export default function ContactProfileModal({
             )}
           </AnimatePresence>
 
-          {/* ✅ Zalo Disabled Warning */}
+          {/* Zalo Disabled Warning */}
           <AnimatePresence>
             {zaloDisabled && (
               <motion.div
@@ -242,7 +269,7 @@ export default function ContactProfileModal({
             )}
           </AnimatePresence>
 
-          {/* ✅ Success Message */}
+          {/* Success Message */}
           <AnimatePresence>
             {justSaved && (
               <motion.div
@@ -259,7 +286,7 @@ export default function ContactProfileModal({
             )}
           </AnimatePresence>
 
-          {/* ✅ Form Fields */}
+          {/* Form Fields */}
           {!loading && (
             <div className="space-y-6">
               {/* Notes Field */}
@@ -330,7 +357,7 @@ export default function ContactProfileModal({
                 </div>
               </motion.div>
 
-              {/* ✅ UPDATED: Alert Threshold Field */}
+              {/* Alert Threshold Field */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -376,7 +403,7 @@ export default function ContactProfileModal({
                   </div>
                 )}
                 
-                {/* ✅ Enhanced Alert Warning */}
+                {/* Enhanced Alert Warning */}
                 <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                   <div className="text-xs text-orange-700 space-y-1">
                     <div className="flex items-center gap-1 font-medium">
@@ -390,7 +417,7 @@ export default function ContactProfileModal({
                 </div>
               </motion.div>
 
-              {/* ✅ UPDATED: Enhanced Tips Section */}
+              {/* Enhanced Tips Section */}
               <motion.div
                 className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200"
                 initial={{ opacity: 0, y: 20 }}
@@ -418,7 +445,7 @@ export default function ContactProfileModal({
                   </div>
                 </div>
                 
-                {/* ✅ Example Scenarios */}
+                {/* Example Scenarios */}
                 <div className="mt-3 pt-3 border-t border-blue-200">
                   <div className="text-xs font-medium text-blue-700 mb-2">📋 Ví dụ thực tế:</div>
                   <div className="text-xs text-blue-600 space-y-1">
@@ -432,8 +459,8 @@ export default function ContactProfileModal({
           )}
         </div>
 
-        {/* ✅ Footer Actions */}
-        <DialogFooter className="flex-shrink-0 bg-white border-t border-gray-200 p-6">
+        {/* Footer Actions */}
+        <div className="flex-shrink-0 bg-white border-t border-gray-200 p-6">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
               <div className="text-xs text-gray-600 bg-gray-100 px-3 py-2 rounded-full">
@@ -486,8 +513,8 @@ export default function ContactProfileModal({
               </Button>
             </div>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }

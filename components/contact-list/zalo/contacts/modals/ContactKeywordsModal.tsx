@@ -3,13 +3,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ContactRole } from "@/types/auto-reply";
 import { useKeywordRoutes } from "@/hooks/contact-list/useKeywordRoutes";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +74,26 @@ export default function ContactKeywordsModal({
     setActiveMap(m);
   }, [routes, contactId]);
 
+  // Handle ESC key and body scroll
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) {
+        onClose();
+      }
+    };
+
+    if (open) {
+      document.addEventListener('keydown', handleEscape);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [open, onClose]);
+
   const promptToggle = (route: { routeId: number; keyword: string }) => {
     if (disabled || zaloDisabled) return;
     const nextActive = !activeMap[route.routeId];
@@ -117,8 +130,6 @@ export default function ContactKeywordsModal({
     }
   };
 
-  // Toggle xác nhận và lưu ngay; không có lưu hàng loạt
-
   // Group routes by type
   const { globalRoutes, contactRoutes } = useMemo(() => {
     const global = routes.filter((r) => r.contactId === null);
@@ -126,22 +137,24 @@ export default function ContactKeywordsModal({
     return { globalRoutes: global, contactRoutes: contact };
   }, [routes, contactId]);
 
-  // Không kiểm tra thay đổi chưa lưu khi đóng modal
+  if (!open) return null;
 
   return (
     <TooltipProvider>
-      <Dialog
-        open={open}
-        onOpenChange={(v) => {
-          if (!v) onClose();
-        }}
-      >
-        <DialogContent className="!max-w-4xl max-h-[85vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        {/* Backdrop */}
+        <div 
+          className="fixed inset-0" 
+          onClick={onClose}
+        />
+        
+        {/* Modal */}
+        <div className="relative !max-w-4xl w-full max-h-[85vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl rounded-xl overflow-hidden animate-fadeIn">
           {/* Decorative Background */}
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-purple-500/3 to-pink-500/3 pointer-events-none"></div>
 
           {/* Fixed Header */}
-          <DialogHeader className="relative pb-4 flex-shrink-0">
+          <div className="relative pb-4 flex-shrink-0 p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl blur-sm opacity-40 animate-pulse"></div>
@@ -150,18 +163,26 @@ export default function ContactKeywordsModal({
                 </div>
               </div>
               <div className="flex-1">
-                <DialogTitle className="text-xl xl:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-1">
+                <h2 className="text-xl xl:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-1">
                   Keywords áp dụng
-                </DialogTitle>
+                </h2>
                 <p className="text-gray-500 text-sm leading-relaxed">
                   Quản lý keywords cho Contact #{contactId}
                 </p>
               </div>
+              
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-full hover:bg-gray-100/80 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
-          </DialogHeader>
+          </div>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 px-6">
             <div className="space-y-4">
               {/* Global Keywords Section */}
               {globalRoutes.length > 0 && (
@@ -302,11 +323,11 @@ export default function ContactKeywordsModal({
                                 {r.keyword}
                               </span>
                               <Badge
-                                  variant="outline"
-                                  className="bg-blue-100 text-blue-700 border-blue-300"
-                                >
-                                  <Hash className="w-3 h-3 mr-1" />
-                                  {(r as any).contact?.name || (r as any).contactName || `#${r.contactId}`}
+                                variant="outline"
+                                className="bg-blue-100 text-blue-700 border-blue-300"
+                              >
+                                <Hash className="w-3 h-3 mr-1" />
+                                {(r as any).contact?.name || (r as any).contactName || `#${r.contactId}`}
                               </Badge>
                             </div>
                             <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -395,7 +416,7 @@ export default function ContactKeywordsModal({
           </div>
 
           {/* Fixed Footer */}
-          <DialogFooter className="relative pt-4 flex-shrink-0 border-t border-gray-200/50 bg-white/50 backdrop-blur-sm">
+          <div className="relative pt-4 flex-shrink-0 border-t border-gray-200/50 bg-white/50 backdrop-blur-sm p-6">
             <div className="flex gap-3 w-full justify-end">
               <Button
                 variant="outline"
@@ -408,10 +429,10 @@ export default function ContactKeywordsModal({
                 </span>
               </Button>
             </div>
-          </DialogFooter>
+          </div>
 
           {/* Decorative Elements */}
-          <div className="absolute top-4 right-4 opacity-15 pointer-events-none">
+          <div className="absolute top-4 right-12 opacity-15 pointer-events-none">
             <div className="flex gap-1">
               <Sparkles className="w-5 h-5 text-blue-500 animate-pulse" />
               <Key className="w-4 h-4 text-purple-500 animate-bounce" />
@@ -420,8 +441,8 @@ export default function ContactKeywordsModal({
           <div className="absolute bottom-4 left-4 opacity-8 pointer-events-none">
             <Zap className="w-5 h-5 text-blue-500 animate-pulse" />
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </div>
 
       {/* Products Dialog */}
       {productsState.open && productsState.routeId !== null && (
@@ -444,6 +465,7 @@ export default function ContactKeywordsModal({
           onClose={() => setAlert(null)}
         />
       )}
+      
       <ConfirmDialog
         isOpen={confirmToggle.open}
         title="Xác nhận thay đổi"

@@ -453,11 +453,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   const filteredDebts: Debt[] = useMemo(() => {
     const filtered = safeDebts.filter((debt) => {
-      const matchesSearch =
-        (debt as any).customer_raw_code
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        ((debt as any).invoice_code || "").toLowerCase().includes(searchTerm.toLowerCase());
+      const customerCode = ((debt as any).customer_raw_code || (debt as any).customer_code || "").toString();
+      const invoiceCode = ((debt as any).invoice_code || "").toString();
+      const haystack = `${customerCode} ${invoiceCode}`.toLowerCase();
+      const matchesSearch = haystack.includes(searchTerm.toLowerCase());
 
       const matchesEmployee =
         selectedEmployees.length === 0 ||
@@ -843,7 +842,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                       {debt.invoice_code}
                     </TableCell>
                     <TableCell className="h-14 px-4 text-sm text-gray-700">
-                      {debt.customer_raw_code}
+                      {(debt as any).customer_raw_code || (debt as any).customer_code || (debt as any).customer_name || "-"}
                     </TableCell>
                     <TableCell className="h-14 px-4 font-semibold text-sm text-right text-gray-900">
                       {formatCurrency(debt.total_amount)}
