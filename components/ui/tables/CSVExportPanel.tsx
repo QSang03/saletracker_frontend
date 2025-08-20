@@ -23,8 +23,14 @@ import ExcelJS from 'exceljs'; // Thay đổi import
 interface CSVExportPanelProps {
   open: boolean;
   onClose: () => void;
-  headers: string[];
-  data: (string | number)[][];
+  // Either provide static headers/data or provide an async getter that will be
+  // called when the user requests export (useful to ask parent to fetch all rows)
+  headers?: string[];
+  data?: (string | number)[][];
+  getExportData?: (
+    mode: "rows" | "all",
+    rowCount: number
+  ) => Promise<{ headers: string[]; data: (string | number)[][] }>;
   filtersDescription?: React.ReactNode;
   defaultExportCount?: number;
 }
@@ -34,6 +40,7 @@ export default function CSVExportPanel({
   onClose,
   headers,
   data,
+  getExportData,
   filtersDescription,
   defaultExportCount = 50,
 }: CSVExportPanelProps) {
@@ -41,20 +48,31 @@ export default function CSVExportPanel({
   const [rowCount, setRowCount] = useState(defaultExportCount);
 
   React.useEffect(() => {
-    if (open)
+    if (open) {
+      const available = data?.length ?? 0;
       setRowCount(
         defaultExportCount > 0
-          ? Math.min(defaultExportCount, data.length)
+          ? Math.min(defaultExportCount, Math.max(available, 1))
           : 1
       );
-  }, [open, defaultExportCount, data.length]);
+    }
+  }, [open, defaultExportCount, data?.length ?? 0]);
 
   const handleExport = async () => {
-    let exportData: (string | number)[][] = [];
-    if (mode === "rows") {
-      exportData = data.slice(0, rowCount);
+  let exportData: (string | number)[][] = [];
+  let exportHeaders: string[] = headers ?? [];
+
+    // If parent provided an async getter, prefer that (allows requesting server-side all-data)
+    if (getExportData) {
+      const result = await getExportData(mode, rowCount);
+      exportHeaders = result.headers;
+      exportData = result.data;
     } else {
-      exportData = data;
+      if (mode === "rows") {
+        exportData = (data ?? []).slice(0, rowCount);
+      } else {
+        exportData = data ?? [];
+      }
     }
 
     // Tạo workbook mới
@@ -64,11 +82,11 @@ export default function CSVExportPanel({
     workbook.created = new Date();
     workbook.modified = new Date();
 
-    // Tạo worksheet
-    const worksheet = workbook.addWorksheet('Data');
+  // Tạo worksheet
+  const worksheet = workbook.addWorksheet('Data');
 
-    // Thêm headers với styling
-    const headerRow = worksheet.addRow(headers);
+  // Thêm headers với styling
+  const headerRow = worksheet.addRow(exportHeaders || []);
     headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
     headerRow.fill = {
       type: 'pattern',
@@ -97,7 +115,7 @@ export default function CSVExportPanel({
 
     // Tự động điều chỉnh độ rộng cột
     worksheet.columns.forEach((column, index) => {
-      let maxWidth = headers[index]?.length || 10;
+      let maxWidth = (exportHeaders && exportHeaders[index]?.length) || 10;
       
       exportData.forEach(row => {
         const cellValue = row[index];
@@ -167,7 +185,7 @@ export default function CSVExportPanel({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="rows">Giới hạn số dòng</SelectItem>
-                <SelectItem value="all">Toàn bộ dữ liệu đã lọc</SelectItem>
+                <SelectItem value="all">Toàn bộ dữ liệu</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -175,19 +193,19 @@ export default function CSVExportPanel({
           {mode === "rows" && (
             <div className="space-y-2">
               <Label htmlFor="rowCount">
-                Số dòng muốn xuất (tối đa {data.length})
+                Số dòng muốn xuất (tối đa {data?.length ?? 0})
               </Label>
               <Input
                 id="rowCount"
                 type="number"
                 min={1}
-                max={data.length}
+                max={data?.length ?? 1}
                 value={rowCount}
                 onChange={(e) =>
                   setRowCount(
                     Math.min(
                       Math.max(1, Number(e.target.value)),
-                      data.length
+                      data?.length ?? 1
                     )
                   )
                 }
