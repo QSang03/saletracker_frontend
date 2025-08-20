@@ -183,7 +183,7 @@ class DebtStatisticsAPI {
     return response.data || [];
   }
 
-  async getContactDetails(params: { date: string; responseStatus: string; page?: number; limit?: number; employeeCode?: string; customerCode?: string; }): Promise<{ data: ContactDetailItem[]; total: number; page: number; limit: number; totalPages: number; }> {
+  async getContactDetails(params: { date?: string; from?: string; to?: string; responseStatus: string; page?: number; limit?: number; employeeCode?: string; customerCode?: string; mode?: 'events' | 'distribution'; }): Promise<{ data: ContactDetailItem[]; total: number; page: number; limit: number; totalPages: number; }> {
     const cacheKey = this.getCacheKey('contact-details', params);
     const cached = this.getCachedData(cacheKey);
     if (cached) return cached;

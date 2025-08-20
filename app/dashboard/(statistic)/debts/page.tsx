@@ -517,7 +517,7 @@ const DebtStatisticsDashboard: React.FC = () => {
       const fromStr = (fromDate as Date).toISOString().split('T')[0];
       const toStr = (toDate as Date).toISOString().split('T')[0];
 
-      // Use range-based details so counts match range aggregation
+      // Use range-based details to match the pay-later buckets aggregation
       const resp = await api.get('/debt-statistics/detailed', {
         params: {
           from: fromStr,
@@ -544,9 +544,11 @@ const DebtStatisticsDashboard: React.FC = () => {
   const loadContactDetails = useCallback(async (status: string, pageNum: number, limitNum: number) => {
     setContactLoading(true);
     try {
+      const fromDate = range?.from ? range.from : new Date();
       const toDate = range?.to ? range.to : new Date();
-      const dateStr = (toDate as Date).toISOString().split('T')[0];
-      const res = await debtStatisticsAPI.getContactDetails({ date: dateStr, responseStatus: status, page: pageNum, limit: limitNum });
+      const fromStr = (fromDate as Date).toISOString().split('T')[0];
+      const toStr = (toDate as Date).toISOString().split('T')[0];
+      const res = await debtStatisticsAPI.getContactDetails({ from: fromStr, to: toStr, responseStatus: status, page: pageNum, limit: limitNum });
       setContactDetails(res.data || []);
       setContactTotal(res.total || 0);
       setContactPage(res.page || pageNum);
@@ -831,11 +833,12 @@ const DebtStatisticsDashboard: React.FC = () => {
                       const todayStr = new Date().toISOString().split('T')[0];
                       const fromStr = (fromDate as Date).toISOString().split('T')[0];
                       const toStr = (toDate as Date).toISOString().split('T')[0];
-                      // Use range to match chart summary scope to avoid count/detail mismatch
+                      // For overdue aging, use as-of date (like chart): prefer 'to' when a range is selected; fallback to today
+                      const asOfDate = range?.from && range?.to ? toStr : new Date().toISOString().split('T')[0];
+
                       const resp = await api.get('/debt-statistics/detailed', {
                         params: {
-                          from: fromStr,
-                          to: toStr,
+                          date: asOfDate,
                           mode: 'overdue',
                           minDays,
                           maxDays,
