@@ -476,7 +476,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   const agingLabels = useMemo(() => ['1-30', '31-60', '61-90', '>90'], []);
   const agingDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
-    const src = Array.isArray(agingDaily) ? agingDaily : [];
+    const src = Array.isArray(agingDaily) ? agingDaily : (agingDaily ? [agingDaily as any] : []);
     src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
@@ -488,7 +488,7 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   const payLaterLabels = useMemo(() => {
     const set = new Set<string>();
-    const src = Array.isArray(payLaterDaily) ? payLaterDaily : [];
+    const src = Array.isArray(payLaterDaily) ? payLaterDaily : (payLaterDaily ? [payLaterDaily as any] : []);
     src.forEach((i) => set.add(i.range));
     const arr = Array.from(set);
     // Try to keep expected order 1-7, 8-14, 15-30, >30 if available
@@ -502,7 +502,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, [payLaterDaily]);
   const payLaterDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
-    const src = Array.isArray(payLaterDaily) ? payLaterDaily : [];
+    const src = Array.isArray(payLaterDaily) ? payLaterDaily : (payLaterDaily ? [payLaterDaily as any] : []);
     src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
@@ -515,7 +515,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   const responseStatuses = useMemo(() => ['Debt Reported', 'First Reminder', 'Second Reminder', 'Customer Responded'], []);
   const responsesDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
-    const src = Array.isArray(responsesDaily) ? responsesDaily : [];
+    const src = Array.isArray(responsesDaily) ? responsesDaily : (responsesDaily ? [responsesDaily as any] : []);
     src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
@@ -924,9 +924,9 @@ const DebtStatisticsDashboard: React.FC = () => {
               <div className="p-4">
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                    <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                       <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
+                      <RXAxis dataKey="name" tickLine={false} axisLine={false} height={20} />
                       <RYAxis />
                       <RTooltip />
                       {agingLabels.map((k, idx) => (
@@ -947,9 +947,9 @@ const DebtStatisticsDashboard: React.FC = () => {
               <div className="p-4">
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                    <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                       <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
+                      <RXAxis dataKey="name" tickLine={false} axisLine={false} height={20} />
                       <RYAxis />
                       <RTooltip />
                       {payLaterLabels.map((k, idx) => (
@@ -970,9 +970,9 @@ const DebtStatisticsDashboard: React.FC = () => {
               <div className="p-4">
                 <div className="h-80 w-full">
                   <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
+                    <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
                       <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
+                      <RXAxis dataKey="name" tickLine={false} axisLine={false} height={20} />
                       <RYAxis />
                       <RTooltip />
                       {responseStatuses.map((k, idx) => (
@@ -1002,54 +1002,15 @@ const DebtStatisticsDashboard: React.FC = () => {
 
           {/* Contact Details Modal */}
           <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
-            <DialogContent className="!max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>{contactModalTitle}</DialogTitle>
-              </DialogHeader>
-              <div className="mt-2">
-                {contactLoading ? (
-                  <div className="py-12 text-center text-muted-foreground">Đang tải...</div>
-                ) : (
-                  <div className="border rounded-md overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Mã KH</TableHead>
-                          <TableHead>Tên KH</TableHead>
-                          <TableHead>Mã NV</TableHead>
-                          <TableHead>Thời điểm gần nhất</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {contactDetails.map((c, idx) => (
-                          <TableRow key={`${c.customer_code}-${idx}`}>
-                            <TableCell>{c.customer_code}</TableCell>
-                            <TableCell>{c.customer_name || '-'}</TableCell>
-                            <TableCell>{c.employee_code_raw || '-'}</TableCell>
-                            <TableCell>{c.latest_time ? new Date(c.latest_time).toLocaleString('vi-VN') : '-'}</TableCell>
-                          </TableRow>
-                        ))}
-                        {contactDetails.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Không có dữ liệu</TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-              {/* Pagination */}
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-muted-foreground">Tổng: {contactTotal}</div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={contactPage <= 1} onClick={() => loadContactDetails(contactStatusFilter, 1, contactLimit)}>Đầu</Button>
-                  <Button variant="outline" size="sm" disabled={contactPage <= 1} onClick={() => loadContactDetails(contactStatusFilter, contactPage - 1, contactLimit)}>Trước</Button>
-                  <span className="text-sm">Trang {contactPage} / {Math.max(1, Math.ceil(contactTotal / contactLimit))}</span>
-                  <Button variant="outline" size="sm" disabled={contactPage >= Math.ceil(contactTotal / contactLimit)} onClick={() => loadContactDetails(contactStatusFilter, contactPage + 1, contactLimit)}>Tiếp</Button>
-                  <Button variant="outline" size="sm" disabled={contactPage >= Math.ceil(contactTotal / contactLimit)} onClick={() => loadContactDetails(contactStatusFilter, Math.ceil(contactTotal / contactLimit), contactLimit)}>Cuối</Button>
-                </div>
-              </div>
+            <DialogContent className="!max-w-6xl p-0 overflow-hidden">
+              {/* Reuse DebtModal look & feel */}
+              <DebtModal
+                isOpen={true}
+                onClose={() => setContactModalOpen(false)}
+                category={contactModalTitle || 'Khách đã trả lời'}
+                debts={Array.isArray(contactDetails) ? (contactDetails as any) : ([] as any)}
+                loading={contactLoading}
+              />
             </DialogContent>
           </Dialog>
         </div>

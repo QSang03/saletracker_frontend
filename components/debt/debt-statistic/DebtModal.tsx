@@ -437,37 +437,40 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const totalCountExternal = useExternalPagination ? propTotalCount : 0;
   const totalPagesExternal = useExternalPagination ? propTotalPages : 0;
 
+  // Normalize debts to array to avoid runtime errors when parent passes non-array
+  const safeDebts: Debt[] = Array.isArray(debts) ? debts : [];
+
   // Extract unique employees from debts data
   const uniqueEmployees = useMemo(() => {
     const employees = new Set<string>();
-    debts.forEach((debt) => {
-      if (debt.employee_code_raw) {
-        employees.add(debt.employee_code_raw);
+    safeDebts.forEach((debt) => {
+      if ((debt as any)?.employee_code_raw) {
+        employees.add((debt as any).employee_code_raw as string);
       }
     });
     return Array.from(employees).sort();
-  }, [debts]);
+  }, [safeDebts]);
 
   const filteredDebts: Debt[] = useMemo(() => {
-    const filtered = debts.filter((debt) => {
+    const filtered = safeDebts.filter((debt) => {
       const matchesSearch =
-        debt.customer_raw_code
+        (debt as any).customer_raw_code
           .toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
-        debt.invoice_code.toLowerCase().includes(searchTerm.toLowerCase());
+        ((debt as any).invoice_code || "").toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesEmployee =
         selectedEmployees.length === 0 ||
-        (debt.employee_code_raw &&
-          selectedEmployees.includes(debt.employee_code_raw));
+        ((debt as any).employee_code_raw &&
+          selectedEmployees.includes((debt as any).employee_code_raw));
 
       const matchesDate =
         !selectedDate ||
-        (debt.pay_later && typeof debt.pay_later === "string"
-          ? new Date(debt.pay_later).toDateString() ===
+        ((debt as any).pay_later && typeof (debt as any).pay_later === "string"
+          ? new Date((debt as any).pay_later).toDateString() ===
             selectedDate.toDateString()
-          : debt.due_date
-          ? new Date(debt.due_date).toDateString() ===
+          : (debt as any).due_date
+          ? new Date((debt as any).due_date).toDateString() ===
             selectedDate.toDateString()
           : false);
 
@@ -475,7 +478,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
     });
 
     return filtered;
-  }, [debts, searchTerm, selectedEmployees, selectedDate]);
+  }, [safeDebts, searchTerm, selectedEmployees, selectedDate]);
 
   // Sort filtered debts
   const sortedDebts = useMemo(() => {
