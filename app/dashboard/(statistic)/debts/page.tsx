@@ -476,7 +476,8 @@ const DebtStatisticsDashboard: React.FC = () => {
   const agingLabels = useMemo(() => ['1-30', '31-60', '61-90', '>90'], []);
   const agingDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
-    agingDaily.forEach((i) => {
+    const src = Array.isArray(agingDaily) ? agingDaily : [];
+    src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
       const row = map.get(key);
@@ -487,7 +488,8 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   const payLaterLabels = useMemo(() => {
     const set = new Set<string>();
-    payLaterDaily.forEach((i) => set.add(i.range));
+    const src = Array.isArray(payLaterDaily) ? payLaterDaily : [];
+    src.forEach((i) => set.add(i.range));
     const arr = Array.from(set);
     // Try to keep expected order 1-7, 8-14, 15-30, >30 if available
     const order = (label: string) => {
@@ -500,7 +502,8 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, [payLaterDaily]);
   const payLaterDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
-    payLaterDaily.forEach((i) => {
+    const src = Array.isArray(payLaterDaily) ? payLaterDaily : [];
+    src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
       const row = map.get(key);
@@ -512,7 +515,8 @@ const DebtStatisticsDashboard: React.FC = () => {
   const responseStatuses = useMemo(() => ['Debt Reported', 'First Reminder', 'Second Reminder', 'Customer Responded'], []);
   const responsesDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
-    responsesDaily.forEach((i) => {
+    const src = Array.isArray(responsesDaily) ? responsesDaily : [];
+    src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
       const row = map.get(key);
