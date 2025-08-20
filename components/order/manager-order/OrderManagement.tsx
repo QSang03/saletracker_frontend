@@ -1127,6 +1127,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         // customer name handling: if >20 chars, use smaller font and allow up to 2 lines
                         const custName = orderDetail.customer_name || "--";
                         const isCustLong = custName.length > 20;
+                        // Show notes-eye icon only when there are notes in notes_history
+                        const hasNotes =
+                          Array.isArray(orderDetail.notes_history) &&
+                          orderDetail.notes_history.length > 0;
                         return (
                           <>
                             {/* Checkbox cell */}
@@ -1412,26 +1416,28 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   className="text-wrap leading-relaxed"
                                 />
                                 {/* Eye icon to open notes history modal; placed in notes column for vertical alignment */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0 hover:bg-slate-100 shrink-0"
-                                      onClick={() => {
-                                        setFocusSafely(orderDetail.id);
-                                        setNotesHistoryDetail(orderDetail);
-                                        setIsNotesHistoryOpen(true);
-                                      }}
-                                      aria-label="Xem lịch sử ghi chú"
-                                    >
-                                      <Eye className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Xem lịch sử ghi chú</p>
-                                  </TooltipContent>
-                                </Tooltip>
+                                {hasNotes && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-slate-100 shrink-0"
+                                        onClick={() => {
+                                          setFocusSafely(orderDetail.id);
+                                          setNotesHistoryDetail(orderDetail);
+                                          setIsNotesHistoryOpen(true);
+                                        }}
+                                        aria-label="Xem lịch sử ghi chú"
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Xem lịch sử ghi chú</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="text-center">
