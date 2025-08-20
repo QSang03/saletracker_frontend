@@ -97,6 +97,8 @@ interface PaginatedTableProps {
     next?: string;
   };
   getExportData?: () => { headers: string[]; data: (string | number)[][] };
+  // Optional async getter to fetch ALL rows for export (backend paging)
+  getExportAllData?: () => Promise<(string | number)[][]>;
   canExport?: boolean;
   onResetFilter?: () => void;
   preventEmptyFilterCall?: boolean;
@@ -176,6 +178,7 @@ export default function PaginatedTable({
   filterClassNames = {},
   buttonClassNames = {},
   getExportData,
+  getExportAllData,
   canExport = true,
   onResetFilter,
   preventEmptyFilterCall = true,
@@ -803,11 +806,6 @@ export default function PaginatedTable({
 
   // State cho panel xuất CSV
   const [openExport, setOpenExport] = useState(false);
-  // Track temporary paging changes during export
-  const exportingRef = useRef(false);
-  const exportRestoreRef = useRef<{ page?: number; pageSize?: number } | null>(
-    null
-  );
 
   // ✅ IMPROVED: Better page size management
   const handlePageSizeChange = useCallback(
@@ -883,90 +881,6 @@ export default function PaginatedTable({
       goToPage(target);
     }
   }, [gotoPageInput, totalPages, currentPage, goToPage]);
-
-  // Provide getExportData handler to CSV panel. If backend paging is active, and
-  // mode === 'all', temporarily request a very large pageSize from parent so
-  // the parent can return all rows. We assume the parent will respond by
-  // calling the same getExportData function (or by returning children) — to
-  // make this reliable, we call provided getExportData prop if available.
-  const localGetExportData = useCallback(
-    async (mode: "rows" | "all", rowCount: number) => {
-      // If parent provided explicit getExportData, prefer it
-      if (typeof getExportData === "function") {
-        return getExportData();
-      }
-
-      // Otherwise, try to orchestrate backend paging: ask parent to set pageSize
-      // to a large number so it returns all rows. This relies on onPageSizeChange
-      // and onPageChange props to be implemented by parent.
-      if (isBackendPaging && mode === "all") {
-        if (!onPageSizeChange) {
-          // Can't request backend change — fallback to current children slice
-          return {
-            headers: [],
-            data: [] as (string | number)[][],
-          };
-        }
-
-        // Save current page/pageSize so we can restore later
-        exportRestoreRef.current = { page: page, pageSize: pageSize } as any;
-
-        exportingRef.current = true;
-
-        // Request parent to change to page=1 and huge pageSize
-        if (onPageChange) onPageChange(1);
-        onPageSizeChange(1000000);
-
-        // Wait briefly for parent's data update to propagate. Parent should
-        // synchronously or asynchronously update the data passed into this
-        // component; since we can't observe that directly, wait up to 2s in
-        // short intervals for children length to grow beyond currentPageSize.
-        const waitForData = async () => {
-          const start = Date.now();
-          while (Date.now() - start < 2000) {
-            // If parent provided getExportData above we'd have used it.
-            // As a fallback, try to read children when it becomes available.
-            if (children && Array.isArray(children) && children.length > 0) {
-              break;
-            }
-            // small delay
-            // eslint-disable-next-line no-await-in-loop
-            await new Promise((r) => setTimeout(r, 150));
-          }
-        };
-
-        await waitForData();
-
-        // At this point, parent should have updated children to include all rows.
-        // Try to extract headers/data if children is a table rows array or if
-        // parent provided a getExportData we already used.
-        const extracted = { headers: [], data: [] as (string | number)[][] };
-
-        // Restore previous paging
-        if (exportRestoreRef.current) {
-          const prev = exportRestoreRef.current;
-          if (prev.page !== undefined) {
-            if (onPageChange) onPageChange(prev.page);
-            else setInternalPage((prev.page as number) - 1);
-          }
-          if (prev.pageSize !== undefined) {
-            if (onPageSizeChange) onPageSizeChange(prev.pageSize as number);
-            else setInternalPageSize(prev.pageSize as number);
-          }
-        }
-
-        exportingRef.current = false;
-        exportRestoreRef.current = null;
-
-        return extracted;
-      }
-
-      // Frontend mode or rows mode: build from current children if possible
-      const fallback = { headers: [], data: [] as (string | number)[][] };
-      return fallback;
-    },
-    [getExportData, isBackendPaging, onPageChange, onPageSizeChange, page, pageSize, children]
-  );
 
   return (
     <div
@@ -1371,21 +1285,13 @@ export default function PaginatedTable({
       )}
 
       {/* Panel xuất CSV */}
-      {canExport && (
+      {canExport && getExportData && (
         <CSVExportPanel
           open={openExport}
           onClose={() => setOpenExport(false)}
           defaultExportCount={currentPageSize}
-          // If parent provided a synchronous getExportData, wrap it into the
-          // async signature expected by the panel. Otherwise use localGetExportData
-          // which will try to orchestrate backend pageSize changes.
-          getExportData={
-            typeof getExportData === "function"
-              ? async (mode, rowCount) => Promise.resolve(getExportData())
-              : localGetExportData
-          }
-          // Also spread immediate headers/data if parent provided the sync helper
-          {...(typeof getExportData === "function" ? getExportData() : {})}
+          {...getExportData()}
+          fetchAllData={getExportAllData}
         />
       )}
     </div>

@@ -23,16 +23,12 @@ import ExcelJS from 'exceljs'; // Thay đổi import
 interface CSVExportPanelProps {
   open: boolean;
   onClose: () => void;
-  // Either provide static headers/data or provide an async getter that will be
-  // called when the user requests export (useful to ask parent to fetch all rows)
-  headers?: string[];
-  data?: (string | number)[][];
-  getExportData?: (
-    mode: "rows" | "all",
-    rowCount: number
-  ) => Promise<{ headers: string[]; data: (string | number)[][] }>;
+  headers: string[];
+  data: (string | number)[][];
   filtersDescription?: React.ReactNode;
   defaultExportCount?: number;
+  // Optional async fetcher to get ALL data from backend (e.g., pageSize=1_000_000)
+  fetchAllData?: () => Promise<(string | number)[][]>;
 }
 
 export default function CSVExportPanel({
@@ -40,40 +36,38 @@ export default function CSVExportPanel({
   onClose,
   headers,
   data,
-  getExportData,
   filtersDescription,
   defaultExportCount = 50,
+  fetchAllData,
 }: CSVExportPanelProps) {
-  const [mode, setMode] = useState<"rows" | "all">("rows");
+  const [mode, setMode] = useState<"rows" | "allData">("rows");
   const [rowCount, setRowCount] = useState(defaultExportCount);
+  const [exporting, setExporting] = useState(false);
 
   React.useEffect(() => {
-    if (open) {
-      const available = data?.length ?? 0;
+    if (open)
       setRowCount(
         defaultExportCount > 0
-          ? Math.min(defaultExportCount, Math.max(available, 1))
+          ? Math.min(defaultExportCount, data.length)
           : 1
       );
-    }
-  }, [open, defaultExportCount, data?.length ?? 0]);
+  }, [open, defaultExportCount, data.length]);
 
   const handleExport = async () => {
-  let exportData: (string | number)[][] = [];
-  let exportHeaders: string[] = headers ?? [];
-
-    // If parent provided an async getter, prefer that (allows requesting server-side all-data)
-    if (getExportData) {
-      const result = await getExportData(mode, rowCount);
-      exportHeaders = result.headers;
-      exportData = result.data;
-    } else {
+    setExporting(true);
+    try {
+      let exportData: (string | number)[][] = [];
       if (mode === "rows") {
-        exportData = (data ?? []).slice(0, rowCount);
+        exportData = data.slice(0, rowCount);
       } else {
-        exportData = data ?? [];
+        // allData mode: if fetchAllData provided, use it to fetch all rows from backend
+        if (fetchAllData) {
+          exportData = await fetchAllData();
+        } else {
+          // Fallback to current provided data if no fetcher available
+          exportData = data;
+        }
       }
-    }
 
     // Tạo workbook mới
     const workbook = new ExcelJS.Workbook();
@@ -82,11 +76,11 @@ export default function CSVExportPanel({
     workbook.created = new Date();
     workbook.modified = new Date();
 
-  // Tạo worksheet
-  const worksheet = workbook.addWorksheet('Data');
+    // Tạo worksheet
+    const worksheet = workbook.addWorksheet('Data');
 
-  // Thêm headers với styling
-  const headerRow = worksheet.addRow(exportHeaders || []);
+    // Thêm headers với styling
+    const headerRow = worksheet.addRow(headers);
     headerRow.font = { bold: true, color: { argb: 'FFFFFF' } };
     headerRow.fill = {
       type: 'pattern',
@@ -115,7 +109,7 @@ export default function CSVExportPanel({
 
     // Tự động điều chỉnh độ rộng cột
     worksheet.columns.forEach((column, index) => {
-      let maxWidth = (exportHeaders && exportHeaders[index]?.length) || 10;
+      let maxWidth = headers[index]?.length || 10;
       
       exportData.forEach(row => {
         const cellValue = row[index];
@@ -161,6 +155,9 @@ export default function CSVExportPanel({
     document.body.removeChild(link);
     
     onClose();
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -178,14 +175,14 @@ export default function CSVExportPanel({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="mode">Chế độ xuất</Label>
+      <Label htmlFor="mode">Chế độ xuất</Label>
             <Select value={mode} onValueChange={(val) => setMode(val as any)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="rows">Giới hạn số dòng</SelectItem>
-                <SelectItem value="all">Toàn bộ dữ liệu</SelectItem>
+        <SelectItem value="rows">Giới hạn số dòng</SelectItem>
+        <SelectItem value="allData">Toàn bộ dữ liệu</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -193,19 +190,19 @@ export default function CSVExportPanel({
           {mode === "rows" && (
             <div className="space-y-2">
               <Label htmlFor="rowCount">
-                Số dòng muốn xuất (tối đa {data?.length ?? 0})
+                Số dòng muốn xuất (tối đa {data.length})
               </Label>
               <Input
                 id="rowCount"
                 type="number"
                 min={1}
-                max={data?.length ?? 1}
+                max={data.length}
                 value={rowCount}
                 onChange={(e) =>
                   setRowCount(
                     Math.min(
                       Math.max(1, Number(e.target.value)),
-                      data?.length ?? 1
+                      data.length
                     )
                   )
                 }
@@ -214,11 +211,11 @@ export default function CSVExportPanel({
           )}
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} className="flex-1">
+            <Button variant="outline" onClick={onClose} className="flex-1" disabled={exporting}>
               Hủy
             </Button>
-            <Button onClick={handleExport} className="flex-1">
-              Tải Excel
+            <Button onClick={handleExport} className="flex-1" disabled={exporting}>
+              {exporting ? "Đang xuất..." : "Tải Excel"}
             </Button>
           </div>
         </div>

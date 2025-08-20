@@ -23,6 +23,7 @@ import {
   ServerResponseAlert,
   type AlertType,
 } from "@/components/ui/loading/ServerResponseAlert";
+import { getAccessToken } from "@/lib/auth";
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function ManagerOrderContent() {
@@ -443,6 +444,107 @@ function ManagerOrderContent() {
     refetch();
   }, [refetch]);
 
+  // Provide an async exporter that fetches ALL rows from backend (respects current filters)
+  const getExportAllData = useCallback(async () => {
+    const params = new URLSearchParams();
+    params.append("page", "1");
+    params.append("pageSize", "1000000");
+    if (filters.search?.trim()) params.append("search", filters.search.trim());
+    if (filters.status?.trim()) params.append("status", filters.status.trim());
+    if (filters.date?.trim()) params.append("date", filters.date.trim());
+    if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+      params.append(
+        "dateRange",
+        JSON.stringify({ start: filters.dateRange.start, end: filters.dateRange.end })
+      );
+    }
+    if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
+    if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
+    if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
+    if (filters.products?.trim()) params.append("products", filters.products.trim());
+    if (filters.warningLevel?.trim()) params.append("warningLevel", filters.warningLevel.trim());
+    if (filters.sortField) params.append("sortField", filters.sortField);
+    if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
+
+    const token = getAccessToken();
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+
+    if (!res.ok) throw new Error(`Failed to fetch all orders for export: ${res.status}`);
+    const result = await res.json();
+    const list: OrderDetail[] = Array.isArray(result)
+      ? result
+      : Array.isArray(result?.data)
+      ? result.data
+      : [];
+
+    // Map to the same shape as getExportData()
+    const rows: (string | number)[][] = list.map((orderDetail, idx) => [
+      idx + 1,
+      orderDetail.id ?? "--",
+      orderDetail.extended ?? "--",
+      orderDetail.created_at
+        ? (() => {
+            const d =
+              typeof orderDetail.created_at === "string"
+                ? new Date(orderDetail.created_at)
+                : orderDetail.created_at instanceof Date
+                ? orderDetail.created_at
+                : null;
+            return d
+              ? d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "")
+              : "--";
+          })()
+        : "--",
+      orderDetail.order?.sale_by?.fullName ||
+        orderDetail.order?.sale_by?.username ||
+        "--",
+      orderDetail.customer_name || "--",
+      orderDetail.raw_item || "--",
+      orderDetail.quantity ?? "--",
+      orderDetail.unit_price
+        ? Number(orderDetail.unit_price).toLocaleString("vi-VN") + "₫"
+        : "--",
+      (() => {
+        switch (orderDetail.status) {
+          case "pending":
+            return "Chờ xử lý";
+          case "quoted":
+            return "Chưa chốt";
+          case "completed":
+            return "Đã chốt";
+          case "demand":
+            return "Nhu cầu";
+          case "confirmed":
+            return "Đã phản hồi";
+          default:
+            return "--";
+        }
+      })(),
+      orderDetail.notes || "--",
+    ]);
+
+    return rows;
+  }, [filters]);
+
   // ✅ Handle search từ double-click tên khách hàng
   const handleSearch = useCallback(
     (searchTerm: string) => {
@@ -777,6 +879,7 @@ function ManagerOrderContent() {
                 orderDetail.notes || "--",
               ]),
             })}
+            getExportAllData={getExportAllData}
             initialFilters={memoizedInitialFilters}
           >
             <OrderManagement
