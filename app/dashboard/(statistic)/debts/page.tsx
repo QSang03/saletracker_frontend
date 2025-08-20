@@ -380,114 +380,94 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Fetch debts for modal - separate from main circuit breaker to avoid blocking
   const fetchDebtsForModal = useCallback(async (category: string, dateFromChart?: string) => {
-    
-    if (!isComponentMounted.current) {
-      return;
-    }
+    if (!isComponentMounted.current) return;
     setLoadingModalData(true);
     try {
-      // Don't use circuit breaker for modal - it should work independently
-      const modalFilters: DebtListFilters = {
-        ...debouncedFilters,
-        limit: 100000,
-      };
-
-      // Determine target date string without timezone drift
-      let targetDateStr: string;
-      if (typeof dateFromChart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateFromChart)) {
-        targetDateStr = dateFromChart;
-      } else {
-        // If no valid date from chart, use today but log warning
-        targetDateStr = (new Date()).toISOString().split('T')[0];
-        console.warn('⚠️ [fetchDebtsForModal] No valid date from chart, using today:', { dateFromChart, targetDateStr });
+      // BẮT BUỘC phải có yyyy-mm-dd hợp lệ
+      if (!(typeof dateFromChart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateFromChart))) {
+        console.warn('[fetchDebtsForModal] dateFromChart không hợp lệ:', dateFromChart);
+        setSelectedDebts([]);
+        return; // dừng, KHÔNG fallback về hôm nay
       }
 
-      // Directly call detailed API with explicit date
       const baseParams: any = {
-        date: targetDateStr,
+        date: dateFromChart,
         page: 1,
         all: true,
         limit: 100000,
       };
+
       switch (category) {
         case 'paid':
-          baseParams.status = 'paid';
-          break;
+          baseParams.status = 'paid'; break;
         case 'promised':
         case 'pay_later':
-          baseParams.status = 'pay_later';
-          break;
+          baseParams.status = 'pay_later'; break;
         case 'no_info':
         case 'no_information_available':
-          baseParams.status = 'no_information_available';
-          break;
+          baseParams.status = 'no_information_available'; break;
       }
+
       const response = await api.get('/debt-statistics/detailed', { params: baseParams });
 
-      // Process the response data (support both paginated and raw array)
-      let filteredData: Debt[] = [];
-      if (response && response.data) {
-        if (Array.isArray(response.data?.data)) {
-          filteredData = response.data.data;
-        } else if (Array.isArray(response.data)) {
-          filteredData = response.data as Debt[];
-        }
-        console.log('📊 [fetchDebtsForModal] Got data:', (filteredData || []).length, 'items');
-      } else {
-        console.warn('⚠️ [fetchDebtsForModal] No data in response:', response);
-      }
-      
-      if (isComponentMounted.current) {
-        setSelectedDebts(filteredData);
-      }
+      const filteredData: Debt[] =
+        Array.isArray(response?.data?.data) ? response.data.data :
+        Array.isArray(response?.data) ? response.data :
+        [];
+
+      if (isComponentMounted.current) setSelectedDebts(filteredData);
     } catch (error) {
       console.error('❌ Error in fetchDebtsForModal:', error);
-      if (isComponentMounted.current) {
-        setSelectedDebts([]);
-      }
+      if (isComponentMounted.current) setSelectedDebts([]);
     } finally {
-      if (isComponentMounted.current) {
-        setLoadingModalData(false);
-      }
+      if (isComponentMounted.current) setLoadingModalData(false);
     }
-  }, [debouncedFilters]);
+  }, [isComponentMounted]);
 
-  const handleChartClick = useCallback((data: any, category: string) => {
-    
-    // Extract date from chart data - data could be from Bar or RadialBar
-    let dateFromChart: string | undefined;
-    
-    console.log('🔍 [handleChartClick] Raw data:', data);
-    
-    if (data && data.payload) {
-      // For Bar chart, data has payload with name (date)
-      dateFromChart = data.payload.name;
-      console.log('🔍 [handleChartClick] Using payload.name:', dateFromChart);
-    } else if (data && data.name) {
-      // For RadialBar chart, data has name directly
-      dateFromChart = data.name;
-      console.log('🔍 [handleChartClick] Using data.name:', dateFromChart);
+
+  const handleChartClick = useCallback((p1: any, p2?: any) => {
+  // Chịu được cả onChartClick(category, data) và onChartClick(data, category)
+  let category: string = '';
+  let data: any;
+
+  if (typeof p1 === 'string') {
+    category = p1;
+    data = p2;
+  } else {
+    data = p1;
+    if (typeof p2 === 'string') category = p2;
+  }
+
+  // Lấy ngày từ nhiều “điểm” có thể có của Recharts
+  let dateFromChart: string | undefined;
+  const payload = (data && (data.payload ?? data)) || {};
+  const candidates = [
+    payload.name,
+    payload.date,
+    payload.label,
+    (data as any)?.activeLabel, // một số chart set trường này
+  ];
+
+  for (const c of candidates) {
+    if (typeof c === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c)) {
+      dateFromChart = c;
+      break;
     }
-    
-    // Additional fallback checks
-    if (!dateFromChart && data) {
-      // Try other possible date fields
-      const possibleDateFields = ['date', 'label', 'x', 'key'];
-      for (const field of possibleDateFields) {
-        if (data[field]) {
-          dateFromChart = data[field];
-          console.log('🔍 [handleChartClick] Using fallback field:', field, dateFromChart);
-          break;
-        }
-      }
-    }
-    
-    console.log('🔍 [handleChartClick] Final dateFromChart:', dateFromChart, 'for category:', category);
-    
-    setSelectedCategory(category);
-    setModalOpen(true);
-    fetchDebtsForModal(category, dateFromChart);
-  }, [fetchDebtsForModal]);
+  }
+
+  // Không rơi về hôm nay nữa — nếu không bắt được ngày thì hủy drilldown
+  if (!dateFromChart) {
+    console.warn('[handleChartClick] Không xác định được ngày từ chart, hủy mở modal.', {
+      p1, p2, data,
+    });
+    return;
+  }
+
+  setSelectedCategory(category || '');
+  setModalOpen(true);
+  // gọi như cũ
+  void fetchDebtsForModal(category || '', dateFromChart);
+}, [fetchDebtsForModal]);
 
   // Build daily grouped datasets
   const agingLabels = useMemo(() => ['1-30', '31-60', '61-90', '>90'], []);
