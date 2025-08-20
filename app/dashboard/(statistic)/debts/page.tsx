@@ -949,7 +949,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <RYAxis />
                       <RTooltip />
                       {agingLabels.map((k, idx) => (
-                        <RBar key={`aging-daily-${k}`} dataKey={k} stackId="a" fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
+                        <RBar key={`aging-daily-${k}`} dataKey={k} fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
                           className="cursor-pointer" onClick={handleAgingDailyClick} />
                       ))}
                     </RBarChart>
@@ -957,66 +957,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Legacy single-distribution chart */}
-              <AgingChart
-                data={agingData}
-                loading={loading}
-                onBarClick={(data) => {
-                  // Map aging range label to overdue drill‑down params
-                  const label = (data as any)?.range || (data as any)?.label || (data as any)?.name || '';
-                  const parse = (lbl: string) => {
-                    const t = lbl.trim();
-                    if (t.startsWith('>')) {
-                      const n = parseInt(t.replace('>', '').replace(' ngày', '').trim(), 10);
-                      return { minDays: (Number.isNaN(n) ? undefined : n + 1), maxDays: undefined };
-                    }
-                    const cleaned = t.replace(' ngày', '');
-                    const parts = cleaned.split('-');
-                    if (parts.length === 2) {
-                      const a = parseInt(parts[0].trim(), 10);
-                      const b = parseInt(parts[1].trim(), 10);
-                      return { minDays: Number.isNaN(a) ? undefined : a, maxDays: Number.isNaN(b) ? undefined : b };
-                    }
-                    return {} as any;
-                  };
-                  const { minDays, maxDays } = parse(label);
-
-                  setSelectedCategory('aging');
-                  setModalOpen(true);
-                  setLoadingModalData(true);
-                  (async () => {
-                    try {
-                      const now = new Date();
-                      const fromDate = range?.from ? range.from : now;
-                      const toDate = range?.to ? range.to : now;
-                      const todayStr = new Date().toISOString().split('T')[0];
-                      const fromStr = (fromDate as Date).toISOString().split('T')[0];
-                      const toStr = (toDate as Date).toISOString().split('T')[0];
-                      // For overdue aging, use as-of date (like chart): prefer 'to' when a range is selected; fallback to today
-                      const asOfDate = range?.from && range?.to ? toStr : new Date().toISOString().split('T')[0];
-
-                      const resp = await api.get('/debt-statistics/detailed', {
-                        params: {
-                          date: asOfDate,
-                          mode: 'overdue',
-                          minDays,
-                          maxDays,
-                          page: 1,
-                          all: true,
-                          limit: 100000,
-                        }
-                      });
-                      const respData = resp.data;
-                      const debts: Debt[] = Array.isArray(respData?.data) ? respData.data : (Array.isArray(respData) ? respData : []);
-                      setSelectedDebts(debts);
-                    } catch {
-                      setSelectedDebts([]);
-                    } finally {
-                      setLoadingModalData(false);
-                    }
-                  })();
-                }}
-              />
+              {/* Remove legacy chart to avoid trùng lặp */}
             </TabsContent>
 
             {/* Phân tích trễ hẹn */}
@@ -1031,7 +972,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <RYAxis />
                       <RTooltip />
                       {payLaterLabels.map((k, idx) => (
-                        <RBar key={`pl-daily-${k}`} dataKey={k} stackId="a" fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
+                        <RBar key={`pl-daily-${k}`} dataKey={k} fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
                           className="cursor-pointer" onClick={handlePayLaterDailyClick} />
                       ))}
                     </RBarChart>
@@ -1039,12 +980,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Legacy one-shot buckets */}
-              <AgingChart
-                data={(payLaterDelayData || []).map((i) => ({ count: i.count, amount: i.amount, label: i.range, range: i.range }))}
-                loading={loading}
-                onBarClick={(data) => handlePayLaterBucketClick(data)}
-              />
+              {/* Remove legacy chart */}
             </TabsContent>
 
             {/* Phân tích khách hàng đã trả lời */}
@@ -1059,27 +995,14 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <RYAxis />
                       <RTooltip />
                       {responseStatuses.map((k, idx) => (
-                        <RBar key={`resp-daily-${k}`} dataKey={k} stackId="a" fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={handleResponseDailyClick} />
+                        <RBar key={`resp-daily-${k}`} dataKey={k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={handleResponseDailyClick} />
                       ))}
                     </RBarChart>
                   </RResponsiveContainer>
                 </div>
               </div>
 
-              {/* Legacy aggregated responses */}
-              <div className="p-4">
-                <div className="h-80 w-full">
-                  <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={contactResponses} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
-                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="status" angle={-30} textAnchor="end" height={60} />
-                      <RYAxis />
-                      <RTooltip formatter={(value: any) => [value, 'Số KH']} />
-                      <RBar dataKey="customers" fill="#3b82f6" onClick={(d: any) => d && d.payload && handleResponseBarClick(d.payload)} className="cursor-pointer" />
-                    </RBarChart>
-                  </RResponsiveContainer>
-                </div>
-              </div>
+              {/* Remove legacy aggregated responses */}
             </TabsContent>
           </Tabs>
 
