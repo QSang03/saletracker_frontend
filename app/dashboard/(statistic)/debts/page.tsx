@@ -324,27 +324,31 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Transform API data for existing components
   const chartData: ChartDataItem[] = useMemo(() => {
+    console.log('🔍 [chartData] Processing trendData:', trendData);
     
     return trendData.map((item, index) => {
-      // Ensure name is a valid date string
-      let displayName = item.name;
+      // Ưu tiên sử dụng trường date từ API (ISO format) thay vì name (vi-VN format)
+      let displayName = item.date || item.name;
       
-      // If item has a date field, prefer that over name
-      if (item.date) {
+      // Nếu có trường date, sử dụng trực tiếp (đã là ISO format)
+      if (item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)) {
         displayName = item.date;
-      }
-      
-      // Try to parse and format the date to ensure consistency
-      try {
-        const date = new Date(displayName);
-        if (!isNaN(date.getTime())) {
-          // Format as YYYY-MM-DD for consistency
-          displayName = date.toISOString().split('T')[0];
+      } else {
+        // Nếu không có date hoặc date không hợp lệ, thử parse từ name
+        try {
+          const date = new Date(displayName);
+          if (!isNaN(date.getTime())) {
+            // Format as YYYY-MM-DD for consistency
+            displayName = date.toISOString().split('T')[0];
+          } else {
+            console.warn('⚠️ Invalid date for chart item:', { item, displayName });
+            displayName = `Day ${index + 1}`;
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not parse date for chart item:', { item, displayName, error });
+          // Fallback to index-based naming if date parsing fails
+          displayName = `Day ${index + 1}`;
         }
-      } catch (error) {
-        console.warn('⚠️ Could not parse date for chart item:', { item, displayName });
-        // Fallback to index-based naming if date parsing fails
-        displayName = `Day ${index + 1}`;
       }
       
       const result = {
@@ -353,6 +357,8 @@ const DebtStatisticsDashboard: React.FC = () => {
         pay_later: item.pay_later,
         no_info: item.no_info,
       };
+      
+      console.log(`🔍 [chartData] Processed item ${index}:`, result);
       return result;
     });
   }, [trendData]);
@@ -441,20 +447,26 @@ const DebtStatisticsDashboard: React.FC = () => {
     if (typeof p2 === 'string') category = p2;
   }
 
-  // Lấy ngày từ nhiều "điểm" có thể có của Recharts
+  // Lấy ngày từ data trực tiếp (fullRowData từ ChartSection)
   let dateFromChart: string | undefined;
-  const payload = (data && (data.payload ?? data)) || {};
+  
+  // Ưu tiên lấy từ data trực tiếp trước (fullRowData từ ChartSection)
   const candidates = [
-    payload.name,
-    payload.date,
-    payload.label,
-    (data as any)?.activeLabel, // một số chart set trường này
+    data?.name,           // Trường name chứa ngày từ chart data (đã được format thành ISO)
+    data?.date,           // Trường date nếu có
+    data?.label,          // Trường label nếu có
+    // Fallback cho các trường hợp khác (Recharts payload)
+    (data && (data.payload ?? data))?.name,
+    (data && (data.payload ?? data))?.date,
+    (data && (data.payload ?? data))?.label,
+    (data as any)?.activeLabel,
   ];
 
   console.log('🔍 [handleChartClick] Debug candidates:', {
-    p1, p2, data, payload, candidates
+    p1, p2, data, candidates
   });
 
+  // Tìm ngày hợp lệ (format YYYY-MM-DD)
   for (const c of candidates) {
     if (typeof c === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c)) {
       dateFromChart = c;
@@ -463,13 +475,13 @@ const DebtStatisticsDashboard: React.FC = () => {
   }
 
   console.log('🔍 [handleChartClick] Final result:', {
-    dateFromChart, category
+    dateFromChart, category, dataName: data?.name, dataDate: data?.date
   });
 
   // Không rơi về hôm nay nữa — nếu không bắt được ngày thì hủy drilldown
   if (!dateFromChart) {
     console.warn('[handleChartClick] Không xác định được ngày từ chart, hủy mở modal.', {
-      p1, p2, data,
+      p1, p2, data, candidates
     });
     return;
   }
