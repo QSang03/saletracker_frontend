@@ -506,12 +506,6 @@ const DebtStatisticsDashboard: React.FC = () => {
       if (d.getDay() === 0) continue; // skip Sunday
       dates.push(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }));
     }
-    
-    // Debug: Log selectedDates and check for 2025-08-18
-    console.log('🔍 [selectedDates] Generated dates:', dates);
-    console.log('🔍 [selectedDates] Contains 2025-08-18:', dates.includes('2025-08-18'));
-    console.log('🔍 [selectedDates] Range:', { from: s.toISOString().split('T')[0], to: e.toISOString().split('T')[0] });
-    
     return dates;
   }, [range?.from?.toDateString(), range?.to?.toDateString()]);
   const agingDailyChartData = useMemo(() => {
@@ -523,14 +517,10 @@ const DebtStatisticsDashboard: React.FC = () => {
       const row = map.get(key);
       row[i.range] = (row[i.range] || 0) + i.count;
     });
-    
-    // Đảm bảo tất cả các ngày trong selectedDates đều có dữ liệu
+    // Ensure every selected date exists and buckets are zero-filled
     const rows = selectedDates.map((date) => {
       const base: any = { name: date };
-      // Khởi tạo tất cả các bucket với giá trị 0
       agingLabels.forEach((lbl) => { base[lbl] = 0; });
-      
-      // Nếu có dữ liệu từ API cho ngày này, sử dụng dữ liệu đó
       const existing = map.get(date);
       if (existing) {
         agingLabels.forEach((lbl) => {
@@ -594,45 +584,23 @@ const DebtStatisticsDashboard: React.FC = () => {
   const responsesDailyChartData = useMemo(() => {
     const map = new Map<string, any>();
     const src = Array.isArray(responsesDaily) ? responsesDaily : (responsesDaily ? [responsesDaily as any] : []);
-    
-    // Debug: Log raw data
-    console.log('🔍 [responsesDailyChartData] Raw responsesDaily data:', src);
-    
     src.forEach((i) => {
       const key = i.date;
       if (!map.has(key)) map.set(key, { name: key });
       const row = map.get(key);
       row[i.status] = (row[i.status] || 0) + i.customers;
     });
-    
-    // Debug: Log processed map
-    console.log('🔍 [responsesDailyChartData] Processed map:', Array.from(map.entries()));
-    
-    // Đảm bảo tất cả các ngày trong selectedDates đều có dữ liệu
     const rows = selectedDates.map((date) => {
       const base: any = { name: date };
-      // Khởi tạo tất cả các trạng thái với giá trị 0
       responseStatuses.forEach((st) => { base[st] = 0; });
-      
-      // Nếu có dữ liệu từ API cho ngày này, sử dụng dữ liệu đó
       const existing = map.get(date);
       if (existing) {
         responseStatuses.forEach((st) => {
           if (typeof existing[st] === 'number') base[st] = existing[st];
         });
       }
-      
-      // Debug: Log data for specific date
-      if (date === '2025-08-18') {
-        console.log('🔍 [responsesDailyChartData] Data for 2025-08-18:', { base, existing, mapHasDate: map.has(date) });
-      }
-      
       return base;
     });
-    
-    // Debug: Log final rows
-    console.log('🔍 [responsesDailyChartData] Final rows:', rows);
-    
     return rows;
   }, [responsesDaily, selectedDates, responseStatuses]);
 
