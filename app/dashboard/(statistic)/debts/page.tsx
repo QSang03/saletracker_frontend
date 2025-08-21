@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { BarChart as RBarChart, Bar as RBar, XAxis as RXAxis, YAxis as RYAxis, CartesianGrid as RCartesianGrid, ResponsiveContainer as RResponsiveContainer, Tooltip as RTooltip } from "recharts";
+import SmartTooltip from '@/components/ui/charts/SmartTooltip';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ChartDataItem {
@@ -1028,29 +1029,18 @@ const DebtStatisticsDashboard: React.FC = () => {
                         <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
                         <RYAxis />
                         <RTooltip 
-                          content={({ active, payload, label }) => {
-                            if (!active || !payload || payload.length === 0) return null;
-                            return (
-                              <div className="bg-white rounded shadow p-2 min-w-[160px]">
-                                <div className="font-bold mb-1">{label}</div>
-                                {/* Order tooltip items to match column order */}
-                                {agingLabels.map((label, idx) => {
-                                  const entry = payload.find((p: any) => p.dataKey === label);
-                                  if (!entry) return null;
-                                  return (
-                                    <div key={label} className="flex items-center mb-1">
-                                      <span
-                                        className="inline-block w-2 h-2 rounded-full mr-2"
-                                        style={{ background: entry.color }}
-                                      />
-                                      <span>{entry.name}</span>
-                                      <span className="ml-auto font-bold">{entry.value}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          }}
+                          content={
+                            <SmartTooltip 
+                              title="Chi tiết công nợ quá hạn"
+                              customConfig={{
+                                '1-30': { label: '1-30 ngày', color: '#10b981' },
+                                '31-60': { label: '31-60 ngày', color: '#f59e0b' },
+                                '61-90': { label: '61-90 ngày', color: '#ef4444' },
+                                '>90': { label: '>90 ngày', color: '#7c2d12' },
+                              }}
+                              customFields={agingLabels}
+                            />
+                          }
                         />
                         {agingLabels.map((k, idx) => (
                           <RBar 
@@ -1114,29 +1104,18 @@ const DebtStatisticsDashboard: React.FC = () => {
                         <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
                         <RYAxis />
                         <RTooltip 
-                          content={({ active, payload, label }) => {
-                            if (!active || !payload || payload.length === 0) return null;
-                            return (
-                              <div className="bg-white rounded shadow p-2 min-w-[160px]">
-                                <div className="font-bold mb-1">{label}</div>
-                                {/* Order tooltip items to match column order */}
-                                {payLaterLabels.map((label, idx) => {
-                                  const entry = payload.find((p: any) => p.dataKey === label);
-                                  if (!entry) return null;
-                                  return (
-                                    <div key={label} className="flex items-center mb-1">
-                                      <span
-                                        className="inline-block w-2 h-2 rounded-full mr-2"
-                                        style={{ background: entry.color }}
-                                      />
-                                      <span>{entry.name}</span>
-                                      <span className="ml-auto font-bold">{entry.value}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          }}
+                          content={
+                            <SmartTooltip 
+                              title="Chi tiết trễ hẹn"
+                              customConfig={{
+                                '1-7': { label: '1-7 ngày', color: '#60A5FA' },
+                                '8-15': { label: '8-15 ngày', color: '#f59e0b' },
+                                '16-30': { label: '16-30 ngày', color: '#ef4444' },
+                                '>30': { label: '>30 ngày', color: '#7c2d12' },
+                              }}
+                              customFields={payLaterLabels}
+                            />
+                          }
                         />
                         {payLaterLabels.map((k, idx) => (
                           <RBar key={`pl-daily-${k}`} dataKey={k} fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
@@ -1184,29 +1163,18 @@ const DebtStatisticsDashboard: React.FC = () => {
                         <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
                         <RYAxis />
                         <RTooltip 
-                          content={({ active, payload, label }) => {
-                            if (!active || !payload || payload.length === 0) return null;
-                            return (
-                              <div className="bg-white rounded shadow p-2 min-w-[160px]">
-                                <div className="font-bold mb-1">{label}</div>
-                                {/* Order tooltip items to match column order: Debt Reported, Customer Responded, First Reminder, Second Reminder */}
-                                {responseStatuses.map((status, idx) => {
-                                  const entry = payload.find((p: any) => p.dataKey === status);
-                                  if (!entry) return null;
-                                  return (
-                                    <div key={status} className="flex items-center mb-1">
-                                      <span
-                                        className="inline-block w-2 h-2 rounded-full mr-2"
-                                        style={{ background: entry.color }}
-                                      />
-                                      <span>{responseStatusVi[status] || status}</span>
-                                      <span className="ml-auto font-bold">{entry.value}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          }}
+                          content={
+                            <SmartTooltip 
+                              title="Chi tiết khách hàng đã trả lời"
+                              customConfig={{
+                                'Debt Reported': { label: 'Đã gửi báo nợ', color: '#3b82f6' },
+                                'Customer Responded': { label: 'Khách đã trả lời', color: '#10b981' },
+                                'First Reminder': { label: 'Nhắc lần 1', color: '#f59e0b' },
+                                'Second Reminder': { label: 'Nhắc lần 2', color: '#ef4444' },
+                              }}
+                              customFields={responseStatuses}
+                            />
+                          }
                         />
                         {responseStatuses.map((k, idx) => (
                           <RBar key={`resp-daily-${k}`} dataKey={k} name={responseStatusVi[k] || k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />

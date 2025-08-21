@@ -4,6 +4,7 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AgingData } from '@/lib/debt-statistics-api';
+import SmartTooltip from '@/components/ui/charts/SmartTooltip';
 
 const agingColors = {
   '0-30': '#10b981',           // Green - good
@@ -18,10 +19,9 @@ const agingColors = {
 };
 
 const agingConfig = {
-  '0-30 ngày': { label: '0-30 ngày', color: agingColors['0-30 ngày'] },
-  '31-60 ngày': { label: '31-60 ngày', color: agingColors['31-60 ngày'] },
-  '61-90 ngày': { label: '61-90 ngày', color: agingColors['61-90 ngày'] },
-  '>90 ngày': { label: '>90 ngày', color: agingColors['>90 ngày'] },
+  amount: { label: 'Tổng tiền', color: '#8884d8' },
+  count: { label: 'Số khoản nợ', color: '#10b981' },
+  percentage: { label: 'Tỷ lệ', color: '#f59e0b' },
 };
 
 interface AgingChartProps {
@@ -163,31 +163,18 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
                   domain={[0, (dataMax: number) => Math.max(dataMax * 1.1, 1000)]}
                 />
                 <Tooltip
-                  content={({ active, payload, label }: any) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 border rounded-lg shadow-lg">
-                          <div className="font-semibold text-gray-900">{label}</div>
-                          <div className="space-y-1 mt-2">
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Số khoản nợ:</span>
-                              <span className="font-medium">{data.count}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Tổng tiền:</span>
-                              <span className="font-medium">{formatCurrency(data.amount)}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Tỷ lệ:</span>
-                              <span className="font-medium">{data.percentage}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
+                  content={
+                    <SmartTooltip 
+                      title="Chi tiết công nợ quá hạn"
+                      customConfig={agingConfig}
+                      customFields={['amount', 'count', 'percentage']}
+                      formatter={(value, field) => {
+                        if (field === 'amount') return formatCurrency(value);
+                        if (field === 'percentage') return `${value}%`;
+                        return value.toString();
+                      }}
+                    />
+                  }
                 />
                 <Bar 
                   dataKey="amount" 

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/chart';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import SimpleSelect from './SimpleSelect';
+import SmartTooltip from '@/components/ui/charts/SmartTooltip';
 
 export interface ChartDataItem {
   name: string;
@@ -58,7 +59,7 @@ const BarChartComponent = React.memo<{ data: ChartDataItem[]; onChartClick: any;
             <YAxis tickLine={false} axisLine={false} fontSize={12} />
             <ChartTooltip
               cursor={{ fill: 'rgba(0,0,0,0.05)' }}
-              content={<DebtChartTooltipContent indicator="line" labelKey="name" nameKey="dataKey" />}
+              content={<SmartTooltip title="Chi tiết công nợ" />} wrapperStyle={{ visibility:'visible' }}
             />
             {(['paid', 'promised', 'no_info'] as const).map(key => (
               <Bar
@@ -112,7 +113,7 @@ const LineChartComponent = React.memo<{ data: ChartDataItem[]; chartKey: string 
           <YAxis tickLine={false} axisLine={false} fontSize={12} />
           <ChartTooltip
             cursor={{ stroke: '#8884d8', strokeWidth: 2 }}
-            content={<DebtChartTooltipContent indicator="line" labelKey="name" nameKey="dataKey" />}
+            content={<SmartTooltip title="Chi tiết công nợ" />} wrapperStyle={{ visibility:'visible' }}
           />
           {(['paid', 'promised', 'no_info'] as const).map(key => (
             <Line
@@ -174,7 +175,7 @@ const RadialBarChartComponent = React.memo<{ data: PieDataItem[]; onChartClick: 
                 <Cell key={`cell-${index}-${chartKey}`} fill={entry.fill} />
               ))}
             </RadialBar>
-            <ChartTooltip content={<DebtChartTooltipContent hideLabel={false} />} />
+            <ChartTooltip content={<SmartTooltip title="Chi tiết công nợ" />} wrapperStyle={{ visibility:'visible' }} />
             <ChartLegend
               layout="vertical"
               align="right"
@@ -274,48 +275,6 @@ const ChartSection: React.FC<ChartSectionProps> = ({
   );
 };
 
-export function DebtChartTooltipContent({ active, payload }: any) {
-  if (!active || !payload || payload.length === 0) return null;
 
-  const paid = payload.find((p: any) => p.dataKey === 'paid');
-  const promised = payload.find((p: any) => p.dataKey === 'promised');
-  const noInfo = payload.find((p: any) => p.dataKey === 'no_info');
-
-  return (
-    <div className="bg-white rounded shadow p-2 min-w-[160px]">
-      <div className="font-bold mb-1">Chi tiết công nợ</div>
-      <div className="flex items-center mb-1">
-        <span
-          className="inline-block w-2 h-2 rounded-full mr-2"
-          style={{ background: chartConfig.paid.color }}
-        />
-        <span style={{ color: chartConfig.paid.color }}>
-          {chartConfig.paid.label}
-        </span>
-        <span className="ml-auto font-bold">{paid ? paid.value : 0}</span>
-      </div>
-      <div className="flex items-center mb-1">
-        <span
-          className="inline-block w-2 h-2 rounded-full mr-2"
-          style={{ background: chartConfig.promised.color }}
-        />
-        <span style={{ color: chartConfig.promised.color }}>
-          {chartConfig.promised.label}
-        </span>
-        <span className="ml-auto font-bold">{promised ? promised.value : 0}</span>
-      </div>
-      <div className="flex items-center">
-        <span
-          className="inline-block w-2 h-2 rounded-full mr-2"
-          style={{ background: chartConfig.no_info.color }}
-        />
-        <span style={{ color: chartConfig.no_info.color }}>
-          {chartConfig.no_info.label}
-        </span>
-        <span className="ml-auto font-bold">{noInfo ? noInfo.value : 0}</span>
-      </div>
-    </div>
-  );
-}
 
 export default React.memo(ChartSection);

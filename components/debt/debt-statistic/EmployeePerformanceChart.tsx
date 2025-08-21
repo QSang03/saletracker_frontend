@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmployeePerformance } from '@/lib/debt-statistics-api';
+import SmartTooltip from '@/components/ui/charts/SmartTooltip';
 
 const performanceConfig = {
   collectionRate: { label: 'Tỷ lệ thu hồi (%)', color: '#3b82f6' },
@@ -60,12 +60,14 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Hiệu suất nhân viên</CardTitle>
-          <CardDescription>Top nhân viên thu nợ hiệu quả nhất</CardDescription>
+        <CardHeader className="flex justify-between items-center">
+          <div>
+            <CardTitle>Hiệu suất nhân viên</CardTitle>
+            <CardDescription>Top nhân viên thu nợ hiệu quả nhất</CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-80 flex items-center justify-center">
+        <CardContent className="px-0 flex items-center justify-center">
+          <div className="h-80 flex items-center justify-center w-full">
             <div className="text-muted-foreground">Đang tải dữ liệu...</div>
           </div>
         </CardContent>
@@ -76,12 +78,14 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
   if (data.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Hiệu suất nhân viên</CardTitle>
-          <CardDescription>Top nhân viên thu nợ hiệu quả nhất</CardDescription>
+        <CardHeader className="flex justify-between items-center">
+          <div>
+            <CardTitle>Hiệu suất nhân viên</CardTitle>
+            <CardDescription>Top nhân viên thu nợ hiệu quả nhất</CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-80 flex items-center justify-center">
+        <CardContent className="px-0 flex items-center justify-center">
+          <div className="h-80 flex items-center justify-center w-full">
             <div className="text-muted-foreground">Không có dữ liệu hiệu suất</div>
           </div>
         </CardContent>
@@ -93,16 +97,18 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
     <div className="space-y-6">
       {/* Chart */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            👥 Hiệu suất nhân viên
-          </CardTitle>
-          <CardDescription>
-            Top {topPerformers.length} nhân viên có tỷ lệ thu hồi cao nhất
-          </CardDescription>
+        <CardHeader className="flex justify-between items-center">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              👥 Hiệu suất nhân viên
+            </CardTitle>
+            <CardDescription>
+              Top {topPerformers.length} nhân viên có tỷ lệ thu hồi cao nhất
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
-          <ChartContainer config={performanceConfig} className="h-80 w-full">
+        <CardContent className="px-0 flex items-center justify-center">
+          <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -111,9 +117,9 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
                   tickLine={false} 
                   axisLine={false}
                   fontSize={12}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
+                  angle={0}
+                  textAnchor="middle"
+                  height={60}
                 />
                 <YAxis 
                   tickLine={false} 
@@ -121,36 +127,25 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
                   fontSize={12}
                   domain={[0, 100]}
                 />
-                <ChartTooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-white p-3 border rounded-lg shadow-lg">
-                          <div className="font-semibold text-gray-900">{label}</div>
-                          <div className="space-y-1 mt-2">
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Tỷ lệ thu hồi:</span>
-                              <span className="font-medium">{(data.collectionRate || 0).toFixed(1)}%</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Đã thu hồi:</span>
-                              <span className="font-medium">{data.totalCollected || 0}/{data.totalAssigned || 0}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Tổng tiền:</span>
-                              <span className="font-medium">{formatCurrency(data.totalAmount || 0)}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-gray-600">Đã thu:</span>
-                              <span className="font-medium">{formatCurrency(data.collectedAmount || 0)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
+                <Tooltip
+                  content={
+                    <SmartTooltip 
+                      title="Chi tiết hiệu suất nhân viên"
+                      customConfig={{
+                        displayRate: { label: 'Tỷ lệ thu hồi (%)', color: performanceConfig.collectionRate.color },
+                        totalCollected: { label: 'Đã thu hồi', color: '#10b981' },
+                        totalAssigned: { label: 'Tổng phân công', color: '#8b5cf6' },
+                        totalAmount: { label: 'Tổng tiền', color: '#f59e0b' },
+                        collectedAmount: { label: 'Đã thu', color: '#ef4444' },
+                      }}
+                      customFields={['displayRate', 'totalCollected', 'totalAssigned', 'totalAmount', 'collectedAmount']}
+                      formatter={(value, field) => {
+                        if (field === 'displayRate') return `${value.toFixed(1)}%`;
+                        if (field === 'totalAmount' || field === 'collectedAmount') return formatCurrency(value);
+                        return value.toString();
+                      }}
+                    />
+                  }
                 />
                 <Bar 
                   dataKey="displayRate" 
@@ -161,17 +156,19 @@ const EmployeePerformanceChart: React.FC<EmployeePerformanceChartProps> = ({
                 />
               </BarChart>
             </ResponsiveContainer>
-          </ChartContainer>
+          </div>
         </CardContent>
       </Card>
 
       {/* Performance Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Chi tiết hiệu suất</CardTitle>
-          <CardDescription>Thống kê đầy đủ cho tất cả nhân viên</CardDescription>
+        <CardHeader className="flex justify-between items-center">
+          <div>
+            <CardTitle>Chi tiết hiệu suất</CardTitle>
+            <CardDescription>Thống kê đầy đủ cho tất cả nhân viên</CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
