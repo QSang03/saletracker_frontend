@@ -59,6 +59,9 @@ export interface ContactDetailItem {
   customer_name: string;
   employee_code_raw?: string;
   latest_time?: string | Date;
+  send_at?: string | Date;
+  first_remind_at?: string | Date;
+  second_remind_at?: string | Date;
 }
 
 export interface TrendData {

@@ -1145,30 +1145,52 @@ const DebtStatisticsDashboard: React.FC = () => {
                             <TableHead>Mã khách hàng</TableHead>
                             <TableHead>Tên khách hàng</TableHead>
                             <TableHead>Mã nhân viên</TableHead>
-                            <TableHead>Thời gian cập nhật</TableHead>
+                            <TableHead>
+                              {contactStatusFilter === 'Debt Reported' || contactStatusFilter === 'Customer Responded' 
+                                ? 'Thời gian gửi' 
+                                : contactStatusFilter === 'First Reminder' 
+                                ? 'Thời gian nhắc lần 1' 
+                                : contactStatusFilter === 'Second Reminder' 
+                                ? 'Thời gian nhắc lần 2' 
+                                : 'Thời gian cập nhật'}
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {Array.isArray(contactDetails) && contactDetails.length > 0 ? (
-                            contactDetails.map((contact, index) => (
-                              <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
-                                <TableCell className="font-mono text-sm">
-                                  {contact.customer_code || '-'}
-                                </TableCell>
-                                <TableCell>{contact.customer_name || '-'}</TableCell>
-                                <TableCell className="font-mono text-sm">
-                                  {contact.employee_code_raw || '-'}
-                                </TableCell>
-                                <TableCell>
-                                  {contact.latest_time ? (
-                                    new Date(contact.latest_time).toLocaleString('vi-VN', {
-                                      timeZone: 'Asia/Ho_Chi_Minh'
-                                    })
-                                  ) : '-'}
-                                </TableCell>
-                              </TableRow>
-                            ))
+                            contactDetails.map((contact, index) => {
+                              // Xác định thời gian hiển thị dựa trên trạng thái
+                              let displayTime = null;
+                              if (contactStatusFilter === 'Debt Reported' || contactStatusFilter === 'Customer Responded') {
+                                displayTime = contact.send_at;
+                              } else if (contactStatusFilter === 'First Reminder') {
+                                displayTime = contact.first_remind_at;
+                              } else if (contactStatusFilter === 'Second Reminder') {
+                                displayTime = contact.second_remind_at;
+                              } else {
+                                displayTime = contact.latest_time;
+                              }
+
+                              return (
+                                <TableRow key={index}>
+                                  <TableCell>{index + 1}</TableCell>
+                                  <TableCell className="font-mono text-sm">
+                                    {contact.customer_code || '-'}
+                                  </TableCell>
+                                  <TableCell>{contact.customer_name || '-'}</TableCell>
+                                  <TableCell className="font-mono text-sm">
+                                    {contact.employee_code_raw || '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {displayTime ? (
+                                      new Date(displayTime).toLocaleString('vi-VN', {
+                                        timeZone: 'Asia/Ho_Chi_Minh'
+                                      })
+                                    ) : '-'}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
                           ) : (
                             <TableRow>
                               <TableCell colSpan={5} className="text-center py-8 text-gray-500">
