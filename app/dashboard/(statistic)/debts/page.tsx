@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { BarChart as RBarChart, Bar as RBar, XAxis as RXAxis, YAxis as RYAxis, CartesianGrid as RCartesianGrid, ResponsiveContainer as RResponsiveContainer, Tooltip as RTooltip } from "recharts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface ChartDataItem {
   name: string;
@@ -1012,77 +1013,225 @@ const DebtStatisticsDashboard: React.FC = () => {
 
             <TabsContent value="aging">
               {/* Daily stacked columns with title/description to match overview */}
-              <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Biểu đồ thống kê công nợ quá hạn</h2>
-                  <p className="text-sm text-gray-600 mt-1">Theo dõi tình hình công nợ qua các khoảng thời gian</p>
-                </div>
-                <div className="h-80 w-full">
-                  <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
-                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
-                      <RYAxis />
-                      <RTooltip />
-                      {agingLabels.map((k, idx) => (
-                        <RBar key={`aging-daily-${k}`} dataKey={k} fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
-                          className="cursor-pointer" onClick={(data, index) => { void handleAgingDailyClick(k, data, index); }} />
+              <Card>
+                <CardHeader className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Biểu đồ thống kê công nợ quá hạn</CardTitle>
+                    <CardDescription>Theo dõi tình hình công nợ qua các khoảng thời gian</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-0 flex items-center justify-center">
+                  <div className="h-80 w-full">
+                    <RResponsiveContainer width="100%" height="100%">
+                      <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
+                        <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
+                        <RYAxis />
+                        <RTooltip 
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            return (
+                              <div className="bg-white rounded shadow p-2 min-w-[160px]">
+                                <div className="font-bold mb-1">{label}</div>
+                                {/* Order tooltip items to match column order */}
+                                {agingLabels.map((label, idx) => {
+                                  const entry = payload.find((p: any) => p.dataKey === label);
+                                  if (!entry) return null;
+                                  return (
+                                    <div key={label} className="flex items-center mb-1">
+                                      <span
+                                        className="inline-block w-2 h-2 rounded-full mr-2"
+                                        style={{ background: entry.color }}
+                                      />
+                                      <span>{entry.name}</span>
+                                      <span className="ml-auto font-bold">{entry.value}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          }}
+                        />
+                        {agingLabels.map((k, idx) => (
+                          <RBar 
+                            key={`aging-daily-${k}`} 
+                            dataKey={k} 
+                            name={
+                              k === '1-30' ? '1-30 ngày' :
+                              k === '31-60' ? '31-60 ngày' :
+                              k === '61-90' ? '61-90 ngày' :
+                              k === '>90' ? '>90 ngày' : k
+                            }
+                            fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
+                            className="cursor-pointer" 
+                            onClick={(data, index) => { void handleAgingDailyClick(k, data, index); }} 
+                          />
+                        ))}
+                      </RBarChart>
+                    </RResponsiveContainer>
+                  </div>
+                </CardContent>
+                {/* Add Legend below chart */}
+                <div className="px-6 pb-6">
+                  <div className="flex justify-center">
+                    <div className="flex gap-6">
+                      {agingLabels.map((label, idx) => (
+                        <div key={label} className="flex items-center">
+                          <div 
+                            className="w-3 h-3 rounded mr-2"
+                            style={{ background: ["#10b981","#f59e0b","#ef4444","#7c2d12"][idx] }}
+                          />
+                          <span className="text-sm">
+                            {label === '1-30' ? '1-30 ngày' :
+                             label === '31-60' ? '31-60 ngày' :
+                             label === '61-90' ? '61-90 ngày' :
+                             label === '>90' ? '>90 ngày' : label}
+                          </span>
+                        </div>
                       ))}
-                    </RBarChart>
-                  </RResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </Card>
 
               {/* Remove legacy chart to avoid trùng lặp */}
             </TabsContent>
 
             {/* Phân tích trễ hẹn */}
             <TabsContent value="promise_not_met">
-              <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Biểu đồ thống kê trễ hẹn</h2>
-                  <p className="text-sm text-gray-600 mt-1">Theo dõi tình hình công nợ qua các khoảng thời gian</p>
-                </div>
-                <div className="h-80 w-full">
-                  <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
-                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
-                      <RYAxis />
-                      <RTooltip />
-                      {payLaterLabels.map((k, idx) => (
-                        <RBar key={`pl-daily-${k}`} dataKey={k} fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
-                          className="cursor-pointer" onClick={(data, index) => { void handlePayLaterDailyClick(k, data, index); }} />
+              <Card>
+                <CardHeader className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Biểu đồ thống kê trễ hẹn</CardTitle>
+                    <CardDescription>Theo dõi tình hình công nợ qua các khoảng thời gian</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-0 flex items-center justify-center">
+                  <div className="h-80 w-full">
+                    <RResponsiveContainer width="100%" height="100%">
+                      <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
+                        <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
+                        <RYAxis />
+                        <RTooltip 
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            return (
+                              <div className="bg-white rounded shadow p-2 min-w-[160px]">
+                                <div className="font-bold mb-1">{label}</div>
+                                {/* Order tooltip items to match column order */}
+                                {payLaterLabels.map((label, idx) => {
+                                  const entry = payload.find((p: any) => p.dataKey === label);
+                                  if (!entry) return null;
+                                  return (
+                                    <div key={label} className="flex items-center mb-1">
+                                      <span
+                                        className="inline-block w-2 h-2 rounded-full mr-2"
+                                        style={{ background: entry.color }}
+                                      />
+                                      <span>{entry.name}</span>
+                                      <span className="ml-auto font-bold">{entry.value}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          }}
+                        />
+                        {payLaterLabels.map((k, idx) => (
+                          <RBar key={`pl-daily-${k}`} dataKey={k} fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
+                            className="cursor-pointer" onClick={(data, index) => { void handlePayLaterDailyClick(k, data, index); }} />
+                        ))}
+                      </RBarChart>
+                    </RResponsiveContainer>
+                  </div>
+                </CardContent>
+                {/* Add Legend below chart */}
+                <div className="px-6 pb-6">
+                  <div className="flex justify-center">
+                    <div className="flex gap-6">
+                      {payLaterLabels.map((label, idx) => (
+                        <div key={label} className="flex items-center">
+                          <div 
+                            className="w-3 h-3 rounded mr-2"
+                            style={{ background: ["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4] }}
+                          />
+                          <span className="text-sm">{label} ngày</span>
+                        </div>
                       ))}
-                    </RBarChart>
-                  </RResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </Card>
 
               {/* Remove legacy chart */}
             </TabsContent>
 
             {/* Phân tích khách hàng đã trả lời */}
             <TabsContent value="customer_responded">
-              <div className="rounded-xl border bg-background p-6 shadow-sm h-auto overflow-hidden">
-                <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Biểu đồ thống kê khách đã trả lời</h2>
-                  <p className="text-sm text-gray-600 mt-1">Theo dõi tình hình công nợ qua các khoảng thời gian</p>
-                </div>
-                <div className="h-80 w-full">
-                  <RResponsiveContainer width="100%" height="100%">
-                    <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 40 }}>
-                      <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <RXAxis dataKey="name" angle={-30} textAnchor="end" height={60} />
-                      <RYAxis />
-                      <RTooltip formatter={(value: any, name: any) => [value, (responseStatusVi as any)[String(name)] || String(name)]} />
-                      {responseStatuses.map((k, idx) => (
-                        <RBar key={`resp-daily-${k}`} dataKey={k} name={responseStatusVi[k] || k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />
+              <Card>
+                <CardHeader className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Biểu đồ thống kê khách đã trả lời</CardTitle>
+                    <CardDescription>Theo dõi tình hình công nợ qua các khoảng thời gian</CardDescription>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-0 flex items-center justify-center">
+                  <div className="h-80 w-full">
+                    <RResponsiveContainer width="100%" height="100%">
+                      <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
+                        <RCartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
+                        <RYAxis />
+                        <RTooltip 
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            return (
+                              <div className="bg-white rounded shadow p-2 min-w-[160px]">
+                                <div className="font-bold mb-1">{label}</div>
+                                {/* Order tooltip items to match column order: Debt Reported, Customer Responded, First Reminder, Second Reminder */}
+                                {responseStatuses.map((status, idx) => {
+                                  const entry = payload.find((p: any) => p.dataKey === status);
+                                  if (!entry) return null;
+                                  return (
+                                    <div key={status} className="flex items-center mb-1">
+                                      <span
+                                        className="inline-block w-2 h-2 rounded-full mr-2"
+                                        style={{ background: entry.color }}
+                                      />
+                                      <span>{responseStatusVi[status] || status}</span>
+                                      <span className="ml-auto font-bold">{entry.value}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          }}
+                        />
+                        {responseStatuses.map((k, idx) => (
+                          <RBar key={`resp-daily-${k}`} dataKey={k} name={responseStatusVi[k] || k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />
+                        ))}
+                      </RBarChart>
+                    </RResponsiveContainer>
+                  </div>
+                </CardContent>
+                {/* Add Legend below chart */}
+                <div className="px-6 pb-6">
+                  <div className="flex justify-center">
+                    <div className="flex gap-6">
+                      {responseStatuses.map((status, idx) => (
+                        <div key={status} className="flex items-center">
+                          <div 
+                            className="w-3 h-3 rounded mr-2"
+                            style={{ background: ["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4] }}
+                          />
+                          <span className="text-sm">{responseStatusVi[status] || status}</span>
+                        </div>
                       ))}
-                    </RBarChart>
-                  </RResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </Card>
 
               {/* Remove legacy aggregated responses */}
             </TabsContent>

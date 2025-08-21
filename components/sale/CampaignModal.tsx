@@ -1445,7 +1445,14 @@ export default function CampaignModal({
 
         await workbook.xlsx.load(arrayBuffer);
 
-        const worksheet = workbook.getWorksheet(1);
+        let worksheet =
+          workbook.worksheets?.[0] ||
+          workbook.getWorksheet(1) ||
+          workbook.getWorksheet("Sheet1");
+        if (!worksheet) {
+          // Thử quét qua tất cả sheet
+          workbook.eachSheet((ws) => { if (!worksheet) worksheet = ws; });
+        }
         if (!worksheet) {
           setAlertSafe({
             type: "error",

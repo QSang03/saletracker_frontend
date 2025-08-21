@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusIcon, RefreshCw, Archive } from "lucide-react"; // ✅ THÊM Archive icon
+import { PlusIcon, RefreshCw, Archive, Download } from "lucide-react"; // ✅ THÊM Archive icon
 import {
   Accordion,
   AccordionContent,
@@ -370,6 +370,18 @@ export default function CampaignPage() {
     handleDepartmentChange([]);
   }, [isViewingArchived, pagination, handleDepartmentChange]);
 
+  // ✅ THÊM MỚI: Download sample file function
+  const downloadSampleFile = useCallback(() => {
+    // Đường dẫn file mẫu trong thư mục public
+    const fileUrl = "/file_mau_cau_hinh_gui_tin_nhan.xlsx";
+    const a = document.createElement("a");
+    a.href = fileUrl;
+    a.download = "file_mau_cau_hinh_gui_tin_nhan.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, []);
+
   // Show error state
   if (error && !campaignsLoading) {
     return (
@@ -458,6 +470,19 @@ export default function CampaignPage() {
                   <span className="flex items-center gap-2">
                   <Archive className="h-4 w-4" />
                   {isViewingArchived ? "Quay lại chiến dịch" : "Xem lưu trữ"}
+                  </span>
+                </Button>
+
+                {/* ✅ THÊM NÚT TẢI FILE MẪU */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={downloadSampleFile}
+                  className="transition-all duration-200 hover:bg-gray-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                    <span>Tải file mẫu</span>
                   </span>
                 </Button>
               </div>

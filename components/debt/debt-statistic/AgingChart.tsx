@@ -107,12 +107,14 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Phân tích nợ quá hạn</CardTitle>
-          <CardDescription>Phân bổ công nợ theo độ tuổi</CardDescription>
+        <CardHeader className="flex justify-between items-center">
+          <div>
+            <CardTitle>Phân tích nợ quá hạn</CardTitle>
+            <CardDescription>Phân bổ công nợ theo ngày quá hạn</CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-80 flex items-center justify-center">
+        <CardContent className="px-0 flex items-center justify-center">
+          <div className="h-80 flex items-center justify-center w-full">
             <div className="text-muted-foreground">Đang tải dữ liệu...</div>
           </div>
         </CardContent>
@@ -122,17 +124,19 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          🕐 Phân tích nợ quá hạn
-        </CardTitle>
-        <CardDescription>
-          Phân bổ {totalDebts} khoản nợ ({formatCurrency(totalAmount)}) theo độ tuổi
-        </CardDescription>
+      <CardHeader className="flex justify-between items-center">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            🕐 Phân tích nợ quá hạn
+          </CardTitle>
+          <CardDescription>
+            Phân bổ {totalDebts} khoản nợ ({formatCurrency(totalAmount)}) theo ngày quá hạn
+          </CardDescription>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-0 flex items-center justify-center">
         {totalDebts === 0 || !chartData || chartData.length === 0 ? (
-          <div className="h-80 flex items-center justify-center">
+          <div className="h-80 flex items-center justify-center w-full">
             <div className="text-muted-foreground">
               {totalDebts === 0 ? "Không có dữ liệu nợ quá hạn" : "Đang tải dữ liệu..."}
             </div>
@@ -147,9 +151,9 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
                   tickLine={false} 
                   axisLine={false}
                   fontSize={12}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
+                  angle={0}
+                  textAnchor="middle"
+                  height={60}
                 />
                 <YAxis 
                   tickLine={false} 
@@ -206,26 +210,30 @@ const AgingChart: React.FC<AgingChartProps> = ({ data, loading = false, onBarCli
             </ResponsiveContainer>
           </div>
         )}
-        
-        {/* Summary stats below chart */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-          {chartData.map((item, index) => (
-            <div 
-              key={`aging-stat-${index}-${item.label}`}
-              className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
-              onClick={() => onBarClick && onBarClick(item)}
-            >
-              <div 
-                className="w-4 h-4 rounded mx-auto mb-2" 
-                style={{ backgroundColor: item.fill }}
-              />
-              <div className="text-xs text-gray-600 mb-1">{item.label}</div>
-              <div className="font-semibold text-sm">{item.count} khoản</div>
-              <div className="text-xs text-gray-500">{item.percentage}%</div>
-            </div>
-          ))}
-        </div>
       </CardContent>
+      
+      {/* Summary stats below chart */}
+      {totalDebts > 0 && chartData && chartData.length > 0 && (
+        <div className="px-6 pb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {chartData.map((item, index) => (
+              <div 
+                key={`aging-stat-${index}-${item.label}`}
+                className="bg-gray-50 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => onBarClick && onBarClick(item)}
+              >
+                <div 
+                  className="w-4 h-4 rounded mx-auto mb-2" 
+                  style={{ backgroundColor: item.fill }}
+                />
+                <div className="text-xs text-gray-600 mb-1">{item.label}</div>
+                <div className="font-semibold text-sm">{item.count} khoản</div>
+                <div className="text-xs text-gray-500">{item.percentage}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 };
