@@ -571,12 +571,12 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, [payLaterDaily, selectedDates, payLaterLabels]);
 
   // Response statuses (English keys for API, localized in tooltip)
-  const responseStatuses = useMemo(() => ['Debt Reported', 'First Reminder', 'Second Reminder', 'Customer Responded'], []);
+  const responseStatuses = useMemo(() => ['Debt Reported', 'Customer Responded', 'First Reminder', 'Second Reminder'], []);
   const responseStatusVi = useMemo(() => ({
     'Debt Reported': 'Đã gửi báo nợ',
+    'Customer Responded': 'Khách đã trả lời',
     'First Reminder': 'Nhắc lần 1',
     'Second Reminder': 'Nhắc lần 2',
-    'Customer Responded': 'Khách đã trả lời',
     'Not Sent': 'Chưa gửi',
     'Error Send': 'Gửi lỗi',
     'Sent But Not Verified': 'Đã gửi, chưa xác minh',
