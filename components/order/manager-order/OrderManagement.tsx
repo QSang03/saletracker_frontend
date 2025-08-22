@@ -305,7 +305,27 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   });
   const [isModalInitialized, setIsModalInitialized] = useState(false); // ✅ THÊM state này
 
-  // ✅ FIXED: Center modal on open and reset on close - SỬA BẰNG useLayoutEffect
+  // ✅ NEW: Trigger message highlighting states
+  const [triggerMessageId, setTriggerMessageId] = useState<string | number | null>(null);
+  const [highlightedMessageRef, setHighlightedMessageRef] = useState<HTMLDivElement | null>(null);
+
+  // ✅ NEW: Auto-scroll to highlighted message when modal opens
+  useEffect(() => {
+    if (isViewModalOpen && triggerMessageId && highlightedMessageRef) {
+      // Delay to ensure the modal is fully rendered
+      const timer = setTimeout(() => {
+        highlightedMessageRef.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest'
+        });
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isViewModalOpen, triggerMessageId, highlightedMessageRef]);
+
+  // ✅ CHỈ khởi tạo vị trí khi modal chưa được khởi tạo
   useLayoutEffect(() => {
     if (!isViewModalOpen) {
       setIsDraggingModal(false);
@@ -590,6 +610,19 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleViewClick = (orderDetail: OrderDetail) => {
     setFocusSafely(orderDetail.id);
     setViewingDetail(orderDetail);
+    
+    // ✅ NEW: Extract trigger_message_id from metadata for highlighting
+    let triggerId: string | number | null = null;
+    try {
+      const metadata = orderDetail.metadata;
+      if (metadata && typeof metadata === 'object' && 'trigger_message_id' in metadata) {
+        triggerId = metadata.trigger_message_id;
+      }
+    } catch (error) {
+      console.warn('Error extracting trigger_message_id:', error);
+    }
+    setTriggerMessageId(triggerId);
+    
     withSkipClear(() => setIsViewModalOpen(true));
   };
 
@@ -635,6 +668,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleViewCancel = () => {
     withSkipClear(() => setIsViewModalOpen(false));
     setViewingDetail(null);
+    // ✅ NEW: Reset trigger message highlighting when modal closes
+    setTriggerMessageId(null);
+    setHighlightedMessageRef(null);
   };
 
   // Function để handle sort - 3 trạng thái: desc -> asc -> null
@@ -999,6 +1035,19 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+        }
+
+        .message-highlight {
+          animation: highlightPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes highlightPulse {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+          }
+          50% {
+            box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+          }
         }
       `}</style>
 
@@ -1773,9 +1822,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         </div>
 
                         <div className="space-y-1">
-                          <h3 className="font-bold text-lg text-white drop-shadow-md">
-                            {viewingDetail?.customer_name || "Khách hàng"}
-                          </h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-lg text-white drop-shadow-md">
+                              {viewingDetail?.customer_name || "Khách hàng"}
+                            </h3>
+                            {/* ✅ NEW: Trigger message notification */}
+                            {triggerMessageId && (
+                              <div className="flex items-center gap-1 px-2 py-1 bg-yellow-400/90 text-yellow-900 rounded-full text-xs font-semibold animate-pulse">
+                                <span>🔍</span>
+                                <span>Tin nhắn kích hoạt</span>
+                              </div>
+                            )}
+                          </div>
                           <div className="flex items-center gap-3">
                           {/* Notes history modal is rendered globally at the bottom to avoid duplication */}
 
@@ -2340,11 +2398,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
                         return messages.map(
                           (message: Message, index: number) => {
+                            // ✅ NEW: Check if this message should be highlighted
+                            const isHighlighted = triggerMessageId && message.messageId && 
+                              String(message.messageId) === String(triggerMessageId);
+                            
                             if (message.type === "customer") {
                               return (
                                 <div
                                   key={`customer-${message.messageId ?? index}`}
-                                  className="flex items-start space-x-4 animate-fadeInLeft group"
+                                  ref={isHighlighted ? setHighlightedMessageRef : undefined}
+                                  className={`flex items-start space-x-4 animate-fadeInLeft group ${
+                                    isHighlighted ? 'message-highlight ring-4 ring-yellow-400 ring-opacity-75 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-2' : ''
+                                  }`}
                                   style={{ animationDelay: `${index * 0.1}s` }}
                                 >
                                   {/* Enhanced customer avatar */}
@@ -2359,6 +2424,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     </div>
                                     {/* Message indicator */}
                                     <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-400 rounded-full border-2 border-white animate-bounce opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                    {/* ✅ NEW: Highlight indicator */}
+                                    {isHighlighted && (
+                                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center shadow-lg animate-bounce">
+                                        <span className="text-xs text-white font-bold">!</span>
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className="flex flex-col space-y-2 max-w-md lg:max-w-lg">
@@ -2611,7 +2682,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               return (
                                 <div
                                   key={`sale-${message.messageId ?? index}`}
-                                  className="flex items-start space-x-4 justify-end animate-fadeInRight group"
+                                  ref={isHighlighted ? setHighlightedMessageRef : undefined}
+                                  className={`flex items-start space-x-4 justify-end animate-fadeInRight group ${
+                                    isHighlighted ? 'message-highlight ring-4 ring-yellow-400 ring-opacity-75 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-2' : ''
+                                  }`}
                                   style={{ animationDelay: `${index * 0.1}s` }}
                                 >
                                   <div className="flex flex-col space-y-2 max-w-md lg:max-w-lg">
@@ -2878,6 +2952,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     </div>
                                     {/* Message indicator */}
                                     <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white animate-bounce opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                    {/* ✅ NEW: Highlight indicator */}
+                                    {isHighlighted && (
+                                      <div className="absolute -top-2 -left-2 w-6 h-6 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center shadow-lg animate-bounce">
+                                        <span className="text-xs text-white font-bold">!</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
