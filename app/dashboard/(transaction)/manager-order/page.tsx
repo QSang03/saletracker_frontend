@@ -326,16 +326,30 @@ function ManagerOrderContent() {
   const handleBulkExtend = useCallback(
     async (orderDetails: OrderDetail[]) => {
       try {
+        // Kiểm tra trạng thái đơn hàng trước khi gia hạn
+        const invalidOrders = orderDetails.filter(
+          (order) => order.status === "completed" || order.status === "demand"
+        );
+
+        if (invalidOrders.length > 0) {
+          const invalidIds = invalidOrders.map((order) => order.id).join(", ");
+          setAlert({
+            type: "error",
+            message: `Không thể gia hạn các đơn hàng chi tiết có trạng thái "Đã chốt" hoặc "Nhu cầu". Mã đơn: ${invalidIds}`,
+          });
+          return;
+        }
+
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkExtendOrderDetails(ids);
         setAlert({
           type: "success",
-          message: `Đã gia hạn ${orderDetails.length} đơn hàng thành công!`,
+          message: `Đã gia hạn ${orderDetails.length} đơn hàng chi tiết thành công!`,
         });
         refetch();
       } catch (err) {
         console.error("Error bulk extending order details:", err);
-        setAlert({ type: "error", message: "Lỗi khi gia hạn nhiều đơn hàng!" });
+        setAlert({ type: "error", message: "Lỗi khi gia hạn nhiều đơn hàng chi tiết!" });
       }
     },
     [bulkExtendOrderDetails, refetch]
