@@ -356,6 +356,32 @@ export default function CampaignModal({
     []
   );
 
+  // Handle campaign type change with reset logic
+  const handleCampaignTypeChange = useCallback(
+    (newType: CampaignType | "") => {
+      const previousType = selectedType;
+      
+      // Reset selected days when changing campaign type
+      if (previousType !== newType) {
+        setSelectedDays([]);
+        // Note: timeOfDay is not reset to preserve user's time selection
+        
+        // Reset day selection mode based on new type
+        if (newType === CampaignType.THREE_DAY_KM) {
+          setDaySelectionMode("adjacent");
+        } else if (
+          newType === CampaignType.WEEKLY_SP ||
+          newType === CampaignType.WEEKLY_BBG
+        ) {
+          setDaySelectionMode("single");
+        }
+      }
+      
+      setSelectedType(newType);
+    },
+    [selectedType]
+  );
+
   const loadUsersWithEmail = useCallback(async () => {
     try {
       setLoadingUsers(true);
@@ -371,7 +397,7 @@ export default function CampaignModal({
 
   const loadCampaignData = useCallback((campaign: CampaignWithDetails) => {
     setCampaignName(campaign.name);
-    setSelectedType(campaign.campaign_type);
+    handleCampaignTypeChange(campaign.campaign_type);
 
     // Load message content
     if (campaign.messages?.text) {
@@ -463,14 +489,14 @@ export default function CampaignModal({
     } else {
       setUploadedCustomers([]);
     }
-  }, []);
+  }, [handleCampaignTypeChange]);
 
   // Reset form function - simplified without alertRef dependency
   const resetForm = useCallback(() => {
     // Reset all form states
     setCurrentTab("basic");
     setCampaignName("");
-    setSelectedType("");
+    handleCampaignTypeChange("");
     setStartTime("");
     setEndTime("");
     setSelectedDays([]);
@@ -1445,14 +1471,7 @@ export default function CampaignModal({
 
         await workbook.xlsx.load(arrayBuffer);
 
-        let worksheet =
-          workbook.worksheets?.[0] ||
-          workbook.getWorksheet(1) ||
-          workbook.getWorksheet("Sheet1");
-        if (!worksheet) {
-          // Thử quét qua tất cả sheet
-          workbook.eachSheet((ws) => { if (!worksheet) worksheet = ws; });
-        }
+        const worksheet = workbook.getWorksheet(1);
         if (!worksheet) {
           setAlertSafe({
             type: "error",
@@ -1466,7 +1485,7 @@ export default function CampaignModal({
             • Thử mở file bằng Excel để kiểm tra
             • Tải file mẫu và làm theo đúng định dạng`,
           });
-          event.target.value = "";      
+          event.target.value = "";
           return;
         }
         const customers: Array<{
@@ -3155,7 +3174,7 @@ export default function CampaignModal({
                                       whileTap={{ scale: 0.98 }}
                                       type="button"
                                       onClick={() =>
-                                        setSelectedType(
+                                        handleCampaignTypeChange(
                                           isSelected ? "" : option.value
                                         )
                                       }
