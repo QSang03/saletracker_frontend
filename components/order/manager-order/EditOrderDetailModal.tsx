@@ -112,7 +112,8 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
     };
 
     // CHỈ gửi số ngày user nhập (để backend tự cộng dồn, tránh duplicate calculation)
-    if (!isNaN(additionalDays) && additionalDays > 0) {
+    // Và chỉ khi đơn hàng có thể gia hạn
+    if (!isNaN(additionalDays) && additionalDays > 0 && canExtend) {
       updatedData.extended = additionalDays; // Chỉ gửi số user nhập
     }
     
@@ -128,6 +129,9 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
   );
   const StatusIcon = currentStatus?.icon || Settings;
 
+  // Kiểm tra xem đơn hàng có thể gia hạn không
+  const canExtend = orderDetail.status !== "completed" && orderDetail.status !== "demand";
+  
   // Tính toán giá trị preview (CHỈ để hiển thị cho user, không gửi đi)
   const currentExtended = orderDetail.extended || 4;
   const additionalDays = parseInt(formData.extendDays) || 0;
@@ -295,64 +299,86 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
                   </label>
 
                   {/* Hiển thị thời gian extend hiện tại */}
-                  <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border-2 border-blue-200">
+                  <div className={`p-4 rounded-xl border-2 ${
+                    canExtend 
+                      ? "bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200" 
+                      : "bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200"
+                  }`}>
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Clock className="w-4 h-4 text-blue-600" />
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        canExtend ? "bg-blue-100" : "bg-gray-100"
+                      }`}>
+                        <Clock className={`w-4 h-4 ${
+                          canExtend ? "text-blue-600" : "text-gray-400"
+                        }`} />
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Thời hạn hiện tại</div>
-                        <div className="text-lg font-bold text-blue-600">
+                        <div className={`text-lg font-bold ${
+                          canExtend ? "text-blue-600" : "text-gray-500"
+                        }`}>
                           {currentExtended} ngày
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Input để nhập số ngày muốn gia hạn thêm */}
-                  <div className="relative group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-200 to-orange-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={formData.extendDays}
-                        onChange={(e) =>
-                          handleChange("extendDays", e.target.value)
-                        }
-                        min="0"
-                        placeholder="0"
-                        className="relative h-14 text-base border-2 border-amber-200 rounded-xl bg-white shadow-sm hover:shadow-md focus:shadow-lg transition-all duration-200 focus:border-amber-300 pl-12 pr-4"
-                      />
-
-                      {/* Plus icon inside input */}
-                      <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-                        <Plus className="w-5 h-5 text-amber-500" />
-                      </div>
-
-                      {/* Label bên trong input */}
-                      <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">
-                        + ngày
-                      </div>
-                    </div>
-
-                    {/* Hiển thị preview kết quả (CHỈ để show cho user, không gửi đi) */}
-                    {additionalDays > 0 && (
-                      <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
-                        <div className="flex items-center justify-center text-sm">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-green-500" />
-                            <span className="text-gray-600">Sau khi gia hạn:</span>
-                            <span className="font-bold text-green-600 text-base">
-                              {newExtended} ngày
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-center mt-1 text-xs text-gray-500">
-                          ({currentExtended} + {additionalDays} = {newExtended})
+                    
+                    {/* Thông báo khi không thể gia hạn */}
+                    {!canExtend && (
+                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-center gap-2 text-red-600 text-sm">
+                          <span>⚠️</span>
+                          <span>Không thể gia hạn đơn hàng có trạng thái "{orderDetail.status === "completed" ? "Đã chốt" : "Yêu cầu"}"</span>
                         </div>
                       </div>
                     )}
                   </div>
+
+                  {/* Input để nhập số ngày muốn gia hạn thêm - chỉ hiển thị khi có thể gia hạn */}
+                  {canExtend && (
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-gradient-to-r from-amber-200 to-orange-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          value={formData.extendDays}
+                          onChange={(e) =>
+                            handleChange("extendDays", e.target.value)
+                          }
+                          min="0"
+                          placeholder="0"
+                          className="relative h-14 text-base border-2 border-amber-200 rounded-xl bg-white shadow-sm hover:shadow-md focus:shadow-lg transition-all duration-200 focus:border-amber-300 pl-12 pr-4"
+                        />
+
+                        {/* Plus icon inside input */}
+                        <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
+                          <Plus className="w-5 h-5 text-amber-500" />
+                        </div>
+
+                        {/* Label bên trong input */}
+                        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-xs text-gray-500 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">
+                          + ngày
+                        </div>
+                      </div>
+
+                      {/* Hiển thị preview kết quả (CHỈ để show cho user, không gửi đi) */}
+                      {additionalDays > 0 && (
+                        <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                          <div className="flex items-center justify-center text-sm">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-green-500" />
+                              <span className="text-gray-600">Sau khi gia hạn:</span>
+                              <span className="font-bold text-green-600 text-base">
+                                {newExtended} ngày
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-center mt-1 text-xs text-gray-500">
+                            ({currentExtended} + {additionalDays} = {newExtended})
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Notes Textarea with enhanced design */}
