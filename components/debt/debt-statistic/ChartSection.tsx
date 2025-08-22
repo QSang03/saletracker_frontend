@@ -170,14 +170,12 @@ const LineChartComponent = React.memo<{ data: ChartDataItem[]; chartKey: string 
             <XAxis 
               dataKey="name" 
               tickLine={false} 
-              
               fontSize={12}
               tick={{ fill: '#64748b', fontWeight: 500 }}
               axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
             />
             <YAxis 
               tickLine={false} 
-               
               fontSize={12}
               tick={{ fill: '#64748b', fontWeight: 500 }}
               axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
