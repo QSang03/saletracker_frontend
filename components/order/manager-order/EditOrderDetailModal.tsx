@@ -57,7 +57,7 @@ const statusOptions = [
   },
   {
     value: "demand",
-    label: "Yêu cầu",
+    label: "Nhu cầu",
     color: "bg-blue-100 text-blue-700 border-blue-200",
     icon: TrendingUp,
   },
@@ -327,7 +327,7 @@ const EditOrderDetailModal: React.FC<EditOrderDetailModalProps> = ({
                       <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                         <div className="flex items-center gap-2 text-red-600 text-sm">
                           <span>⚠️</span>
-                          <span>Không thể gia hạn đơn hàng có trạng thái "{orderDetail.status === "completed" ? "Đã chốt" : "Yêu cầu"}"</span>
+                          <span>Không thể gia hạn đơn hàng có trạng thái "{orderDetail.status === "completed" ? "Đã chốt" : "Nhu cầu"}"</span>
                         </div>
                       </div>
                     )}
