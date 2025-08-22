@@ -21,6 +21,9 @@ import ChartSection, {
 import DebtModal from "@/components/debt/debt-statistic/DebtModal";
 import AgingChart from "@/components/debt/debt-statistic/AgingChart";
 import EmployeePerformanceChart from "@/components/debt/debt-statistic/EmployeePerformanceChart";
+import AgingDailyChart from "@/components/debt/debt-statistic/AgingDailyChart";
+import PayLaterDailyChart from "@/components/debt/debt-statistic/PayLaterDailyChart";
+import CustomerResponseChart from "@/components/debt/debt-statistic/CustomerResponseChart";
 import { Debt } from "@/types";
 import { DateRange } from "react-day-picker";
 import { 
@@ -1013,195 +1016,33 @@ const DebtStatisticsDashboard: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="aging">
-              {/* Daily stacked columns with title/description to match overview */}
-              <Card>
-                <CardHeader className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Biểu đồ thống kê công nợ quá hạn</CardTitle>
-                    <CardDescription>Theo dõi tình hình công nợ qua các khoảng thời gian</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="px-0 flex items-center justify-center">
-                  <div className="h-80 w-full">
-                    <RResponsiveContainer width="100%" height="100%">
-                      <RBarChart data={agingDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
-                        <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
-                        <RYAxis />
-                        <RTooltip 
-                          content={
-                            <SmartTooltip 
-                              title="Chi tiết công nợ quá hạn"
-                              customConfig={{
-                                '1-30': { label: '1-30 ngày', color: '#10b981' },
-                                '31-60': { label: '31-60 ngày', color: '#f59e0b' },
-                                '61-90': { label: '61-90 ngày', color: '#ef4444' },
-                                '>90': { label: '>90 ngày', color: '#7c2d12' },
-                              }}
-                              customFields={agingLabels}
-                            />
-                          }
-                        />
-                        {agingLabels.map((k, idx) => (
-                          <RBar 
-                            key={`aging-daily-${k}`} 
-                            dataKey={k} 
-                            name={
-                              k === '1-30' ? '1-30 ngày' :
-                              k === '31-60' ? '31-60 ngày' :
-                              k === '61-90' ? '61-90 ngày' :
-                              k === '>90' ? '>90 ngày' : k
-                            }
-                            fill={["#10b981","#f59e0b","#ef4444","#7c2d12"][idx]}
-                            className="cursor-pointer" 
-                            onClick={(data, index) => { void handleAgingDailyClick(k, data, index); }} 
-                          />
-                        ))}
-                      </RBarChart>
-                    </RResponsiveContainer>
-                  </div>
-                </CardContent>
-                {/* Add Legend below chart */}
-                <div className="px-6 pb-6">
-                  <div className="flex justify-center">
-                    <div className="flex gap-6">
-                      {agingLabels.map((label, idx) => (
-                        <div key={label} className="flex items-center">
-                          <div 
-                            className="w-3 h-3 rounded mr-2"
-                            style={{ background: ["#10b981","#f59e0b","#ef4444","#7c2d12"][idx] }}
-                          />
-                          <span className="text-sm">
-                            {label === '1-30' ? '1-30 ngày' :
-                             label === '31-60' ? '31-60 ngày' :
-                             label === '61-90' ? '61-90 ngày' :
-                             label === '>90' ? '>90 ngày' : label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Remove legacy chart to avoid trùng lặp */}
+              <AgingDailyChart 
+                data={agingDailyChartData}
+                onBarClick={handleAgingDailyClick}
+                loading={loading}
+                labels={agingLabels}
+              />
             </TabsContent>
 
             {/* Phân tích trễ hẹn */}
             <TabsContent value="promise_not_met">
-              <Card>
-                <CardHeader className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Biểu đồ thống kê trễ hẹn</CardTitle>
-                    <CardDescription>Theo dõi tình hình công nợ qua các khoảng thời gian</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="px-0 flex items-center justify-center">
-                  <div className="h-80 w-full">
-                    <RResponsiveContainer width="100%" height="100%">
-                      <RBarChart data={payLaterDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
-                        <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
-                        <RYAxis />
-                        <RTooltip 
-                          content={
-                            <SmartTooltip 
-                              title="Chi tiết trễ hẹn"
-                              customConfig={{
-                                '1-7': { label: '1-7 ngày', color: '#60A5FA' },
-                                '8-15': { label: '8-15 ngày', color: '#f59e0b' },
-                                '16-30': { label: '16-30 ngày', color: '#ef4444' },
-                                '>30': { label: '>30 ngày', color: '#7c2d12' },
-                              }}
-                              customFields={payLaterLabels}
-                            />
-                          }
-                        />
-                        {payLaterLabels.map((k, idx) => (
-                          <RBar key={`pl-daily-${k}`} dataKey={k} fill={["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4]}
-                            className="cursor-pointer" onClick={(data, index) => { void handlePayLaterDailyClick(k, data, index); }} />
-                        ))}
-                      </RBarChart>
-                    </RResponsiveContainer>
-                  </div>
-                </CardContent>
-                {/* Add Legend below chart */}
-                <div className="px-6 pb-6">
-                  <div className="flex justify-center">
-                    <div className="flex gap-6">
-                      {payLaterLabels.map((label, idx) => (
-                        <div key={label} className="flex items-center">
-                          <div 
-                            className="w-3 h-3 rounded mr-2"
-                            style={{ background: ["#60A5FA","#f59e0b","#ef4444","#7c2d12"][idx % 4] }}
-                          />
-                          <span className="text-sm">{label} ngày</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Remove legacy chart */}
+              <PayLaterDailyChart 
+                data={payLaterDailyChartData}
+                onBarClick={handlePayLaterDailyClick}
+                loading={loading}
+                labels={payLaterLabels}
+              />
             </TabsContent>
 
             {/* Phân tích khách hàng đã trả lời */}
             <TabsContent value="customer_responded">
-              <Card>
-                <CardHeader className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Biểu đồ thống kê khách đã trả lời</CardTitle>
-                    <CardDescription>Theo dõi tình hình công nợ qua các khoảng thời gian</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="px-0 flex items-center justify-center">
-                  <div className="h-80 w-full">
-                    <RResponsiveContainer width="100%" height="100%">
-                      <RBarChart data={responsesDailyChartData} margin={{ top: 20, right: 20, left: 20, bottom: 60 }}>
-                        <RCartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <RXAxis dataKey="name" angle={0} textAnchor="middle" height={60} />
-                        <RYAxis />
-                        <RTooltip 
-                          content={
-                            <SmartTooltip 
-                              title="Chi tiết khách hàng đã trả lời"
-                              customConfig={{
-                                'Debt Reported': { label: 'Đã gửi báo nợ', color: '#3b82f6' },
-                                'Customer Responded': { label: 'Khách đã trả lời', color: '#10b981' },
-                                'First Reminder': { label: 'Nhắc lần 1', color: '#f59e0b' },
-                                'Second Reminder': { label: 'Nhắc lần 2', color: '#ef4444' },
-                              }}
-                              customFields={responseStatuses}
-                            />
-                          }
-                        />
-                        {responseStatuses.map((k, idx) => (
-                          <RBar key={`resp-daily-${k}`} dataKey={k} name={responseStatusVi[k] || k} fill={["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4]} className="cursor-pointer" onClick={(data, index) => { void handleResponseDailyClick(k, data, index); }} />
-                        ))}
-                      </RBarChart>
-                    </RResponsiveContainer>
-                  </div>
-                </CardContent>
-                {/* Add Legend below chart */}
-                <div className="px-6 pb-6">
-                  <div className="flex justify-center">
-                    <div className="flex gap-6">
-                      {responseStatuses.map((status, idx) => (
-                        <div key={status} className="flex items-center">
-                          <div 
-                            className="w-3 h-3 rounded mr-2"
-                            style={{ background: ["#3b82f6","#10b981","#f59e0b","#ef4444"][idx % 4] }}
-                          />
-                          <span className="text-sm">{responseStatusVi[status] || status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Remove legacy aggregated responses */}
+              <CustomerResponseChart 
+                data={responsesDailyChartData}
+                onBarClick={handleResponseDailyClick}
+                loading={loading}
+                labels={responseStatuses}
+                responseStatusVi={responseStatusVi}
+              />
             </TabsContent>
           </Tabs>
 

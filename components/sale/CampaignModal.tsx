@@ -1466,7 +1466,7 @@ export default function CampaignModal({
             • Thử mở file bằng Excel để kiểm tra
             • Tải file mẫu và làm theo đúng định dạng`,
           });
-          event.target.value = "";
+          event.target.value = "";      
           return;
         }
         const customers: Array<{
