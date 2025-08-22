@@ -85,6 +85,11 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
     return iconMap[label] || <MessageSquare className="h-4 w-4" />;
   };
 
+  // ✅ Helper function để tạo valid SVG ID
+  const createValidId = (label: string) => {
+    return label.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-]/g, '');
+  };
+
   // Tạo customConfig động từ labels
   const customConfig = labels.reduce((acc, label) => {
     acc[label] = { 
@@ -176,22 +181,35 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
           </div>
           
           <RResponsiveContainer width="100%" height="100%">
-            <RBarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+            <RBarChart 
+              data={data} 
+              margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+              key={`customer-response-${Date.now()}`}
+            >
               <defs>
-                {/* Gradient definitions for bars */}
-                {labels.map((label, idx) => (
-                  <linearGradient key={`gradient-${label}`} id={`gradient-resp-${label}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={getColorForLabel(label, idx)} stopOpacity={0.9}/>
-                    <stop offset="100%" stopColor={getColorForLabel(label, idx)} stopOpacity={0.6}/>
-                  </linearGradient>
-                ))}
+                {/* ✅ Gradient definitions với valid SVG IDs */}
+                {labels.map((label, idx) => {
+                  const validId = createValidId(label);
+                  return (
+                    <linearGradient 
+                      key={`gradient-${validId}`} 
+                      id={`gradient-resp-${validId}`} 
+                      x1="0" y1="0" x2="0" y2="1"
+                    >
+                      <stop offset="0%" stopColor={getColorForLabel(label, idx)} stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor={getColorForLabel(label, idx)} stopOpacity={0.6}/>
+                    </linearGradient>
+                  );
+                })}
               </defs>
+              
               <RCartesianGrid 
                 strokeDasharray="3 3" 
                 vertical={false} 
                 stroke="#e2e8f0"
                 strokeOpacity={0.6}
               />
+              
               <RXAxis 
                 dataKey="name" 
                 angle={0} 
@@ -200,10 +218,12 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                 tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
                 axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
               />
+              
               <RYAxis 
                 tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
                 axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
               />
+              
               <RTooltip 
                 content={
                   <SmartTooltip 
@@ -213,17 +233,26 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                   />
                 }
               />
-              {labels.map((k, idx) => (
-                <RBar 
-                  key={`resp-daily-${k}`} 
-                  dataKey={k} 
-                  name={responseStatusVi[k] || k} 
-                  fill={`url(#gradient-resp-${k})`}
-                  className="cursor-pointer transition-all duration-200 hover:opacity-80" 
-                  onClick={(data, index) => onBarClick(k, data, index)}
-                  radius={[6, 6, 0, 0]}
-                />
-              ))}
+              
+              {/* ✅ Bars với valid gradient IDs và animation */}
+              {labels.map((k, idx) => {
+                const validId = createValidId(k);
+                return (
+                  <RBar 
+                    key={`resp-daily-${k}`} 
+                    dataKey={k} 
+                    name={responseStatusVi[k] || k} 
+                    fill={`url(#gradient-resp-${validId})`}
+                    className="cursor-pointer transition-all duration-200 hover:opacity-80" 
+                    onClick={(data, index) => onBarClick(k, data, index)}
+                    radius={[6, 6, 0, 0]}
+                    isAnimationActive={true}
+                    animationDuration={400}
+                    animationEasing="ease-out"
+                    animationBegin={idx * 100}
+                  />
+                );
+              })}
             </RBarChart>
           </RResponsiveContainer>
         </div>
