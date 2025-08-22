@@ -1118,14 +1118,16 @@ const DebtStatisticsDashboard: React.FC = () => {
                               setContactStatusFilter(value);
                               // Reset to page 1 and fetch new data when filter changes
                               setContactPage(1);
-                              loadContactDetails(value, 1, contactLimit);
+                              // Convert "all" back to empty string for API
+                              const apiStatus = value === "all" ? "" : value;
+                              loadContactDetails(apiStatus, 1, contactLimit);
                             }}
                           >
                             <SelectTrigger className="h-10 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
                               <SelectValue placeholder="Tất cả trạng thái" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">Tất cả trạng thái</SelectItem>
+                              <SelectItem value="all">Tất cả trạng thái</SelectItem>
                               <SelectItem value="Debt Reported">Đã gửi báo nợ</SelectItem>
                               <SelectItem value="Customer Responded">Khách đã trả lời</SelectItem>
                               <SelectItem value="First Reminder">Nhắc lần 1</SelectItem>
@@ -1141,7 +1143,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                         {/* Active Filters */}
                         <div className="flex items-center gap-3 flex-wrap">
-                          {contactStatusFilter && (
+                          {contactStatusFilter && contactStatusFilter !== "all" && (
                             <>
                               <span className="text-sm font-medium text-gray-600">
                                 Bộ lọc đang áp dụng:
@@ -1154,7 +1156,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                                   Trạng thái: {responseStatusVi[contactStatusFilter] || contactStatusFilter}
                                   <button
                                     onClick={() => {
-                                      setContactStatusFilter("");
+                                      setContactStatusFilter("all");
                                       setContactPage(1);
                                       loadContactDetails("", 1, contactLimit);
                                     }}
@@ -1174,7 +1176,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              setContactStatusFilter("");
+                              setContactStatusFilter("all");
                               setContactPage(1);
                               loadContactDetails("", 1, contactLimit);
                             }}
