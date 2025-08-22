@@ -30,7 +30,11 @@ const BulkActions: React.FC<BulkActionsProps> = ({
   const invalidExtendOrders = selectedOrders.filter(
     (order) => order.status === "completed" || order.status === "demand"
   );
-  const canExtend = invalidExtendOrders.length === 0;
+  const validExtendOrders = selectedOrders.filter(
+    (order) => order.status !== "completed" && order.status !== "demand"
+  );
+  const canExtend = validExtendOrders.length > 0; // Có ít nhất 1 đơn hợp lệ
+  const showExtendButton = canExtend; // Chỉ hiển thị nút nếu có đơn hợp lệ
 
   return (
     <div className="mb-8 overflow-hidden relative">
@@ -95,11 +99,7 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                 <div className="text-sm text-gray-600 font-medium">
                   đã được chọn ✨
                 </div>
-                                 {invalidExtendOrders.length > 0 && (
-                   <div className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-md border border-amber-200">
-                     ⚠️ {invalidExtendOrders.length} đơn chi tiết không thể gia hạn
-                   </div>
-                 )}
+                
               </div>
             </div>
 
@@ -175,28 +175,26 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                 </span>
               </Button>
 
-              {/* Extend Button - Enhanced */}
-              <Button
-                variant="default"
-                size="lg"
-                onClick={onBulkExtend}
-                disabled={loading || !canAct || !canExtend}
-                className={`group relative overflow-hidden flex items-center justify-center gap-3 
-                         whitespace-nowrap min-w-[180px] px-6 py-4 text-base font-semibold
-                         border-0 shadow-2xl transform transition-all duration-500 ease-out rounded-2xl text-white
-                         active:scale-95 active:translate-y-0 ${
-                           canExtend
-                             ? "bg-gradient-to-r from-blue-500 via-blue-600 to-cyan-600 hover:from-blue-600 hover:via-blue-700 hover:to-cyan-700 hover:shadow-blue-500/50 hover:scale-110 hover:-translate-y-1"
-                             : "bg-gradient-to-r from-gray-400 via-gray-500 to-gray-600 cursor-not-allowed opacity-60"
-                         }`}
-                                 title={
-                   !canAct
-                     ? "Chỉ thao tác với đơn hàng chi tiết do bạn sở hữu"
-                     : !canExtend
-                     ? `Không thể gia hạn ${invalidExtendOrders.length} đơn hàng chi tiết có trạng thái "Đã chốt" hoặc "Nhu cầu"`
-                     : undefined
-                 }
-              >
+                             {/* Extend Button - Enhanced */}
+               {showExtendButton && (
+                 <Button
+                   variant="default"
+                   size="lg"
+                   onClick={onBulkExtend}
+                   disabled={loading || !canAct}
+                   className="group relative overflow-hidden flex items-center justify-center gap-3 
+                            whitespace-nowrap min-w-[180px] px-6 py-4 text-base font-semibold
+                            bg-gradient-to-r from-blue-500 via-blue-600 to-cyan-600 hover:from-blue-600 hover:via-blue-700 hover:to-cyan-700 hover:shadow-blue-500/50 hover:scale-110 hover:-translate-y-1
+                            border-0 shadow-2xl transform transition-all duration-500 ease-out rounded-2xl text-white
+                            active:scale-95 active:translate-y-0"
+                   title={
+                     !canAct
+                       ? "Chỉ thao tác với đơn hàng chi tiết do bạn sở hữu"
+                       : invalidExtendOrders.length > 0
+                       ? `Chỉ gia hạn ${validExtendOrders.length} đơn hàng chi tiết hợp lệ, bỏ qua ${invalidExtendOrders.length} đơn không hợp lệ`
+                       : undefined
+                   }
+                 >
                 {/* Shimmer effect */}
                 <div
                   className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent 
@@ -220,14 +218,15 @@ const BulkActions: React.FC<BulkActionsProps> = ({
                         Đang gia hạn...
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                       </span>
-                    ) : !canExtend ? (
-                      `Gia hạn (${invalidExtendOrders.length} lỗi)`
-                    ) : (
-                      "Gia hạn (+4 ngày)"
-                    )}
-                  </span>
-                </span>
-              </Button>
+                                         ) : invalidExtendOrders.length > 0 ? (
+                       `Gia hạn (${validExtendOrders.length} đơn)`
+                     ) : (
+                       "Gia hạn (+4 ngày)"
+                     )}
+                   </span>
+                 </span>
+               </Button>
+               )}
 
               {/* Notes Button - Enhanced */}
               <Button

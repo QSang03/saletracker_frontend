@@ -326,27 +326,37 @@ function ManagerOrderContent() {
   const handleBulkExtend = useCallback(
     async (orderDetails: OrderDetail[]) => {
       try {
-        // Kiểm tra trạng thái đơn hàng trước khi gia hạn
+        // Lọc ra những đơn hàng chi tiết hợp lệ để gia hạn
+        const validOrders = orderDetails.filter(
+          (order) => order.status !== "completed" && order.status !== "demand"
+        );
+        
         const invalidOrders = orderDetails.filter(
           (order) => order.status === "completed" || order.status === "demand"
         );
 
-        if (invalidOrders.length > 0) {
-          const invalidIds = invalidOrders.map((order) => order.id).join(", ");
+        // Chỉ gửi những đơn hợp lệ lên backend
+        if (validOrders.length > 0) {
+          const validIds = validOrders.map((od) => Number(od.id));
+          await bulkExtendOrderDetails(validIds);
+          
+          let message = `Đã gia hạn ${validOrders.length} đơn hàng chi tiết thành công!`;
+          if (invalidOrders.length > 0) {
+            const invalidIds = invalidOrders.map((order) => order.id).join(", ");
+            message += ` (Bỏ qua ${invalidOrders.length} đơn có trạng thái "Đã chốt" hoặc "Nhu cầu": ${invalidIds})`;
+          }
+          
+          setAlert({
+            type: "success",
+            message: message,
+          });
+          refetch();
+        } else {
           setAlert({
             type: "error",
-            message: `Không thể gia hạn các đơn hàng chi tiết có trạng thái "Đã chốt" hoặc "Nhu cầu". Mã đơn: ${invalidIds}`,
+            message: "Không có đơn hàng chi tiết nào hợp lệ để gia hạn!",
           });
-          return;
         }
-
-        const ids = orderDetails.map((od) => Number(od.id));
-        await bulkExtendOrderDetails(ids);
-        setAlert({
-          type: "success",
-          message: `Đã gia hạn ${orderDetails.length} đơn hàng chi tiết thành công!`,
-        });
-        refetch();
       } catch (err) {
         console.error("Error bulk extending order details:", err);
         setAlert({ type: "error", message: "Lỗi khi gia hạn nhiều đơn hàng chi tiết!" });
