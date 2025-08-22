@@ -49,6 +49,11 @@ import { Button } from "@/components/ui/button";
 import { BarChart as RBarChart, Bar as RBar, XAxis as RXAxis, YAxis as RYAxis, CartesianGrid as RCartesianGrid, ResponsiveContainer as RResponsiveContainer, Tooltip as RTooltip } from "recharts";
 import SmartTooltip from '@/components/ui/charts/SmartTooltip';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Search, FileText, Download, X } from "lucide-react";
 interface ChartDataItem {
   name: string;
   paid: number;
@@ -1060,145 +1065,326 @@ const DebtStatisticsDashboard: React.FC = () => {
 
           {/* Contact Details Modal - Custom for ContactDetailItem structure */}
           <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
-            <DialogContent className="max-w-6xl p-0 border-0 shadow-2xl">
-              {/* ==== HEADER ==== */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-white via-gray-50 to-blue-50">
-                {/* hiệu ứng nền mờ */}
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-blue-500/5 to-violet-500/5" />
+            <DialogContent className="!w-[80vw] !max-w-[80vw] !h-[80vh] !max-h-[80vh] overflow-hidden flex flex-col p-0">
+              {/* Header */}
+              <DialogHeader className="flex flex-row items-center justify-between p-4 border-b bg-background">
+                <DialogTitle className="text-lg font-semibold">
+                  Chi tiết khách hàng đã trả lời - {contactModalTitle || "Khách đã trả lời"} ({contactTotal} khách)
+                </DialogTitle>
+              </DialogHeader>
 
-                <div className="relative z-10 p-6 flex items-start justify-between">
-                  <div>
-                    <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-emerald-800 to-blue-800 bg-clip-text text-transparent">
-                      {contactModalTitle || "Khách đã trả lời"}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Theo dõi chi tiết phản hồi của khách hàng
-                    </p>
+              {/* Body */}
+              <div className="flex flex-col gap-4 flex-1 overflow-hidden p-4">
+                {/* Filter Section */}
+                <div className="space-y-4">
+                  {/* Filter Controls */}
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    {/* Filter Inputs */}
+                    <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Search Input */}
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <FileText className="h-4 w-4 text-gray-500" />
+                            Tìm kiếm
+                          </Label>
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              placeholder="Mã khách hàng, tên khách hàng..."
+                              className="h-10 pl-10 pr-10 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Status Filter */}
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <AlertCircle className="h-4 w-4 text-gray-500" />
+                            Trạng thái
+                          </Label>
+                          <Select value={contactStatusFilter} onValueChange={setContactStatusFilter}>
+                            <SelectTrigger className="h-10 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                              <SelectValue placeholder="Chọn trạng thái" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">Tất cả trạng thái</SelectItem>
+                              <SelectItem value="Debt Reported">Đã gửi báo nợ</SelectItem>
+                              <SelectItem value="Customer Responded">Khách đã trả lời</SelectItem>
+                              <SelectItem value="First Reminder">Nhắc lần 1</SelectItem>
+                              <SelectItem value="Second Reminder">Nhắc lần 2</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="px-6 py-4 bg-white border-t border-gray-200">
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        {/* Active Filters */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {contactStatusFilter && (
+                            <>
+                              <span className="text-sm font-medium text-gray-600">
+                                Bộ lọc đang áp dụng:
+                              </span>
+                              <div className="flex gap-2 flex-wrap">
+                                <Badge
+                                  variant="secondary"
+                                  className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200"
+                                >
+                                  Trạng thái: {responseStatusVi[contactStatusFilter] || contactStatusFilter}
+                                  <button
+                                    onClick={() => setContactStatusFilter("")}
+                                    className="ml-2 hover:text-blue-900"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setContactStatusFilter("")}
+                            className="h-9 px-4 text-sm font-medium text-gray-600 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-700"
+                          >
+                            <X className="h-4 w-4 inline-block mr-1" />
+                            Xóa bộ lọc
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {/* Export functionality */}}
+                            className="h-9 px-4 text-sm font-medium text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+                          >
+                            <Download className="h-4 w-4 inline-block mr-2" />
+                            Xuất Excel
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <button
-                    className="rounded-full p-2 hover:bg-red-50 hover:text-red-600"
-                    onClick={() => setContactModalOpen(false)}
-                    aria-label="Đóng"
-                  >
-                    {/* SVG icon X (20×20) */}
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M18 6 6 18" />
-                      <path d="m6 6 12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-3 gap-3 p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border">
+                    <div className="text-center p-3 bg-white rounded-lg shadow-sm border border-gray-200">
+                      <div className="h-6 w-6 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <Users className="h-3 w-3 text-blue-600" />
+                      </div>
+                      <p className="text-xs text-gray-600">Tổng khách hàng</p>
+                      <p className="text-base font-bold text-gray-900">{contactTotal?.toLocaleString() || 0}</p>
+                    </div>
 
-              {/* ==== BODY ==== */}
-              <div className="flex-1 overflow-auto px-6 py-6 space-y-6 max-h-[70vh]">
-                {/* ----- Loading ----- */}
-                {contactLoading && (
-                  <div className="flex flex-col items-center justify-center h-40 gap-2">
-                    <LoadingSpinner size={32} />
-                    <span className="text-gray-600">Đang tải dữ liệu...</span>
+                    <div className="text-center p-3 bg-white rounded-lg shadow-sm border border-gray-200">
+                      <div className="h-6 w-6 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <FileText className="h-3 w-3 text-green-600" />
+                      </div>
+                      <p className="text-xs text-gray-600">Số bản ghi hiển thị</p>
+                      <p className="text-base font-bold text-green-600">{Array.isArray(contactDetails) ? contactDetails.length : 0}</p>
+                    </div>
+
+                    <div className="text-center p-3 bg-white rounded-lg shadow-sm border border-gray-200">
+                      <div className="h-6 w-6 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <AlertCircle className="h-3 w-3 text-orange-600" />
+                      </div>
+                      <p className="text-xs text-gray-600">Trạng thái</p>
+                      <p className="text-base font-bold text-orange-600">{contactStatusFilter || "Tất cả"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-gray-50 z-10">
+                      <TableRow className="hover:bg-transparent border-b border-gray-200">
+                        <TableHead className="h-12 px-4 text-center font-semibold text-sm text-gray-700 bg-gray-50">
+                          #
+                        </TableHead>
+                        <TableHead className="h-12 px-4 text-left font-semibold text-sm text-gray-700 bg-gray-50">
+                          Mã KH
+                        </TableHead>
+                        <TableHead className="h-12 px-4 text-left font-semibold text-sm text-gray-700 bg-gray-50">
+                          Tên KH
+                        </TableHead>
+                        <TableHead className="h-12 px-4 text-left font-semibold text-sm text-gray-700 bg-gray-50">
+                          Mã NV
+                        </TableHead>
+                        <TableHead className="h-12 px-4 text-center font-semibold text-sm text-gray-700 bg-gray-50">
+                          Thời gian cập nhật
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Array.isArray(contactDetails) && contactDetails.length > 0 ? (
+                        contactDetails.map((contact, idx) => {
+                          // Determine which time column to display based on status
+                          const time =
+                            contactStatusFilter === "Debt Reported" ||
+                            contactStatusFilter === "Customer Responded"
+                              ? contact.send_at
+                              : contactStatusFilter === "First Reminder"
+                              ? contact.first_remind_at
+                              : contactStatusFilter === "Second Reminder"
+                              ? contact.second_remind_at
+                              : contact.latest_time;
+
+                          return (
+                            <TableRow
+                              key={idx}
+                              className={`hover:bg-blue-50 transition-colors border-b border-gray-100 ${
+                                idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"
+                              }`}
+                            >
+                              <TableCell className="h-14 px-4 text-center font-medium text-sm text-gray-900">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="h-14 px-4 font-mono text-sm text-gray-700">
+                                {contact.customer_code || "-"}
+                              </TableCell>
+                              <TableCell className="h-14 px-4 text-sm text-gray-700">
+                                {contact.customer_name || "-"}
+                              </TableCell>
+                              <TableCell className="h-14 px-4 font-mono text-sm text-gray-700">
+                                {contact.employee_code_raw || "-"}
+                              </TableCell>
+                              <TableCell className="h-14 px-4 text-sm text-center text-gray-700">
+                                {time
+                                  ? new Date(time).toLocaleString("vi-VN", {
+                                      timeZone: "Asia/Ho_Chi_Minh",
+                                    })
+                                  : "-"}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="py-16 text-center">
+                            <div className="flex flex-col items-center space-y-4">
+                              <AlertCircle className="h-16 w-16 opacity-50 text-gray-400" />
+                              <div>
+                                <p className="text-xl font-medium text-gray-900 mb-2">
+                                  Không tìm thấy kết quả nào
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  Thử thay đổi bộ lọc để xem thêm kết quả
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Pagination Controls */}
+                {contactTotal > contactLimit && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <span>
+                        Hiển thị {((contactPage - 1) * contactLimit) + 1}-{Math.min(contactPage * contactLimit, contactTotal)} trên {contactTotal} kết quả
+                      </span>
+                      <Select
+                        value={contactLimit.toString()}
+                        onValueChange={(value) => {
+                          setContactLimit(Number(value));
+                          loadContactDetails(contactStatusFilter, 1, Number(value));
+                        }}
+                      >
+                        <SelectTrigger className="w-20 h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="25">25</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                          <SelectItem value="200">200</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span>mỗi trang</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadContactDetails(contactStatusFilter, 1, contactLimit)}
+                        disabled={contactPage === 1}
+                      >
+                        Đầu
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadContactDetails(contactStatusFilter, contactPage - 1, contactLimit)}
+                        disabled={contactPage === 1}
+                      >
+                        Trước
+                      </Button>
+
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, Math.ceil(contactTotal / contactLimit)) }, (_, i) => {
+                          const totalPages = Math.ceil(contactTotal / contactLimit);
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (contactPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (contactPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = contactPage - 2 + i;
+                          }
+
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={contactPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              className="w-8 h-8 p-0"
+                              onClick={() => loadContactDetails(contactStatusFilter, pageNum, contactLimit)}
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadContactDetails(contactStatusFilter, contactPage + 1, contactLimit)}
+                        disabled={contactPage >= Math.ceil(contactTotal / contactLimit)}
+                      >
+                        Tiếp
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadContactDetails(contactStatusFilter, Math.ceil(contactTotal / contactLimit), contactLimit)}
+                        disabled={contactPage >= Math.ceil(contactTotal / contactLimit)}
+                      >
+                        Cuối
+                      </Button>
+                    </div>
                   </div>
                 )}
 
-                {/* ----- Nội dung chính ----- */}
-                {!contactLoading && (
-                  <>
-                    {/* --- QUICK STATS --- */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow">
-                        <div className="text-emerald-600 text-2xl font-bold">
-                          {contactTotal?.toLocaleString() || 0}
-                        </div>
-                        <p className="text-sm text-gray-600">Tổng khách hàng</p>
-                      </div>
-
-                      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow">
-                        <div className="text-blue-600 text-2xl font-bold">
-                          {Array.isArray(contactDetails) ? contactDetails.length : 0}
-                        </div>
-                        <p className="text-sm text-gray-600">Số bản ghi hiển thị</p>
-                      </div>
-
-                      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow">
-                        <div className="text-orange-600 text-2xl font-bold">
-                          {contactStatusFilter || "Tất cả"}
-                        </div>
-                        <p className="text-sm text-gray-600">Trạng thái</p>
-                      </div>
-                    </div>
-
-                    {/* --- BẢNG CHI TIẾT --- */}
-                    <div className="border border-gray-100 rounded-xl overflow-hidden shadow">
-                      <Table className="text-sm">
-                        <TableHeader className="bg-gray-50">
-                          <TableRow>
-                            <TableHead className="w-14 text-center">#</TableHead>
-                            <TableHead>Mã KH</TableHead>
-                            <TableHead>Tên KH</TableHead>
-                            <TableHead>Mã NV</TableHead>
-                            <TableHead>
-                              {contactStatusFilter === "Debt Reported" ||
-                              contactStatusFilter === "Customer Responded"
-                                ? "Thời gian gửi"
-                                : contactStatusFilter === "First Reminder"
-                                ? "Nhắc lần 1"
-                                : contactStatusFilter === "Second Reminder"
-                                ? "Nhắc lần 2"
-                                : "Thời gian cập nhật"}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-
-                        <TableBody>
-                          {Array.isArray(contactDetails) && contactDetails.length > 0 ? (
-                            contactDetails.map((c, idx) => {
-                              // xác định cột thời gian hiển thị
-                              const time =
-                                contactStatusFilter === "Debt Reported" ||
-                                contactStatusFilter === "Customer Responded"
-                                  ? c.send_at
-                                  : contactStatusFilter === "First Reminder"
-                                  ? c.first_remind_at
-                                  : contactStatusFilter === "Second Reminder"
-                                  ? c.second_remind_at
-                                  : c.latest_time;
-
-                              return (
-                                <TableRow key={idx}>
-                                  <TableCell className="text-center">{idx + 1}</TableCell>
-                                  <TableCell className="font-mono">{c.customer_code || "-"}</TableCell>
-                                  <TableCell>{c.customer_name || "-"}</TableCell>
-                                  <TableCell className="font-mono">{c.employee_code_raw || "-"}</TableCell>
-                                  <TableCell>
-                                    {time
-                                      ? new Date(time).toLocaleString("vi-VN", {
-                                          timeZone: "Asia/Ho_Chi_Minh",
-                                        })
-                                      : "-"}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={5} className="py-8 text-center text-gray-500">
-                                Không có dữ liệu
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
+                {/* Loading State */}
+                {contactLoading && (
+                  <div className="text-center py-16">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Đang tải dữ liệu...</p>
+                  </div>
                 )}
               </div>
             </DialogContent>
