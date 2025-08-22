@@ -98,14 +98,12 @@ const BarChartComponent = React.memo<{ data: ChartDataItem[]; onChartClick: any;
               <XAxis 
                 dataKey="name" 
                 tickLine={false} 
-                axisLine={false} 
                 fontSize={12}
                 tick={{ fill: '#64748b', fontWeight: 500 }}
                 axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
               />
               <YAxis 
                 tickLine={false} 
-                axisLine={false} 
                 fontSize={12}
                 tick={{ fill: '#64748b', fontWeight: 500 }}
                 axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
@@ -172,14 +170,14 @@ const LineChartComponent = React.memo<{ data: ChartDataItem[]; chartKey: string 
             <XAxis 
               dataKey="name" 
               tickLine={false} 
-              axisLine={false} 
+              
               fontSize={12}
               tick={{ fill: '#64748b', fontWeight: 500 }}
               axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
             />
             <YAxis 
               tickLine={false} 
-              axisLine={false} 
+               
               fontSize={12}
               tick={{ fill: '#64748b', fontWeight: 500 }}
               axisLine={{ stroke: '#cbd5e1', strokeWidth: 2 }}
