@@ -44,47 +44,25 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import CustomerResponseModal from "@/components/debt/debt-statistic/CustomerResponseModal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { BarChart as RBarChart, Bar as RBar, XAxis as RXAxis, YAxis as RYAxis, CartesianGrid as RCartesianGrid, ResponsiveContainer as RResponsiveContainer, Tooltip as RTooltip } from "recharts";
 import SmartTooltip from '@/components/ui/charts/SmartTooltip';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
 interface ChartDataItem {
   name: string;
   paid: number;
   pay_later: number;
   no_info: number;
 }
-const modalDate = new Date().toISOString().slice(0, 10);
+
 interface PieDataItem {
   name: string;
   value: number;
   fill: string;
 }
-const StatCard = ({
-  color,
-  value,
-  label,
-}: {
-  color: "emerald" | "blue" | "orange";
-  value: React.ReactNode;
-  label: string;
-}) => {
-  const palette =
-    color === "emerald"
-      ? "text-emerald-600"
-      : color === "blue"
-      ? "text-blue-600"
-      : "text-orange-600";
 
-  return (
-    <div className="flex flex-col items-center justify-center bg-white border border-gray-200 rounded-lg px-4 py-5">
-      <span className={`text-2xl font-bold ${palette}`}>{value}</span>
-      <span className="text-xs text-gray-500 mt-1">{label}</span>
-    </div>
-  );
-};
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -1081,136 +1059,18 @@ const DebtStatisticsDashboard: React.FC = () => {
             loading={loadingModalData}
           />
 
-          {/* Contact Details Modal - Custom for ContactDetailItem structure */}
-          <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
-            <DialogContent className="max-w-6xl max-h-[80vh] p-0 overflow-hidden rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
-              {/* ---------- HEADER ---------- */}
-              <header className="flex items-center justify-between px-8 py-6 border-b border-gray-200">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800">
-                    Khách theo trạng thái: <span className="text-indigo-600">{contactStatusFilter || 'Tất cả'}</span>
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {contactModalTitle || 'Chi tiết phản hồi khách hàng'} ({modalDate})
-                  </p>
-                </div>
-
-                {/* nút đóng */}
-                <button
-                  onClick={() => setContactModalOpen(false)}
-                  className="group rounded-full p-2 transition hover:bg-red-50"
-                  aria-label="Đóng"
-                >
-                  <svg
-                    className="h-5 w-5 stroke-gray-500 group-hover:stroke-red-600 transition"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                  </svg>
-                </button>
-              </header>
-
-              {/* ---------- BODY ---------- */}
-              <section className="flex flex-col gap-6 px-8 py-6 overflow-auto h-full">
-                {/* loading */}
-                {contactLoading && (
-                  <div className="flex flex-col items-center justify-center h-60 gap-3">
-                    <LoadingSpinner size={32} />
-                    <span className="text-sm text-gray-600">Đang tải dữ liệu...</span>
-                  </div>
-                )}
-
-                {!contactLoading && (
-                  <>
-                    {/* QUICK-STATS */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <StatCard
-                        color="emerald"
-                        value={contactTotal?.toLocaleString() || 0}
-                        label="Tổng khách hàng"
-                      />
-                      <StatCard
-                        color="blue"
-                        value={Array.isArray(contactDetails) ? contactDetails.length : 0}
-                        label="Số bản ghi hiển thị"
-                      />
-                      <StatCard
-                        color="orange"
-                        value={contactStatusFilter || 'Tất cả'}
-                        label="Trạng thái"
-                      />
-                    </div>
-
-                    {/* TABLE */}
-                    <div className="border border-gray-200 rounded-xl shadow-sm overflow-auto">
-                      <Table className="min-w-full text-sm">
-                        <TableHeader className="bg-gray-50 sticky top-0 z-10">
-                          <TableRow>
-                            <TableHead className="w-12 text-center">#</TableHead>
-                            <TableHead>Mã KH</TableHead>
-                            <TableHead className="w-56">Tên KH</TableHead>
-                            <TableHead>Mã NV</TableHead>
-                            <TableHead>
-                              {contactStatusFilter === 'Debt Reported' ||
-                              contactStatusFilter === 'Customer Responded'
-                                ? 'Thời gian gửi'
-                                : contactStatusFilter === 'First Reminder'
-                                ? 'Nhắc lần 1'
-                                : contactStatusFilter === 'Second Reminder'
-                                ? 'Nhắc lần 2'
-                                : 'Thời gian cập nhật'}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-
-                        <TableBody>
-                          {Array.isArray(contactDetails) && contactDetails.length ? (
-                            contactDetails.map((c, i) => {
-                              const t =
-                                contactStatusFilter === 'Debt Reported' ||
-                                contactStatusFilter === 'Customer Responded'
-                                  ? c.send_at
-                                  : contactStatusFilter === 'First Reminder'
-                                  ? c.first_remind_at
-                                  : contactStatusFilter === 'Second Reminder'
-                                  ? c.second_remind_at
-                                  : c.latest_time;
-
-                              return (
-                                <TableRow key={i} className="odd:bg-white even:bg-gray-50">
-                                  <TableCell className="text-center">{i + 1}</TableCell>
-                                  <TableCell className="font-mono">{c.customer_code || '-'}</TableCell>
-                                  <TableCell className="truncate">{c.customer_name || '-'}</TableCell>
-                                  <TableCell className="font-mono">{c.employee_code_raw || '-'}</TableCell>
-                                  <TableCell>
-                                    {t
-                                      ? new Date(t).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
-                                      : '-'}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={5} className="py-8 text-center text-gray-500">
-                                Không có dữ liệu
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
-                )}
-              </section>
-            </DialogContent>
-          </Dialog>
-
+          {/* Contact Details Modal using CustomerResponseModal */}
+          <CustomerResponseModal
+            isOpen={contactModalOpen}
+            onClose={() => setContactModalOpen(false)}
+            title={contactModalTitle || "Khách đã trả lời"}
+            items={contactDetails}
+            loading={contactLoading}
+            total={contactTotal}
+            page={contactPage}
+            limit={contactLimit}
+            onPageChange={(p) => loadContactDetails(contactStatusFilter || "", p, contactLimit)}
+          />
         </div>
       </div>
     </main>
