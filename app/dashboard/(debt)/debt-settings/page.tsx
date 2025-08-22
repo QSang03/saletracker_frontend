@@ -46,7 +46,7 @@ export default function DebtSettingsPage() {
     categories: [],
     brands: [],
     dateRange: { from: undefined, to: undefined },
-    singleDate: undefined,
+    singleDate: new Date().toISOString().split('T')[0], // Mặc định ngày hiện tại
     employees: [],
     sort: undefined,
     warningLevels: [], // Add this line to match Filters type
@@ -142,9 +142,9 @@ export default function DebtSettingsPage() {
   const paginatedData = useMemo(() => apiData, [apiData]); // Backend đã trả về đúng dữ liệu cho trang hiện tại
   const statusFilterOptions = useMemo(
     () => [
-      { value: "normal", label: "Bình thường" },
-      { value: "not_matched_debt", label: "Không trùng phiếu nợ" },
-      { value: "wrong_customer_name", label: "Sai tên khách hàng" },
+      { value: "normal", label: "Không có phiếu nợ" },
+      { value: "not_matched_debt", label: "Có phiếu nợ trong ngày" },
+      { value: "wrong_customer_name", label: "Lỗi gửi Zalo" },
     ],
     []
   );
@@ -179,7 +179,7 @@ export default function DebtSettingsPage() {
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
-      singleDate: undefined,
+      singleDate: new Date().toISOString().split('T')[0], // Mặc định ngày hiện tại
       employees: [],
       sort: undefined,
       warningLevels: [],
