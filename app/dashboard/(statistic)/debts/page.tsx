@@ -1105,10 +1105,9 @@ const DebtStatisticsDashboard: React.FC = () => {
                           </Label>
                           <Select value={contactStatusFilter} onValueChange={setContactStatusFilter}>
                             <SelectTrigger className="h-10 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                              <SelectValue placeholder="Chọn trạng thái" />
+                              <SelectValue placeholder="Tất cả trạng thái" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">Tất cả trạng thái</SelectItem>
                               <SelectItem value="Debt Reported">Đã gửi báo nợ</SelectItem>
                               <SelectItem value="Customer Responded">Khách đã trả lời</SelectItem>
                               <SelectItem value="First Reminder">Nhắc lần 1</SelectItem>
