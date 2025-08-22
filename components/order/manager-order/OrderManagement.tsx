@@ -996,7 +996,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
 
   return (
     <TooltipProvider>
-      <style jsx>{`
+      <style>{`
         .glow-red {
           box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
         }
@@ -1941,7 +1941,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           isQuoted?: boolean;
                           quotedMessageId?: number | string | null;
                           quotedSenderName?: string | null;
-                          quotedText?: string;
+                          quotedText?: string | null;
                           // Media / content type support
                           contentType?:
                             | "text"
@@ -2047,10 +2047,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 : customerDisplayName);
                             const isQuoted =
                               Boolean(m.is_quoted_message) ||
-                              m.quoted_message_id != null;
+                              m.quoted_message_id != null ||
+                              Boolean(m.quote_text);
                             const quotedMessageId = m.quoted_message_id ?? null;
                             const quotedSenderName =
                               m.quoted_sender_name?.toString?.() ?? null;
+                            const quotedText = m.quote_text?.toString?.() ?? null;
 
                             // media/content detection
                             let contentType: Message["contentType"] = "text";
@@ -2237,6 +2239,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               isQuoted,
                               quotedMessageId,
                               quotedSenderName,
+                              quotedText,
                               contentType,
                               imageUrl,
                               imageCaption,
@@ -2280,6 +2283,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               }
                             }
                             messages = messages.map((msg) => {
+                              // If message already has quotedText from quote_text field, keep it
+                              if (msg.quotedText) {
+                                return msg;
+                              }
+                              
                               if (msg.quotedMessageId != null) {
                                 const entry = messageLookup.get(
                                   String(msg.quotedMessageId)
