@@ -769,7 +769,16 @@ const DebtStatisticsDashboard: React.FC = () => {
       const toDate = range?.to ? range.to : new Date();
       const fromStr = (fromDate as Date).toISOString().split('T')[0];
       const toStr = (toDate as Date).toISOString().split('T')[0];
-      const res = await debtStatisticsAPI.getContactDetails({ from: fromStr, to: toStr, responseStatus: status, page: pageNum, limit: limitNum });
+      
+      // Prepare API parameters
+      const params: any = { from: fromStr, to: toStr, page: pageNum, limit: limitNum };
+      
+      // Only add responseStatus if it's not empty
+      if (status && status.trim() !== '') {
+        params.responseStatus = status;
+      }
+      
+      const res = await debtStatisticsAPI.getContactDetails(params);
       setContactDetails(res.data || []);
       setContactTotal(res.total || 0);
       setContactPage(res.page || pageNum);
@@ -1103,11 +1112,20 @@ const DebtStatisticsDashboard: React.FC = () => {
                             <AlertCircle className="h-4 w-4 text-gray-500" />
                             Trạng thái
                           </Label>
-                          <Select value={contactStatusFilter} onValueChange={setContactStatusFilter}>
+                          <Select 
+                            value={contactStatusFilter} 
+                            onValueChange={(value) => {
+                              setContactStatusFilter(value);
+                              // Reset to page 1 and fetch new data when filter changes
+                              setContactPage(1);
+                              loadContactDetails(value, 1, contactLimit);
+                            }}
+                          >
                             <SelectTrigger className="h-10 bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500">
                               <SelectValue placeholder="Tất cả trạng thái" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="">Tất cả trạng thái</SelectItem>
                               <SelectItem value="Debt Reported">Đã gửi báo nợ</SelectItem>
                               <SelectItem value="Customer Responded">Khách đã trả lời</SelectItem>
                               <SelectItem value="First Reminder">Nhắc lần 1</SelectItem>
@@ -1135,7 +1153,11 @@ const DebtStatisticsDashboard: React.FC = () => {
                                 >
                                   Trạng thái: {responseStatusVi[contactStatusFilter] || contactStatusFilter}
                                   <button
-                                    onClick={() => setContactStatusFilter("")}
+                                    onClick={() => {
+                                      setContactStatusFilter("");
+                                      setContactPage(1);
+                                      loadContactDetails("", 1, contactLimit);
+                                    }}
                                     className="ml-2 hover:text-blue-900"
                                   >
                                     <X className="h-3 w-3" />
@@ -1151,7 +1173,11 @@ const DebtStatisticsDashboard: React.FC = () => {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setContactStatusFilter("")}
+                            onClick={() => {
+                              setContactStatusFilter("");
+                              setContactPage(1);
+                              loadContactDetails("", 1, contactLimit);
+                            }}
                             className="h-9 px-4 text-sm font-medium text-gray-600 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-700"
                           >
                             <X className="h-4 w-4 inline-block mr-1" />
