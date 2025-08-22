@@ -2479,7 +2479,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                                 </div>
 
                                                 {/* Quoted message content - heavily muted */}
-                                                <div className="text-xs text-gray-400/90 line-clamp-2 whitespace-pre-wrap opacity-75 italic">
+                                                <div className="text-xs text-gray-400/90 whitespace-pre-wrap opacity-75 italic">
                                                   "
                                                   {message.quotedText ||
                                                     "(Không xem được nội dung)"}
@@ -2735,7 +2735,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                                 </div>
 
                                                 {/* Quoted message content - heavily muted */}
-                                                <div className="text-xs text-white/60 line-clamp-2 whitespace-pre-wrap text-right italic">
+                                                <div className="text-xs text-white/60 whitespace-pre-wrap text-right italic">
                                                   "
                                                   {message.quotedText ||
                                                     "(Không xem được nội dung)"}
