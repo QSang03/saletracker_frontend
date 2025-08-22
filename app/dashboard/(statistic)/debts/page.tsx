@@ -56,13 +56,35 @@ interface ChartDataItem {
   pay_later: number;
   no_info: number;
 }
-
+const modalDate = new Date().toISOString().slice(0, 10);
 interface PieDataItem {
   name: string;
   value: number;
   fill: string;
 }
+const StatCard = ({
+  color,
+  value,
+  label,
+}: {
+  color: "emerald" | "blue" | "orange";
+  value: React.ReactNode;
+  label: string;
+}) => {
+  const palette =
+    color === "emerald"
+      ? "text-emerald-600"
+      : color === "blue"
+      ? "text-blue-600"
+      : "text-orange-600";
 
+  return (
+    <div className="flex flex-col items-center justify-center bg-white border border-gray-200 rounded-lg px-4 py-5">
+      <span className={`text-2xl font-bold ${palette}`}>{value}</span>
+      <span className="text-xs text-gray-500 mt-1">{label}</span>
+    </div>
+  );
+};
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -1061,130 +1083,114 @@ const DebtStatisticsDashboard: React.FC = () => {
 
           {/* Contact Details Modal - Custom for ContactDetailItem structure */}
           <Dialog open={contactModalOpen} onOpenChange={setContactModalOpen}>
-            <DialogContent className="max-w-6xl p-0 border-0 shadow-2xl">
-              {/* ==== HEADER ==== */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-white via-gray-50 to-blue-50">
-                {/* hiệu ứng nền mờ */}
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-blue-500/5 to-violet-500/5" />
-
-                <div className="relative z-10 p-6 flex items-start justify-between">
-                  <div>
-                    <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-emerald-800 to-blue-800 bg-clip-text text-transparent">
-                      {contactModalTitle || "Khách đã trả lời"}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Theo dõi chi tiết phản hồi của khách hàng
-                    </p>
-                  </div>
-
-                  <button
-                    className="rounded-full p-2 hover:bg-red-50 hover:text-red-600"
-                    onClick={() => setContactModalOpen(false)}
-                    aria-label="Đóng"
-                  >
-                    {/* SVG icon X (20×20) */}
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M18 6 6 18" />
-                      <path d="m6 6 12 12" />
-                    </svg>
-                  </button>
+            <DialogContent className="max-w-6xl max-h-[80vh] p-0 overflow-hidden rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+              {/* ---------- HEADER ---------- */}
+              <header className="flex items-center justify-between px-8 py-6 border-b border-gray-200">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    Khách theo trạng thái: <span className="text-indigo-600">{contactStatusFilter || 'Tất cả'}</span>
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {contactModalTitle || 'Chi tiết phản hồi khách hàng'} ({modalDate})
+                  </p>
                 </div>
-              </div>
 
-              {/* ==== BODY ==== */}
-              <div className="flex-1 overflow-auto px-6 py-6 space-y-6 max-h-[70vh]">
-                {/* ----- Loading ----- */}
+                {/* nút đóng */}
+                <button
+                  onClick={() => setContactModalOpen(false)}
+                  className="group rounded-full p-2 transition hover:bg-red-50"
+                  aria-label="Đóng"
+                >
+                  <svg
+                    className="h-5 w-5 stroke-gray-500 group-hover:stroke-red-600 transition"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </header>
+
+              {/* ---------- BODY ---------- */}
+              <section className="flex flex-col gap-6 px-8 py-6 overflow-auto h-full">
+                {/* loading */}
                 {contactLoading && (
-                  <div className="flex flex-col items-center justify-center h-40 gap-2">
+                  <div className="flex flex-col items-center justify-center h-60 gap-3">
                     <LoadingSpinner size={32} />
-                    <span className="text-gray-600">Đang tải dữ liệu...</span>
+                    <span className="text-sm text-gray-600">Đang tải dữ liệu...</span>
                   </div>
                 )}
 
-                {/* ----- Nội dung chính ----- */}
                 {!contactLoading && (
                   <>
-                    {/* --- QUICK STATS --- */}
+                    {/* QUICK-STATS */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow">
-                        <div className="text-emerald-600 text-2xl font-bold">
-                          {contactTotal?.toLocaleString() || 0}
-                        </div>
-                        <p className="text-sm text-gray-600">Tổng khách hàng</p>
-                      </div>
-
-                      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow">
-                        <div className="text-blue-600 text-2xl font-bold">
-                          {Array.isArray(contactDetails) ? contactDetails.length : 0}
-                        </div>
-                        <p className="text-sm text-gray-600">Số bản ghi hiển thị</p>
-                      </div>
-
-                      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow">
-                        <div className="text-orange-600 text-2xl font-bold">
-                          {contactStatusFilter || "Tất cả"}
-                        </div>
-                        <p className="text-sm text-gray-600">Trạng thái</p>
-                      </div>
+                      <StatCard
+                        color="emerald"
+                        value={contactTotal?.toLocaleString() || 0}
+                        label="Tổng khách hàng"
+                      />
+                      <StatCard
+                        color="blue"
+                        value={Array.isArray(contactDetails) ? contactDetails.length : 0}
+                        label="Số bản ghi hiển thị"
+                      />
+                      <StatCard
+                        color="orange"
+                        value={contactStatusFilter || 'Tất cả'}
+                        label="Trạng thái"
+                      />
                     </div>
 
-                    {/* --- BẢNG CHI TIẾT --- */}
-                    <div className="border border-gray-100 rounded-xl overflow-hidden shadow">
-                      <Table className="text-sm">
-                        <TableHeader className="bg-gray-50">
+                    {/* TABLE */}
+                    <div className="border border-gray-200 rounded-xl shadow-sm overflow-auto">
+                      <Table className="min-w-full text-sm">
+                        <TableHeader className="bg-gray-50 sticky top-0 z-10">
                           <TableRow>
-                            <TableHead className="w-14 text-center">#</TableHead>
+                            <TableHead className="w-12 text-center">#</TableHead>
                             <TableHead>Mã KH</TableHead>
-                            <TableHead>Tên KH</TableHead>
+                            <TableHead className="w-56">Tên KH</TableHead>
                             <TableHead>Mã NV</TableHead>
                             <TableHead>
-                              {contactStatusFilter === "Debt Reported" ||
-                              contactStatusFilter === "Customer Responded"
-                                ? "Thời gian gửi"
-                                : contactStatusFilter === "First Reminder"
-                                ? "Nhắc lần 1"
-                                : contactStatusFilter === "Second Reminder"
-                                ? "Nhắc lần 2"
-                                : "Thời gian cập nhật"}
+                              {contactStatusFilter === 'Debt Reported' ||
+                              contactStatusFilter === 'Customer Responded'
+                                ? 'Thời gian gửi'
+                                : contactStatusFilter === 'First Reminder'
+                                ? 'Nhắc lần 1'
+                                : contactStatusFilter === 'Second Reminder'
+                                ? 'Nhắc lần 2'
+                                : 'Thời gian cập nhật'}
                             </TableHead>
                           </TableRow>
                         </TableHeader>
 
                         <TableBody>
-                          {Array.isArray(contactDetails) && contactDetails.length > 0 ? (
-                            contactDetails.map((c, idx) => {
-                              // xác định cột thời gian hiển thị
-                              const time =
-                                contactStatusFilter === "Debt Reported" ||
-                                contactStatusFilter === "Customer Responded"
+                          {Array.isArray(contactDetails) && contactDetails.length ? (
+                            contactDetails.map((c, i) => {
+                              const t =
+                                contactStatusFilter === 'Debt Reported' ||
+                                contactStatusFilter === 'Customer Responded'
                                   ? c.send_at
-                                  : contactStatusFilter === "First Reminder"
+                                  : contactStatusFilter === 'First Reminder'
                                   ? c.first_remind_at
-                                  : contactStatusFilter === "Second Reminder"
+                                  : contactStatusFilter === 'Second Reminder'
                                   ? c.second_remind_at
                                   : c.latest_time;
 
                               return (
-                                <TableRow key={idx}>
-                                  <TableCell className="text-center">{idx + 1}</TableCell>
-                                  <TableCell className="font-mono">{c.customer_code || "-"}</TableCell>
-                                  <TableCell>{c.customer_name || "-"}</TableCell>
-                                  <TableCell className="font-mono">{c.employee_code_raw || "-"}</TableCell>
+                                <TableRow key={i} className="odd:bg-white even:bg-gray-50">
+                                  <TableCell className="text-center">{i + 1}</TableCell>
+                                  <TableCell className="font-mono">{c.customer_code || '-'}</TableCell>
+                                  <TableCell className="truncate">{c.customer_name || '-'}</TableCell>
+                                  <TableCell className="font-mono">{c.employee_code_raw || '-'}</TableCell>
                                   <TableCell>
-                                    {time
-                                      ? new Date(time).toLocaleString("vi-VN", {
-                                          timeZone: "Asia/Ho_Chi_Minh",
-                                        })
-                                      : "-"}
+                                    {t
+                                      ? new Date(t).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+                                      : '-'}
                                   </TableCell>
                                 </TableRow>
                               );
@@ -1201,9 +1207,10 @@ const DebtStatisticsDashboard: React.FC = () => {
                     </div>
                   </>
                 )}
-              </div>
+              </section>
             </DialogContent>
           </Dialog>
+
         </div>
       </div>
     </main>
