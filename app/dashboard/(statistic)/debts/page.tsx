@@ -229,6 +229,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   const [contactTotal, setContactTotal] = useState(0);
   const [contactLoading, setContactLoading] = useState(false);
   const [contactStatusFilter, setContactStatusFilter] = useState<string>("");
+  const [contactModalDate, setContactModalDate] = useState<string>(""); // Lưu ngày được bấm từ chart
 
   // Use ref to track if initial fetch is done and prevent duplicate calls
   const initialFetchDone = useRef(false);
@@ -316,6 +317,11 @@ const DebtStatisticsDashboard: React.FC = () => {
       fetchData();
     }
   }, []); // Empty dependency array - only run on mount
+
+  // Debug effect to monitor contactStatusFilter changes
+  useEffect(() => {
+    console.log('🔍 [Debug] contactStatusFilter changed to:', contactStatusFilter);
+  }, [contactStatusFilter]);
 
   // Separate effect for filter changes - now using debounced filters
   useEffect(() => {
@@ -673,8 +679,10 @@ const DebtStatisticsDashboard: React.FC = () => {
   const handleResponseDailyClick = useCallback(async (status: string, entry: any, index: number) => {
     const dateStr = entry?.payload?.name;
     if (!dateStr || !status) return;
+    console.log('🔍 [handleResponseDailyClick] Opening modal with status:', status, 'date:', dateStr);
     setContactStatusFilter(status);
     setContactModalTitle(`Khách theo trạng thái: ${status} (${dateStr})`);
+    setContactModalDate(dateStr); // Lưu ngày được bấm từ chart
     setContactModalOpen(true);
     setContactLoading(true);
     try {
@@ -695,7 +703,8 @@ const DebtStatisticsDashboard: React.FC = () => {
       setContactTotal(payload?.total || data.length || 0);
       setContactPage(payload?.page || 1);
       setContactLimit(payload?.limit || contactLimit);
-    } catch {
+    } catch (error) {
+      console.error('❌ [handleResponseDailyClick] Error:', error);
       setContactDetails([]);
       setContactTotal(0);
     } finally {
@@ -763,33 +772,45 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Contact details modal loader
   const loadContactDetails = useCallback(async (status: string, pageNum: number, limitNum: number) => {
+    console.log('🔍 [loadContactDetails] Called with:', { status, pageNum, limitNum });
+    console.log('🔍 [loadContactDetails] Using date from chart click:', contactModalDate);
     setContactLoading(true);
     try {
-      const fromDate = range?.from ? range.from : new Date();
-      const toDate = range?.to ? range.to : new Date();
-      const fromStr = (fromDate as Date).toISOString().split('T')[0];
-      const toStr = (toDate as Date).toISOString().split('T')[0];
+      if (!contactModalDate) {
+        console.warn('⚠️ No date from chart click, cannot filter properly');
+        setContactDetails([]);
+        setContactTotal(0);
+        return;
+      }
       
-      // Prepare API parameters
-      const params: any = { from: fromStr, to: toStr, page: pageNum, limit: limitNum };
+      // Always use the date from chart click - NEVER use range
+      const params: any = {
+        date: contactModalDate,
+        mode: 'events',
+        page: pageNum,
+        limit: limitNum,
+      };
       
       // Only add responseStatus if it's not empty
       if (status && status.trim() !== '') {
         params.responseStatus = status;
       }
       
+      console.log('🔍 [loadContactDetails] API params (date mode):', params);
       const res = await debtStatisticsAPI.getContactDetails(params);
+      console.log('🔍 [loadContactDetails] API response:', res);
       setContactDetails(res.data || []);
       setContactTotal(res.total || 0);
       setContactPage(res.page || pageNum);
       setContactLimit(res.limit || limitNum);
-    } catch {
+    } catch (error) {
+      console.error('❌ [loadContactDetails] Error:', error);
       setContactDetails([]);
       setContactTotal(0);
     } finally {
       setContactLoading(false);
     }
-  }, [range]);
+  }, [contactModalDate]); // Depend on the date from chart click
 
   const handleResponseBarClick = useCallback((item: ContactResponseItem) => {
     const status = item.status;
@@ -1115,11 +1136,13 @@ const DebtStatisticsDashboard: React.FC = () => {
                           <Select 
                             value={contactStatusFilter} 
                             onValueChange={(value) => {
+                              console.log('🔍 [Filter] Changing status filter:', { from: contactStatusFilter, to: value });
                               setContactStatusFilter(value);
                               // Reset to page 1 and fetch new data when filter changes
                               setContactPage(1);
                               // Convert "all" back to empty string for API
                               const apiStatus = value === "all" ? "" : value;
+                              console.log('🔍 [Filter] API status will be:', apiStatus);
                               loadContactDetails(apiStatus, 1, contactLimit);
                             }}
                           >
@@ -1158,6 +1181,7 @@ const DebtStatisticsDashboard: React.FC = () => {
                                     onClick={() => {
                                       setContactStatusFilter("all");
                                       setContactPage(1);
+                                      // Clear filter = show all statuses for the current date
                                       loadContactDetails("", 1, contactLimit);
                                     }}
                                     className="ml-2 hover:text-blue-900"
@@ -1176,14 +1200,29 @@ const DebtStatisticsDashboard: React.FC = () => {
                             variant="outline"
                             size="sm"
                             onClick={() => {
+                              console.log('🔍 [Test] Clear filter button clicked');
                               setContactStatusFilter("all");
                               setContactPage(1);
+                              // Clear filter = show all statuses for the current date
                               loadContactDetails("", 1, contactLimit);
                             }}
                             className="h-9 px-4 text-sm font-medium text-gray-600 bg-white border-gray-300 hover:bg-gray-50 hover:text-gray-700"
                           >
                             <X className="h-4 w-4 inline-block mr-1" />
                             Xóa bộ lọc
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              console.log('🔍 [Test] Test filter button clicked');
+                              console.log('🔍 [Test] Current modal title:', contactModalTitle);
+                              console.log('🔍 [Test] Date from chart click:', contactModalDate);
+                              loadContactDetails("Debt Reported", 1, contactLimit);
+                            }}
+                            className="h-9 px-4 text-sm font-medium text-blue-700 bg-white border-blue-300 hover:bg-blue-50"
+                          >
+                            Test Filter
                           </Button>
                           <Button
                             variant="outline"
