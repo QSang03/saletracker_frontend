@@ -126,10 +126,10 @@ export default function DebtHistoryDialog({
     if (!loading && histories.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={3} className="h-[400px] text-center">
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="text-6xl mb-4 animate-bounce">📋</div>
-              <div className="text-xl font-medium bg-gradient-to-r from-slate-600 via-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+          <TableCell colSpan={3} className="h-[300px] text-center">
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="text-5xl mb-3 animate-bounce">📋</div>
+              <div className="text-lg font-medium bg-gradient-to-r from-slate-600 via-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
                 Chưa có lịch sử công nợ
               </div>
               <div className="text-sm text-slate-400">
@@ -162,7 +162,7 @@ export default function DebtHistoryDialog({
           style={{ 
             animationDelay: `${idx * 60}ms`,
             animation: 'fadeInScale 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards'
-          }}
+          } as React.CSSProperties}
         >
           {/* STT Column - ✅ CLEAN ALIGNMENT */}
           <TableCell className="text-center font-medium px-4 py-3 relative z-10 w-20">
@@ -503,7 +503,7 @@ export default function DebtHistoryDialog({
       `}</style>
 
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="!w-[50vw] !max-w-[50vw] !h-[85vh] !max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogContent className="!w-[50vw] !max-w-[50vw] !h-[80vh] !max-h-[80vh] flex flex-col">
           {/* Quantum field background */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-cyan-400/15 to-blue-400/15 rounded-full blur-3xl animate-pulse"></div>
@@ -551,8 +551,8 @@ export default function DebtHistoryDialog({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Main content area với proper layout và scroll */}
-          <div className="flex-1 flex flex-col min-h-0 relative z-10 overflow-hidden">
+          {/* Main content area với proper layout và giới hạn chiều cao */}
+          <div className="flex-1 flex flex-col min-h-0 relative z-10">
             <PaginatedTable
               loading={loading}
               page={currentPage}
@@ -564,7 +564,7 @@ export default function DebtHistoryDialog({
               defaultPageSize={10}
               emptyText="Chưa có lịch sử công nợ"
             >
-              <div className="flex-1 min-h-0 border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden max-h-[calc(85vh-200px)]">
+              <div className="flex-1 min-h-0 max-h-[60vh] border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden">
                 <div className="h-full overflow-y-auto">
                   {/* ✅ FIXED TABLE LAYOUT - PERFECT ALIGNMENT */}
                   <Table className="w-full table-fixed">
@@ -573,8 +573,8 @@ export default function DebtHistoryDialog({
                       <col />
                       <col className="w-25" />
                     </colgroup>
-                    <TableHeader className="sticky top-0 z-10">
-                      <TableRow className="bg-gradient-to-r from-cyan-50/80 via-blue-50/80 to-purple-50/80 border-b-2 border-gradient-to-r from-cyan-200 via-blue-200 to-purple-200 backdrop-blur-sm">
+                    <TableHeader className="sticky top-0 z-10 bg-gradient-to-r from-cyan-50/80 via-blue-50/80 to-purple-50/80 border-b-2 border-gradient-to-r from-cyan-200 via-blue-200 to-purple-200 backdrop-blur-sm">
+                      <TableRow>
                         <TableHead className="text-center font-bold text-slate-700 py-4 px-4 text-sm w-20">
                           <div className="flex items-center justify-center gap-2 group/head">
                             <Hexagon className="h-4 w-4 text-cyan-600 group-hover/head:animate-spin" />
