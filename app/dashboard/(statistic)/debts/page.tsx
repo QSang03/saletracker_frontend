@@ -404,7 +404,7 @@ const DebtStatisticsDashboard: React.FC = () => {
     if (!isComponentMounted.current) return;
     setLoadingModalData(true);
     try {
-      // BẮT BUỘC phải có yyyy-mm-dd hợp lệ
+      // BẮT BUỘC phải có yyyy-mm-dd hợp lệ - KHÔNG fallback về hôm nay
       if (!(typeof dateFromChart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateFromChart))) {
         console.warn('[fetchDebtsForModal] dateFromChart không hợp lệ:', dateFromChart);
         setSelectedDebts([]);

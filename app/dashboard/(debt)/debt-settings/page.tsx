@@ -46,7 +46,7 @@ export default function DebtSettingsPage() {
     categories: [],
     brands: [],
     dateRange: { from: undefined, to: undefined },
-    singleDate: new Date().toISOString().split('T')[0], // Mặc định ngày hiện tại
+    singleDate: undefined, // Không mặc định ngày hiện tại
     employees: [],
     sort: undefined,
     warningLevels: [], // Add this line to match Filters type
@@ -179,7 +179,7 @@ export default function DebtSettingsPage() {
       categories: [],
       brands: [],
       dateRange: { from: undefined, to: undefined },
-      singleDate: new Date().toISOString().split('T')[0], // Mặc định ngày hiện tại
+      singleDate: undefined, // Không mặc định ngày hiện tại
       employees: [],
       sort: undefined,
       warningLevels: [],

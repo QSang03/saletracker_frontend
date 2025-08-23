@@ -73,7 +73,7 @@ export default function ManagerDebtPage() {
   });
   const [filters, setFilters] = useState({
     search: "",
-    singleDate: "", // Không set giá trị mặc định là ngày hôm nay
+    singleDate: new Date().toLocaleDateString("en-CA"), // Use toLocaleDateString to avoid timezone issues
     statuses: [] as string[],
     employees: [] as string[],
   });
@@ -93,7 +93,8 @@ export default function ManagerDebtPage() {
           const filter = JSON.parse(filterStr);
           const newFilters = {
             search: filter.search || "",
-            singleDate: filter.singleDate || "", // Không set giá trị mặc định là ngày hôm nay
+            singleDate:
+              filter.singleDate || new Date().toLocaleDateString("en-CA"),
             statuses: [],
             employees: [],
           };
