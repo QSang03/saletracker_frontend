@@ -46,8 +46,8 @@ interface Alert {
 
 // Constants
 const STATUS_OPTIONS = [
-  { value: CampaignStatus.SCHEDULED, label: "Đã lên lịch" },
   { value: CampaignStatus.DRAFT, label: "Bản nháp" },
+  { value: CampaignStatus.SCHEDULED, label: "Đã lên lịch" },
   { value: CampaignStatus.RUNNING, label: "Đang chạy" },
   { value: CampaignStatus.PAUSED, label: "Tạm dừng" },
   { value: CampaignStatus.COMPLETED, label: "Hoàn thành" },
@@ -72,40 +72,6 @@ const DEFAULT_STATS: CampaignStats = {
   completedCampaigns: 0,
   scheduledCampaigns: 0,
   archivedCampaigns: 0,
-};
-
-// ✅ THÊM: Default filters với ưu tiên status trước, sau đó mới đến ngày tạo
-const DEFAULT_FILTERS: CampaignFilters = {
-  statuses: [
-    CampaignStatus.SCHEDULED,
-    CampaignStatus.DRAFT,
-    CampaignStatus.RUNNING,
-    CampaignStatus.PAUSED,
-    CampaignStatus.COMPLETED,
-  ],
-  page: 1,
-  pageSize: 10,
-};
-
-// ✅ THÊM: Default filters cho PaginatedTable component
-const DEFAULT_PAGINATED_TABLE_FILTERS = {
-  search: "",
-  departments: [],
-  roles: [],
-  statuses: [
-    CampaignStatus.SCHEDULED,
-    CampaignStatus.DRAFT,
-    CampaignStatus.RUNNING,
-    CampaignStatus.PAUSED,
-    CampaignStatus.COMPLETED,
-  ],
-  zaloLinkStatuses: [],
-  categories: [],
-  brands: [],
-  warningLevels: [],
-  dateRange: { from: undefined, to: undefined },
-  singleDate: undefined,
-  employees: [],
 };
 
 // ✅ CẬP NHẬT: Custom hook for campaign data với pagination sync
@@ -203,11 +169,11 @@ export default function CampaignPage() {
     handleDepartmentChange,
   } = useCampaignFilters();
 
-  // ✅ CẬP NHẬT: Use pagination sync hook với pageSize từ localStorage và default filters
+  // ✅ CẬP NHẬT: Use pagination sync hook với pageSize từ localStorage
   const pagination = usePaginationSync({
     initialPage: 1,
     initialPageSize: getInitialPageSize(),
-    initialFilters: DEFAULT_FILTERS,
+    initialFilters: {},
     onStateChange: (state) => {
     },
     debounceMs: 300
@@ -303,8 +269,10 @@ export default function CampaignPage() {
       localStorage.setItem(PAGE_SIZE_KEY, defaultPageSize.toString());
     }
     
-    // ✅ Reset pagination state (sẽ reset về DEFAULT_FILTERS)
-    pagination.reset();
+    // ✅ Reset pagination state với pageSize mặc định
+    pagination.setPageSize(defaultPageSize);
+    pagination.setFilters({});
+    pagination.setPage(1);
     
     // ✅ Reset department selection
     handleDepartmentChange([]);
@@ -397,7 +365,7 @@ export default function CampaignPage() {
     const newIsArchived = !isViewingArchived;
     setIsViewingArchived(newIsArchived);
     
-    // ✅ UPDATE: Reset everything using pagination hook (sẽ reset về DEFAULT_FILTERS)
+    // ✅ UPDATE: Reset everything using pagination hook
     pagination.reset();
     handleDepartmentChange([]);
   }, [isViewingArchived, pagination, handleDepartmentChange]);
@@ -604,8 +572,6 @@ export default function CampaignPage() {
               onFilterChange={handleFilterChange}
               onDepartmentChange={handleDepartmentFilterChange} // Callback đặc biệt cho department
               loading={campaignsLoading || optionsLoading}
-              // ✅ THÊM: Initial filters để hiển thị status mặc định
-              initialFilters={DEFAULT_PAGINATED_TABLE_FILTERS}
               // **Export functionality**
             >
               <CampaignManagement
