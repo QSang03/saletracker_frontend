@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   Campaign,
   CampaignFormData,
@@ -310,6 +310,7 @@ const CampaignRow = React.memo(
     isLoading,
     onAction,
     onShowCustomers,
+    focusedRowId,
   }: {
     campaign: CampaignWithDetails;
     index: number;
@@ -317,6 +318,7 @@ const CampaignRow = React.memo(
     isLoading: boolean;
     onAction: (action: string, campaign: CampaignWithDetails) => void;
     onShowCustomers: (campaign: CampaignWithDetails) => void;
+    focusedRowId: string | null;
   }) => {
     const { canAccess } = usePermission();
     const canUpdate = canAccess("chien-dich", "update");
@@ -366,11 +368,17 @@ const CampaignRow = React.memo(
 
     const tableRowContent = (
       <TableRow
+        {...(focusedRowId === campaign.id
+          ? { "data-focused-row-id": String(campaign.id) }
+          : {})}
         className={cn(
           "group transition-all duration-200 cursor-pointer",
           hasWarning
             ? "bg-orange-50 hover:bg-orange-100 border-l-4 border-l-orange-400"
             : "hover:bg-gray-50",
+          focusedRowId === campaign.id
+            ? "focused-no-hover ring-2 ring-indigo-300 shadow-lg bg-amber-300"
+            : "",
           isLoading && "opacity-50 pointer-events-none"
         )}
         onDoubleClick={handleDoubleClick}
@@ -673,6 +681,11 @@ export default function CampaignManagement({
   );
   const [lastEventTimestamp, setLastEventTimestamp] = useState<number>(0);
 
+  // ✅ THÊM: Focused row state để highlight row đang được thao tác
+  const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
+  const skipClearRef = useRef(false);
+  const modalOpenRef = useRef(false);
+
   const getEventKey = (event: any): string => {
     return `${event.ws_type}_${event.campaign_id}_${event.entity_id}_${event.timestamp}`;
   };
@@ -801,6 +814,7 @@ export default function CampaignManagement({
   const handleCopyCampaign = useCallback(
     async (campaign: CampaignWithDetails) => {
       try {
+        setFocusSafely(campaign.id);
         setItemLoading(campaign.id, true);
 
         const copyData = await campaignAPI.getCopyData(campaign.id);
@@ -816,7 +830,7 @@ export default function CampaignManagement({
         const safeCampaign = transformToCampaignWithDetails(newCampaign);
         setEditingCampaign(safeCampaign);
         setIsCopyAndEditMode(true);
-        setIsEditModalOpen(true);
+        withSkipClear(() => setIsEditModalOpen(true));
 
         setTimeout(() => {
           toast.info(
@@ -838,13 +852,14 @@ export default function CampaignManagement({
   );
 
   const handleEdit = useCallback((campaign: CampaignWithDetails) => {
+    setFocusSafely(campaign.id);
     setEditingCampaign(campaign);
     setIsCopyAndEditMode(false);
-    setIsEditModalOpen(true);
+    withSkipClear(() => setIsEditModalOpen(true));
   }, []);
 
   const handleEditModalClose = useCallback(() => {
-    setIsEditModalOpen(false);
+    withSkipClear(() => setIsEditModalOpen(false));
     setEditingCampaign(null);
     setIsCopyAndEditMode(false);
   }, []);
@@ -889,17 +904,21 @@ export default function CampaignManagement({
   }, []);
 
   const handleShowCustomers = useCallback((campaign: Campaign) => {
+    setFocusSafely(campaign.id);
     setSelectedCampaign(campaign);
-    setIsCustomersModalOpen(true);
+    withSkipClear(() => setIsCustomersModalOpen(true));
   }, []);
 
   const handleCloseCustomersModal = useCallback(() => {
-    setIsCustomersModalOpen(false);
+    withSkipClear(() => setIsCustomersModalOpen(false));
     setSelectedCampaign(null);
   }, []);
 
   const handleAction = useCallback(
     async (action: string, payload: any) => {
+      // ✅ THÊM: Set focus cho row đang được thao tác
+      setFocusSafely(payload.id);
+      
       const canUpdate = canAccess("chien-dich", "update");
       const canDelete = canAccess("chien-dich", "delete");
       const canCreate = canAccess("chien-dich", "create");
@@ -1247,6 +1266,69 @@ export default function CampaignManagement({
     return () => clearInterval(cleanup);
   }, []);
 
+  // ✅ THÊM: Helper function để set focus an toàn
+  const setFocusSafely = (id: string | null) => {
+    try {
+      skipClearRef.current = true;
+      setFocusedRowId(id);
+    } finally {
+      setTimeout(() => {
+        skipClearRef.current = false;
+      }, 0);
+    }
+  };
+
+  // ✅ THÊM: Utility để thực hiện action mà không bị clear focus
+  const withSkipClear = (fn: () => void, ms: number = 400) => {
+    skipClearRef.current = true;
+    try {
+      fn();
+    } finally {
+      setTimeout(() => {
+        skipClearRef.current = false;
+      }, ms);
+    }
+  };
+
+  // ✅ THÊM: Clear focusedRowId khi click outside
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (skipClearRef.current) return;
+      if (modalOpenRef.current) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      const focusedNode = target.closest(
+        "[data-focused-row-id]"
+      ) as HTMLElement | null;
+
+      if (focusedNode) {
+        const id = focusedNode.getAttribute("data-focused-row-id");
+        if (id !== null && String(focusedRowId) === id) return;
+      }
+
+      if (focusedRowId !== null) setFocusSafely(null);
+    };
+
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [focusedRowId]);
+
+  // ✅ THÊM: Keep modalOpenRef in sync với modal states
+  useEffect(() => {
+    modalOpenRef.current = !!(
+      isCustomersModalOpen ||
+      createModalOpen ||
+      isEditModalOpen ||
+      confirmDialog.isOpen
+    );
+  }, [isCustomersModalOpen, createModalOpen, isEditModalOpen, confirmDialog.isOpen]);
+
+  // ✅ THÊM: Clear focus khi data thay đổi
+  useEffect(() => {
+    setFocusSafely(null);
+  }, [campaigns]);
+
   return (
     <TooltipProvider>
       {/* ✅ Socket integration for real-time updates */}
@@ -1317,6 +1399,7 @@ export default function CampaignManagement({
                   isLoading={loadingItems.has(campaign.id)}
                   onAction={handleAction}
                   onShowCustomers={handleShowCustomers}
+                  focusedRowId={focusedRowId}
                 />
               ))}
 

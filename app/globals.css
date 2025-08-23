@@ -3,6 +3,12 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* ✅ THÊM: CSS cho focused row highlight */
+.focused-no-hover:hover {
+  background-color: inherit !important;
+  transform: none !important;
+}
 :root {
   --radius: 0.625rem;
   --card: oklch(1 0 0);

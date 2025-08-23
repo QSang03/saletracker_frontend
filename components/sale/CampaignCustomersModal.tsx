@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -244,6 +244,11 @@ export default function CampaignCustomersModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [customerToDelete, setCustomerToDelete] =
     useState<CustomerWithStatus | null>(null);
+
+  // ✅ THÊM: Focused row state để highlight row đang được thao tác
+  const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
+  const skipClearRef = useRef(false);
+  const modalOpenRef = useRef(false);
 
   const getEventKey = (event: any): string => {
     return `${event.ws_type || event.type}_${
@@ -517,11 +522,74 @@ export default function CampaignCustomersModal({
     return () => clearInterval(cleanup);
   }, []);
 
+  // ✅ THÊM: Helper function để set focus an toàn
+  const setFocusSafely = (id: string | null) => {
+    try {
+      skipClearRef.current = true;
+      setFocusedRowId(id);
+    } finally {
+      setTimeout(() => {
+        skipClearRef.current = false;
+      }, 0);
+    }
+  };
+
+  // ✅ THÊM: Utility để thực hiện action mà không bị clear focus
+  const withSkipClear = (fn: () => void, ms: number = 400) => {
+    skipClearRef.current = true;
+    try {
+      fn();
+    } finally {
+      setTimeout(() => {
+        skipClearRef.current = false;
+      }, ms);
+    }
+  };
+
+  // ✅ THÊM: Clear focusedRowId khi click outside
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (skipClearRef.current) return;
+      if (modalOpenRef.current) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      const focusedNode = target.closest(
+        "[data-focused-row-id]"
+      ) as HTMLElement | null;
+
+      if (focusedNode) {
+        const id = focusedNode.getAttribute("data-focused-row-id");
+        if (id !== null && String(focusedRowId) === id) return;
+      }
+
+      if (focusedRowId !== null) setFocusSafely(null);
+    };
+
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [focusedRowId]);
+
+  // ✅ THÊM: Keep modalOpenRef in sync với modal states
+  useEffect(() => {
+    modalOpenRef.current = !!(
+      isLogModalOpen ||
+      isEditModalOpen ||
+      showDeleteConfirm
+    );
+  }, [isLogModalOpen, isEditModalOpen, showDeleteConfirm]);
+
+  // ✅ THÊM: Clear focus khi data thay đổi
+  useEffect(() => {
+    setFocusSafely(null);
+  }, [customers]);
+
   const handleStatusFilterChange = (value: string) => {
     setStatusFilter(value);
   };
 
   const handleViewLogs = (customer: CustomerWithStatus) => {
+    setFocusSafely(customer.id);
     const customerWithSentDate = {
       ...customer,
       sent_date: customer.sent_at
@@ -530,32 +598,34 @@ export default function CampaignCustomersModal({
     };
 
     setSelectedCustomer(customerWithSentDate);
-    setIsLogModalOpen(true);
+    withSkipClear(() => setIsLogModalOpen(true));
   };
 
   // ✅ THÊM MỚI: Handle edit customer
   const handleEditCustomer = (customer: CustomerWithStatus) => {
+    setFocusSafely(customer.id);
     setEditingCustomer(customer);
-    setIsEditModalOpen(true);
+    withSkipClear(() => setIsEditModalOpen(true));
   };
 
   const handleEditModalClose = () => {
-    setIsEditModalOpen(false);
+    withSkipClear(() => setIsEditModalOpen(false));
     setEditingCustomer(null);
   };
 
   const handleEditSuccess = () => {
     // Reload customers sau khi edit thành công
     fetchCustomers(searchTerm, statusFilter);
-    handleEditModalClose();
+    withSkipClear(() => handleEditModalClose());
   };
 
   const handleDeleteCustomer = async (customer: CustomerWithStatus) => {
     if (!campaign) return;
 
+    setFocusSafely(customer.id);
     // ✅ THAY ĐỔI: Thay vì window.confirm, hiển thị confirm dialog
     setCustomerToDelete(customer);
-    setShowDeleteConfirm(true);
+    withSkipClear(() => setShowDeleteConfirm(true));
   };
 
   // ✅ THÊM MỚI: Handle confirm delete
@@ -582,14 +652,14 @@ export default function CampaignCustomersModal({
       toast.error("Không thể xóa khách hàng khỏi chiến dịch");
     } finally {
       setDeletingCustomerId(null);
-      setShowDeleteConfirm(false);
+      withSkipClear(() => setShowDeleteConfirm(false));
       setCustomerToDelete(null);
     }
   };
 
   // ✅ THÊM MỚI: Handle cancel delete
   const handleCancelDelete = () => {
-    setShowDeleteConfirm(false);
+    withSkipClear(() => setShowDeleteConfirm(false));
     setCustomerToDelete(null);
     setDeletingCustomerId(null);
   };
@@ -989,7 +1059,13 @@ export default function CampaignCustomersModal({
                                     backgroundColor: "#f9fafb",
                                     scale: 1.005,
                                   }}
-                                  className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                                  className={cn(
+                                    "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+                                    focusedRowId === customer.id
+                                      ? "focused-no-hover ring-2 ring-indigo-300 shadow-lg bg-amber-300"
+                                      : ""
+                                  )}
+                                  data-focused-row-id={customer.id}
                                 >
                                   <TableCell className="text-center text-sm text-gray-500">
                                     <motion.span
@@ -1389,7 +1465,7 @@ export default function CampaignCustomersModal({
       {/* Customer Log Detail Modal */}
       <CustomerLogModal
         isOpen={isLogModalOpen}
-        onClose={() => setIsLogModalOpen(false)}
+        onClose={() => withSkipClear(() => setIsLogModalOpen(false))}
         customer={selectedCustomer}
         campaignId={campaign?.id || ""}
       />
