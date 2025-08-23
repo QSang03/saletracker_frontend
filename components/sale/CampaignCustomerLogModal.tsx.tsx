@@ -179,7 +179,30 @@ const parseMessageContent = (content: string, contentType?: string) => {
   try {
     // Try to parse as JSON first
     const parsed = JSON.parse(content);
-
+    
+    // ✅ ENHANCED: Handle CALL contentType specifically
+    if (contentType === "CALL" || (
+      parsed &&
+      (parsed.callType !== undefined ||
+        parsed.callStage !== undefined ||
+        parsed.duration !== undefined ||
+        parsed.isCaller !== undefined ||
+        parsed.callId !== undefined)
+    )) {
+      return {
+        type: "call",
+        callData: {
+          callStage: parsed.callStage ?? null,
+          duration: typeof parsed.duration === "number" ? parsed.duration : 0,
+          isCaller: parsed.isCaller ?? false,
+          reason: parsed.reason ?? null,
+          callType: parsed.callType ?? "voice",
+          callId: parsed.callId ?? null,
+          // giữ nguyên các trường khác nếu có
+          ...parsed,
+        },
+      };
+    }
     if (contentType === "SYSTEM") {
       // Handle undo message action
       if (parsed.action === "undo_message") {
@@ -307,7 +330,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
         linkType: parsed.type || 0,
       };
     }
-
+    
     // Handle regular text messages
     const text = parsed.text || content;
     // Replace \n with actual line breaks và xử lý emoji
@@ -779,6 +802,215 @@ const ZaloAttachmentRenderer = ({
   );
 };
 
+// ✅ ENHANCED: Call renderer component
+const CallRenderer = ({
+  callData,
+  senderType = "customer",
+}: {
+  callData: any;
+  senderType?: "staff" | "customer" | "bot";
+}) => {
+  const isStaff = senderType === "staff";
+  const isBot = senderType === "bot";
+
+  // Helper function to get call status icon and color
+  const getCallStatusInfo = () => {
+    const callStage = callData.callStage;
+    const callType = callData.callType || "voice";
+    
+    // ✅ ENHANCED: Better call stage detection
+    if (callStage === "completed" || callStage === "ended" || callStage === "finished") {
+      return {
+        icon: "📞✅",
+        color: "text-green-600",
+        bgColor: "bg-green-100",
+        status: "Cuộc gọi đã kết thúc",
+      };
+    } else if (callStage === "missed" || callStage === "rejected" || callStage === "declined") {
+      return {
+        icon: "📞❌",
+        color: "text-red-600",
+        bgColor: "bg-red-100",
+        status: "Cuộc gọi nhỡ/Từ chối",
+      };
+    } else if (callStage === "incoming" || callStage === "outgoing" || callStage === "ringing") {
+      return {
+        icon: callData.isCaller ? "📞↗️" : "📞↙️",
+        color: "text-blue-600",
+        bgColor: "bg-blue-100",
+        status: callData.isCaller ? "Đang gọi đi" : "Cuộc gọi đến",
+      };
+    } else if (callStage === "connected" || callStage === "active") {
+      return {
+        icon: "📞🟢",
+        color: "text-green-600",
+        bgColor: "bg-green-100",
+        status: "Đang kết nối",
+      };
+    } else {
+      // Default case for null or unknown callStage
+      return {
+        icon: "📞",
+        color: "text-gray-600",
+        bgColor: "bg-gray-100",
+        status: callData.callStage === null ? "Cuộc gọi (chưa xác định)" : "Cuộc gọi",
+      };
+    }
+  };
+
+  // Helper function to format duration
+  const formatDuration = (seconds: number) => {
+    if (!seconds || seconds === 0) return "0s";
+    
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (minutes > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    }
+    return `${remainingSeconds}s`;
+  };
+
+  // Helper function to get call type display
+  const getCallTypeDisplay = () => {
+    const callType = callData.callType || "voice";
+    switch (callType) {
+      case "voice":
+        return "Gọi thoại";
+      case "video":
+        return "Gọi video";
+      case "group":
+        return "Gọi nhóm";
+      default:
+        return "Cuộc gọi";
+    }
+  };
+
+  const statusInfo = getCallStatusInfo();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      className={cn(
+        "p-4 rounded-xl border-2 transition-all duration-200",
+        isStaff
+          ? "bg-blue-50/50 border-blue-200/50"
+          : isBot
+          ? "bg-yellow-50/50 border-yellow-200/50"
+          : "bg-gray-50/80 border-gray-200/80"
+      )}
+    >
+      <div className="flex items-center gap-4">
+        {/* Call Icon */}
+        <div
+          className={cn(
+            "flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-xl",
+            isStaff
+              ? "bg-blue-100 text-blue-600"
+              : isBot
+              ? "bg-yellow-100 text-yellow-600"
+              : statusInfo.bgColor
+          )}
+        >
+          <span className="text-2xl">{statusInfo.icon}</span>
+        </div>
+
+        {/* Call Details */}
+        <div className="flex-1 min-w-0">
+          <div
+            className={cn(
+              "font-bold text-sm mb-1",
+              isStaff
+                ? "text-blue-700"
+                : isBot
+                ? "text-yellow-700"
+                : statusInfo.color
+            )}
+          >
+            {getCallTypeDisplay()}
+          </div>
+          
+          <div
+            className={cn(
+              "text-xs mb-2",
+              isStaff
+                ? "text-blue-600"
+                : isBot
+                ? "text-yellow-600"
+                : "text-gray-600"
+            )}
+          >
+            {statusInfo.status}
+            {callData.duration > 0 && (
+              <span className="ml-2">
+                • {formatDuration(callData.duration)}
+              </span>
+            )}
+            {callData.duration === 0 && callData.callStage && (
+              <span className="ml-2">
+                • Chưa kết nối
+              </span>
+            )}
+          </div>
+
+          {/* Call Details */}
+          <div className="space-y-1">
+            {callData.isCaller !== undefined && (
+              <div className="text-xs text-gray-500">
+                <span className="font-medium">Người gọi:</span>{" "}
+                {callData.isCaller ? "Bạn" : "Khách hàng"}
+              </div>
+            )}
+            
+            {callData.reason && (
+              <div className="text-xs text-gray-500">
+                <span className="font-medium">Lý do:</span> {callData.reason}
+              </div>
+            )}
+            
+            {callData.callStage && callData.callStage !== "null" && (
+              <div className="text-xs text-gray-500">
+                <span className="font-medium">Trạng thái:</span> {callData.callStage}
+              </div>
+            )}
+            {(!callData.callStage || callData.callStage === "null") && (
+              <div className="text-xs text-gray-500">
+                <span className="font-medium">Trạng thái:</span> Chưa xác định
+              </div>
+            )}
+            
+            {callData.callId && (
+              <div className="text-xs text-gray-400 font-mono">
+                ID: {callData.callId}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Status Badge */}
+        <div
+          className={cn(
+            "flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium",
+            isStaff
+              ? "bg-blue-100 text-blue-700"
+              : isBot
+              ? "bg-yellow-100 text-yellow-700"
+              : "bg-gray-100 text-gray-600"
+          )}
+        >
+          {callData.callType === "video" ? "📹 Video" : "📞 Thoại"}
+          {callData.callStage && callData.callStage !== "null" && (
+            <span className="ml-1">• {callData.callStage}</span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+
 // ✅ ENHANCED: Chat Message Component với xử lý ảnh, sticker và file (sticker không thể phóng to)
 const ZaloChatMessage = ({
   message,
@@ -975,6 +1207,14 @@ const ZaloChatMessage = ({
                     />
                   </div>
                 )}
+              </div>
+            ) : parsedMessage.type === "call" ? (
+              // ✅ NEW: Display call card using CallRenderer
+              <div className="mb-3">
+                <CallRenderer
+                  callData={parsedMessage.callData}
+                  senderType={message.sender}
+                />
               </div>
             ) : parsedMessage.type === "file" ? (
               // ✅ Display file from fileUrl
