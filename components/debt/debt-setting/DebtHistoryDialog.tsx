@@ -481,7 +481,7 @@ export default function DebtHistoryDialog({
         /* Giới hạn vùng cuộn thực tế (trừ header + padding) */
         .dialog-scroll {
           /* 85vh là kích thước max dialog, trừ khoảng header/footer ~140px => chỉnh nếu cần */
-          max-height: calc(85vh - 140px);
+          max-height: calc(70vh - 110px);
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
@@ -493,7 +493,7 @@ export default function DebtHistoryDialog({
 
       <Dialog open={open} onOpenChange={onClose}>
         {/* NOTE: max-h + h-auto — không ép chiều cao con */}
-        <DialogContent className="!w-[50vw] !max-w-[50vw] max-h-[85vh] !h-auto flex flex-col">
+        <DialogContent className="!w-[50vw] !max-w-[50vw] max-h-[60vh] !h-auto flex flex-col">
           {/* Quantum field background (pointer-events-none so it won't affect layout/scroll) */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-cyan-400/15 to-blue-400/15 rounded-full blur-3xl animate-pulse"></div>
