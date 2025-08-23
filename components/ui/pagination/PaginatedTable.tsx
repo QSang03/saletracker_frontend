@@ -131,7 +131,7 @@ export type Filters = {
   dateRange: DateRange;
   singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
-  sort?: { field: string; direction: "asc" | "desc" } | undefined;
+  sort?: { field: string; direction: "asc" | "desc" } | undefined; // Cập nhật type sort
 };
 
 export default function PaginatedTable({
@@ -354,6 +354,7 @@ export default function PaginatedTable({
       },
       singleDate: initialFilters?.singleDate || undefined, // Không set mặc định
       employees: initialFilters?.employees || [],
+      sort: initialFilters?.sort || undefined, // Thêm property sort
     };
   });
 
@@ -389,6 +390,7 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.dateRange),
       initialFilters?.singleDate,
       JSON.stringify(initialFilters?.employees),
+      JSON.stringify(initialFilters?.sort), // Thêm property sort
     ]
   );
 
@@ -501,6 +503,10 @@ export default function PaginatedTable({
               memoizedInitialFilters.employees !== undefined
                 ? memoizedInitialFilters.employees
                 : prev.employees,
+            sort:
+              memoizedInitialFilters.sort !== undefined
+                ? memoizedInitialFilters.sort
+                : prev.sort,
           };
 
           // Only update if actually different
@@ -523,6 +529,7 @@ export default function PaginatedTable({
             "dateRange",
             "singleDate",
             "employees",
+            "sort",
           ] as (keyof Filters)[];
 
           fieldsToCheck.forEach((field) => {
@@ -592,6 +599,7 @@ export default function PaginatedTable({
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
       employees: [],
+      sort: undefined, // Thêm property sort
     };
 
     setFilters(reset);
@@ -1037,32 +1045,55 @@ export default function PaginatedTable({
           )}
           {/* Số dòng/trang nằm ngang hàng filter */}
           {enablePageSize && (
-            <Input
-              type="number"
-              min={1}
-              className="min-w-0 w-full border rounded px-2 py-1 text-sm"
-              value={pendingPageSize}
-              placeholder="Số dòng/trang"
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setPendingPageSize(
-                  e.target.value === "" ? "10" : val > 0 ? val : "10"
-                );
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const val = Number(pendingPageSize);
+            <div className="flex gap-2 min-w-0 w-full">
+              <select
+                className="min-w-0 w-3/5 border rounded px-2 py-1 text-sm bg-white"
+                value={currentPageSize}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
                   if (!isNaN(val) && val > 0) {
-                    if (isBackendPaging && onPageSizeChange)
+                    if (isBackendPaging && onPageSizeChange) {
                       onPageSizeChange(val);
-                    else {
+                    } else {
                       setInternalPage(0);
                       setInternalPageSize(val);
                     }
                   }
-                }
-              }}
-            />
+                }}
+              >
+                {[5, 10, 20, 50, 100].map((size: number) => (
+                  <option key={size} value={size}>
+                    {size} dòng/trang
+                  </option>
+                ))}
+              </select>
+              <Input
+                type="number"
+                min={1}
+                className="min-w-0 w-2/5 border rounded px-2 py-1 text-sm"
+                value={pendingPageSize}
+                placeholder="Tùy chỉnh"
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setPendingPageSize(
+                    e.target.value === "" ? "10" : val > 0 ? val : "10"
+                  );
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const val = Number(pendingPageSize);
+                    if (!isNaN(val) && val > 0) {
+                      if (isBackendPaging && onPageSizeChange)
+                        onPageSizeChange(val);
+                      else {
+                        setInternalPage(0);
+                        setInternalPageSize(val);
+                      }
+                    }
+                  }
+                }}
+              />
+            </div>
           )}
           {/* Nút Xuất và Xoá filter chia đôi 1 cột */}
           <div className="flex gap-2 min-w-0 w-full">

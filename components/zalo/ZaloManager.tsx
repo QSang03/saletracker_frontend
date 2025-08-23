@@ -15,7 +15,7 @@ import PaginatedTable, { Filters } from "@/components/ui/pagination/PaginatedTab
 export default function ZaloManager() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userPage, setUserPage] = useState(1);
-  const userLimit = 10;
+  const [userLimit, setUserLimit] = useState(10);
   const [userFilters, setUserFilters] = useState<{
     search: string;
     statuses: (string | number)[];
@@ -240,6 +240,11 @@ export default function ZaloManager() {
     setUserPage(1); // Reset to first page when filters change
   }, []);
 
+  const handlePageSizeChange = useCallback((pageSize: number) => {
+    setUserLimit(pageSize);
+    setUserPage(1); // Reset to first page when page size changes
+  }, []);
+
   const handleResetFilter = useCallback(() => {
     setUserFilters({
       search: "",
@@ -315,37 +320,40 @@ export default function ZaloManager() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <PaginatedTable
-            enableSearch={true}
-            enableStatusFilter={true}
-            enableZaloLinkStatusFilter={true}
-            enableDepartmentFilter={true}
-            availableStatuses={[
-              { value: "active", label: "Hoạt động" },
-              { value: "inactive", label: "Không hoạt động" }
-            ]}
-            availableZaloLinkStatuses={[
-              { value: 0, label: "Chưa liên kết" },
-              { value: 1, label: "Đã liên kết" },
-              { value: 2, label: "Lỗi liên kết" }
-            ]}
-            availableDepartments={departments}
-            initialFilters={{
-              search: userFilters.search,
-              statuses: userFilters.statuses,
-              zaloLinkStatuses: userFilters.zaloLinkStatuses,
-              departments: userFilters.departments,
-            }}
-            preserveFiltersOnEmpty={true}
-            page={userPage}
-            total={userTotal}
-            pageSize={userLimit}
-            onPageChange={setUserPage}
-            onFilterChange={handleFilterChange}
-            onResetFilter={handleResetFilter}
-            loading={isLoading}
-            emptyText="Không có dữ liệu người dùng"
-          >
+                      <PaginatedTable
+              enableSearch={true}
+              enableStatusFilter={true}
+              enableZaloLinkStatusFilter={true}
+              enableDepartmentFilter={true}
+              enablePageSize={true}
+              pageSizeOptions={[5, 10, 20, 50, 100]}
+              availableStatuses={[
+                { value: "active", label: "Hoạt động" },
+                { value: "inactive", label: "Không hoạt động" }
+              ]}
+              availableZaloLinkStatuses={[
+                { value: 0, label: "Chưa liên kết" },
+                { value: 1, label: "Đã liên kết" },
+                { value: 2, label: "Lỗi liên kết" }
+              ]}
+              availableDepartments={departments}
+              initialFilters={{
+                search: userFilters.search,
+                statuses: userFilters.statuses,
+                zaloLinkStatuses: userFilters.zaloLinkStatuses,
+                departments: userFilters.departments,
+              }}
+              preserveFiltersOnEmpty={true}
+              page={userPage}
+              total={userTotal}
+              pageSize={userLimit}
+              onPageChange={setUserPage}
+              onPageSizeChange={handlePageSizeChange}
+              onFilterChange={handleFilterChange}
+              onResetFilter={handleResetFilter}
+              loading={isLoading}
+              emptyText="Không có dữ liệu người dùng"
+            >
             <ZaloTable
               users={users}
               onToggleListening={handleToggleListening}

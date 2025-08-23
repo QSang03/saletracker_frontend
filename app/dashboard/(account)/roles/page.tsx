@@ -28,6 +28,11 @@ export default function RolesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const handlePageSizeChange = useCallback((newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPage(1); // Reset to first page when page size changes
+  }, []);
+
   // Modal state cho thêm vai trò chính
   const [showAddMainRole, setShowAddMainRole] = useState(false);
 
@@ -213,16 +218,18 @@ export default function RolesPage() {
           ) : (
             <PaginatedTable
               enableSearch
+              enablePageSize={true}
+              pageSizeOptions={[5, 10, 20, 50, 100]}
               page={page}
               pageSize={pageSize}
               total={filteredUsers.length}
               canExport={canExportInDepartment('account')}
               onPageChange={setPage}
+              onPageSizeChange={handlePageSizeChange}
               onFilterChange={({ search }) => {
                 setSearch(search);
                 setPage(1);
               }}
-              pageSizeOptions={[5, 10, 20, 50]}
             >
               <RoleManagement
                 users={pagedUsers}
