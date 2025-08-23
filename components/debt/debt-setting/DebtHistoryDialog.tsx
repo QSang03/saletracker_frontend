@@ -481,7 +481,7 @@ export default function DebtHistoryDialog({
         /* Giới hạn vùng cuộn thực tế (trừ header + padding) */
         .dialog-scroll {
           /* 85vh là kích thước max dialog, trừ khoảng header/footer ~140px => chỉnh nếu cần */
-          max-height: calc(70vh - 110px);
+          max-height: calc(65vh - 140px);
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
