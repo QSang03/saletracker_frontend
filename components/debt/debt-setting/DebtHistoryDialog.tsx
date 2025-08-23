@@ -480,8 +480,7 @@ export default function DebtHistoryDialog({
 
         /* Giới hạn vùng cuộn thực tế (trừ header + padding) */
         .dialog-scroll {
-          /* 85vh là kích thước max dialog, trừ khoảng header/footer ~140px => chỉnh nếu cần */
-          max-height: calc(65vh - 140px);
+          max-height: calc(65vh - 110px);
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
@@ -552,9 +551,14 @@ export default function DebtHistoryDialog({
               emptyText="Chưa có lịch sử công nợ"
             >
               {/* wrapper: overflow-hidden để tránh nội dung 'đẩy' modal */}
-              <div className="flex-1 min-h-0 overflow-hidden">
+              {/* CHANGED: make this a column so the inner .dialog-scroll can be the scrolling area
+                  and pagination rendered by PaginatedTable (after children) stays visible inside modal */}
+              <div className="flex-1 min-h-0 flex flex-col"> {/* CHANGED */}
                 {/* dialog-scroll là vùng cuộn thực tế — giới hạn chiều cao bằng calc */}
-                <div className="dialog-scroll border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden">
+                <div
+                  className="dialog-scroll border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden"
+                  style={{ maxHeight: "calc(60vh - 140px)", overflowY: "auto", WebkitOverflowScrolling: "touch" }} /* CHANGED: tighten height */
+                >
                   <div className="h-full">
                     {/* TABLE */}
                     <div className="h-full">
@@ -599,6 +603,10 @@ export default function DebtHistoryDialog({
                     </div>
                   </div>
                 </div>
+
+                {/* NOTE: PaginatedTable typically renders pagination AFTER children.
+                    Because we made the container a column (flex), that pagination will appear
+                    here (still inside modal) and will NOT be inside the scrolling .dialog-scroll */}
               </div>
             </PaginatedTable>
           </div>
