@@ -503,7 +503,7 @@ export default function DebtHistoryDialog({
       `}</style>
 
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="!w-[50vw] !max-w-[50vw] !h-[85vh] !max-h-[85vh] flex flex-col">
+        <DialogContent className="!w-[50vw] !max-w-[50vw] !h-[85vh] !max-h-[85vh] flex flex-col overflow-hidden">
           {/* Quantum field background */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-cyan-400/15 to-blue-400/15 rounded-full blur-3xl animate-pulse"></div>
@@ -551,8 +551,8 @@ export default function DebtHistoryDialog({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Main content area với proper layout */}
-          <div className="flex-1 flex flex-col min-h-0 relative z-10">
+          {/* Main content area với proper layout và scroll */}
+          <div className="flex-1 flex flex-col min-h-0 relative z-10 overflow-hidden">
             <PaginatedTable
               loading={loading}
               page={currentPage}
@@ -564,8 +564,8 @@ export default function DebtHistoryDialog({
               defaultPageSize={10}
               emptyText="Chưa có lịch sử công nợ"
             >
-              <div className="flex-1 min-h-0 border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden">
-                <div className="h-full overflow-auto">
+              <div className="flex-1 min-h-0 border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden max-h-[calc(85vh-200px)]">
+                <div className="h-full overflow-y-auto">
                   {/* ✅ FIXED TABLE LAYOUT - PERFECT ALIGNMENT */}
                   <Table className="w-full table-fixed">
                     <colgroup>
