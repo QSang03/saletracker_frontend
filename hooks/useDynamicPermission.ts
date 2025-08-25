@@ -11,6 +11,7 @@ export interface DynamicPermissionCheck {
   action?: string;
   requireAdmin?: boolean;
   requireManager?: boolean;
+  requirePM?: boolean;
   requireSpecificRole?: string;
   requireAnyRole?: string[];
 }
@@ -53,6 +54,25 @@ export const useDynamicPermission = () => {
     return userRoles.some(role => role === "manager" || role.startsWith("manager-"));
   }, [userRoles]);
 
+  /**
+   * Kiểm tra user có role PM nào (PM gốc hoặc pm-{department})
+   * Logic: PM gốc cho phép truy cập, pm-{department} cho phép xem dữ liệu
+   */
+  const isPM = useMemo(() => {
+    return userRoles.some(role => role === "PM" || role.startsWith("pm-"));
+  }, [userRoles]);
+
+  /**
+   * Lấy danh sách phòng ban từ role pm-{department}
+   * Ví dụ: pm-cong-no -> ["cong-no"], pm-chien-dich -> ["chien-dich"]
+   * Dùng để lọc dữ liệu theo phòng ban được phân quyền
+   */
+  const getPMDepartments = useMemo(() => {
+    return userRoles
+      .filter(role => role.startsWith("pm-"))
+      .map(role => role.replace("pm-", ""));
+  }, [userRoles]);
+
   // Hàm kiểm tra permission động
   const checkDynamicPermission = (check: DynamicPermissionCheck): boolean => {
     if (!user) return false;
@@ -67,6 +87,11 @@ export const useDynamicPermission = () => {
 
     // Kiểm tra yêu cầu manager
     if (check.requireManager && !isManager) {
+      return false;
+    }
+
+    // Kiểm tra yêu cầu PM - chỉ cho phép truy cập nếu có role PM
+    if (check.requirePM && !isPM) {
       return false;
     }
 
@@ -176,6 +201,8 @@ export const useDynamicPermission = () => {
     userDepartments,
     isAdmin,
     isManager,
+    isPM,
+    getPMDepartments,
     checkDynamicPermission,
     checkAnyPermission,
     checkAllPermissions,

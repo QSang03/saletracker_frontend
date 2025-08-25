@@ -1,11 +1,11 @@
 // Định nghĩa navItems dùng chung cho sidebar, middleware, layout
 export const navItems = [
-  {
+ {
     title: "Thống kê",
     icon: "FileBarChart2",
     items: [
-      { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin", "analysis"] },
-      { title: "Thống kê công nợ", url: "/dashboard/debts", roles: ["admin", "manager-cong-no", "user-cong-no"] },
+      { title: "Thống kê giao dịch", url: "/dashboard/transactions", roles: ["admin", "analysis", "PM"] },
+      { title: "Thống kê công nợ", url: "/dashboard/debts", roles: ["admin", "manager-cong-no", "user-cong-no", "PM"] },
     ],
   },
   {
@@ -34,11 +34,11 @@ export const navItems = [
       { title: "Lịch chiến dịch", url: "/dashboard/campaign-schedules", roles: ["admin", "manager-chien-dich", "user-chien-dich", "scheduler"] },
     ],
   },
-  {
+   {
     title: "Product Manager",
     icon: "Terminal",
     items: [
-      { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-products", roles: ["admin"] },
+      { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-pm-transactions", roles: ["admin", "PM"] },
       { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin"] },
     ],
   },

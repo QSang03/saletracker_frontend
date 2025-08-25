@@ -4,7 +4,24 @@ import type { User } from './types';
 import { base64UrlDecode } from './lib/auth';
 
 function hasRole(userRoles: string[], requiredRoles: string[]): boolean {
-  return requiredRoles.some(role => userRoles.includes(role));
+  if (!userRoles || userRoles.length === 0) return false;
+  const userRolesLower = userRoles.map((r) => r.toString().toLowerCase());
+  const requiredLower = requiredRoles.map((r) => r.toString().toLowerCase());
+
+  return requiredLower.some((required) => {
+    // Allow generic roles to match their department-scoped variants
+    if (required === 'pm') {
+      return userRolesLower.some((u) => u === 'pm' || u.startsWith('pm-'));
+    }
+    if (required === 'manager') {
+      return userRolesLower.some((u) => u === 'manager' || u.startsWith('manager-'));
+    }
+    if (required === 'user') {
+      return userRolesLower.some((u) => u === 'user' || u.startsWith('user-'));
+    }
+    // Exact match for other roles (e.g., admin, analysis, specific slugs like manager-cong-no)
+    return userRolesLower.includes(required);
+  });
 }
 
 function getFirstAccessibleUrl(userRoles: string[]): string | null {
@@ -48,7 +65,8 @@ export async function middleware(request: NextRequest) {
       
       // Lấy roles từ payload - backend trả về array objects với name
       if (payload.roles && Array.isArray(payload.roles)) {
-        userRoles = payload.roles.map((role: any) => role.name || role);
+        // Normalize role names to lowercase for consistent comparisons
+        userRoles = payload.roles.map((role: any) => (role.name || role).toString().toLowerCase());
       }
 
       // Lấy zaloLinkStatus từ payload

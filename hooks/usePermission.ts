@@ -40,6 +40,10 @@ export const usePermission = () => {
 
     if (isAdminOrScheduler) return true;
 
+    // Kiểm tra user có role PM không
+    const isPM = user.roles?.some((role: Role) => role.name === "PM");
+    if (isPM) return true;
+
     // Kiểm tra user có role manager của department này không
     const isManagerOfDepartment = user.roles?.some((role: Role) => 
       role.name === `manager-${departmentSlug}`
@@ -53,6 +57,7 @@ export const usePermission = () => {
     // Tạo role cần kiểm tra
     const requiredRoles = [
       `user-${departmentSlug}`,
+      `pm-${departmentSlug}`,
     ];
 
     // Kiểm tra user có role phù hợp không

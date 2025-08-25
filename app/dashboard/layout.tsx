@@ -46,6 +46,32 @@ export default function DashboardLayout({
     setActiveUrl(pathname);
   }, [pathname]);
 
+  // Lưu đường dẫn cuối cùng người dùng truy cập để redirect sau khi reload
+  useEffect(() => {
+    try {
+      // Only persist when we're on a stable dashboard subpath.
+      // This prevents saving an initial default route (like '/dashboard/transactions')
+      // that might be set by middleware or other logic before the user actually navigates.
+      if (typeof window !== 'undefined' && activeUrl && activeUrl !== '/' && !activeUrl.startsWith('/dashboard') === false) {
+        // ensure pathname and activeUrl match to avoid saving unrelated defaults
+        const currentPath = window.location.pathname;
+        if (currentPath === activeUrl && activeUrl !== '/dashboard') {
+          // debounce write a little to allow any mounts/redirects to settle
+          const t = setTimeout(() => {
+            try {
+              localStorage.setItem('lastVisitedUrl', activeUrl);
+            } catch (e) {
+              // ignore
+            }
+          }, 250);
+          return () => clearTimeout(t);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [activeUrl]);
+
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {

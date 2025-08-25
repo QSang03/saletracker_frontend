@@ -61,7 +61,16 @@ export function AppSidebar({
   ];
 
   // Lọc navItems và từng item con theo role
-  const filteredNavItems = navItems
+  // Nếu user không phải admin và không có role PM thì ẩn hẳn nhóm 'Product Manager'
+  const isAdmin = hasRole(currentUser, 'admin');
+  const isPMRole = currentUser?.roles?.some(r => (r.name || '').toLowerCase().includes('pm'));
+
+  const effectiveNavItems = navItems.filter(group => {
+    if (group.title === 'Product Manager' && !isAdmin && !isPMRole) return false;
+    return true;
+  });
+
+  const filteredNavItems = effectiveNavItems
     .map(item => ({
       ...item,
       items: item.items.filter(subItem => !subItem.roles || hasRole(currentUser, subItem.roles)),
