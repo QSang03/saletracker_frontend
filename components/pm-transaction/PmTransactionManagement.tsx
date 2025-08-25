@@ -55,7 +55,7 @@ export default function PmTransactionManagement() {
   const [modalOrder, setModalOrder] = useState<Order | null>(null);
   const [modalMessages, setModalMessages] = useState<any[]>([]);
   const [filterOptions, setFilterOptions] = useState<{ departments: any[]; products?: any[] }>({ departments: [], products: [] });
-  const [departmentsSelected, setDepartmentsSelected] = useState<string[] | number[]>([]);
+  const [departmentsSelected, setDepartmentsSelected] = useState<(string | number)[]>([]);
 
   // Nếu là admin, dùng danh sách departments khả dụng; nếu không, dùng pm-{dept}
   const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments;
@@ -156,7 +156,43 @@ export default function PmTransactionManagement() {
         });
         if (!res.ok) return;
         const json = await res.json();
-        setFilterOptions({ departments: json.departments || [], products: json.products || [] });
+        const departments = json.departments || [];
+        setFilterOptions({ departments, products: json.products || [] });
+
+        // If user is PM (non-admin) and hasn't selected departments explicitly,
+        // try to map their pm-<slug> roles to department values and apply as default selection
+        if (!isAdmin && Array.isArray(pmDepartments) && pmDepartments.length > 0) {
+          // don't overwrite if user already selected departments
+          if (!departmentsSelected || departmentsSelected.length === 0) {
+            const mapped: (string | number)[] = [];
+
+            pmDepartments.forEach((pm: any) => {
+              // pm might be slug (string)
+              const slug = String(pm).toLowerCase();
+              const found = departments.find((d: any) => {
+                // try matching value, label or slug fields
+                if (d == null) return false;
+                const val = d.value != null ? String(d.value).toLowerCase() : '';
+                const label = d.label != null ? String(d.label).toLowerCase() : '';
+                const deptSlug = d.slug != null ? String(d.slug).toLowerCase() : '';
+                return val === slug || label === slug || deptSlug === slug || label.includes(slug);
+              });
+              if (found) mapped.push(found.value != null ? found.value : slug);
+              else mapped.push(pm);
+            });
+
+            if (mapped.length > 0) {
+              setDepartmentsSelected(mapped);
+              // trigger fetch with mapped departments
+              try {
+                // small delay to ensure state updates propagate
+                setTimeout(() => {
+                  fetchOrders();
+                }, 50);
+              } catch (e) {}
+            }
+          }
+        }
       } catch (err) {
         console.error('Error loading filter options', err);
       }
