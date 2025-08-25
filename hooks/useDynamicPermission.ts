@@ -34,9 +34,11 @@ export const useDynamicPermission = () => {
     return Array.from(uniqueMap.values());
   }, [user?.permissions]);
 
-  // Lấy tất cả roles của user
+  // Lấy tất cả roles của user (normalize về lowercase để so sánh không phân biệt hoa thường)
   const userRoles = useMemo(() => {
-    return user?.roles?.map((role: Role) => role.name) || [];
+    return (
+      user?.roles?.map((role: Role) => (role.name ? String(role.name).toLowerCase() : String(role.name))) || []
+    );
   }, [user?.roles]);
 
   // Lấy tất cả departments của user
@@ -59,7 +61,7 @@ export const useDynamicPermission = () => {
    * Logic: PM gốc cho phép truy cập, pm-{department} cho phép xem dữ liệu
    */
   const isPM = useMemo(() => {
-    return userRoles.some(role => role === "PM" || role.startsWith("pm-"));
+    return userRoles.some(role => role === "pm" || role.startsWith("pm-"));
   }, [userRoles]);
 
   /**
