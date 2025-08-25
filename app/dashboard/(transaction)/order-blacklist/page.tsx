@@ -7,6 +7,7 @@ import PaginatedTable, {
   Filters,
 } from "@/components/ui/pagination/PaginatedTable";
 import BlacklistManagement from "@/components/order/order-blacklist/BlacklistManagement";
+import { getAccessToken } from "@/lib/auth";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -144,6 +145,101 @@ function OrderBlacklistContent() {
     }
   }, [error]);
 
+  // ✅ Export data function
+  const getExportData = () => {
+    const headers = [
+      "STT",
+      "Khách Hàng",
+      "Zalo Contact ID",
+      "Lý Do Chặn",
+      "Người Chặn",
+      "Thời Gian Chặn",
+    ];
+
+    const exportData = blacklists.map((item, idx) => [
+      (filters.page - 1) * filters.pageSize + idx + 1,
+      item.customerName || "--",
+      item.zaloContactId || "--",
+      item.reason || "--",
+      item.user?.fullName || item.user?.username || "--",
+      item.created_at
+        ? (() => {
+            const d = new Date(item.created_at);
+            return d
+              ? d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "")
+              : "--";
+          })()
+        : "--",
+    ]);
+
+    return { headers, data: exportData };
+  };
+
+  // ✅ Export all data function
+  const getExportAllData = async () => {
+    const params = new URLSearchParams();
+    params.append("page", "1");
+    params.append("pageSize", "1000000");
+    if (filters.search?.trim()) params.append("search", filters.search.trim());
+    if (filters.departments.length > 0) params.append("departments", filters.departments.join(","));
+    if (filters.users.length > 0) params.append("users", filters.users.join(","));
+
+    const token = getAccessToken();
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/order-blacklist?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+
+    if (!res.ok) throw new Error(`Failed to fetch all blacklist data for export: ${res.status}`);
+    const result = await res.json();
+    const list = Array.isArray(result.data) ? result.data : [];
+
+    // Map to the same shape as getExportData()
+    const rows = list.map((item: any, idx: number) => [
+      idx + 1,
+      item.customerName || "--",
+      item.zaloContactId || "--",
+      item.reason || "--",
+      item.user?.fullName || item.user?.username || "--",
+      item.created_at
+        ? (() => {
+            const d = new Date(item.created_at);
+            return d
+              ? d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "")
+              : "--";
+          })()
+        : "--",
+    ]);
+
+    return rows;
+  };
+
   // Prepare filters for PaginatedTable
   const memoizedInitialFilters = useMemo(
     () => ({
@@ -210,7 +306,9 @@ function OrderBlacklistContent() {
             loading={isLoading}
             initialFilters={memoizedInitialFilters}
             onResetFilter={handleResetFilter}
-            canExport={false}
+            canExport={true}
+            getExportData={getExportData}
+            getExportAllData={getExportAllData}
           >
             <BlacklistManagement
               blacklists={blacklists}
