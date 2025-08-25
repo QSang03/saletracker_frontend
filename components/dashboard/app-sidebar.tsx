@@ -66,7 +66,10 @@ export function AppSidebar({
   const isPMRole = currentUser?.roles?.some(r => (r.name || '').toLowerCase().includes('pm'));
 
   const effectiveNavItems = navItems.filter(group => {
-    if (group.title === 'Product Manager' && !isAdmin && !isPMRole) return false;
+  // Show Product Manager group only to admin or users with any pm role
+  if (group.title === 'Product Manager' && !isAdmin && !isPMRole) return false;
+  // Hide the whole 'Giao dịch' group for PM users (who are not admin)
+  if (group.title === 'Giao dịch' && !isAdmin && isPMRole) return false;
     return true;
   });
 
