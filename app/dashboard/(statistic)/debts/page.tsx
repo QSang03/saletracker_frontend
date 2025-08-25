@@ -166,7 +166,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   // Check if user has read access to debt department
   const canAccessDebtStatistics = canReadDepartment('cong-no');
 
-  const [chartType, setChartTypeState] = useState<'bar' | 'line' | 'radial'>("bar");
+  const [chartType, setChartTypeState] = useState<'bar' | 'line'>("bar");
   const [timeRange, setTimeRangeState] = React.useState<"week" | "month" | "quarter">("week");
   
   // Initialize date range with stable values
@@ -199,7 +199,7 @@ const DebtStatisticsDashboard: React.FC = () => {
   }, []);
 
   // Memoized setters to prevent unnecessary re-renders
-  const setChartType = useCallback((type: 'bar' | 'line' | 'radial') => {
+  const setChartType = useCallback((type: 'bar' | 'line') => {
     setChartTypeState(type);
   }, []);
 

@@ -25,6 +25,35 @@ import {
 } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken } from "@/lib/auth";
 
+// Helper function để tính toán ngày gia hạn
+const calculateExtendedDays = (createdAt: string | Date | undefined, extended: any): string => {
+  if (!createdAt || !extended) {
+    return "--";
+  }
+  
+  const createdDate = typeof createdAt === "string"
+    ? new Date(createdAt)
+    : createdAt instanceof Date
+    ? createdAt
+    : null;
+    
+  if (!createdDate) return "--";
+  
+  const extendedDays = parseInt(extended.toString());
+  if (isNaN(extendedDays)) return "--";
+  
+  // Tính toán ngày hết hạn = ngày tạo + extended
+  const expiredDate = new Date(createdDate);
+  expiredDate.setDate(expiredDate.getDate() + extendedDays);
+  
+  // Tính số ngày còn lại từ ngày hiện tại
+  const now = new Date();
+  const diffTime = expiredDate.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays.toString();
+};
+
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function ManagerOrderContent() {
   const [alert, setAlert] = useState<{
@@ -514,7 +543,7 @@ function ManagerOrderContent() {
     const rows: (string | number)[][] = list.map((orderDetail, idx) => [
       idx + 1,
       orderDetail.id ?? "--",
-      orderDetail.extended ?? "--",
+      calculateExtendedDays(orderDetail.created_at, orderDetail.extended),
       orderDetail.created_at
         ? (() => {
             const d =
@@ -850,7 +879,7 @@ function ManagerOrderContent() {
               data: orders.map((orderDetail, idx) => [
                 idx + 1,
                 orderDetail.id ?? "--",
-                orderDetail.extended ?? "--",
+                calculateExtendedDays(orderDetail.created_at, orderDetail.extended),
                 orderDetail.created_at
                   ? (() => {
                       const d =
