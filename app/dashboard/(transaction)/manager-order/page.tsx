@@ -25,33 +25,38 @@ import {
 } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken } from "@/lib/auth";
 
-// Helper function để tính toán ngày gia hạn
-const calculateExtendedDays = (createdAt: string | Date | undefined, extended: any): string => {
-  if (!createdAt || !extended) {
-    return "--";
-  }
+// Helper function để tính toán gia hạn động
+const calculateDynamicExtended = (
+  createdAt: string | Date | undefined,
+  originalExtended: number | undefined
+): number | string => {
+  if (!createdAt || !originalExtended) return "--";
   
-  const createdDate = typeof createdAt === "string"
-    ? new Date(createdAt)
-    : createdAt instanceof Date
-    ? createdAt
-    : null;
+  try {
+    const createdDate = typeof createdAt === "string" 
+      ? new Date(createdAt) 
+      : createdAt;
     
-  if (!createdDate) return "--";
-  
-  const extendedDays = parseInt(extended.toString());
-  if (isNaN(extendedDays)) return "--";
-  
-  // Tính toán ngày hết hạn = ngày tạo + extended
-  const expiredDate = new Date(createdDate);
-  expiredDate.setDate(expiredDate.getDate() + extendedDays);
-  
-  // Tính số ngày còn lại từ ngày hiện tại
-  const now = new Date();
-  const diffTime = expiredDate.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  return diffDays.toString();
+    if (isNaN(createdDate.getTime())) return "--";
+    
+    // Ngày hết hạn = ngày tạo + extended (theo ngày thực tế)
+    const expiredDate = new Date(createdDate);
+    expiredDate.setHours(0, 0, 0, 0);
+    expiredDate.setDate(expiredDate.getDate() + originalExtended);
+    
+    // Ngày hiện tại (bỏ giờ)
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    // Số ngày còn lại (có thể âm nếu đã hết hạn)
+    const diffMs = expiredDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    return diffDays;
+  } catch (error) {
+    console.error("Error calculating dynamic extended:", error);
+    return originalExtended ?? "--";
+  }
 };
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
@@ -543,7 +548,7 @@ function ManagerOrderContent() {
     const rows: (string | number)[][] = list.map((orderDetail, idx) => [
       idx + 1,
       orderDetail.id ?? "--",
-      calculateExtendedDays(orderDetail.created_at, orderDetail.extended),
+      calculateDynamicExtended(orderDetail.created_at, orderDetail.extended),
       orderDetail.created_at
         ? (() => {
             const d =
@@ -879,7 +884,7 @@ function ManagerOrderContent() {
               data: orders.map((orderDetail, idx) => [
                 idx + 1,
                 orderDetail.id ?? "--",
-                calculateExtendedDays(orderDetail.created_at, orderDetail.extended),
+                calculateDynamicExtended(orderDetail.created_at, orderDetail.extended),
                 orderDetail.created_at
                   ? (() => {
                       const d =
