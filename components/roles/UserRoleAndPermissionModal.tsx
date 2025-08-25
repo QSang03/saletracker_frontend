@@ -60,10 +60,26 @@ export default function UserRoleAndPermissionModal({
       depName: departments.find((dep) => r.name.endsWith(`-${dep.slug}`))?.name,
     }));
   }, [rolesGrouped.sub, departments]);
-  const subRoleOptions: Option[] = allSubRoles.map((r) => ({
-    label: r.depName ? `${r.display_name} (${r.depName})` : r.display_name,
-    value: r.id,
-  }));
+  // Only show sub-role options that correspond to the selected main roles.
+  // E.g. if main includes 'manager' show only 'manager-<dep>' subs; if 'pm' show only 'pm-<dep>' subs, etc.
+  const subRoleOptions: Option[] = useMemo(() => {
+    // derive selected main role names from selectedMainRoles to avoid ordering issues
+    const mainPrefixes = rolesGrouped.main
+      .filter((r) => selectedMainRoles.includes(r.id))
+      .map((r) => r.name.toLowerCase());
+    // If no main role selected, don't offer any sub roles
+    if (mainPrefixes.length === 0) return [];
+    return allSubRoles
+      .filter((r) => {
+        // support both hyphen and underscore separators (e.g., pm-sales or pm_sales)
+        const prefix = (r.name || "").split(/[-_]/)[0];
+        return mainPrefixes.includes(prefix);
+      })
+      .map((r) => ({
+        label: r.depName ? `${r.display_name} (${r.depName})` : r.display_name,
+        value: r.id,
+      }));
+  }, [allSubRoles, rolesGrouped.main, selectedMainRoles]);
   const [selectedSubRoles, setSelectedSubRoles] = useState<number[]>(
     user.roles
       ?.filter((r) => rolesGrouped.sub.some((s) => s.id === r.id))
@@ -145,6 +161,7 @@ export default function UserRoleAndPermissionModal({
     );
     for (const dep of departments) {
       if (selectedDepartments.includes(dep.id)) {
+        // manager-<dep>
         if (selectedMainRoleNames.includes("manager")) {
           const managerRole = allSubRoles.find(
             (r) => r.name === `manager-${dep.slug}`
@@ -153,6 +170,7 @@ export default function UserRoleAndPermissionModal({
             autoSubRoles.push(managerRole.id);
           }
         }
+        // user-<dep>
         if (selectedMainRoleNames.includes("user")) {
           const userRole = allSubRoles.find(
             (r) => r.name === `user-${dep.slug}`
@@ -161,17 +179,28 @@ export default function UserRoleAndPermissionModal({
             autoSubRoles.push(userRole.id);
           }
         }
+        // pm-<dep>
+        if (selectedMainRoleNames.includes("pm")) {
+          const pmRole = allSubRoles.find((r) => r.name === `pm-${dep.slug}`);
+          if (pmRole && !autoSubRoles.includes(pmRole.id)) {
+            autoSubRoles.push(pmRole.id);
+          }
+        }
       }
     }
     if (!selectedMainRoleNames.includes("manager")) {
       autoSubRoles = autoSubRoles.filter(
-        (id) =>
-          !allSubRoles.find((r) => r.id === id)?.name.startsWith("manager-")
+        (id) => !allSubRoles.find((r) => r.id === id)?.name.startsWith("manager-")
       );
     }
     if (!selectedMainRoleNames.includes("user")) {
       autoSubRoles = autoSubRoles.filter(
         (id) => !allSubRoles.find((r) => r.id === id)?.name.startsWith("user-")
+      );
+    }
+    if (!selectedMainRoleNames.includes("pm")) {
+      autoSubRoles = autoSubRoles.filter(
+        (id) => !allSubRoles.find((r) => r.id === id)?.name.startsWith("pm-")
       );
     }
     setSelectedSubRoles(Array.from(new Set(autoSubRoles)));

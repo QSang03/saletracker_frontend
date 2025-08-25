@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import OrderManagement from '@/components/order/manager-order/OrderManagement';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Download, Search, Filter, Calendar, Eye } from 'lucide-react';
@@ -51,6 +52,8 @@ export default function PmTransactionManagement() {
   const [dateRangeState, setDateRangeState] = useState<{ start?: string; end?: string } | null>(null);
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState<string | null>(null);
+  const [employeesSelected, setEmployeesSelected] = useState<(string | number)[]>([]);
+  const [warningLevelFilter, setWarningLevelFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalOrder, setModalOrder] = useState<Order | null>(null);
   const [modalMessages, setModalMessages] = useState<any[]>([]);
@@ -68,18 +71,24 @@ export default function PmTransactionManagement() {
       setLoading(true);
       setError(null);
 
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        pageSize: pageSize.toString(),
-        search: searchTerm,
-        status: statusFilter !== 'all' ? statusFilter : '',
-      });
+      const params = new URLSearchParams();
+      params.set('page', currentPage.toString());
+      params.set('pageSize', pageSize.toString());
+
+      // only add search/status when provided to avoid sending empty values
+      if (searchTerm && String(searchTerm).trim()) {
+        params.set('search', String(searchTerm).trim());
+      }
+
+      if (statusFilter && statusFilter !== 'all') {
+        params.set('status', statusFilter);
+      }
 
       // date handling: if custom date range provided, send dateFrom/dateTo, else send date short token
       if (dateRangeState && dateRangeState.start && dateRangeState.end) {
         params.set('dateFrom', dateRangeState.start);
         params.set('dateTo', dateRangeState.end);
-      } else if (dateFilter) {
+      } else if (dateFilter && dateFilter !== 'all') {
         params.set('date', dateFilter);
       }
 
@@ -87,10 +96,23 @@ export default function PmTransactionManagement() {
       if (Array.isArray(departmentsSelected) && departmentsSelected.length > 0) {
         params.set('departments', departmentsSelected.join(','));
       }
+      if (Array.isArray(employeesSelected) && employeesSelected.length > 0) {
+        params.set('employees', employeesSelected.join(','));
+      }
+
+      if (warningLevelFilter && warningLevelFilter !== '') {
+        params.set('warningLevel', warningLevelFilter);
+      }
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const token = getAccessToken();
-  const response = await fetch(`${baseUrl}/orders?${params}`, {
+      const url = `${baseUrl}/orders?${params.toString()}`;
+      // Debug: log request URL and token presence
+      // eslint-disable-next-line no-console
+  console.debug('[PM] fetchOrders URL:', url, 'departmentsSelected=', departmentsSelected);
+      // eslint-disable-next-line no-console
+      console.debug('[PM] token present:', !!token);
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -100,7 +122,20 @@ export default function PmTransactionManagement() {
         throw new Error('Không thể tải dữ liệu giao dịch');
       }
 
-  const data = await response.json();
+      // capture body for debugging when necessary
+      let data: any;
+      try {
+        data = await response.json();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.debug('[PM] fetchOrders: failed to parse json response', e);
+        const text = await response.text();
+        // eslint-disable-next-line no-console
+        console.debug('[PM] fetchOrders response text:', text.slice ? text.slice(0, 2000) : text);
+        throw e;
+      }
+      // eslint-disable-next-line no-console
+      console.debug('[PM] fetchOrders result count:', Array.isArray(data?.data) ? data.data.length : (Array.isArray(data) ? data.length : 0), 'total:', data?.total);
   setOrders(data.data || []);
   const total = Number(data.total || 0);
   setTotalItems(total);
@@ -138,12 +173,12 @@ export default function PmTransactionManagement() {
       fetchOrders();
       fetchStats();
     }
-  }, [isPM, isAdmin, currentPage, searchTerm, statusFilter, dateFilter]);
+  }, [isPM, isAdmin, currentPage, searchTerm, statusFilter, dateFilter, departmentsSelected]);
 
   // Sync effect: refetch when pageSize or dateRangeState changes
   useEffect(() => {
     if (isPM || isAdmin) fetchOrders();
-  }, [pageSize, dateRangeState]);
+  }, [pageSize, dateRangeState, departmentsSelected]);
 
   // Load filter options (departments/employees) similar to Order page
   useEffect(() => {
@@ -151,7 +186,10 @@ export default function PmTransactionManagement() {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
         const token = getAccessToken();
-        const res = await fetch(`${baseUrl}/orders/filter-options`, {
+        const foUrl = `${baseUrl}/orders/filter-options`;
+        // eslint-disable-next-line no-console
+        console.debug('[PM] fetch filter-options URL:', foUrl, ' token present:', !!token);
+        const res = await fetch(foUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;
@@ -182,6 +220,8 @@ export default function PmTransactionManagement() {
             });
 
             if (mapped.length > 0) {
+              // eslint-disable-next-line no-console
+              console.debug('[PM] mapped pm departments ->', mapped);
               setDepartmentsSelected(mapped);
               // trigger fetch with mapped departments
               try {
@@ -203,6 +243,8 @@ export default function PmTransactionManagement() {
 
   const handleFilterChange = (f: PaginatedFilters) => {
     try {
+  // eslint-disable-next-line no-console
+  console.debug('[PM] handleFilterChange', f);
       // search
       setSearchTerm(f.search || '');
 
@@ -215,7 +257,12 @@ export default function PmTransactionManagement() {
 
       // employees / departments
       if (f.employees && f.employees.length > 0) {
-        // not used directly now; backend may accept employees param in future
+  const emps = f.employees as (string | number)[];
+  // eslint-disable-next-line no-console
+  console.debug('[PM] employees selected', emps);
+  setEmployeesSelected(emps);
+      } else {
+        setEmployeesSelected([]);
       }
 
       // departments selected by user in the filter UI
@@ -242,6 +289,19 @@ export default function PmTransactionManagement() {
         setDateRangeState(null);
       }
 
+      // warning levels mapping (PaginatedTable passes labels)
+      if (f.warningLevels && f.warningLevels.length > 0) {
+        const mappedLevels = (f.warningLevels as (string | number)[]).map((w) => {
+          const found = warningLevelOptions.find((opt) => String(opt.label) === String(w) || String(opt.value) === String(w));
+          return found ? String(found.value) : String(w);
+        });
+        // eslint-disable-next-line no-console
+        console.debug('[PM] warning levels selected (mapped) ->', mappedLevels);
+        setWarningLevelFilter(mappedLevels.join(','));
+      } else {
+        setWarningLevelFilter('');
+      }
+
       // reset to page 1 after filter change
       setCurrentPage(1);
     } catch (e) {
@@ -252,12 +312,11 @@ export default function PmTransactionManagement() {
   // Export data
   const handleExport = async () => {
     try {
-      const params = new URLSearchParams({
-        search: searchTerm,
-        status: statusFilter !== 'all' ? statusFilter : '',
-        date_filter: dateFilter,
-        export: 'true',
-      });
+  const params = new URLSearchParams();
+  if (searchTerm && String(searchTerm).trim()) params.set('search', String(searchTerm).trim());
+  if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+  if (dateFilter && dateFilter !== 'all') params.set('date_filter', dateFilter);
+  params.set('export', 'true');
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       const token = getAccessToken();
@@ -382,8 +441,19 @@ export default function PmTransactionManagement() {
       params.set('date', dateFilter);
     }
 
-    if (Array.isArray(pmDepartments) && pmDepartments.length > 0 && !isAdmin) {
+    // prefer explicit selection, otherwise for non-admin use pmDepartments
+    if (Array.isArray(departmentsSelected) && departmentsSelected.length > 0) {
+      params.set('departments', departmentsSelected.join(','));
+    } else if (!isAdmin && Array.isArray(pmDepartments) && pmDepartments.length > 0) {
       params.set('departments', pmDepartments.join(','));
+    }
+
+    if (Array.isArray(employeesSelected) && employeesSelected.length > 0) {
+      params.set('employees', employeesSelected.join(','));
+    }
+
+    if (warningLevelFilter && warningLevelFilter !== '') {
+      params.set('warningLevel', warningLevelFilter);
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
@@ -438,54 +508,20 @@ export default function PmTransactionManagement() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Statistics Cards */}
-  {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tổng giao dịch</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{Number(stats.total_orders || 0)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Tổng giá trị</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(Number(stats.total_amount || 0))}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Chờ xử lý</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{Number(stats.pending_orders || 0)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Hoàn thành</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{Number(stats.completed_orders || 0)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Đã hủy</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{Number(stats.cancelled_orders || 0)}</div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+    <div className="h-full overflow-hidden relative">
+      {/* Statistics Cards removed per request */}
 
-      <PaginatedTable
+      <Card className="w-full max-w-full">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-xl font-bold">Danh sách giao dịch</CardTitle>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => fetchOrders()} className="text-sm">
+              🔄 Làm mới
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 space-y-4">
+          <PaginatedTable
         enableSearch={true}
         enableStatusFilter={true}
   enableEmployeeFilter={true}
@@ -502,6 +538,16 @@ export default function PmTransactionManagement() {
         onPageChange={(p) => setCurrentPage(p)}
         onPageSizeChange={(s) => setPageSize(s)}
         onFilterChange={handleFilterChange}
+        onDepartmentChange={(vals) => {
+          // immediate handler when user changes departments in the toolbar
+          // eslint-disable-next-line no-console
+          console.debug('[PM] onDepartmentChange immediate', vals);
+          setDepartmentsSelected(vals as (string | number)[]);
+          setCurrentPage(1);
+          try {
+            fetchOrders();
+          } catch (e) {}
+        }}
         onResetFilter={handleResetFilter}
         loading={loading}
         canExport={true}
@@ -542,11 +588,6 @@ export default function PmTransactionManagement() {
           employees: [],
         }}
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>Danh sách giao dịch</CardTitle>
-          </CardHeader>
-          <CardContent>
             {error && (
               <Alert className="mb-4">
                 <AlertCircle className="h-4 w-4" />
@@ -554,107 +595,22 @@ export default function PmTransactionManagement() {
               </Alert>
             )}
 
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-              </div>
-            ) : orders.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Không có giao dịch nào được tìm thấy.
-              </div>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mã đơn</TableHead>
-                      <TableHead>Khách hàng</TableHead>
-                      <TableHead>Số điện thoại</TableHead>
-                      <TableHead>Giá trị</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead>Nhân viên</TableHead>
-                      <TableHead>Phòng ban</TableHead>
-                      <TableHead>Ngày tạo</TableHead>
-                      <TableHead>Hành động</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-medium">{order.order_code}</TableCell>
-                        <TableCell>{order.customer_name}</TableCell>
-                        <TableCell>{order.customer_phone}</TableCell>
-                        <TableCell>{formatCurrency(order.total_amount)}</TableCell>
-                        <TableCell>{getStatusBadge(order.status)}</TableCell>
-                        <TableCell>{order.employee_code || '-'}</TableCell>
-                        <TableCell>{order.department_name || '-'}</TableCell>
-                        <TableCell>{formatDate(order.created_at)}</TableCell>
-                        <TableCell>
-                          <button
-                            className="p-1 rounded hover:bg-muted"
-                            onClick={async () => {
-                              setLoading(true);
-                              try {
-                                const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-                                const token = getAccessToken();
-                                const res = await fetch(`${baseUrl}/orders/${order.id}/messages`, {
-                                  headers: { 'Authorization': `Bearer ${token}` },
-                                });
-                                if (res.ok) {
-                                  const msgs = await res.json();
-                                  setModalMessages(msgs || []);
-                                  setModalOrder(order);
-                                  setShowModal(true);
-                                } else {
-                                  setError('Không thể tải tin nhắn');
-                                }
-                              } catch (err) {
-                                setError('Có lỗi khi tải tin nhắn');
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
-                            title="Xem tin nhắn liên quan"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                {/* Pagination built-in by PaginatedTable toolbar; keep simple extra pager if needed */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between space-x-2 py-4">
-                    <div className="text-sm text-muted-foreground">
-                      Trang {currentPage} của {totalPages}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        Trước
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        Sau
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </PaginatedTable>
+            <OrderManagement
+              orders={orders as any}
+              expectedRowCount={pageSize}
+              startIndex={(currentPage - 1) * pageSize}
+              onReload={fetchOrders}
+              loading={loading}
+              showActions={true}
+              actionMode="view-only"
+              onSearch={(s) => {
+                setSearchTerm(s || '');
+                setCurrentPage(1);
+              }}
+            />
+          </PaginatedTable>
+        </CardContent>
+      </Card>
       {/* Simple modal for viewing messages */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

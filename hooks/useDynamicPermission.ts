@@ -36,9 +36,14 @@ export const useDynamicPermission = () => {
 
   // Lấy tất cả roles của user (normalize về lowercase để so sánh không phân biệt hoa thường)
   const userRoles = useMemo(() => {
-    return (
-      user?.roles?.map((role: Role) => (role.name ? String(role.name).toLowerCase() : String(role.name))) || []
-    );
+    if (!user?.roles) return [];
+    return user.roles.map((role: any) => {
+      // role can be a string or an object with `name`
+      if (!role) return '';
+      if (typeof role === 'string') return role.toLowerCase();
+      if (typeof role === 'object' && role.name) return String(role.name).toLowerCase();
+      return String(role).toLowerCase();
+    }).filter(Boolean);
   }, [user?.roles]);
 
   // Lấy tất cả departments của user

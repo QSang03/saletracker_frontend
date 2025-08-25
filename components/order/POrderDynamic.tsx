@@ -4,7 +4,7 @@ import { useOrderPermissions } from '@/hooks/useOrderPermissions';
 
 interface POrderDynamicProps {
   children: React.ReactNode;
-  action?: 'read' | 'create' | 'update' | 'delete' | 'import' | 'export';
+  action?: 'read' | 'create' | 'update' | 'delete' | 'import' | 'export' | 'hide';
   requireAnalysis?: boolean;
   fallback?: React.ReactNode;
   showLoading?: boolean;

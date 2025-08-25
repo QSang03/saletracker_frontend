@@ -57,68 +57,32 @@ export default function ManagerPMTransactionsPage() {
   const hasSpecificPMRole = isAdmin || (pmDepartments && pmDepartments.length > 0);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Quản lý giao dịch cho PM</h1>
-          <p className="text-muted-foreground">
-            Quản lý và theo dõi các giao dịch theo phòng ban
-          </p>
+    <div className="h-full overflow-hidden relative">
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Quản lý giao dịch cho PM</h1>
+            <p className="text-muted-foreground">Quản lý và theo dõi các giao dịch theo phòng ban</p>
+          </div>
         </div>
+
+        {/* Hiển thị thông báo nếu chỉ có role PM mà không có pm_{phong_ban} */}
+        {!isAdmin && !hasSpecificPMRole && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Bạn có quyền truy cập vào chức năng này nhưng chưa được phân quyền cho phòng ban cụ thể nào.
+              Vui lòng liên hệ quản trị viên để được cấp quyền xem dữ liệu của phòng ban.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Hiển thị thông tin phòng ban được phân quyền */}
+    {/* Department permission card removed per request */}
+
+        {/* Component quản lý giao dịch */}
+        <PmTransactionManagement />
       </div>
-
-      {/* Hiển thị thông báo nếu chỉ có role PM mà không có pm_{phong_ban} */}
-  {/* Nếu không phải admin và cũng không có pm-specific thì hiển thị cảnh báo */}
-  {!isAdmin && !hasSpecificPMRole && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Bạn có quyền truy cập vào chức năng này nhưng chưa được phân quyền cho phòng ban cụ thể nào. 
-            Vui lòng liên hệ quản trị viên để được cấp quyền xem dữ liệu của phòng ban.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Hiển thị thông tin phòng ban được phân quyền */}
-      {isAdmin ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Phòng ban được phân quyền
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Tất cả phòng ban</span>
-            </div>
-          </CardContent>
-        </Card>
-      ) : hasSpecificPMRole && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Phòng ban được phân quyền
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {pmDepartments.map((dept) => (
-                <span
-                  key={dept}
-                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                >
-                  {dept}
-                </span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Component quản lý giao dịch */}
-      <PmTransactionManagement />
     </div>
   );
 }
