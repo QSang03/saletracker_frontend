@@ -18,6 +18,7 @@ import { AlertType } from "@/components/ui/loading/ServerResponseAlert";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import DeleteOrderDetailModal from "@/components/order/manager-order/DeleteOrderDetailModal";
 import { useCurrentUser } from "@/contexts/CurrentUserContext"; // ✅ THÊM
+import { getAccessToken } from "@/lib/auth";
 
 interface HiddenOrderManagementProps {
   rows: any[];
@@ -266,28 +267,170 @@ export default function HiddenOrderManagement({
   // ✅ Export data function
   const getExportData = () => {
     const headers = [
+      "STT",
       "ID",
-      "Tên khách hàng",
-      "Sản phẩm",
-      "Số lượng",
-      "Tổng tiền",
-      "Trạng thái",
-      "Lý do ẩn",
-      "Ngày ẩn",
+      "Khách Hàng",
+      "Sản Phẩm",
+      "Số Lượng",
+      "Đơn Giá",
+      "Tổng Tiền",
+      "Trạng Thái",
+      "Lý Do Ẩn",
+      "Ngày Ẩn",
     ];
 
-    const data = rows.map((row) => [
-      row.id,
-      row.customer_name || "",
+    const exportData = rows.map((row: any, idx: number) => [
+      (filters.page - 1) * filters.pageSize + idx + 1,
+      row.id ?? "--",
+      row.customer_name || "--",
       getProductName(row),
-      row.quantity || 0,
-      (row.quantity || 0) * (row.unit_price || 0),
-      row.status || "",
-      row.reason || "",
-      row.hidden_at ? new Date(row.hidden_at).toLocaleDateString("vi-VN") : "",
+      row.quantity ?? "--",
+      row.unit_price
+        ? Number(row.unit_price).toLocaleString("vi-VN") + "₫"
+        : "--",
+      row.quantity && row.unit_price
+        ? Number(row.quantity * row.unit_price).toLocaleString("vi-VN") + "₫"
+        : "--",
+      (() => {
+        switch (row.status) {
+          case "pending":
+            return "Chờ xử lý";
+          case "quoted":
+            return "Chưa chốt";
+          case "completed":
+            return "Đã chốt";
+          case "demand":
+            return "Nhu cầu";
+          case "confirmed":
+            return "Đã phản hồi";
+          default:
+            return "--";
+        }
+      })(),
+      row.reason || "--",
+      row.hidden_at
+        ? (() => {
+            const d =
+              typeof row.hidden_at === "string"
+                ? new Date(row.hidden_at)
+                : row.hidden_at instanceof Date
+                ? row.hidden_at
+                : null;
+            return d
+              ? d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "")
+              : "--";
+          })()
+        : "--",
     ]);
 
-    return { headers, data };
+    return { headers, data: exportData };
+  };
+
+  // ✅ Export all data function
+  const getExportAllData = async () => {
+    const params = new URLSearchParams();
+    params.append("page", "1");
+    params.append("pageSize", "1000000");
+    if (filters.search?.trim()) params.append("search", filters.search.trim());
+    if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
+    if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
+    if (filters.status?.trim()) params.append("status", filters.status.trim());
+    if (filters.sortField) params.append("sortField", filters.sortField);
+    if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
+
+    // Hidden date range
+    if (filters.hiddenDateRange?.from && filters.hiddenDateRange?.to) {
+      params.append(
+        "hiddenDateRange",
+        JSON.stringify({
+          start: filters.hiddenDateRange.from.toISOString().split("T")[0],
+          end: filters.hiddenDateRange.to.toISOString().split("T")[0],
+        })
+      );
+    }
+
+    const token = getAccessToken();
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/order-details/hidden?${params.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+
+    if (!res.ok) throw new Error(`Failed to fetch all hidden orders for export: ${res.status}`);
+    const result = await res.json();
+    const list = Array.isArray(result.data) ? result.data : [];
+
+    // Map to the same shape as getExportData()
+    const rows = list.map((row: any, idx: number) => [
+      idx + 1,
+      row.id ?? "--",
+      row.customer_name || "--",
+      getProductName(row),
+      row.quantity ?? "--",
+      row.unit_price
+        ? Number(row.unit_price).toLocaleString("vi-VN") + "₫"
+        : "--",
+      row.quantity && row.unit_price
+        ? Number(row.quantity * row.unit_price).toLocaleString("vi-VN") + "₫"
+        : "--",
+      (() => {
+        switch (row.status) {
+          case "pending":
+            return "Chờ xử lý";
+          case "quoted":
+            return "Chưa chốt";
+          case "completed":
+            return "Đã chốt";
+          case "demand":
+            return "Nhu cầu";
+          case "confirmed":
+            return "Đã phản hồi";
+          default:
+            return "--";
+        }
+      })(),
+      row.reason || "--",
+      row.hidden_at
+        ? (() => {
+            const d =
+              typeof row.hidden_at === "string"
+                ? new Date(row.hidden_at)
+                : row.hidden_at instanceof Date
+                ? row.hidden_at
+                : null;
+            return d
+              ? d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "")
+              : "--";
+          })()
+        : "--",
+    ]);
+
+    return rows;
   };
 
   // ✅ Enhanced Skeleton Row Component
@@ -366,6 +509,7 @@ export default function HiddenOrderManagement({
         loading={loading}
         canExport={true}
         getExportData={getExportData}
+        getExportAllData={getExportAllData}
       >
         {/* ✅ Enhanced Bulk Actions Bar - THÊM ownership check */}
         {selectedIds.size > 0 && (
