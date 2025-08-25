@@ -13,6 +13,7 @@ import {
 import type { OrderDetail } from "@/types";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { useTrashedOrders } from "@/hooks/useTrashedOrders";
+import { getAccessToken } from "@/lib/auth";
 import {
   Table,
   TableBody,
@@ -270,8 +271,176 @@ export default function TrashedOrderDetailTable() {
             }
             isRestoring={false}
             loading={isLoading}
-            canExport={false}
-            getExportData={() => ({ headers: [], data: [] })}
+            canExport={true}
+            getExportData={() => {
+              const headers = [
+                "STT",
+                "Mã Đơn",
+                "Nhân Viên",
+                "Khách Hàng",
+                "Mặt Hàng",
+                "Số Lượng",
+                "Đơn Giá",
+                "Ngày Xóa",
+                "Ngày Tạo",
+              ];
+
+              const exportData = data.map((orderDetail, idx) => [
+                (filters.page - 1) * filters.pageSize + idx + 1,
+                orderDetail.id ?? "--",
+                orderDetail.order?.sale_by?.fullName ||
+                  orderDetail.order?.sale_by?.username ||
+                  "--",
+                orderDetail.customer_name || "--",
+                orderDetail.raw_item || "--",
+                orderDetail.quantity ?? "--",
+                orderDetail.unit_price
+                  ? Number(orderDetail.unit_price).toLocaleString("vi-VN") + "₫"
+                  : "--",
+                orderDetail.deleted_at
+                  ? (() => {
+                      const d =
+                        typeof orderDetail.deleted_at === "string"
+                          ? new Date(orderDetail.deleted_at)
+                          : orderDetail.deleted_at instanceof Date
+                          ? orderDetail.deleted_at
+                          : null;
+                      return d
+                        ? d
+                            .toLocaleString("vi-VN", {
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            })
+                            .replace(",", "")
+                        : "--";
+                    })()
+                  : "--",
+                orderDetail.created_at
+                  ? (() => {
+                      const d =
+                        typeof orderDetail.created_at === "string"
+                          ? new Date(orderDetail.created_at)
+                          : orderDetail.created_at instanceof Date
+                          ? orderDetail.created_at
+                          : null;
+                      return d
+                        ? d
+                            .toLocaleString("vi-VN", {
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            })
+                            .replace(",", "")
+                        : "--";
+                    })()
+                  : "--",
+              ]);
+
+              return { headers, data: exportData };
+            }}
+            getExportAllData={async () => {
+              const params = new URLSearchParams();
+              params.append("page", "1");
+              params.append("pageSize", "1000000");
+              if (filters.search?.trim()) params.append("search", filters.search.trim());
+              if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
+              if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
+              if (filters.products?.trim()) params.append("products", filters.products.trim());
+              if (filters.sortField) params.append("sortField", filters.sortField);
+              if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
+
+              const token = getAccessToken();
+              const res = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/order-details/trashed?${params.toString()}`,
+                {
+                  method: "GET",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                }
+              );
+
+              if (!res.ok) throw new Error(`Failed to fetch all trashed orders for export: ${res.status}`);
+              const result = await res.json();
+              const list: OrderDetail[] = Array.isArray(result)
+                ? result
+                : Array.isArray(result?.data)
+                ? result.data
+                : [];
+
+              // Map to the same shape as getExportData()
+              const rows: (string | number)[][] = list.map((orderDetail, idx) => [
+                idx + 1,
+                orderDetail.id ?? "--",
+                orderDetail.order?.sale_by?.fullName ||
+                  orderDetail.order?.sale_by?.username ||
+                  "--",
+                orderDetail.customer_name || "--",
+                orderDetail.raw_item || "--",
+                orderDetail.quantity ?? "--",
+                orderDetail.unit_price
+                  ? Number(orderDetail.unit_price).toLocaleString("vi-VN") + "₫"
+                  : "--",
+                orderDetail.deleted_at
+                  ? (() => {
+                      const d =
+                        typeof orderDetail.deleted_at === "string"
+                          ? new Date(orderDetail.deleted_at)
+                          : orderDetail.deleted_at instanceof Date
+                          ? orderDetail.deleted_at
+                          : null;
+                      return d
+                        ? d
+                            .toLocaleString("vi-VN", {
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            })
+                            .replace(",", "")
+                        : "--";
+                    })()
+                  : "--",
+                orderDetail.created_at
+                  ? (() => {
+                      const d =
+                        typeof orderDetail.created_at === "string"
+                          ? new Date(orderDetail.created_at)
+                          : orderDetail.created_at instanceof Date
+                          ? orderDetail.created_at
+                          : null;
+                      return d
+                        ? d
+                            .toLocaleString("vi-VN", {
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            })
+                            .replace(",", "")
+                        : "--";
+                    })()
+                  : "--",
+              ]);
+
+              return rows;
+            }}
             initialFilters={{
               search: filters.search || "",
               departments: filters.departments
