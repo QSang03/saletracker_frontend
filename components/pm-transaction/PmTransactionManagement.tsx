@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,11 +54,15 @@ export default function PmTransactionManagement() {
   const [error, setError] = useState<string | null>(null);
   const [employeesSelected, setEmployeesSelected] = useState<(string | number)[]>([]);
   const [warningLevelFilter, setWarningLevelFilter] = useState('');
+  const [minQuantity, setMinQuantity] = useState<number | undefined>(3);
+  const [conversationTypesSelected, setConversationTypesSelected] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [modalOrder, setModalOrder] = useState<Order | null>(null);
   const [modalMessages, setModalMessages] = useState<any[]>([]);
   const [filterOptions, setFilterOptions] = useState<{ departments: any[]; products?: any[] }>({ departments: [], products: [] });
   const [departmentsSelected, setDepartmentsSelected] = useState<(string | number)[]>([]);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
+  const filtersLoadingRef = useRef(false);
 
   // Nếu là admin, dùng danh sách departments khả dụng; nếu không, dùng pm-{dept}
   const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments;
@@ -102,6 +106,14 @@ export default function PmTransactionManagement() {
 
       if (warningLevelFilter && warningLevelFilter !== '') {
         params.set('warningLevel', warningLevelFilter);
+      }
+
+      // PM-only filters: min quantity and conversation type
+      if (typeof minQuantity === 'number') {
+        params.set('quantity', String(minQuantity));
+      }
+      if (Array.isArray(conversationTypesSelected) && conversationTypesSelected.length > 0) {
+        params.set('conversationType', conversationTypesSelected.join(','));
       }
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
@@ -170,19 +182,26 @@ export default function PmTransactionManagement() {
   useEffect(() => {
     // Nếu là PM hoặc admin thì tải dữ liệu
     if (isPM || isAdmin) {
+      // Wait until filter options are loaded/mapped to departments to avoid
+      // firing an initial fetch before default departments are applied.
+      if (!filtersLoaded) return;
       fetchOrders();
       fetchStats();
     }
-  }, [isPM, isAdmin, currentPage, searchTerm, statusFilter, dateFilter, departmentsSelected]);
+  // consolidate triggers: include pageSize and dateRangeState and employees/warning filters
+  }, [isPM, isAdmin, currentPage, searchTerm, statusFilter, dateFilter, departmentsSelected, pageSize, dateRangeState, employeesSelected, warningLevelFilter, filtersLoaded, minQuantity, conversationTypesSelected]);
 
-  // Sync effect: refetch when pageSize or dateRangeState changes
-  useEffect(() => {
-    if (isPM || isAdmin) fetchOrders();
-  }, [pageSize, dateRangeState, departmentsSelected]);
+
+
+  // removed duplicate sync effect — pageSize/dateRangeState/departments/employees/warningLevel are handled
+  // in the consolidated main effect above to avoid multiple fetches.
 
   // Load filter options (departments/employees) similar to Order page
   useEffect(() => {
     const load = async () => {
+      // Prevent concurrent duplication (React Strict Mode / fast re-renders)
+      if (filtersLoadingRef.current) return;
+      filtersLoadingRef.current = true;
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
         const token = getAccessToken();
@@ -222,23 +241,25 @@ export default function PmTransactionManagement() {
             if (mapped.length > 0) {
               // eslint-disable-next-line no-console
               console.debug('[PM] mapped pm departments ->', mapped);
+              // just set state; the consolidated effect will trigger fetchOrders
               setDepartmentsSelected(mapped);
-              // trigger fetch with mapped departments
-              try {
-                // small delay to ensure state updates propagate
-                setTimeout(() => {
-                  fetchOrders();
-                }, 50);
-              } catch (e) {}
             }
           }
         }
       } catch (err) {
         console.error('Error loading filter options', err);
+      } finally {
+        filtersLoadingRef.current = false;
+        // mark that filter options have been loaded so main fetch can run
+        setFiltersLoaded(true);
       }
     };
 
-    if (isPM || isAdmin) load();
+    if (isPM || isAdmin) {
+      // reset loaded flag and then load filter options
+      setFiltersLoaded(false);
+      load();
+    }
   }, [isPM, isAdmin]);
 
   const handleFilterChange = (f: PaginatedFilters) => {
@@ -300,6 +321,20 @@ export default function PmTransactionManagement() {
         setWarningLevelFilter(mappedLevels.join(','));
       } else {
         setWarningLevelFilter('');
+      }
+
+      // min quantity (Số lượng tối thiểu)
+      if (typeof (f as any).minQuantity === 'number' && !Number.isNaN((f as any).minQuantity)) {
+        setMinQuantity((f as any).minQuantity as number);
+      } else {
+        setMinQuantity(undefined);
+      }
+
+      // conversation type (group / private)
+      if ((f as any).conversationType && (f as any).conversationType.length > 0) {
+        setConversationTypesSelected((f as any).conversationType as string[]);
+      } else {
+        setConversationTypesSelected([]);
       }
 
       // reset to page 1 after filter change
@@ -394,8 +429,7 @@ export default function PmTransactionManagement() {
     setDateRangeState(null);
     setPageSize(10);
     setCurrentPage(1);
-    // trigger fetch after resetting
-    fetchOrders();
+  // Do not call fetchOrders() directly here; the consolidated effect will react to state changes.
   };
 
   // Export data helper (returns headers + mapped rows for current visible orders)
@@ -454,6 +488,13 @@ export default function PmTransactionManagement() {
 
     if (warningLevelFilter && warningLevelFilter !== '') {
       params.set('warningLevel', warningLevelFilter);
+    }
+
+    if (typeof minQuantity === 'number') {
+      params.set('quantity', String(minQuantity));
+    }
+    if (Array.isArray(conversationTypesSelected) && conversationTypesSelected.length > 0) {
+      params.set('conversationType', conversationTypesSelected.join(','));
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
@@ -523,9 +564,8 @@ export default function PmTransactionManagement() {
         <CardContent className="p-6 space-y-4">
           <PaginatedTable
         enableSearch={true}
-        enableStatusFilter={true}
+  enableStatusFilter={true}
   enableEmployeeFilter={true}
-  // Show department filter control so users can select departments
   enableDepartmentFilter={true}
         enableDateRangeFilter={true}
         enableSingleDateFilter={true}
@@ -544,9 +584,7 @@ export default function PmTransactionManagement() {
           console.debug('[PM] onDepartmentChange immediate', vals);
           setDepartmentsSelected(vals as (string | number)[]);
           setCurrentPage(1);
-          try {
-            fetchOrders();
-          } catch (e) {}
+          // do not call fetchOrders() here; consolidated effect will react to state changes
         }}
         onResetFilter={handleResetFilter}
         loading={loading}
@@ -575,7 +613,7 @@ export default function PmTransactionManagement() {
         singleDateLabel="Ngày tạo"
         dateRangeLabel="Khoảng thời gian"
         isRestoring={false}
-        initialFilters={{
+  initialFilters={{
           search: searchTerm,
           // do NOT pre-filter by departments; keep department selection empty so results are not restricted
           departments: [],
@@ -586,7 +624,11 @@ export default function PmTransactionManagement() {
             : { from: undefined, to: undefined },
           singleDate: dateFilter && dateFilter !== 'all' ? new Date(dateFilter) : undefined,
           employees: [],
+          minQuantity: minQuantity,
+          conversationType: conversationTypesSelected,
         }}
+        enableQuantityFilter={true}
+        enableConversationTypeFilter={true}
       >
             {error && (
               <Alert className="mb-4">

@@ -66,6 +66,9 @@ interface PaginatedTableProps {
   dateRangeLabel?: string;
   singleDateLabel?: string;
   defaultPageSize?: number;
+  // New filters
+  enableQuantityFilter?: boolean;
+  enableConversationTypeFilter?: boolean;
   pageSizeOptions?: number[];
   page?: number;
   total?: number;
@@ -128,6 +131,8 @@ export type Filters = {
   categories: (string | number)[];
   brands: (string | number)[];
   warningLevels: (string | number)[]; // Thêm warning levels
+  minQuantity?: number; // Số lượng tối thiểu
+  conversationType?: (string | number)[]; // 'group' | 'private'
   dateRange: DateRange;
   singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
@@ -165,6 +170,9 @@ export default function PaginatedTable({
   // Thêm props cho warning levels
   enableWarningLevelFilter,
   availableWarningLevels = [],
+  // PM-only new filters (defaults false)
+  enableQuantityFilter = false,
+  enableConversationTypeFilter = false,
   defaultPageSize = 10,
   page,
   total,
@@ -348,6 +356,8 @@ export default function PaginatedTable({
       categories: initialFilters?.categories || [],
       brands: initialFilters?.brands || [],
       warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
+  minQuantity: initialFilters?.minQuantity,
+  conversationType: initialFilters?.conversationType || [],
       dateRange: initialFilters?.dateRange || {
         from: undefined,
         to: undefined,
@@ -368,7 +378,9 @@ export default function PaginatedTable({
       filters.categories.length === 0 &&
       filters.brands.length === 0 &&
       filters.warningLevels.length === 0 && // Thêm warning levels
-      filters.employees.length === 0 &&
+  filters.employees.length === 0 &&
+  (filters.minQuantity === undefined || filters.minQuantity === null) &&
+  (filters.conversationType?.length || 0) === 0 &&
       !filters.dateRange.from &&
       !filters.dateRange.to &&
       !filters.singleDate
@@ -387,6 +399,8 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.categories),
       JSON.stringify(initialFilters?.brands),
       JSON.stringify(initialFilters?.warningLevels), // Thêm warning levels
+  JSON.stringify(initialFilters?.minQuantity),
+  JSON.stringify(initialFilters?.conversationType),
       JSON.stringify(initialFilters?.dateRange),
       initialFilters?.singleDate,
       JSON.stringify(initialFilters?.employees),
@@ -545,7 +559,8 @@ export default function PaginatedTable({
                 JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
 
               if (isDifferent) {
-                newFilters[field] = incomingValue as any;
+                // safe indexed assignment when field is a dynamic keyof Filters
+                (newFilters as any)[field] = incomingValue as any;
                 hasChanges = true;
               }
             } else if (userModifiedFieldsRef.current.has(field)) {
@@ -976,6 +991,42 @@ export default function PaginatedTable({
               value={filters.warningLevels}
               options={warningLevelOptions}
               onChange={handleWarningLevelsChange}
+            />
+          )}
+          {enableQuantityFilter && (
+            <div className="min-w-0 w-full flex items-center">
+              <input
+                type="number"
+                min={0}
+                className="w-full border rounded px-2 py-1 text-sm"
+                value={filters.minQuantity ?? ""}
+                placeholder="Số lượng tối thiểu"
+                onChange={(e) => {
+                  const v = e.target.value === "" ? undefined : Number(e.target.value);
+                  setHasUserInteracted(true);
+                  userModifiedFieldsRef.current.add("minQuantity");
+                  setFilters((prev) => {
+                    const next = { ...prev, minQuantity: v } as Filters;
+                    if (onFilterChange) debouncedSetFilters(next as Filters);
+                    return next;
+                  });
+                }}
+              />
+            </div>
+          )}
+          {enableConversationTypeFilter && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full`}
+              placeholder="Nhóm / Cá Nhân"
+              value={filters.conversationType || []}
+              options={[{ label: "Nhóm chat", value: "group" }, { label: "Cá Nhân", value: "private" }]}
+              onChange={(vals) => {
+                setHasUserInteracted(true);
+                userModifiedFieldsRef.current.add("conversationType");
+                const next = { ...filters, conversationType: vals as (string | number)[] } as Filters;
+                setFilters(next);
+                if (onFilterChange) debouncedSetFilters(next as Filters);
+              }}
             />
           )}
           {enableSingleDateFilter && (

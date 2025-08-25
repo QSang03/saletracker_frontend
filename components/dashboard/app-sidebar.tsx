@@ -74,10 +74,18 @@ export function AppSidebar({
   });
 
   const filteredNavItems = effectiveNavItems
-    .map(item => ({
-      ...item,
-      items: item.items.filter(subItem => !subItem.roles || hasRole(currentUser, subItem.roles)),
-    }))
+    .map(item => {
+      // First filter by roles defined on sub-items
+      let itemsFiltered = item.items.filter(subItem => !subItem.roles || hasRole(currentUser, subItem.roles));
+      // If user is PM (and not admin), hide the debt-statistics sub-item
+      if (!isAdmin && isPMRole && item.title === 'Thống kê') {
+        itemsFiltered = itemsFiltered.filter(si => si.title !== 'Thống kê công nợ');
+      }
+      return {
+        ...item,
+        items: itemsFiltered,
+      };
+    })
     .filter(item => item.items.length > 0);
 
   return (
