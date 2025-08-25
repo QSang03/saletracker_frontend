@@ -743,7 +743,7 @@ const ChartSection: React.FC<ChartSectionProps> = ({
                 <div className="relative flex items-center gap-3 bg-gradient-to-r from-green-50 to-blue-50 px-6 py-3 rounded-full border border-white/50 shadow-xl backdrop-blur-sm">
                   <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-blue-500 rounded-full animate-pulse shadow-lg" />
                   <span className="text-sm font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-                    {activeFilters.length}/3 ACTIVE
+                    {activeFilters.length}/3 Kích hoạt
                   </span>
                 </div>
               </div>
