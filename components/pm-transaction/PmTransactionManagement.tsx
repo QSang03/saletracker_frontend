@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,47 @@ export default function PmTransactionManagement() {
   const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments();
   // Admin luôn được xem toàn bộ phòng ban — nếu là admin bỏ qua kiểm tra pm-specific
   const hasSpecificPMRole = isAdmin || (pmDepartments && pmDepartments.length > 0);
+
+  // Compute available employees based on selected departments (or PM-accessible departments for non-admin)
+  const availableEmployees = useMemo(() => {
+    const depts = Array.isArray(filterOptions?.departments)
+      ? filterOptions.departments
+      : [];
+
+    const normalize = (v: any) => (v == null ? '' : String(v).toLowerCase());
+    const pmSet = new Set((Array.isArray(pmDepartments) ? pmDepartments : []).map((x: any) => normalize(x)));
+
+    // Determine which departments to pull employees from
+    const selectedValues = new Set((departmentsSelected || []).map((v) => String(v)));
+    const filteredDepts = (departmentsSelected && departmentsSelected.length > 0)
+      ? depts.filter((d: any) => String(d?.value) && selectedValues.has(String(d.value)))
+      : (isAdmin
+          ? depts
+          : depts.filter((d: any) => {
+              const val = normalize(d?.value);
+              const slug = normalize(d?.slug);
+              const label = normalize(d?.label);
+              // match against pm-allowed list by value/slug/label contains
+              if (pmSet.has(val) || pmSet.has(slug)) return true;
+              for (const pm of pmSet) {
+                if (pm && label.includes(pm)) return true;
+              }
+              return false;
+            }));
+
+    // Flatten and dedupe users
+    const map = new Map<string, { label: string; value: string | number }>();
+    filteredDepts.forEach((d: any) => {
+      const users = Array.isArray(d?.users) ? d.users : [];
+      users.forEach((u: any) => {
+        const key = String(u?.value);
+        if (!map.has(key)) map.set(key, { label: u?.label ?? key, value: key });
+      });
+    });
+    return Array.from(map.values());
+  }, [filterOptions.departments, departmentsSelected, isAdmin, pmDepartments]);
+
+  // removed: moved pmDepartments/hasSpecificPMRole above to avoid temporal dead zone
 
   // Fetch orders data
   const fetchOrders = async () => {
@@ -262,6 +303,13 @@ export default function PmTransactionManagement() {
     }
   }, [isPM, isAdmin]);
 
+  // When departments change, remove any selected employees that no longer belong to the available set
+  useEffect(() => {
+    if (!employeesSelected || employeesSelected.length === 0) return;
+    const allowed = new Set(availableEmployees.map((e) => String(e.value)));
+    setEmployeesSelected((prev) => prev.filter((v) => allowed.has(String(v))));
+  }, [availableEmployees]);
+
   const handleFilterChange = (f: PaginatedFilters) => {
     try {
   // eslint-disable-next-line no-console
@@ -323,9 +371,9 @@ export default function PmTransactionManagement() {
         setWarningLevelFilter('');
       }
 
-      // min quantity (Số lượng tối thiểu)
-      if (typeof (f as any).minQuantity === 'number' && !Number.isNaN((f as any).minQuantity)) {
-        setMinQuantity((f as any).minQuantity as number);
+      // quantity (Số lượng tối thiểu)
+      if (typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity)) {
+        setMinQuantity((f as any).quantity as number);
       } else {
         setMinQuantity(undefined);
       }
@@ -603,12 +651,7 @@ export default function PmTransactionManagement() {
         }
         availableWarningLevels={warningLevelOptions}
         availableEmployees={
-          (filterOptions.departments || [])
-            .reduce((acc: any[], dept: any) => {
-              const users = Array.isArray(dept.users) ? dept.users : [];
-              users.forEach((u: any) => acc.push({ label: u.label, value: String(u.value) }));
-              return acc;
-            }, [])
+          availableEmployees
         }
         singleDateLabel="Ngày tạo"
         dateRangeLabel="Khoảng thời gian"
