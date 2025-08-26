@@ -39,7 +39,7 @@ export const navItems = [
     icon: "Terminal",
     items: [
       { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-pm-transactions", roles: ["admin", "PM", "view"] },
-      { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin", "view"] },
+      { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin", "pm", "view"] },
     ],
   },
   {

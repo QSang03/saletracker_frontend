@@ -44,6 +44,7 @@ import {
 import { campaignAPI } from "@/lib/campaign-api";
 import { toast } from "sonner";
 import { usePermission } from "@/hooks/usePermission";
+import { useViewRole } from "@/hooks/useViewRole";
 import { cn } from "@/lib/utils";
 import CampaignCustomersModal from "./CampaignCustomersModal";
 import CampaignModal from "./CampaignModal";
@@ -143,6 +144,7 @@ const StatusDropdown = React.memo(
     loading: boolean;
     campaign?: CampaignWithDetails;
   }) => {
+    const { isViewRole } = useViewRole();
     const config = STATUS_CONFIG[status] || STATUS_CONFIG[CampaignStatus.DRAFT];
     const validStatuses = getValidStatusTransitions(status);
 
@@ -168,6 +170,33 @@ const StatusDropdown = React.memo(
     const buttonColor = hasWarningStatus
       ? "bg-orange-100 text-orange-700 border-orange-200"
       : config.color;
+
+    // Nếu là role view, chỉ hiển thị status mà không cho phép thay đổi
+    if (isViewRole) {
+      return (
+        <div
+          className={cn(
+            "h-6 gap-1 text-xs min-w-[80px] justify-start inline-flex items-center rounded-md border px-2 py-1",
+            buttonColor
+          )}
+          title={getStatusTooltip(status)}
+        >
+          <div className="flex items-center gap-1">
+            {hasWarningStatus ? (
+              <>
+                <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate">{config.label}</span>
+              </>
+            ) : (
+              <>
+                {config.icon}
+                <span className="truncate">{config.label}</span>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
 
     return (
       <DropdownMenu>
@@ -251,7 +280,7 @@ const LoadingSkeleton = ({
   <>
     {/* Loading Header */}
     <TableRow>
-      <TableCell colSpan={9} className="bg-blue-50 border-b text-center py-3">
+      <TableCell colSpan={10} className="bg-blue-50 border-b text-center py-3">
         <div className="flex items-center justify-center gap-3 text-blue-600">
           <Loader2 className="w-5 h-5 animate-spin" />
           <span className="text-sm font-medium">
@@ -655,6 +684,10 @@ export default function CampaignManagement({
 }: CampaignManagementProps) {
   const [campaigns, setCampaigns] =
     useState<CampaignWithDetails[]>(initialCampaigns);
+  // Đồng bộ lại danh sách nếu parent cập nhật (ví dụ khi đổi trang / pageSize)
+  useEffect(() => {
+    setCampaigns(initialCampaigns);
+  }, [initialCampaigns]);
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
     null
@@ -1411,7 +1444,7 @@ export default function CampaignManagement({
                     key={`empty-${index}`}
                     className="hover:bg-transparent"
                   >
-                    <TableCell colSpan={9} className="h-[57px] border-0" />
+                    <TableCell colSpan={10} className="h-[57px] border-0" />
                   </TableRow>
                 ))}
               </>
@@ -1420,7 +1453,7 @@ export default function CampaignManagement({
             {/* ✅ EMPTY STATE - Icon Plus có thể click */}
             {!isLoading && campaigns.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12">
+                <TableCell colSpan={10} className="text-center py-12">
                   <div className="flex flex-col items-center justify-center space-y-6 text-gray-500">
                     {/* ✅ Icon lớn với Plus button clickable */}
                     <div className="relative">

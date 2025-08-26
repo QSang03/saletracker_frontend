@@ -28,6 +28,7 @@ interface OrderFilters {
   departments?: string;
   products?: string;
   warningLevel?: string;
+  quantity?: number; // Thêm bộ lọc số lượng
   sortField?: "quantity" | "unit_price" | "created_at" | null;
   sortDirection?: "asc" | "desc" | null;
 }
@@ -63,6 +64,7 @@ interface UseOrdersReturn {
   setDepartments: (departments: string, resetPage?: boolean) => void;
   setProducts: (products: string, resetPage?: boolean) => void;
   setWarningLevel: (warningLevel: string, resetPage?: boolean) => void;
+  setQuantity: (quantity: number, resetPage?: boolean) => void; // Thêm setter cho quantity
   setSortField: (
     sortField: "quantity" | "unit_price" | "created_at" | null,
     resetPage?: boolean
@@ -256,6 +258,7 @@ export const useOrders = (): UseOrdersReturn => {
     const departments = searchParams.get("departments") || "";
     const products = searchParams.get("products") || "";
     const warningLevel = searchParams.get("warningLevel") || "";
+    const quantity = parseInt(searchParams.get("quantity") || "1"); // Mặc định là 1
     const sortField = searchParams.get("sortField") as
       | "quantity"
       | "unit_price"
@@ -290,6 +293,7 @@ export const useOrders = (): UseOrdersReturn => {
         departments,
         products,
         warningLevel,
+        quantity,
         sortField,
         sortDirection,
       };
@@ -309,6 +313,7 @@ export const useOrders = (): UseOrdersReturn => {
       departments: savedFilters.departments || "",
       products: savedFilters.products || "",
       warningLevel: savedFilters.warningLevel || "",
+      quantity: savedFilters.quantity || 1, // Mặc định là 1
       sortField: savedFilters.sortField || null,
       sortDirection: savedFilters.sortDirection || null,
     };
@@ -819,6 +824,18 @@ export const useOrders = (): UseOrdersReturn => {
     [filters, updateFiltersAndUrl]
   );
 
+  const setQuantity = useCallback(
+    (quantity: number, resetPage = true) => {
+      const newFilters = {
+        ...filters,
+        quantity,
+        page: resetPage ? 1 : filters.page,
+      };
+      updateFiltersAndUrl(newFilters);
+    },
+    [filters, updateFiltersAndUrl]
+  );
+
   const setSortField = useCallback(
     (
       sortField: "quantity" | "unit_price" | "created_at" | null,
@@ -900,6 +917,7 @@ export const useOrders = (): UseOrdersReturn => {
       departments: "",
       products: "",
       warningLevel: "",
+      quantity: 1, // Reset về mặc định 1
       sortField: null,
       sortDirection: null,
     };
@@ -1996,6 +2014,7 @@ export const useOrders = (): UseOrdersReturn => {
     setDepartments,
     setProducts,
     setWarningLevel,
+    setQuantity,
     setSortField,
     setSortDirection,
 

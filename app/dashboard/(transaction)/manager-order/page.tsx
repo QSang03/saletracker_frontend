@@ -757,6 +757,7 @@ function ManagerOrderContent() {
             }
           : { from: undefined, to: undefined },
       singleDate: filters.date ? new Date(filters.date) : undefined,
+      quantity: filters.quantity || 1, // Thêm quantity filter
       employees: filters.employees
         ? filters.employees.split(",").filter((e) => e)
         : [],
@@ -772,6 +773,7 @@ function ManagerOrderContent() {
     filters.dateRange?.start,
     filters.dateRange?.end,
     filters.date,
+    filters.quantity,
     filters.employees,
     JSON.stringify(warningLevelOptions), // Include warningLevelOptions to handle mapping changes
   ]);
@@ -852,6 +854,9 @@ function ManagerOrderContent() {
             availableDepartments={departmentOptions}
             availableCategories={productOptions} // Products mapped to categories
             availableWarningLevels={warningLevelOptions} // Thay thế availableBrands
+            enableQuantityFilter={true} // Bật bộ lọc số lượng
+            quantityLabel="Số lượng"
+            defaultQuantity={1} // Mặc định là 1
             singleDateLabel="Ngày tạo đơn"
             dateRangeLabel="Khoảng thời gian"
             page={filters.page}

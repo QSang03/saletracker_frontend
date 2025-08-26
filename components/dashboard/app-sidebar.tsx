@@ -63,7 +63,10 @@ export function AppSidebar({
   // Lọc navItems và từng item con theo role
   // Nếu user không phải admin và không có role PM thì ẩn hẳn nhóm 'Product Manager'
   const isAdmin = hasRole(currentUser, 'admin');
-  const isPMRole = currentUser?.roles?.some(r => (r.name || '').toLowerCase().includes('pm'));
+  const isPMRole = currentUser?.roles?.some(r => {
+    const n = (r.name || '').toLowerCase();
+    return n === 'pm' || n.startsWith('pm-');
+  });
 
   const effectiveNavItems = navItems.filter(group => {
   // Show Product Manager group only to admin or users with any pm role

@@ -1324,7 +1324,7 @@ export default function CampaignCustomersModal({
                               {isLoadingMore && (
                                 <TableRow>
                                   <TableCell
-                                    colSpan={9}
+                                    colSpan={10}
                                     className="h-16 text-center"
                                   >
                                     <motion.div
@@ -1351,7 +1351,7 @@ export default function CampaignCustomersModal({
                               {hasMoreData && !isLoadingMore && (
                                 <TableRow>
                                   <TableCell
-                                    colSpan={9}
+                                    colSpan={10}
                                     className="h-16 text-center"
                                   >
                                     <motion.div
@@ -1376,7 +1376,7 @@ export default function CampaignCustomersModal({
                           ) : (
                             <TableRow>
                               <TableCell
-                                colSpan={9}
+                                colSpan={10}
                                 className="h-32 text-center"
                               >
                                 <motion.div

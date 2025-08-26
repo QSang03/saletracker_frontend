@@ -65,7 +65,7 @@ export default function PmTransactionManagement() {
   const filtersLoadingRef = useRef(false);
 
   // Nếu là admin, dùng danh sách departments khả dụng; nếu không, dùng pm-{dept}
-  const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments;
+  const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments();
   // Admin luôn được xem toàn bộ phòng ban — nếu là admin bỏ qua kiểm tra pm-specific
   const hasSpecificPMRole = isAdmin || (pmDepartments && pmDepartments.length > 0);
 
@@ -218,7 +218,7 @@ export default function PmTransactionManagement() {
 
         // If user is PM (non-admin) and hasn't selected departments explicitly,
         // try to map their pm-<slug> roles to department values and apply as default selection
-        if (!isAdmin && Array.isArray(pmDepartments) && pmDepartments.length > 0) {
+  if (!isAdmin && Array.isArray(pmDepartments) && pmDepartments.length > 0) {
           // don't overwrite if user already selected departments
           if (!departmentsSelected || departmentsSelected.length === 0) {
             const mapped: (string | number)[] = [];
@@ -597,7 +597,7 @@ export default function PmTransactionManagement() {
             ? (filterOptions.departments || []).map((d: any) => ({ value: d.value, label: d.label }))
             : ((): any => {
                 const depts = (filterOptions.departments || []).map((d: any) => ({ value: d.value, label: d.label }));
-                const matched = depts.filter((d: any) => pmDepartments.includes(String(d.value)) || pmDepartments.includes(d.label?.toLowerCase()));
+                const matched = depts.filter((d: any) => pmDepartments.includes(String(d.value)) || pmDepartments.includes((d.label || '').toString().toLowerCase()));
                 return matched.length > 0 ? matched : (Array.isArray(pmDepartments) ? pmDepartments : []);
               })()
         }
@@ -624,7 +624,7 @@ export default function PmTransactionManagement() {
             : { from: undefined, to: undefined },
           singleDate: dateFilter && dateFilter !== 'all' ? new Date(dateFilter) : undefined,
           employees: [],
-          minQuantity: minQuantity,
+          quantity: minQuantity,
           conversationType: conversationTypesSelected,
         }}
         enableQuantityFilter={true}

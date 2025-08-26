@@ -1,30 +1,28 @@
 'use client';
 
-import { useEffect, useState, useContext } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, FileText } from 'lucide-react';
 import PmTransactionManagement from '@/components/pm-transaction/PmTransactionManagement';
-import { AuthContext } from '@/contexts/AuthContext';
 
 export default function ManagerPMTransactionsPage() {
   const router = useRouter();
-  const { isPM, getPMDepartments, isAdmin, getAccessibleDepartments, user } = useDynamicPermission();
+  const { isPM, isViewRole, getPMDepartments, isAdmin, getAccessibleDepartments, user } = useDynamicPermission();
   const [isLoading, setIsLoading] = useState(true);
-  const { isLoading: authLoading } = useContext(AuthContext);
 
   useEffect(() => {
-    // Kiểm tra quyền truy cập: cho phép cả PM và admin (dùng isAdmin từ hook)
-    // Đợi context auth load xong để tránh redirect sớm khi reload trang
-    if (authLoading) return;
-    if (!isPM && !isAdmin) {
+    // Chờ user được load để tránh redirect sớm khi user chưa sẵn sàng
+    if (!user) return;
+    // Kiểm tra quyền truy cập: cho phép PM, admin, hoặc view (xem-only)
+    if (!isPM && !isAdmin && !isViewRole) {
       router.push('/dashboard');
       return;
     }
     setIsLoading(false);
-  }, [authLoading, isPM, isAdmin, router]);
+  }, [user, isPM, isAdmin, isViewRole, router]);
 
   // Đăng ký đường dẫn hiện tại là lastVisitedUrl để reload giữ đúng trang PM
   useEffect(() => {
@@ -40,7 +38,7 @@ export default function ManagerPMTransactionsPage() {
     }
   }, []);
 
-  if (authLoading || isLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
@@ -48,12 +46,12 @@ export default function ManagerPMTransactionsPage() {
     );
   }
 
-  // Kiểm tra nếu user không có quyền truy cập (dùng isAdmin từ hook)
-  if (!isPM && !isAdmin) {
+  // Kiểm tra nếu user không có quyền truy cập
+  if (!isPM && !isAdmin && !isViewRole) {
     return null;
   }
 
-  const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments;
+  const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments();
   const hasSpecificPMRole = isAdmin || (pmDepartments && pmDepartments.length > 0);
 
   return (

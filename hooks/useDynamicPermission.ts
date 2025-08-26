@@ -60,23 +60,28 @@ export const useDynamicPermission = () => {
   }, [userRoles]);
 
   /**
-   * Kiểm tra user có role PM nào (PM gốc hoặc pm-{department})
+   * Kiểm tra user có role PM nào (PM/pm gốc hoặc pm-{department})
    * Logic: PM gốc cho phép truy cập, pm-{department} cho phép xem dữ liệu
+   * Không phân biệt hoa/thường
    */
   const isPM = useMemo(() => {
-    return userRoles.some(role => role === "PM" || role.startsWith("pm-"));
+    return userRoles.some((role) => {
+      const r = (role || '').toLowerCase();
+      return r === 'pm' || r.startsWith('pm-');
+    });
   }, [userRoles]);
 
   /**
    * Lấy danh sách phòng ban từ role pm-{department}
    * Ví dụ: pm-cong-no -> ["cong-no"], pm-chien-dich -> ["chien-dich"]
    * Dùng để lọc dữ liệu theo phòng ban được phân quyền
+   * Không phân biệt hoa/thường phần tiền tố
    */
-  const getPMDepartments = useMemo(() => {
+  const getPMDepartments = () => {
     return userRoles
-      .filter(role => role.startsWith("pm-"))
-      .map(role => role.replace("pm-", ""));
-  }, [userRoles]);
+      .filter((role) => (role || '').toLowerCase().startsWith('pm-'))
+      .map((role) => (role || '').replace(/^pm-/i, ''));
+  };
 
   // Hàm kiểm tra permission động
   const checkDynamicPermission = (check: DynamicPermissionCheck): boolean => {
@@ -217,7 +222,7 @@ export const useDynamicPermission = () => {
     isViewRole,
     isManager,
     isPM,
-    getPMDepartments,
+  getPMDepartments,
     checkDynamicPermission,
     checkAnyPermission,
     checkAllPermissions,
