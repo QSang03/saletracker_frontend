@@ -93,6 +93,8 @@ interface OrderManagementProps {
   loading?: boolean;
   showActions?: boolean;
   actionMode?: string;
+  // When false, the eye (view messages) action won't require the 'analysis' role
+  viewRequireAnalysis?: boolean;
 }
 
 // Function tính toán extended động
@@ -221,6 +223,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   currentSortField,
   currentSortDirection,
   loading = false,
+  viewRequireAnalysis = true,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const { currentUser } = useCurrentUser();
@@ -1501,7 +1504,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center space-x-1">
-                                <POrderDynamic action="read">
+                                <POrderDynamic action="read" requireAnalysis={viewRequireAnalysis}>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button

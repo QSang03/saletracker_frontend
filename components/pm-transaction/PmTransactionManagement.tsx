@@ -689,6 +689,7 @@ export default function PmTransactionManagement() {
               loading={loading}
               showActions={true}
               actionMode="view-only"
+              viewRequireAnalysis={false}
               onSearch={(s) => {
                 setSearchTerm(s || '');
                 setCurrentPage(1);
