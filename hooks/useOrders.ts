@@ -191,6 +191,7 @@ const saveFiltersToStorage = (filters: OrderFilters): void => {
       warningLevel: filters.warningLevel || "",
       sortField: filters.sortField || null,
       sortDirection: filters.sortDirection || null,
+  quantity: typeof filters.quantity === "number" ? filters.quantity : undefined,
     };
     localStorage.setItem("orderFilters", JSON.stringify(filtersToSave));
   } catch (error) {
@@ -511,6 +512,9 @@ export const useOrders = (): UseOrdersReturn => {
         if (newFilters.warningLevel?.trim()) {
           searchParams.set("warningLevel", newFilters.warningLevel.trim());
         }
+        if (typeof newFilters.quantity === "number") {
+          searchParams.set("quantity", String(newFilters.quantity));
+        }
         if (newFilters.sortField) {
           searchParams.set("sortField", newFilters.sortField);
         }
@@ -647,6 +651,9 @@ export const useOrders = (): UseOrdersReturn => {
         }
         if (currentFilters.warningLevel && currentFilters.warningLevel.trim()) {
           params.append("warningLevel", currentFilters.warningLevel.trim());
+        }
+        if (typeof currentFilters.quantity === "number") {
+          params.append("quantity", String(currentFilters.quantity));
         }
         if (currentFilters.sortField) {
           params.append("sortField", currentFilters.sortField);

@@ -237,6 +237,17 @@ function ManagerOrderContent() {
           ? paginatedFilters.categories.join(",")
           : "";
 
+      // Handle quantity (minimum quantity filter)
+      let quantityValue: number | undefined;
+      if (
+        typeof paginatedFilters.quantity === "number" &&
+        !isNaN(paginatedFilters.quantity)
+      ) {
+        quantityValue = paginatedFilters.quantity;
+      } else {
+        quantityValue = undefined;
+      }
+
       // Handle warning levels
       let warningLevelValue = "";
       if (paginatedFilters.warningLevels.length > 0) {
@@ -260,6 +271,7 @@ function ManagerOrderContent() {
         employees: employeesValue,
         departments: departmentsValue,
         products: productsValue,
+  quantity: quantityValue,
         warningLevel: warningLevelValue,
         page: shouldResetPage ? 1 : filters.page,
       };
@@ -516,6 +528,7 @@ function ManagerOrderContent() {
         JSON.stringify({ start: filters.dateRange.start, end: filters.dateRange.end })
       );
     }
+  if (typeof filters.quantity === "number") params.append("quantity", String(filters.quantity));
     if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
     if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
     if (filters.departments?.trim()) params.append("departments", filters.departments.trim());

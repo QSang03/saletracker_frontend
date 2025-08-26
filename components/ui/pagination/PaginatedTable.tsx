@@ -1004,17 +1004,44 @@ export default function PaginatedTable({
             />
           )}
           {enableQuantityFilter && (
-            <Input
-              type="number"
-              min={1}
-              className="min-w-0 w-full border rounded px-2 py-1 text-sm"
-              placeholder={quantityLabel}
-              value={filters.quantity || defaultQuantity}
-              onChange={(e) => {
-                const value = parseInt(e.target.value) || defaultQuantity;
-                updateFilter("quantity", value);
-              }}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Input
+                  type="number"
+                  min={1}
+                  className="min-w-0 w-full border rounded px-2 py-1 text-sm"
+                  placeholder={`${quantityLabel} (tối thiểu)`}
+                  title={`Lọc: ${quantityLabel} (số lượng tối thiểu)`}
+                  aria-label={`Lọc ${quantityLabel}`}
+                  // show empty string when undefined to allow clearing the input
+                  value={filters.quantity !== undefined ? String(filters.quantity) : ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      // user cleared input -> remove quantity filter
+                      updateFilter("quantity", undefined as any);
+                      return;
+                    }
+                    const n = parseInt(raw, 10);
+                    updateFilter("quantity", Number.isNaN(n) ? undefined as any : n as any);
+                  }}
+                  onBlur={(e) => {
+                    // Ensure parent receives filter immediately on blur (bypass debounce)
+                    try {
+                      const raw = e.currentTarget.value;
+                      const n = raw === "" ? undefined : parseInt(raw, 10);
+                      const newFilters = { ...filters, quantity: Number.isNaN(n as any) ? undefined : (n as any) } as Filters;
+                      if (onFilterChange) onFilterChange(newFilters);
+                    } catch (err) {
+                      // ignore
+                    }
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Chọn số lượng tối thiểu để lọc các đơn có số lượng &ge; giá trị này.</p>
+              </TooltipContent>
+            </Tooltip>
           )}
           {enableSingleDateFilter && (
             <DatePicker
