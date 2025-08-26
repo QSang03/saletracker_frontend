@@ -63,6 +63,7 @@ import {
 } from "@/types/schedule";
 import { ScheduleService } from "@/lib/schedule-api";
 import { usePermission } from "@/hooks/usePermission";
+import { useViewRole } from "@/hooks/useViewRole";
 
 // Types
 interface Department {
@@ -229,6 +230,7 @@ const LAST_SLOT_END = "17:45";
 export default function CompleteScheduleApp() {
   // Permission check
   const { user, getAllUserRoles } = usePermission();
+  const { isViewRole } = useViewRole();
   const uiToDow = (dayIndex: number) => ((dayIndex + 1) % 7) + 1;
   const dowToUi = (dow: number) => (dow === 1 ? 6 : dow - 2);
 
@@ -2467,30 +2469,31 @@ export default function CompleteScheduleApp() {
                     </SelectContent>
                   </Select>
                   {/* Bulk Scheduling Controls */}
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant={isBulkMode ? "default" : "outline"}
-                      onClick={() => {
-                        if (isBulkMode) {
-                          turnOffBulk();
-                        } else {
-                          setIsBulkMode(true);
-                          setBulkScheduleConfig((prev) => ({
-                            ...prev,
-                            enabled: true,
-                          }));
-                        }
-                      }}
-                      className="flex items-center gap-2 hover:bg-blue-50"
-                      disabled={!canOpenBulk}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        {isBulkMode
-                          ? "Thoát chế độ bulk"
-                          : "Sắp lịch hàng loạt"}
-                      </span>
-                    </Button>
+                  {!isViewRole && (
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant={isBulkMode ? "default" : "outline"}
+                        onClick={() => {
+                          if (isBulkMode) {
+                            turnOffBulk();
+                          } else {
+                            setIsBulkMode(true);
+                            setBulkScheduleConfig((prev) => ({
+                              ...prev,
+                              enabled: true,
+                            }));
+                          }
+                        }}
+                        className="flex items-center gap-2 hover:bg-blue-50"
+                        disabled={!canOpenBulk}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          {isBulkMode
+                            ? "Thoát chế độ bulk"
+                            : "Sắp lịch hàng loạt"}
+                        </span>
+                      </Button>
 
                     {isBulkMode && (
                       <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border">
@@ -2529,6 +2532,7 @@ export default function CompleteScheduleApp() {
                       </div>
                     )}
                   </div>
+                    )}
                 </div>
               </div>
             </CardHeader>
@@ -3657,20 +3661,21 @@ export default function CompleteScheduleApp() {
                           })}
                       </div>
 
-                      <Button
-                        onClick={() => {
-                          setIsCreateDialogOpen(true);
-                        }}
-                        className="w-full bg-green-600 hover:bg-green-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={
-                          departmentSelections.size === 0 ||
-                          !(
-                            isAdmin ||
-                            isScheduler ||
-                            userManagerDepartmentSlugs.length > 0
-                          )
-                        }
-                      >
+                      {!isViewRole && (
+                        <Button
+                          onClick={() => {
+                            setIsCreateDialogOpen(true);
+                          }}
+                          className="w-full bg-green-600 hover:bg-green-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={
+                            departmentSelections.size === 0 ||
+                            !(
+                              isAdmin ||
+                              isScheduler ||
+                              userManagerDepartmentSlugs.length > 0
+                            )
+                          }
+                        >
                         <span className="flex items-center gap-2">
                           <Save className="w-4 h-4" />
                           {isAdmin ||
@@ -3690,8 +3695,10 @@ export default function CompleteScheduleApp() {
                             : "Bạn không có quyền lưu lịch"}
                         </span>
                       </Button>
+                        )}
 
-                      <Button
+                      {!isViewRole && (
+                        <Button
                         onClick={() => {
                           setDepartmentSelections(new Map());
                           setSelectedDepartment(null);
@@ -3712,6 +3719,7 @@ export default function CompleteScheduleApp() {
                           Xóa tất cả
                         </span>
                       </Button>
+                        )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -3884,57 +3892,59 @@ export default function CompleteScheduleApp() {
                                     </span>
 
                                     <div className="flex items-center gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        disabled={
-                                          !isDataReady ||
-                                          !isDepartmentEditable(
-                                            schedule.department!.id
-                                          )
-                                        }
-                                        className="h-6 w-6 p-0 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleEditSchedule(schedule);
-                                        }}
-                                        title={
-                                          !isDataReady
-                                            ? "Đang tải thông tin..."
-                                            : isDepartmentEditable(
+                                      {!isViewRole && (
+                                        <>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={
+                                              !isDataReady ||
+                                              !isDepartmentEditable(
                                                 schedule.department!.id
                                               )
-                                            ? "Chỉnh sửa lịch"
-                                            : "Bạn không có quyền chỉnh sửa lịch này"
-                                        }
-                                      >
-                                        {!isDataReady ? (
-                                          <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                                        ) : (
-                                          <Edit className="w-3 h-3 text-blue-600" />
-                                        )}
-                                      </Button>
+                                            }
+                                            className="h-6 w-6 p-0 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleEditSchedule(schedule);
+                                            }}
+                                            title={
+                                              !isDataReady
+                                                ? "Đang tải thông tin..."
+                                                : isDepartmentEditable(
+                                                    schedule.department!.id
+                                                  )
+                                                ? "Chỉnh sửa lịch"
+                                                : "Bạn không có quyền chỉnh sửa lịch này"
+                                            }
+                                          >
+                                            {!isDataReady ? (
+                                              <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                                            ) : (
+                                              <Edit className="w-3 h-3 text-blue-600" />
+                                            )}
+                                          </Button>
 
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        disabled={
-                                          !isDataReady ||
-                                          !isDepartmentEditable(
-                                            schedule.department!.id
-                                          )
-                                        }
-                                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        title={
-                                          !isDataReady
-                                            ? "Đang tải thông tin..."
-                                            : isDepartmentEditable(
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={
+                                              !isDataReady ||
+                                              !isDepartmentEditable(
                                                 schedule.department!.id
                                               )
-                                            ? "Xóa lịch"
-                                            : "Bạn không có quyền xóa lịch này"
-                                        }
-                                        onClick={async (e) => {
+                                            }
+                                            className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title={
+                                              !isDataReady
+                                                ? "Đang tải thông tin..."
+                                                : isDepartmentEditable(
+                                                    schedule.department!.id
+                                                  )
+                                                ? "Xóa lịch"
+                                                : "Bạn không có quyền xóa lịch này"
+                                            }
+                                            onClick={async (e) => {
                                           e.stopPropagation();
                                           if (
                                             !isDepartmentEditable(
@@ -3973,6 +3983,8 @@ export default function CompleteScheduleApp() {
                                           <Trash2 className="w-3 h-3" />
                                         )}
                                       </Button>
+                                        </>
+                                      )}
                                     </div>
                                   </div>
                                 </CardContent>

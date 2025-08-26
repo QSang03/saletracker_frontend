@@ -132,10 +132,15 @@ export default function ManagerDebtPage() {
       throw new Error("No token available");
     }
 
+    // Sử dụng ngày hôm nay làm mặc định nếu không có ngày được chọn hoặc ngày bị xóa
+    const effectiveDate = filters.singleDate && filters.singleDate.trim() !== "" 
+      ? filters.singleDate 
+      : new Date().toLocaleDateString("en-CA");
+    
     const params: Record<string, any> = {
       page,
       pageSize,
-      date: filters.singleDate, // Use the string date directly
+      date: effectiveDate,
     };
 
     if (filters.search) params.search = filters.search;
@@ -184,8 +189,13 @@ export default function ManagerDebtPage() {
       };
 
     try {
+      // Sử dụng ngày hôm nay làm mặc định nếu không có ngày được chọn hoặc ngày bị xóa
+      const effectiveDate = filters.singleDate && filters.singleDate.trim() !== "" 
+        ? filters.singleDate 
+        : new Date().toLocaleDateString("en-CA");
+      
       const params: Record<string, any> = {
-        date: filters.singleDate, // Use the string date directly
+        date: effectiveDate,
         stats: 1,
       };
 

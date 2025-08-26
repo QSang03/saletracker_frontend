@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { MoreVertical } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { useViewRole } from "@/hooks/useViewRole";
 
 interface UserTableProps {
   users: User[];
@@ -45,6 +46,7 @@ export default React.memo(function UserTable({
   onRestore,
   onResetPassword,
 }: UserTableProps) {
+  const { isViewRole } = useViewRole();
   const headers = [
     "User ID",
     "Mã NV",
@@ -59,7 +61,7 @@ export default React.memo(function UserTable({
     "Ngày tạo",
     "Đăng nhập cuối",
     "Thời gian hoạt động cuối cùng",
-    "Thao tác",
+    ...(isViewRole ? [] : ["Thao tác"]),
   ];
 
   const centerIndexes = [6, 7, 8, 9];
@@ -252,85 +254,87 @@ export default React.memo(function UserTable({
                     ? new Date(user.lastOnlineAt).toLocaleString("vi-VN")
                     : "-"}
                 </TableCell>
-                <TableCell className={cellCenterClass}>
-                  {showRestore ? (
-                    <Button
-                      variant="add"
-                      size="sm"
-                      onClick={() => onRestore && onRestore(user.id)}
-                    >
-                      Khôi phục
-                    </Button>
-                  ) : (
-                    (currentUserRole === "ADMIN" ||
-                      currentUserRole.startsWith("MANAGER")) && (
-                      <div className="flex items-center justify-center gap-2">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="ghost" size="icon" className="p-1"><MoreVertical size={18} /></Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="end" className="w-40 p-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start"
-                              onClick={() => onEdit(user)}
-                            >
-                              Sửa
-                            </Button>
-                            {currentUserRole === "ADMIN" && 
-                             !user.roles?.some(role => role.name === "admin") && 
-                             user.id !== currentUserId && (
+                {!isViewRole && (
+                  <TableCell className={cellCenterClass}>
+                    {showRestore ? (
+                      <Button
+                        variant="add"
+                        size="sm"
+                        onClick={() => onRestore && onRestore(user.id)}
+                      >
+                        Khôi phục
+                      </Button>
+                    ) : (
+                      (currentUserRole === "ADMIN" ||
+                        currentUserRole.startsWith("MANAGER")) && (
+                        <div className="flex items-center justify-center gap-2">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="ghost" size="icon" className="p-1"><MoreVertical size={18} /></Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-40 p-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className="w-full justify-start"
-                                onClick={() => onDelete(user.id)}
+                                onClick={() => onEdit(user)}
                               >
-                                Xóa
+                                Sửa
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full justify-start"
-                              onClick={() => onResetPassword && onResetPassword(user.id)}
-                            >
-                              Reset pass
-                            </Button>
-                            {!user.roles?.some(role => role.name === "admin") && 
-                             user.id !== currentUserId && (
-                              <div className="flex items-center w-full px-2 py-1">
-                                <Switch
-                                  checked={user.isBlock}
-                                  onCheckedChange={(checked) => {
-                                    if (
-                                      typeof onRequestBlockConfirm === "function"
-                                    ) {
-                                      onRequestBlockConfirm(user, checked);
-                                    } else {
-                                      onToggleBlock(user, checked);
+                              {currentUserRole === "ADMIN" && 
+                               !user.roles?.some(role => role.name === "admin") && 
+                               user.id !== currentUserId && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-start"
+                                  onClick={() => onDelete(user.id)}
+                                >
+                                  Xóa
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                onClick={() => onResetPassword && onResetPassword(user.id)}
+                              >
+                                Reset pass
+                              </Button>
+                              {!user.roles?.some(role => role.name === "admin") && 
+                               user.id !== currentUserId && (
+                                <div className="flex items-center w-full px-2 py-1">
+                                  <Switch
+                                    checked={user.isBlock}
+                                    onCheckedChange={(checked) => {
+                                      if (
+                                        typeof onRequestBlockConfirm === "function"
+                                      ) {
+                                        onRequestBlockConfirm(user, checked);
+                                      } else {
+                                        onToggleBlock(user, checked);
+                                      }
+                                    }}
+                                    className="mr-2"
+                                    aria-label="Khóa tài khoản"
+                                    title={
+                                      user.isBlock
+                                        ? "Mở khóa tài khoản"
+                                        : "Khóa tài khoản"
                                     }
-                                  }}
-                                  className="mr-2"
-                                  aria-label="Khóa tài khoản"
-                                  title={
-                                    user.isBlock
-                                      ? "Mở khóa tài khoản"
-                                      : "Khóa tài khoản"
-                                  }
-                                />
-                                <span className="text-xs">
-                                  {user.isBlock ? "Mở khóa" : "Khóa"}
-                                </span>
-                              </div>
-                            )}
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    )
-                  )}
-                </TableCell>
+                                  />
+                                  <span className="text-xs">
+                                    {user.isBlock ? "Mở khóa" : "Khóa"}
+                                  </span>
+                                </div>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

@@ -10,6 +10,7 @@ import { Department } from "../../types";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useState } from "react";
+import { useViewRole } from "@/hooks/useViewRole";
 
 export default function DepartmentTable({
   departments,
@@ -24,6 +25,7 @@ export default function DepartmentTable({
   onEdit?: (dep: Department) => void;
   onDelete?: (dep: Department) => void;
 }) {
+  const { isViewRole } = useViewRole();
   const [selectedDep, setSelectedDep] = useState<Department | null>(null);
 
   const safeDepartments = Array.isArray(departments) ? departments : [];
@@ -60,15 +62,17 @@ export default function DepartmentTable({
             <TableHead className="px-3 py-2 text-left">IP Server</TableHead>
             <TableHead className="px-3 py-2 text-left">Trưởng nhóm</TableHead>
             <TableHead className="px-3 py-2 text-left">Ngày tạo</TableHead>
-            <TableHead className="w-36 text-center px-3 py-2">
-              Thao tác
-            </TableHead>
+            {!isViewRole && (
+              <TableHead className="w-36 text-center px-3 py-2">
+                Thao tác
+              </TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center py-4 text-gray-400">
+              <TableCell colSpan={isViewRole ? 6 : 7} className="text-center py-4 text-gray-400">
                 Không có phòng ban nào phù hợp.
               </TableCell>
             </TableRow>
@@ -95,22 +99,24 @@ export default function DepartmentTable({
                       ? new Date(dep.createdAt).toLocaleString()
                       : "-"}
                   </TableCell>
-                  <TableCell className="text-center px-3 py-2 flex gap-2 justify-center">
-                    <Button
-                      size="sm"
-                      variant="edit"
-                      onClick={() => onEdit && onEdit(dep)}
-                    >
-                      Chỉnh sửa
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="delete"
-                      onClick={() => handleDeleteClick(dep)}
-                    >
-                      Xóa
-                    </Button>
-                  </TableCell>
+                  {!isViewRole && (
+                    <TableCell className="text-center px-3 py-2 flex gap-2 justify-center">
+                      <Button
+                        size="sm"
+                        variant="edit"
+                        onClick={() => onEdit && onEdit(dep)}
+                      >
+                        Chỉnh sửa
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="delete"
+                        onClick={() => handleDeleteClick(dep)}
+                      >
+                        Xóa
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ) : (
                 <TableRow
@@ -119,7 +125,7 @@ export default function DepartmentTable({
                   style={{ height: 49, opacity: 0, pointerEvents: "none" }}
                   aria-hidden="true"
                 >
-                  {Array.from({ length: 7 }).map((_, i) => (
+                  {Array.from({ length: isViewRole ? 6 : 7 }).map((_, i) => (
                     <TableCell key={i} />
                   ))}
                 </TableRow>

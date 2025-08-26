@@ -15,8 +15,8 @@ export const useOrderPermissions = () => {
 
   // Kiểm tra có role analysis không
   const hasAnalysisRole = useMemo(() => {
-    return isAdmin || userRoles.includes('analysis');
-  }, [isAdmin, userRoles]);
+    return isAdmin || isViewRole || userRoles.includes('analysis');
+  }, [isAdmin, isViewRole, userRoles]);
 
   // Lấy tất cả permissions từ các phòng ban của user
   const aggregatedPermissions = useMemo(() => {
@@ -73,6 +73,11 @@ export const useOrderPermissions = () => {
   const canAccessOrderAction = (action: string): boolean => {
     if (!hasAnalysisRole) return false;
     if (isAdmin) return true;
+    
+    // Role view chỉ có quyền read và export
+    if (isViewRole) {
+      return action === 'read' || action === 'export';
+    }
     
     // Kiểm tra user có action này trong bất kỳ phòng ban nào không
     return userPermissions.some(permission => permission.action === action);
