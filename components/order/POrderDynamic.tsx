@@ -36,8 +36,15 @@ export const POrderDynamic: React.FC<POrderDynamicProps> = ({
   }
 
   // Kiểm tra action permission
-  if (action && !canAccessOrderAction(action)) {
-    return <>{fallback}</>;
+  // Nếu action là 'read' và caller đã chỉ rõ không cần role analysis
+  // (requireAnalysis = false), thì cho phép bypass kiểm tra canAccessOrderAction.
+  // Điều này cho phép các trang như PM Transaction hiển thị nút xem tin nhắn
+  // trong trường hợp họ đã explicitly yêu cầu không cần role analysis.
+  if (action) {
+    const bypassReadCheck = action === 'read' && requireAnalysis === false;
+    if (!bypassReadCheck && !canAccessOrderAction(action)) {
+      return <>{fallback}</>;
+    }
   }
 
   return <>{children}</>;
