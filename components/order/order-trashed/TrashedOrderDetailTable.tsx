@@ -69,9 +69,19 @@ export default function TrashedOrderDetailTable() {
 
   const allEmployeeOptions = useMemo(() => {
     return filterOptions.departments.reduce((acc, dept) => {
-      dept.users.forEach((u) => {
-        if (!acc.find((x) => x.value === String(u.value))) {
-          acc.push({ label: u.label, value: String(u.value) });
+      if (!dept || !Array.isArray((dept as any).users)) return acc;
+      (dept as any).users.forEach((u: any) => {
+        try {
+          if (!u) return;
+          const raw = u.value ?? u.id ?? (u.value && u.value.toString && u.value.toString());
+          if (raw === undefined || raw === null) return;
+          const value = String(raw);
+          const label = (u.label ?? u.fullName ?? u.name ?? value) + "";
+          if (!acc.find((x) => x.value === value)) {
+            acc.push({ label, value });
+          }
+        } catch (e) {
+          // ignore malformed user entries
         }
       });
       return acc;

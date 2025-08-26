@@ -361,7 +361,9 @@ export default function PaginatedTable({
       categories: initialFilters?.categories || [],
       brands: initialFilters?.brands || [],
   warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
-  quantity: initialFilters?.quantity || defaultQuantity, // Thêm quantity với mặc định
+  quantity: (initialFilters && "quantity" in initialFilters)
+    ? (initialFilters.quantity as number | undefined)
+    : defaultQuantity, // Tôn trọng initial quantity nếu được set, ngược lại dùng mặc định
   conversationType: initialFilters?.conversationType || [], // Thêm conversation type
       dateRange: initialFilters?.dateRange || {
         from: undefined,
@@ -404,7 +406,7 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.categories),
       JSON.stringify(initialFilters?.brands),
       JSON.stringify(initialFilters?.warningLevels), // Thêm warning levels
-      initialFilters?.quantity, // Thêm quantity
+  initialFilters?.quantity, // Thêm quantity
   JSON.stringify(initialFilters?.conversationType),
       JSON.stringify(initialFilters?.dateRange),
       initialFilters?.singleDate,
@@ -449,19 +451,15 @@ export default function PaginatedTable({
   }, [memoizedInitialFilters]);
 
   useEffect(() => {
-    if (!isInitializedRef.current && initialFilters) {
+    if (!isInitializedRef.current) {
       isInitializedRef.current = true;
 
-      // ✅ Set initial filters without triggering change
-      const merged = { ...filters, ...initialFilters };
-      setFilters(merged);
-
-      // ✅ Send initial filters to parent immediately but only once
-      if (
-        onFilterChange &&
-        (!preventEmptyFilterCall || !isFiltersEmpty(merged))
-      ) {
-        onFilterChange(merged);
+      // Prime lastFiltersRef to avoid immediate feedback to parent.
+      try {
+        const merged = initialFilters ? { ...filters, ...initialFilters } : filters;
+        lastFiltersRef.current = JSON.stringify(merged);
+      } catch (e) {
+        // ignore stringify errors
       }
     }
   }, []);
@@ -510,6 +508,10 @@ export default function PaginatedTable({
               memoizedInitialFilters.warningLevels !== undefined
                 ? memoizedInitialFilters.warningLevels
                 : prev.warningLevels,
+            quantity:
+              memoizedInitialFilters.quantity !== undefined
+                ? memoizedInitialFilters.quantity
+                : prev.quantity,
                 conversationType:
                   memoizedInitialFilters.conversationType !== undefined
                     ? memoizedInitialFilters.conversationType
@@ -549,6 +551,7 @@ export default function PaginatedTable({
             "categories",
             "brands",
             "warningLevels",
+            "quantity",
             "dateRange",
             "singleDate",
             "employees",
@@ -656,6 +659,14 @@ export default function PaginatedTable({
       if (filterTimeout.current) clearTimeout(filterTimeout.current);
       filterTimeout.current = setTimeout(() => {
         if (onFilterChange) {
+          try {
+            const json = JSON.stringify(newFilters);
+            // Avoid calling parent if filters identical to last sent (prevents update cycles)
+            if (lastFiltersRef.current === json) return;
+            lastFiltersRef.current = json;
+          } catch (e) {
+            // If stringify fails, just proceed
+          }
           onFilterChange(newFilters);
         }
       }, 300);
@@ -676,9 +687,17 @@ export default function PaginatedTable({
       userModifiedFieldsRef.current.add(key); // Track which field was modified
 
       setFilters((prev) => {
-        if (prev[key] === value) return prev;
-        const next = { ...prev, [key]: value };
+        try {
+          const a = prev[key];
+          const b = value;
+          const same = JSON.stringify(a) === JSON.stringify(b);
+          if (same) return prev;
+        } catch (e) {
+          // fallback to strict equality
+          if (prev[key] === value) return prev;
+        }
 
+        const next = { ...prev, [key]: value };
         debouncedSetFilters(next);
         return next;
       });
@@ -887,11 +906,16 @@ export default function PaginatedTable({
   // Khi input số dòng/trang rỗng, tự động reset pageSize về mặc định (nhưng không khi đang restore)
   useEffect(() => {
     if (pendingPageSize === "10" && !isRestoring) {
-      if (isBackendPaging && onPageSizeChange)
-        onPageSizeChange(defaultPageSize);
-      else setInternalPageSize(defaultPageSize);
-      if (onPageChange) onPageChange(1);
-      else setInternalPage(0);
+      const sizeMismatch = isBackendPaging
+        ? currentPageSize !== defaultPageSize
+        : internalPageSize !== defaultPageSize;
+      if (sizeMismatch) {
+        if (isBackendPaging && onPageSizeChange)
+          onPageSizeChange(defaultPageSize);
+        else setInternalPageSize(defaultPageSize);
+        if (onPageChange && currentPage !== 1) onPageChange(1);
+        else if (!isBackendPaging) setInternalPage(0);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPageSize, isRestoring]);
@@ -1029,9 +1053,16 @@ export default function PaginatedTable({
                     // Ensure parent receives filter immediately on blur (bypass debounce)
                     try {
                       const raw = e.currentTarget.value;
-                      const n = raw === "" ? undefined : parseInt(raw, 10);
-                      const newFilters = { ...filters, quantity: Number.isNaN(n as any) ? undefined : (n as any) } as Filters;
-                      if (onFilterChange) onFilterChange(newFilters);
+                      const parsed = raw === "" ? undefined : parseInt(raw, 10);
+                      const n = Number.isNaN(parsed as any) ? undefined : (parsed as any);
+                      const newFilters = { ...filters, quantity: n } as Filters;
+                      if (onFilterChange) {
+                        const json = JSON.stringify(newFilters);
+                        if (lastFiltersRef.current !== json) {
+                          lastFiltersRef.current = json;
+                          onFilterChange(newFilters);
+                        }
+                      }
                     } catch (err) {
                       // ignore
                     }

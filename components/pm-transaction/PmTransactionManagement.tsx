@@ -423,11 +423,19 @@ export default function PmTransactionManagement() {
   }, [isPM, isAdmin]);
 
   // When departments change, remove any selected employees that no longer belong to the available set
+  // When departments change, remove any selected employees that no longer belong to the available set
   useEffect(() => {
     if (!employeesSelected || employeesSelected.length === 0) return;
     const allowed = new Set(availableEmployees.map((e) => String(e.value)));
-    setEmployeesSelected((prev) => prev.filter((v) => allowed.has(String(v))));
-  }, [availableEmployees]);
+    const filtered = employeesSelected.filter((v) => allowed.has(String(v)));
+    // Only update when actually changed to avoid render loops
+    const isSame =
+      filtered.length === employeesSelected.length &&
+      filtered.every((v, i) => String(v) === String(employeesSelected[i]));
+    if (!isSame) {
+      setEmployeesSelected(filtered);
+    }
+  }, [availableEmployees, employeesSelected]);
 
   const handleFilterChange = (f: PaginatedFilters) => {
     try {
@@ -444,20 +452,28 @@ export default function PmTransactionManagement() {
       }
 
       // employees / departments
+      // employees / departments
       if (f.employees && f.employees.length > 0) {
         const emps = f.employees as (string | number)[];
-        // eslint-disable-next-line no-console
-        console.debug("[PM] employees selected", emps);
-        setEmployeesSelected(emps);
+        const same =
+          emps.length === employeesSelected.length &&
+          emps.every((v, i) => String(v) === String(employeesSelected[i]));
+        if (!same) setEmployeesSelected(emps);
       } else {
-        setEmployeesSelected([]);
+        if (employeesSelected.length > 0) setEmployeesSelected([]);
       }
 
       // departments selected by user in the filter UI
       if (f.departments && f.departments.length > 0) {
-        setDepartmentsSelected(f.departments as string[]);
+        const incoming = f.departments as (string | number)[];
+        const same =
+          incoming.length === departmentsSelected.length &&
+          incoming.every(
+            (v, i) => String(v) === String(departmentsSelected[i])
+          );
+        if (!same) setDepartmentsSelected(incoming as string[]);
       } else {
-        setDepartmentsSelected([]);
+        if (departmentsSelected.length > 0) setDepartmentsSelected([]);
       }
 
       // date handling

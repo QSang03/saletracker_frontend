@@ -141,9 +141,19 @@ function ManagerOrderContent() {
 
   // Lấy danh sách nhân viên từ filter options
   const allEmployeeOptions = filterOptions.departments.reduce((acc, dept) => {
-    dept.users.forEach((user) => {
-      if (!acc.find((emp) => emp.value === user.value.toString())) {
-        acc.push({ label: user.label, value: user.value.toString() });
+    if (!dept || !Array.isArray((dept as any).users)) return acc;
+    (dept as any).users.forEach((user: any) => {
+      try {
+        if (!user) return;
+        const rawValue = user.value ?? user.id ?? user.value?.toString?.();
+        if (rawValue === undefined || rawValue === null) return;
+        const value = String(rawValue);
+        const label = (user.label ?? user.fullName ?? user.name ?? value) + "";
+        if (!acc.find((emp) => emp.value === value)) {
+          acc.push({ label, value });
+        }
+      } catch (e) {
+        // ignore malformed user entries
       }
     });
     return acc;
@@ -151,12 +161,13 @@ function ManagerOrderContent() {
 
   // ✅ Filter employees theo departments đã chọn
   const filteredEmployeeOptions = useMemo(() => {
-    if (!filters.departments || filters.departments === "") {
+    if (!filters.departments || typeof filters.departments !== 'string' || filters.departments === "") {
       return allEmployeeOptions; // Nếu không chọn department nào, hiển thị tất cả
     }
 
-    const selectedDepartmentIds = filters.departments
+    const selectedDepartmentIds = String(filters.departments)
       .split(",")
+      .map((d) => d.trim())
       .filter((d) => d);
     if (selectedDepartmentIds.length === 0) {
       return allEmployeeOptions;
@@ -164,7 +175,7 @@ function ManagerOrderContent() {
 
     // Lọc employees theo departments đã chọn
     const filtered = filterOptions.departments
-      .filter((dept) => selectedDepartmentIds.includes(dept.value.toString()))
+  .filter((dept) => dept && selectedDepartmentIds.includes(String(dept.value)))
       .reduce((acc, dept) => {
         dept.users.forEach((user) => {
           if (!acc.find((emp) => emp.value === user.value.toString())) {
