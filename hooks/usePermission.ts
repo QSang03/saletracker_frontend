@@ -44,6 +44,12 @@ export const usePermission = () => {
     const isPM = user.roles?.some((role: Role) => role.name === "PM");
     if (isPM) return true;
 
+    // Kiểm tra role "view" - chỉ cho phép action "read" và "export"
+    const isViewRole = user.roles?.some((role: Role) => role.name === "view");
+    if (isViewRole) {
+      return action === "read" || action === "export";
+    }
+
     // Kiểm tra user có role manager của department này không
     const isManagerOfDepartment = user.roles?.some((role: Role) => 
       role.name === `manager-${departmentSlug}`

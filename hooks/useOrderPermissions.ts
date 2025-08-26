@@ -9,6 +9,7 @@ export const useOrderPermissions = () => {
     userPermissions,
     getAccessibleDepartments,
     isAdmin,
+    isViewRole,
     checkDynamicPermission
   } = useDynamicPermission();
 
@@ -36,6 +37,18 @@ export const useOrderPermissions = () => {
         canUpdate: true,
         canDelete: true,
         canImport: true,
+        canExport: true
+      };
+    }
+
+    // Role view chỉ có quyền read và export
+    if (isViewRole) {
+      return {
+        canRead: true,
+        canCreate: false,
+        canUpdate: false,
+        canDelete: false,
+        canImport: false,
         canExport: true
       };
     }

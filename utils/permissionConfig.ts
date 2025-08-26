@@ -4,6 +4,8 @@ export const PAGE_PERMISSIONS = {
     { departmentSlug: "quan-ly-nguoi-dung", actions: ["read"] },
   ],
   "/reports": [{ departmentSlug: "bao-cao", actions: ["read"] }],
+  // Role "view" có thể truy cập tất cả pages nhưng chỉ có quyền read và export
+  "/view-role": [{ departmentSlug: "*", actions: ["read", "export"] }],
 } as const;
 
 export const COMPONENT_PERMISSIONS = {
@@ -16,6 +18,9 @@ export const COMPONENT_PERMISSIONS = {
   "debt-config-actions": [
     { departmentSlug: "cong-no", actions: ["read", "update", "delete"] },
   ],
+  // Role "view" chỉ có quyền read và export cho tất cả components
+  "view-role-read": [{ departmentSlug: "*", actions: ["read"] }],
+  "view-role-export": [{ departmentSlug: "*", actions: ["export"] }],
 } as const;
 
 export const ORDER_PERMISSIONS = {
@@ -26,4 +31,7 @@ export const ORDER_PERMISSIONS = {
   "order-import": "dynamic",
   "order-export": "dynamic",
   "order-actions": "dynamic",
+  // Role "view" chỉ có quyền read và export cho orders
+  "view-role-order-read": "dynamic",
+  "view-role-order-export": "dynamic",
 } as const;

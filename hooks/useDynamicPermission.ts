@@ -34,16 +34,9 @@ export const useDynamicPermission = () => {
     return Array.from(uniqueMap.values());
   }, [user?.permissions]);
 
-  // Lấy tất cả roles của user (normalize về lowercase để so sánh không phân biệt hoa thường)
+  // Lấy tất cả roles của user
   const userRoles = useMemo(() => {
-    if (!user?.roles) return [];
-    return user.roles.map((role: any) => {
-      // role can be a string or an object with `name`
-      if (!role) return '';
-      if (typeof role === 'string') return role.toLowerCase();
-      if (typeof role === 'object' && role.name) return String(role.name).toLowerCase();
-      return String(role).toLowerCase();
-    }).filter(Boolean);
+    return user?.roles?.map((role: Role) => role.name) || [];
   }, [user?.roles]);
 
   // Lấy tất cả departments của user
@@ -56,6 +49,11 @@ export const useDynamicPermission = () => {
     return userRoles.includes("admin");
   }, [userRoles]);
 
+  // Kiểm tra role "view"
+  const isViewRole = useMemo(() => {
+    return userRoles.includes("view");
+  }, [userRoles]);
+
   // Kiểm tra manager (bất kỳ loại manager nào)
   const isManager = useMemo(() => {
     return userRoles.some(role => role === "manager" || role.startsWith("manager-"));
@@ -66,7 +64,7 @@ export const useDynamicPermission = () => {
    * Logic: PM gốc cho phép truy cập, pm-{department} cho phép xem dữ liệu
    */
   const isPM = useMemo(() => {
-    return userRoles.some(role => role === "pm" || role.startsWith("pm-"));
+    return userRoles.some(role => role === "PM" || role.startsWith("pm-"));
   }, [userRoles]);
 
   /**
@@ -86,6 +84,15 @@ export const useDynamicPermission = () => {
 
     // Admin có tất cả quyền
     if (isAdmin) return true;
+
+    // Kiểm tra role "view" - chỉ cho phép action "read" và "export"
+    if (isViewRole) {
+      if (check.action && check.action !== "read" && check.action !== "export") {
+        return false;
+      }
+      // Role view có thể xem tất cả departments
+      return true;
+    }
 
     // Kiểm tra yêu cầu admin
     if (check.requireAdmin && !isAdmin) {
@@ -207,6 +214,7 @@ export const useDynamicPermission = () => {
     userRoles,
     userDepartments,
     isAdmin,
+    isViewRole,
     isManager,
     isPM,
     getPMDepartments,

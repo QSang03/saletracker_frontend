@@ -13,7 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-                  } from "@/components/ui/table";
+} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -64,14 +64,13 @@ import ViewNotesHistoryModal from "./ViewNotesHistoryModal";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { useViewRole } from "@/hooks/useViewRole";
 
 interface OrderManagementProps {
   orders: OrderDetail[];
   expectedRowCount: number;
   startIndex: number;
   onReload: () => void;
-  /** When false, hide the action column and all action buttons (eye/edit/delete/...) */
-  showActions?: boolean;
   onEdit?: (orderDetail: OrderDetail, data: any) => void;
   onDelete?: (orderDetail: OrderDetail, reason?: string) => void;
   onEditCustomerName?: (
@@ -92,8 +91,8 @@ interface OrderManagementProps {
   currentSortField?: "quantity" | "unit_price" | "created_at" | null;
   currentSortDirection?: "asc" | "desc" | null;
   loading?: boolean;
-  /** 'all' = show all action buttons; 'view-only' = only show view (eye); 'none' = hide action column */
-  actionMode?: 'all' | 'view-only' | 'none';
+  showActions?: boolean;
+  actionMode?: string;
 }
 
 // Function tính toán extended động
@@ -203,14 +202,11 @@ const TruncatedText: React.FC<{
   );
 };
 
-// Augment component props defaulting helper
 const OrderManagement: React.FC<OrderManagementProps> = ({
   orders,
   expectedRowCount,
   startIndex,
   onReload,
-  showActions = true,
-  actionMode = 'all',
   onEdit,
   onDelete,
   onEditCustomerName,
@@ -226,9 +222,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   currentSortDirection,
   loading = false,
 }) => {
-  const actionColumnVisible = showActions !== false && actionMode !== 'none';
   const safeOrders = Array.isArray(orders) ? orders : [];
   const { currentUser } = useCurrentUser();
+  const { 
+    hideEditButtons, 
+    hideDeleteButtons, 
+    hideActionButtons, 
+    hideBulkActions,
+    getViewOnlyMessage 
+  } = useViewRole();
   const isOwner = React.useCallback(
     (od: OrderDetail) => {
       return !!(
@@ -923,11 +925,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[140px] text-center">
                   Ghi chú
                 </TableHead>
-                {showActions && (
-                  <TableHead className="font-bold text-gray-700 w-[200px] text-center">
-                    ⚙️ Thao tác
-                  </TableHead>
-                )}
+                <TableHead className="font-bold text-gray-700 w-[200px] text-center">
+                  Thao tác
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -982,16 +982,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-24 rounded mx-auto" />
                   </TableCell>
-                  {showActions && (
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center space-x-1">
-                        <Skeleton className="h-6 w-6 rounded" />
-                        <Skeleton className="h-6 w-6 rounded" />
-                        <Skeleton className="h-6 w-6 rounded" />
-                        <Skeleton className="h-6 w-6 rounded" />
-                      </div>
-                    </TableCell>
-                  )}
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center space-x-1">
+                      <Skeleton className="h-6 w-6 rounded" />
+                      <Skeleton className="h-6 w-6 rounded" />
+                      <Skeleton className="h-6 w-6 rounded" />
+                      <Skeleton className="h-6 w-6 rounded" />
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1147,18 +1145,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm w-[140px] text-center">
                     📝 Ghi chú
                   </TableHead>
-                  {showActions && (
-                    <TableHead className="font-bold text-slate-700 text-sm w-[200px] text-center">
-                      ⚙️ Thao tác
-                    </TableHead>
-                  )}
+                  <TableHead className="font-bold text-slate-700 text-sm w-[200px] text-center">
+                    ⚙️ Thao tác
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayOrders.length === 0 && (
                   <TableRow className="border-l-4 border-gray-300 bg-gradient-to-r from-gray-50 to-white rounded-lg shadow-sm my-1">
                     <TableCell
-                      colSpan={actionColumnVisible ? 16 : 15}
+                      colSpan={16}
                       className="text-center py-8 text-gray-500"
                     >
                       <div className="flex flex-col items-center space-y-3">
@@ -1503,89 +1499,151 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 )}
                               </div>
                             </TableCell>
-                            {actionColumnVisible && (
-                              <TableCell className="text-center">
-                                <div className="flex items-center justify-center space-x-1">
-                                  {/* Always allow read/view (eye) if permitted */}
-                                  <POrderDynamic action="read">
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          onClick={() => handleViewClick(orderDetail)}
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
-                                        >
-                                          <Eye className="h-3 w-3" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Xem tin nhắn</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </POrderDynamic>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center space-x-1">
+                                <POrderDynamic action="read">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          handleViewClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
+                                      >
+                                        <Eye className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Xem tin nhắn</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
 
-                                  {/* If full actions allowed, render other buttons (edit/delete/hide) */}
-                                  {actionMode === 'all' && (
-                                    <>
-                                      <POrderDynamic action="update">
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              onClick={() => handleEditClick(orderDetail)}
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 w-7 p-0"
-                                            >
-                                              <Edit className="h-3 w-3" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>Chỉnh sửa</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </POrderDynamic>
+                                <POrderDynamic action="update">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner && handleEditClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Sửa"
+                                            : "Chỉ chủ sở hữu được sửa"
+                                        }
+                                      >
+                                        <Edit className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Sửa"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
 
-                                      <POrderDynamic action="delete">
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              onClick={() => handleDeleteClick(orderDetail)}
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 w-7 p-0"
-                                            >
-                                              <Trash2 className="h-3 w-3" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>Xoá</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </POrderDynamic>
+                                <POrderDynamic action="delete">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner &&
+                                          handleDeleteClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Xóa"
+                                            : "Chỉ chủ sở hữu được xóa"
+                                        }
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Xóa"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
 
-                                      <POrderDynamic action="hide">
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              onClick={() => handleHideClick(orderDetail)}
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 w-7 p-0"
-                                            >
-                                              <EyeOff className="h-3 w-3" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>Ẩn đơn</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </POrderDynamic>
-                                    </>
-                                  )}
-                                </div>
-                              </TableCell>
-                            )}
+                                <POrderDynamic action="update">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner && handleHideClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Ẩn"
+                                            : "Chỉ chủ sở hữu được ẩn"
+                                        }
+                                      >
+                                        <EyeOff className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Ẩn"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
+
+                                <POrderDynamic action="update">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        onClick={() =>
+                                          owner &&
+                                          handleAddToBlacklistClick(orderDetail)
+                                        }
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition-colors"
+                                        disabled={!owner}
+                                        title={
+                                          owner
+                                            ? "Thêm vào blacklist"
+                                            : "Chỉ chủ sở hữu được thao tác"
+                                        }
+                                      >
+                                        <Shield className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {owner
+                                          ? "Thêm vào blacklist"
+                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </POrderDynamic>
+                              </div>
+                            </TableCell>
                           </>
                         );
                       })()}
