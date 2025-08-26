@@ -672,6 +672,7 @@ export default function PmTransactionManagement() {
         }}
         enableQuantityFilter={true}
         enableConversationTypeFilter={true}
+  defaultQuantity={3}
       >
             {error && (
               <Alert className="mb-4">
