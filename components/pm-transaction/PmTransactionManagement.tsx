@@ -656,6 +656,48 @@ export default function PmTransactionManagement() {
     }
   };
 
+  // Resolve employee/sale display name from multiple possible shapes
+  const getEmployeeDisplay = (o: any) => {
+    const candidates = [
+      // nested order.sale_by
+      o?.order?.sale_by?.fullName,
+      o?.order?.sale_by?.username,
+      // top-level sale_by
+      o?.sale_by?.fullName,
+      o?.sale_by?.username,
+      // common legacy fields
+      o?.sale_name_raw,
+      o?.sale_name,
+      o?.saleByName,
+      o?.saleBy?.fullName,
+      o?.saleBy?.username,
+      // employee objects
+      o?.employee?.fullName,
+      o?.employee?.username,
+      o?.employee_name,
+      o?.employeeName,
+      o?.employee_code_raw,
+      o?.employee_code,
+      // created/actor/user
+      o?.created_by?.fullName,
+      o?.created_by?.username,
+      o?.user?.fullName,
+      o?.user?.username,
+      o?.actor?.fullName,
+      o?.actor?.username,
+      // flat strings sometimes used
+      o?.sale || o?.sale_name_raw || o?.sale_name || o?.saleBy || o?.employee || o?.creator,
+    ];
+
+    for (const c of candidates) {
+      if (c && (typeof c === "string" ? c.trim() : true)) {
+        return typeof c === "string" ? c.trim() : String(c);
+      }
+    }
+
+    return "--";
+  };
+
   // Status options and warning levels (match Order page labels)
   const statusOptions = [
     { value: "completed", label: "Đã chốt" },
@@ -685,6 +727,8 @@ export default function PmTransactionManagement() {
   // Export data helper (returns headers + mapped rows for current visible orders)
   // Match the manager-order export column order and formatting so PM exports are identical to Order exports
   const getExportData = () => {
+  // getExportData uses the component-level resolver `getEmployeeDisplay`
+
     const headers = [
       "STT",
       "Mã Đơn",
@@ -732,7 +776,7 @@ export default function PmTransactionManagement() {
           })()
         : "--",
       // Tên Nhân Viên
-      o.employee_code || o.sale_by?.fullName || o.sale_by?.username || "--",
+  getEmployeeDisplay(o),
       // Tên Khách Hàng
       o.customer_name || "--",
       // Tên Mặt Hàng
@@ -772,6 +816,8 @@ export default function PmTransactionManagement() {
 
   // Export all data helper - fetches all rows from backend respecting current filters
   const getExportAllData = async () => {
+  // Use shared getEmployeeDisplay helper defined at component scope
+
     const params = new URLSearchParams({
       page: "1",
       pageSize: "1000000",
@@ -859,7 +905,8 @@ export default function PmTransactionManagement() {
             }
           })()
         : "--",
-      o.sale_by?.fullName || o.sale_by?.username || o.employee_code || "--",
+  // Tên Nhân Viên - use shared resolver to find best candidate
+  getEmployeeDisplay(o),
       o.customer_name || "--",
       o.raw_item || (o.items ? o.items.map((it: any) => it.name).join(", ") : "--") || "--",
       o.quantity ?? "--",
