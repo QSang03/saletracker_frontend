@@ -476,24 +476,54 @@ export default function PmTransactionManagement() {
         if (departmentsSelected.length > 0) setDepartmentsSelected([]);
       }
 
-      // date handling
+      // date handling - thêm validation để tránh lỗi Invalid time value
       if (f.singleDate) {
-        const d =
-          f.singleDate instanceof Date
-            ? f.singleDate
-            : new Date(f.singleDate as string);
-        const val = d.toLocaleDateString("en-CA");
-        setDateFilter(val);
-        setDateRangeState(null);
+        try {
+          const d =
+            f.singleDate instanceof Date
+              ? f.singleDate
+              : new Date(f.singleDate as string);
+          
+          // Kiểm tra xem ngày có hợp lệ không
+          if (!isNaN(d.getTime())) {
+            const val = d.toLocaleDateString("en-CA");
+            setDateFilter(val);
+            setDateRangeState(null);
+          } else {
+            console.warn("[PM] Invalid singleDate value:", f.singleDate);
+            setDateFilter("all");
+            setDateRangeState(null);
+          }
+        } catch (error) {
+          console.warn("[PM] Error parsing singleDate:", error);
+          setDateFilter("all");
+          setDateRangeState(null);
+        }
       } else if (
         f.dateRange &&
         (f.dateRange as any).from &&
         (f.dateRange as any).to
       ) {
-        const from = (f.dateRange as any).from.toLocaleDateString("en-CA");
-        const to = (f.dateRange as any).to.toLocaleDateString("en-CA");
-        setDateRangeState({ start: from, end: to });
-        setDateFilter("custom");
+        try {
+          const fromDate = (f.dateRange as any).from;
+          const toDate = (f.dateRange as any).to;
+          
+          // Kiểm tra xem các ngày có hợp lệ không
+          if (fromDate && toDate && !isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+            const from = fromDate.toLocaleDateString("en-CA");
+            const to = toDate.toLocaleDateString("en-CA");
+            setDateRangeState({ start: from, end: to });
+            setDateFilter("custom");
+          } else {
+            console.warn("[PM] Invalid dateRange values:", { from: fromDate, to: toDate });
+            setDateFilter("all");
+            setDateRangeState(null);
+          }
+        } catch (error) {
+          console.warn("[PM] Error parsing dateRange:", error);
+          setDateFilter("all");
+          setDateRangeState(null);
+        }
       } else {
         // keep 'all' or previous
         setDateFilter("all");
@@ -612,7 +642,18 @@ export default function PmTransactionManagement() {
 
   // Format date
   const formatDate = (dateString: string) => {
-    return format(new Date(dateString), "dd/MM/yyyy HH:mm", { locale: vi });
+    try {
+      const date = new Date(dateString);
+      if (!isNaN(date.getTime())) {
+        return format(date, "dd/MM/yyyy HH:mm", { locale: vi });
+      } else {
+        console.warn("[PM] Invalid date string in formatDate:", dateString);
+        return "N/A";
+      }
+    } catch (error) {
+      console.warn("[PM] Error formatting date:", error);
+      return "N/A";
+    }
   };
 
   // Status options and warning levels (match Order page labels)
@@ -668,21 +709,25 @@ export default function PmTransactionManagement() {
         ? (() => {
             try {
               const d = new Date(o.created_at);
-              return d
-                ? d
-                    .toLocaleString("vi-VN", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: false,
-                    })
-                    .replace(",", "")
-                : "--";
+              if (!isNaN(d.getTime())) {
+                return d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "");
+              } else {
+                console.warn("[PM] Invalid created_at date in export:", o.created_at);
+                return "--";
+              }
             } catch (e) {
-              return String(o.created_at);
+              console.warn("[PM] Error parsing created_at in export:", e);
+              return "--";
             }
           })()
         : "--",
@@ -792,21 +837,25 @@ export default function PmTransactionManagement() {
         ? (() => {
             try {
               const d = new Date(o.created_at);
-              return d
-                ? d
-                    .toLocaleString("vi-VN", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: false,
-                    })
-                    .replace(",", "")
-                : "--";
+              if (!isNaN(d.getTime())) {
+                return d
+                  .toLocaleString("vi-VN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                  .replace(",", "");
+              } else {
+                console.warn("[PM] Invalid created_at date in exportAll:", o.created_at);
+                return "--";
+              }
             } catch (e) {
-              return String(o.created_at);
+              console.warn("[PM] Error parsing created_at in exportAll:", e);
+              return "--";
             }
           })()
         : "--",
@@ -960,14 +1009,43 @@ export default function PmTransactionManagement() {
                   : [],
               warningLevels: [],
               dateRange: dateRangeState
-                ? {
-                    from: new Date(dateRangeState.start || ""),
-                    to: new Date(dateRangeState.end || ""),
-                  }
+                ? (() => {
+                    try {
+                      const fromDate = new Date(dateRangeState.start || "");
+                      const toDate = new Date(dateRangeState.end || "");
+                      
+                      // Kiểm tra xem các ngày có hợp lệ không
+                      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+                        return {
+                          from: fromDate,
+                          to: toDate,
+                        };
+                      } else {
+                        console.warn("[PM] Invalid dateRange in initialFilters:", dateRangeState);
+                        return { from: undefined, to: undefined };
+                      }
+                    } catch (error) {
+                      console.warn("[PM] Error parsing dateRange in initialFilters:", error);
+                      return { from: undefined, to: undefined };
+                    }
+                  })()
                 : { from: undefined, to: undefined },
               singleDate:
                 dateFilter && dateFilter !== "all"
-                  ? new Date(dateFilter)
+                  ? (() => {
+                      try {
+                        const date = new Date(dateFilter);
+                        if (!isNaN(date.getTime())) {
+                          return date;
+                        } else {
+                          console.warn("[PM] Invalid singleDate in initialFilters:", dateFilter);
+                          return undefined;
+                        }
+                      } catch (error) {
+                        console.warn("[PM] Error parsing singleDate in initialFilters:", error);
+                        return undefined;
+                      }
+                    })()
                   : undefined,
               employees: [],
               quantity: minQuantity,

@@ -107,27 +107,8 @@ const useCampaignData = (
         ? await campaignAPI.getAllArchived(requestFilters)
         : await campaignAPI.getAll(requestFilters);
 
-      // Apply a stable default sort so initial view matches expected order
-      const list = (response.data || []).slice();
-      const sorted = list.sort((a, b) => {
-        // Prefer start_date desc when present
-        const ad = a.start_date ? new Date(a.start_date).getTime() : 0;
-        const bd = b.start_date ? new Date(b.start_date).getTime() : 0;
-        if (ad !== bd) return bd - ad;
-        // Then end_date desc
-        const ae = a.end_date ? new Date(a.end_date).getTime() : 0;
-        const be = b.end_date ? new Date(b.end_date).getTime() : 0;
-        if (ae !== be) return be - ae;
-        // Then created_at desc
-        const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const bc = b.created_at ? new Date(b.created_at).getTime() : 0;
-        if (ac !== bc) return bc - ac;
-        // Finally by customer_count desc
-        const acc = a.customer_count ?? 0;
-        const bcc = b.customer_count ?? 0;
-        return bcc - acc;
-      });
-      setCampaigns(sorted);
+      // ✅ Respect backend ordering and pagination (10 per page)
+      setCampaigns(response.data || []);
       setTotalCount(response.total || 0);
       setStats(response.stats || DEFAULT_STATS);
     } catch (error: any) {
@@ -275,7 +256,8 @@ export default function CampaignPage() {
           : undefined,
   page: 1, // ✅ ALWAYS reset to page 1 when filters change
   pageSize: pagination.pageSize,
-  sort: "start_date:desc,end_date:desc,created_at:desc",
+  // Keep sort param only if backend uses it; otherwise rely on server default
+  // sort: "status:custom(created),created_at:desc",
       };
       
       // ✅ UPDATE: Use pagination hook
