@@ -24,7 +24,8 @@ import {
   Sparkles,
   Trophy,
   Target,
-  Heart
+  Heart,
+  User
 } from 'lucide-react';
 
 // Simple and Clean Pagination Component
@@ -153,7 +154,8 @@ export function CustomerListDialog({
     error, 
     fetchPage, 
     setPage, 
-    setPageSize 
+    setPageSize,
+    setFilters
   } = useCustomerList(filters, { autoFetch: false }) || {};
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -225,6 +227,27 @@ export function CustomerListDialog({
       fetchedOnOpenRef.current = false;
     }
   }, [open, page, fetchPage]);
+
+  // Fetch data when filters change
+  useEffect(() => {
+    if (open && filters) {
+      // Update filters and fetch data
+      setFilters?.(filters);
+    }
+  }, [filters, open, setFilters]);
+
+  // Refresh count when dialog opens or filters change
+  useEffect(() => {
+    if (open) {
+      // Force refresh the customer count
+      fetchPage?.(1, filters);
+    }
+  }, [open, filters, fetchPage]);
+
+  // Reset animated total when total changes
+  useEffect(() => {
+    setAnimatedTotal(total);
+  }, [total]);
 
   // Enhanced customer tier system
   const getCustomerTier = (orders: number = 0) => {
@@ -423,13 +446,21 @@ export function CustomerListDialog({
                           <h3 className="font-bold text-lg text-gray-900 group-hover:text-blue-700 transition-colors truncate mb-2" title={item.customer_name}>
                             {item.customer_name}
                           </h3>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 mb-2">
                             <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl border border-blue-200 shadow-sm">
                               <ShoppingBag className="w-4 h-4 text-blue-600" />
                               <span className="text-blue-800 font-bold text-sm">
                                 {(item.orders || 0).toLocaleString()} đơn hàng
                               </span>
                             </div>
+                            {item.sale_name && (
+                              <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl border border-green-200 shadow-sm">
+                                <User className="w-4 h-4 text-green-600" />
+                                <span className="text-green-800 font-bold text-sm">
+                                  {item.sale_name}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         

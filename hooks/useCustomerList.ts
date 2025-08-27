@@ -3,6 +3,8 @@ import { getAccessToken } from '@/lib/auth';
 
 export interface CustomerListItem {
   customer_name: string;
+  sale_id: number;
+  sale_name: string;
   orders: number;
 }
 

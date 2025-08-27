@@ -8,7 +8,16 @@ import {
   Role,
 } from "../types";
 
-export const usePermission = () => {
+export type UsePermissionResult = {
+  user: UserWithPermissions | null;
+  canAccess: (departmentSlug: string, action: string) => boolean;
+  getAllUserPermissions: () => Permission[];
+  getAllUserRoles: () => Role[];
+  refreshPermissions: () => void;
+  isLoadingPermissions: boolean;
+};
+
+export const usePermission = (): UsePermissionResult => {
   const { user } = useContext(AuthContext);
   const [dbPermissions, setDbPermissions] = useState<Permission[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);

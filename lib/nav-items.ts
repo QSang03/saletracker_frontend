@@ -15,9 +15,7 @@ export const navItems = [
     { 
       title: "Quản lý đơn hàng", 
       url: "/dashboard/manager-order", 
-      roles: ["admin", "analysis", "view"],
-      showBadge: true,
-      badgeType: 'customer-count'
+      roles: ["admin", "analysis", "view"]
     },
     { title: "Quản lý Blacklist", url: "/dashboard/order-blacklist", roles: ["admin", "analysis", "view"] },
     { title: "Quản lý Đơn hàng đã xóa", url: "/dashboard/order-trashed", roles: ["admin", "analysis", "view"] },

@@ -142,7 +142,14 @@ function ManagerOrderContent() {
   ];
 
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
-  const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount();
+  const customerCountFilters = useMemo(() => ({
+    fromDate: filters.dateRange?.start,
+    toDate: filters.dateRange?.end,
+    employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
+    departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+  }), [filters.dateRange?.start, filters.dateRange?.end, filters.employees, filters.departments]);
+
+  const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount(customerCountFilters);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
 
   // Lấy danh sách nhân viên từ filter options
@@ -1027,6 +1034,12 @@ function ManagerOrderContent() {
       <CustomerListDialog
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
+        filters={{
+          fromDate: filters.dateRange?.start,
+          toDate: filters.dateRange?.end,
+          employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
+          departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+        }}
         onSelectCustomer={(name: string) => {
           setCustomerDialogOpen(false);
           // Điều hướng nhanh bằng search theo tên khách hàng có sẵn
