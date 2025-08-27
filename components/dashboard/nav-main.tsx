@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useCustomerCount } from "@/hooks/useCustomerCount";
 
 export function NavMain({
   items,
@@ -22,12 +23,15 @@ export function NavMain({
     items: {
       title: string;
       url: string;
+      showBadge?: boolean;
+      badgeType?: string;
     }[];
   }[];
   activeUrl: string;
   setActiveUrl: (url: string) => void;
 }) {
   const activeRef = useRef<HTMLAnchorElement | null>(null);
+  const { count: customerCount, loading: customerCountLoading } = useCustomerCount();
 
   useEffect(() => {
     if (activeRef.current) {
@@ -37,6 +41,25 @@ export function NavMain({
       });
     }
   }, [activeUrl]);
+
+  const renderBadge = (item: any) => {
+    if (!item.showBadge) return null;
+    
+    if (item.badgeType === 'customer-count') {
+      if (customerCountLoading) {
+        return <span className="ml-2 px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">...</span>;
+      }
+      if (customerCount !== null) {
+        return (
+          <span className="ml-2 px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
+            {customerCount.toLocaleString()}
+          </span>
+        );
+      }
+    }
+    
+    return null;
+  };
 
   return (
     <div className="space-y-1 [&_*]:list-none overflow-y-auto max-h-[calc(100vh-64px)] pr-1">
@@ -65,7 +88,8 @@ export function NavMain({
                       title={subItem.title}
                       onClick={() => setActiveUrl(subItem.url)}
                     >
-                      {subItem.title}
+                      <span className="flex-1">{subItem.title}</span>
+                      {renderBadge(subItem)}
                     </Link>
                   </SidebarMenuSubItem>
                 );

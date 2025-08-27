@@ -190,6 +190,7 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Cleanup on unmount
   useEffect(() => {
+    isComponentMounted.current = true;
     return () => {
       isComponentMounted.current = false;
       if (refreshIntervalRef.current) {
@@ -254,7 +255,6 @@ const DebtStatisticsDashboard: React.FC = () => {
     if (!isComponentMounted.current || fetchingRef.current || isCallInProgress) {
       return;
     }
-
     try {
       fetchingRef.current = true;
       await callWithCircuitBreaker(async () => {
@@ -280,8 +280,9 @@ const DebtStatisticsDashboard: React.FC = () => {
           debtStatisticsAPI.getContactResponsesDaily({ ...debouncedFilters, by: 'customer' }),
         ]);
 
+  // verbose debug logs removed
         if (isComponentMounted.current) {
-          console.log('🔍 [Dashboard] Setting aging data:', agingRes);
+          
           setOverview(overviewRes);
           setAgingData(agingRes);
           setTrendData(trendsRes);
@@ -295,6 +296,7 @@ const DebtStatisticsDashboard: React.FC = () => {
         }
       });
     } catch (error) {
+      console.error('❌ [fetchData] Error:', error);
       if (isComponentMounted.current) {
         setSelectedDebts([]);
       }
@@ -306,22 +308,12 @@ const DebtStatisticsDashboard: React.FC = () => {
     }
   }, [debouncedFilters, callWithCircuitBreaker, isCallInProgress]);
 
-  useEffect(() => {
-    // Remove auto-refresh completely - causes performance issues
-    // Only manual refresh on mount and filter changes
-  }, []);
-
   // Single effect for initial data loading only
   useEffect(() => {
     if (!initialFetchDone.current && isComponentMounted.current) {
       fetchData();
     }
   }, []); // Empty dependency array - only run on mount
-
-  // Debug effect to monitor contactStatusFilter changes
-  useEffect(() => {
-    console.log('🔍 [Debug] contactStatusFilter changed to:', contactStatusFilter);
-  }, [contactStatusFilter]);
 
   // Separate effect for filter changes - now using debounced filters
   useEffect(() => {
@@ -339,8 +331,7 @@ const DebtStatisticsDashboard: React.FC = () => {
 
   // Transform API data for existing components
   const chartData: ChartDataItem[] = useMemo(() => {
-    console.log('🔍 [chartData] Processing trendData:', trendData);
-    
+    // processing trendData (debug logs removed)
     return trendData.map((item, index) => {
       // Ưu tiên sử dụng trường date từ API (ISO format) thay vì name (vi-VN format)
       let displayName = item.date || item.name;
@@ -373,7 +364,6 @@ const DebtStatisticsDashboard: React.FC = () => {
         no_info: item.no_info,
       };
       
-      console.log(`🔍 [chartData] Processed item ${index}:`, result);
       return result;
     });
   }, [trendData]);
@@ -979,6 +969,33 @@ const DebtStatisticsDashboard: React.FC = () => {
                   Theo dõi và phân tích tình trạng công nợ khách hàng
                 </p>
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* <Button
+                onClick={async () => {
+                  try {
+                    await debtStatisticsAPI.captureStatistics();
+                    await debtStatisticsAPI.forceRefresh();
+                    await fetchData();
+                    console.log('✅ Data captured and refreshed');
+                  } catch (error) {
+                    console.error('❌ Error capturing data:', error);
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                className="h-9 px-4 text-sm font-medium text-gray-700 bg-white border-gray-300 hover:bg-gray-50"
+              >
+                Capture Data
+              </Button> */}
+              <Button
+                onClick={handleRefresh}
+                variant="outline"
+                size="sm"
+                className="h-9 px-4 text-sm font-medium text-blue-700 bg-white border-blue-300 hover:bg-blue-50"
+              >
+                Refresh
+              </Button>
             </div>
           </div>
 

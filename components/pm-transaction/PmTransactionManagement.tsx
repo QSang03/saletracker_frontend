@@ -642,27 +642,84 @@ export default function PmTransactionManagement() {
   };
 
   // Export data helper (returns headers + mapped rows for current visible orders)
+  // Match the manager-order export column order and formatting so PM exports are identical to Order exports
   const getExportData = () => {
     const headers = [
-      "Mã đơn",
-      "Khách hàng",
-      "Số điện thoại",
-      "Giá trị",
-      "Trạng thái",
-      "Nhân viên",
-      "Phòng ban",
-      "Ngày tạo",
+      "STT",
+      "Mã Đơn",
+      "Gia Hạn",
+      "Thời Gian Tạo Đơn Hàng",
+      "Tên Nhân Viên",
+      "Tên Khách Hàng",
+      "Tên Mặt Hàng",
+      "Số Lượng",
+      "Đơn Giá",
+      "Trạng Thái",
+      "Ghi Chú",
     ];
 
-    const data = orders.map((o) => [
-      o.order_code || "--",
+    const data = orders.map((o: any, idx) => [
+      idx + 1,
+      o.id ?? o.order_code ?? "--",
+      // Gia Hạn - PM orders may not include 'extended' field; keep as '--' when missing
+      o.extended ?? "--",
+      // Thời Gian Tạo Đơn Hàng - format similar to manager-order
+      o.created_at
+        ? (() => {
+            try {
+              const d = new Date(o.created_at);
+              return d
+                ? d
+                    .toLocaleString("vi-VN", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false,
+                    })
+                    .replace(",", "")
+                : "--";
+            } catch (e) {
+              return String(o.created_at);
+            }
+          })()
+        : "--",
+      // Tên Nhân Viên
+      o.employee_code || o.sale_by?.fullName || o.sale_by?.username || "--",
+      // Tên Khách Hàng
       o.customer_name || "--",
-      o.customer_phone || "--",
-      o.total_amount != null ? Number(o.total_amount) : "--",
-      o.status || "--",
-      o.employee_code || "--",
-      o.department_name || "--",
-      o.created_at || "--",
+      // Tên Mặt Hàng
+      o.raw_item || o.items?.map((it: any) => it.name).join(", ") || "--",
+      // Số Lượng
+      o.quantity ?? "--",
+      // Đơn Giá - format as VND like manager-order
+      o.unit_price ? Number(o.unit_price).toLocaleString("vi-VN") + "₫" : (o.total_amount != null ? Number(o.total_amount).toLocaleString("vi-VN") + "₫" : "--"),
+      // Trạng Thái - try to map common statuses
+      (() => {
+        const st = (o.status || "").toString();
+        switch (st) {
+          case "pending":
+            return "Chờ xử lý";
+          case "quoted":
+            return "Chưa chốt";
+          case "completed":
+            return "Đã chốt";
+          case "demand":
+            return "Nhu cầu";
+          case "confirmed":
+            return "Đã phản hồi";
+          case "processing":
+            return "Đang xử lý";
+          case "cancelled":
+            return "Đã hủy";
+          default:
+            return st || "--";
+        }
+      })(),
+      // Ghi Chú
+      o.notes || "--",
     ]);
 
     return { headers, data };
@@ -726,15 +783,60 @@ export default function PmTransactionManagement() {
       : Array.isArray(json.data)
       ? json.data
       : [];
-    return list.map((o: any) => [
-      o.order_code || "--",
+    // Map to the same shape as manager-order export
+    return list.map((o: any, idx: number) => [
+      idx + 1,
+      o.id ?? o.order_code ?? "--",
+      o.extended ?? "--",
+      o.created_at
+        ? (() => {
+            try {
+              const d = new Date(o.created_at);
+              return d
+                ? d
+                    .toLocaleString("vi-VN", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                      hour12: false,
+                    })
+                    .replace(",", "")
+                : "--";
+            } catch (e) {
+              return String(o.created_at);
+            }
+          })()
+        : "--",
+      o.sale_by?.fullName || o.sale_by?.username || o.employee_code || "--",
       o.customer_name || "--",
-      o.customer_phone || "--",
-      o.total_amount != null ? Number(o.total_amount) : "--",
-      o.status || "--",
-      o.employee_code || "--",
-      o.department_name || "--",
-      o.created_at || "--",
+      o.raw_item || (o.items ? o.items.map((it: any) => it.name).join(", ") : "--") || "--",
+      o.quantity ?? "--",
+      o.unit_price ? Number(o.unit_price).toLocaleString("vi-VN") + "₫" : (o.total_amount != null ? Number(o.total_amount).toLocaleString("vi-VN") + "₫" : "--"),
+      (() => {
+        const st = (o.status || "").toString();
+        switch (st) {
+          case "pending":
+            return "Chờ xử lý";
+          case "quoted":
+            return "Chưa chốt";
+          case "completed":
+            return "Đã chốt";
+          case "demand":
+            return "Nhu cầu";
+          case "confirmed":
+            return "Đã phản hồi";
+          case "processing":
+            return "Đang xử lý";
+          case "cancelled":
+            return "Đã hủy";
+          default:
+            return st || "--";
+        }
+      })(),
+      o.notes || "--",
     ]);
   };
 

@@ -29,6 +29,7 @@ import { ProfileModal } from "@/components/dashboard/ProfileModal";
 import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
 import { SocketPortal } from "@/components/socket/SocketPortal";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
+import { ViewRoleGuard } from "@/components/common/ViewRoleGuard";
 
 export default function DashboardLayout({
   children,
@@ -206,7 +207,11 @@ export default function DashboardLayout({
               <NavUserInline user={userInfo} />
             </div>
           </header>
-          <div className="flex-1 overflow-hidden">{children}</div>
+          <div className="flex-1 overflow-hidden">
+            <ViewRoleGuard>
+              {children}
+            </ViewRoleGuard>
+          </div>
           {/* Modal cảnh báo đổi mật khẩu mặc định - luôn hiển thị modal đổi mật khẩu, không cho tắt */}
           {(showChangePasswordModal || (showPasswordModal && currentUser)) &&
             currentUser && (

@@ -126,17 +126,31 @@ export const useDynamicPermission = () => {
 
     // Kiểm tra department và action
     if (check.departmentSlug && check.action) {
+      const slug = check.departmentSlug;
+      const alt1 = `thong-ke-${slug}`; // mapping used in frontend URL_PERMISSION_MAPPING
+      const alt2 = `thong_ke_${slug}`; // possible alternate underscore style
       return userPermissions.some(
-        permission => 
-          permission.name === check.departmentSlug && 
-          permission.action === check.action
+        permission => {
+          const name = permission.name;
+          return (
+            (name === slug || name === alt1 || name === alt2) &&
+            permission.action === check.action
+          );
+        }
       );
     }
 
     // Kiểm tra chỉ department (thuộc phòng ban)
     if (check.departmentSlug && !check.action) {
-      return userDepartments.some(dept => dept.slug === check.departmentSlug) ||
-             userRoles.some(role => role.endsWith(`-${check.departmentSlug}`));
+      const slug = check.departmentSlug;
+      const alt1 = `thong-ke-${slug}`;
+      const alt2 = `thong_ke_${slug}`;
+      const hasPermissionName = userPermissions.some(p => [slug, alt1, alt2].includes(p.name));
+      return (
+        userDepartments.some(dept => dept.slug === slug) ||
+        userRoles.some(role => role.endsWith(`-${slug}`)) ||
+        hasPermissionName
+      );
     }
 
     return true;

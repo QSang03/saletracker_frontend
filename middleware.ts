@@ -36,6 +36,12 @@ function getFirstAccessibleUrl(userRoles: string[]): string | null {
 }
 
 function isAccessible(userRoles: string[], url: string): boolean {
+  // Nếu user có role "view", cho phép truy cập tất cả routes
+  // Permissions sẽ được kiểm tra ở component level
+  if (userRoles.includes('view')) {
+    return true;
+  }
+
   for (const group of navItems) {
     for (const item of group.items) {
       if (item.url === url && (!item.roles || hasRole(userRoles, item.roles))) {

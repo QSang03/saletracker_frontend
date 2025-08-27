@@ -155,55 +155,61 @@ class DebtStatisticsAPI {
     return `${endpoint}_${JSON.stringify(filters)}`;
   }
 
-  async getOverview(filters: StatisticsFilters = {}): Promise<DebtStatsOverview> {
-    const cacheKey = this.getCacheKey('overview', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
+  // Generic fetch with cache fallback (handles 304 and empty bodies)
+  private async fetchWithCacheFallback<T>(endpoint: string, params: any, defaultValue: T): Promise<T> {
+    const cacheKey = this.getCacheKey(endpoint, params);
+    const cached = this.getCachedData(cacheKey) as T | null;
+    try {
+      // Add cache-buster on cold request to avoid 304 with empty body
+      const finalParams = cached == null ? { ...(params || {}), _cb: Date.now() } : params;
+      const response = await api.get(`${this.baseUrl}/${endpoint}`, { params: finalParams });
+      const status: number | undefined = (response as any)?.status;
+      const data = (response as any)?.data;
+      console.log(`🔍 [API] ${endpoint} - Status: ${status}, Data:`, data);
+      // If server responds 304 or empty body, reuse cached data
+      if ((status === 304 || data == null) && cached != null) {
+        return cached;
+      }
+      const result = (data == null ? defaultValue : data) as T;
+      this.setCacheData(cacheKey, result as any);
+      return result;
+    } catch (_err) {
+      console.error(`❌ [API] ${endpoint} - Error:`, _err);
+      // On error, serve cached data if available, else default
+      if (cached != null) return cached;
+      return defaultValue;
+    }
+  }
 
-    const response = await api.get(`${this.baseUrl}/overview`, { params: filters });
-    this.setCacheData(cacheKey, response.data);
-    return response.data;
+  async getOverview(filters: StatisticsFilters = {}): Promise<DebtStatsOverview> {
+    return this.fetchWithCacheFallback<DebtStatsOverview>('overview', filters, {
+      total: 0,
+      paid: 0,
+      payLater: 0,
+      noInfo: 0,
+      totalAmount: 0,
+      remainingAmount: 0,
+      collectedAmount: 0,
+      collectionRate: 0,
+      avgDebtAmount: 0,
+    });
   }
 
   async getAgingAnalysis(filters: StatisticsFilters = {}): Promise<AgingData[]> {
-    const cacheKey = this.getCacheKey('aging', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/aging`, { params: filters });
-    this.setCacheData(cacheKey, response.data);
-    return response.data;
+  return this.fetchWithCacheFallback<AgingData[]>('aging', filters, []);
   }
 
   async getTrends(filters: StatisticsFilters = {}): Promise<TrendData[]> {
-    const cacheKey = this.getCacheKey('trends', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/trends`, { params: filters });
-    this.setCacheData(cacheKey, response.data);
-    return response.data;
+  return this.fetchWithCacheFallback<TrendData[]>('trends', filters, []);
   }
 
   async getPayLaterDelay(filters: StatisticsFilters & { buckets?: string } = {}): Promise<PayLaterDelayItem[]> {
-    const cacheKey = this.getCacheKey('pay-later-delay', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/pay-later-delay`, { params: filters });
-    this.setCacheData(cacheKey, response.data || []);
-    return response.data || [];
+  return this.fetchWithCacheFallback<PayLaterDelayItem[]>('pay-later-delay', filters, []);
   }
 
   async getContactResponses(filters: StatisticsFilters & { by?: 'customer' | 'invoice' } = {}): Promise<ContactResponseItem[]> {
     const params = { by: 'customer', ...filters };
-    const cacheKey = this.getCacheKey('contact-responses', params);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/contact-responses`, { params });
-    this.setCacheData(cacheKey, response.data || []);
-    return response.data || [];
+  return this.fetchWithCacheFallback<ContactResponseItem[]>('contact-responses', params, []);
   }
 
   async getContactDetails(params: { date?: string; from?: string; to?: string; responseStatus: string; page?: number; limit?: number; employeeCode?: string; customerCode?: string; mode?: 'events' | 'distribution'; }): Promise<{ data: ContactDetailItem[]; total: number; page: number; limit: number; totalPages: number; }> {
@@ -219,54 +225,24 @@ class DebtStatisticsAPI {
 
   // Daily series endpoints
   async getAgingDaily(filters: StatisticsFilters = {}): Promise<AgingDailyItem[]> {
-    const cacheKey = this.getCacheKey('aging-daily', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/aging-daily`, { params: filters });
-    this.setCacheData(cacheKey, response.data || []);
-    return response.data || [];
+  return this.fetchWithCacheFallback<AgingDailyItem[]>('aging-daily', filters, []);
   }
 
   async getPayLaterDelayDaily(filters: StatisticsFilters & { buckets?: string } = {}): Promise<PayLaterDailyItem[]> {
-    const cacheKey = this.getCacheKey('pay-later-delay-daily', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/pay-later-delay-daily`, { params: filters });
-    this.setCacheData(cacheKey, response.data || []);
-    return response.data || [];
+  return this.fetchWithCacheFallback<PayLaterDailyItem[]>('pay-later-delay-daily', filters, []);
   }
 
   async getContactResponsesDaily(filters: StatisticsFilters & { by?: 'customer' | 'invoice' } = {}): Promise<ContactResponseDailyItem[]> {
     const params = { by: 'customer', ...filters } as any;
-    const cacheKey = this.getCacheKey('contact-responses-daily', params);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/contact-responses-daily`, { params });
-    this.setCacheData(cacheKey, response.data || []);
-    return response.data || [];
+  return this.fetchWithCacheFallback<ContactResponseDailyItem[]>('contact-responses-daily', params, []);
   }
 
   async getEmployeePerformance(filters: StatisticsFilters = {}): Promise<EmployeePerformance[]> {
-    const cacheKey = this.getCacheKey('employee-performance', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/employee-performance`, { params: filters });
-    this.setCacheData(cacheKey, response.data);
-    return response.data;
+  return this.fetchWithCacheFallback<EmployeePerformance[]>('employee-performance', filters, []);
   }
 
   async getDepartmentBreakdown(filters: StatisticsFilters = {}): Promise<DepartmentBreakdown[]> {
-    const cacheKey = this.getCacheKey('department-breakdown', filters);
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
-    const response = await api.get(`${this.baseUrl}/department-breakdown`, { params: filters });
-    this.setCacheData(cacheKey, response.data);
-    return response.data;
+  return this.fetchWithCacheFallback<DepartmentBreakdown[]>('department-breakdown', filters, []);
   }
 
   async getDebtsByStatus(
@@ -376,6 +352,12 @@ class DebtStatisticsAPI {
   // Force refresh - bypass cache
   async forceRefresh() {
     this.cache.clear();
+  }
+
+  // Capture debt statistics for a specific date
+  async captureStatistics(date?: string) {
+    const response = await api.post(`${this.baseUrl}/capture`, { date });
+    return response.data;
   }
 }
 

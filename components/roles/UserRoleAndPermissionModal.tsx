@@ -30,7 +30,9 @@ export interface UserRoleAndPermissionModalProps {
     roleIds: number[];
     permissionIds: number[];
     rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
+    viewSubRoleName?: string; // Thêm thông tin để backend tạo role "view con"
   }) => Promise<void>;
+  onSaveSuccess?: () => void; // Callback khi lưu thành công
 }
 
 export default function UserRoleAndPermissionModal({
@@ -41,6 +43,7 @@ export default function UserRoleAndPermissionModal({
   rolePermissions,
   onClose,
   onSave,
+  onSaveSuccess,
 }: UserRoleAndPermissionModalProps) {
   const [selectedDepartments, setSelectedDepartments] = useState<number[]>(
     user.departments?.map((d) => d.id) || []
@@ -93,6 +96,12 @@ export default function UserRoleAndPermissionModal({
           .map((rp) => rp.permissionId) || []
     ) || []
   );
+  
+  // State cho role "view"
+  const [isViewRoleSelected, setIsViewRoleSelected] = useState(false);
+  const [viewRoleDepartments, setViewRoleDepartments] = useState<number[]>([]);
+  const [viewRolePermissions, setViewRolePermissions] = useState<number[]>([]);
+  
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
@@ -260,7 +269,35 @@ export default function UserRoleAndPermissionModal({
     setSelectedSubRoles(
       user.roles?.filter((r) => rolesGrouped.sub.some((s) => s.id === r.id)).map((r) => r.id) || []
     );
-  }, [user.id, rolesGrouped.main, rolesGrouped.sub]);
+    
+    // Kiểm tra nếu user có role "view"
+    const hasViewRole = user.roles?.some((r) => r.name === "view");
+    if (hasViewRole) {
+      setIsViewRoleSelected(true);
+      setViewRoleDepartments(user.departments?.map((d) => d.id) || []);
+      
+      // Tìm role "view con" của user này
+      const viewSubRoleName = `view_${user.username}`;
+      const viewSubRole = user.roles?.find((r) => r.name === viewSubRoleName);
+      if (viewSubRole) {
+        // Lấy permissions của role "view con" từ rolePermissions prop
+        const viewRolePermissions = rolePermissions
+          .filter((rp) => rp.isActive && rp.roleId === viewSubRole.id)
+          .map((rp) => rp.permissionId) || [];
+        setViewRolePermissions(viewRolePermissions);
+      } else {
+        // Nếu chưa có role "view con", mặc định chọn tất cả permissions read & export
+        const defaultViewPermissions = permissions
+          .filter(p => p.action === 'read' || p.action === 'export')
+          .map(p => p.id);
+        setViewRolePermissions(defaultViewPermissions);
+      }
+    } else {
+      setIsViewRoleSelected(false);
+      setViewRoleDepartments([]);
+      setViewRolePermissions([]);
+    }
+  }, [user.id, rolesGrouped.main, rolesGrouped.sub, rolePermissions]);
 
   // Helper: kiểm tra quyền này có đang active với vai trò đang chọn không
   const isPermissionActive = (permissionId: number, roleId: number) => {
@@ -273,6 +310,71 @@ export default function UserRoleAndPermissionModal({
   const currentRoleIds = useMemo(() => {
     return [...selectedMainRoles, ...selectedSubRoles];
   }, [selectedMainRoles, selectedSubRoles]);
+
+  // Helper: nhóm permissions theo chức năng cho role "view" (chỉ read và export)
+  const viewRolePermissionGroups = useMemo(() => {
+    const isReadOrExport = (p: Permission) => p.action === 'read' || p.action === 'export';
+    const dedupByNameAction = (list: Permission[]) => {
+      const m = new Map<string, Permission>();
+      list.forEach(p => {
+        const key = `${p.name}:${p.action}`;
+        if (!m.has(key)) m.set(key, p);
+      });
+      return Array.from(m.values());
+    };
+    const groups = {
+      'thong-ke': {
+        name: '📊 THỐNG KÊ',
+        permissions: dedupByNameAction(
+          permissions.filter(p => p.name.startsWith('thong-ke') && isReadOrExport(p))
+        )
+      },
+      'giao-dich': {
+        name: '💰 GIAO DỊCH',
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('don-hang') || p.name.includes('blacklist')) && isReadOrExport(p))
+        )
+      },
+      'cong-no': {
+        name: '💳 CÔNG NỢ',
+    // Loại bỏ các quyền thống kê công nợ (thong-ke-cong-no) để tránh trùng với nhóm THỐNG KÊ
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('cong-no') || p.name.includes('nhac-no')) && !p.name.startsWith('thong-ke') && isReadOrExport(p))
+        )
+      },
+      'chien-dich': {
+        name: '📢 CHIẾN DỊCH',
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('chien-dich') || p.name.includes('gui-tin-nhan')) && isReadOrExport(p))
+        )
+      },
+      'product-manager': {
+        name: '👨‍💼 PRODUCT MANAGER',
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('giao-dich-pm') || p.name.includes('san-pham')) && isReadOrExport(p))
+        )
+      },
+      'tai-khoan': {
+        name: '👤 TÀI KHOẢN',
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('tai-khoan') || p.name.includes('bo-phan') || p.name.includes('zalo') || p.name.includes('phan-quyen')) && isReadOrExport(p))
+        )
+      },
+      'thong-tin': {
+        name: 'ℹ️ THÔNG TIN',
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('lien-ket') || p.name.includes('zalo-nkc')) && isReadOrExport(p))
+        )
+      },
+      'cai-dat': {
+        name: '⚙️ CÀI ĐẶT',
+        permissions: dedupByNameAction(
+          permissions.filter(p => (p.name.includes('cau-hinh') || p.name.includes('chat-gpt')) && isReadOrExport(p))
+        )
+      }
+    };
+    return groups;
+  }, [permissions]);
 
   // Khi click checkbox quyền, chỉ cập nhật rolePermissionsState
   const handlePermissionChange = (permissionId: number, roleId: number, checked: boolean) => {
@@ -326,6 +428,33 @@ export default function UserRoleAndPermissionModal({
     setSelectedMainRoles(vals.map(Number));
     const adminRole = rolesGrouped.main.find((r) => r.name === "admin");
     const managerRole = rolesGrouped.main.find((r) => r.name === "manager");
+    const viewRole = rolesGrouped.main.find((r) => r.name === "view");
+    
+    // Xử lý role "view"
+    if (viewRole && vals.includes(viewRole.id)) {
+      // Khi chọn role "view", xóa tất cả role khác (realtime trong modal)
+      setIsViewRoleSelected(true);
+      setSelectedMainRoles([viewRole.id]);
+      setSelectedSubRoles([]);
+      setSelectedDepartments([]);
+      
+      // Mặc định chọn tất cả phòng ban
+      setViewRoleDepartments(departments.map(d => d.id));
+      
+      // Mặc định chọn tất cả permissions cho role "view" (chỉ read và export)
+      const viewPermissions = permissions.filter(p => 
+        p.action === 'read' || p.action === 'export'
+      ).map(p => p.id);
+      setViewRolePermissions(viewPermissions);
+      
+      return;
+    } else if (viewRole && !vals.includes(viewRole.id)) {
+      // Khi bỏ chọn role "view", khôi phục logic cũ
+      setIsViewRoleSelected(false);
+      setViewRoleDepartments([]);
+      setViewRolePermissions([]);
+    }
+    
     if (adminRole && vals.includes(adminRole.id)) {
       // Nếu chọn admin thì active full quyền
       setRolePermissionsState((prev) => {
@@ -377,23 +506,77 @@ export default function UserRoleAndPermissionModal({
   };
   const handleConfirm = async () => {
     setSaving(true);
-    // Lấy các role phụ thực tế của user (roleId thuộc rolesGrouped.sub)
-    const subRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
-    // Lấy tất cả permissionId đang active từ rolePermissionsState, chỉ cho role phụ
-    const uniqueRolePermissions = rolePermissionsState.filter(
-      (rp) => subRoleIds.includes(rp.roleId)
-    );
-    const permissionIds = Array.from(
-      new Set(uniqueRolePermissions.filter(rp => rp.isActive).map(rp => rp.permissionId))
-    );
-    await onSave({
-      departmentIds: selectedDepartments,
-      roleIds: [...selectedMainRoles, ...selectedSubRoles],
-      permissionIds,
-      rolePermissions: uniqueRolePermissions,
-    });
+    
+    if (isViewRoleSelected) {
+      // Logic lưu cho role "view"
+      const viewRole = rolesGrouped.main.find((r) => r.name === "view");
+      if (!viewRole) {
+        console.error("Không tìm thấy role 'view'");
+        setSaving(false);
+        return;
+      }
+      
+      // Tạo hoặc tìm role "view con" dựa trên username
+      const viewSubRoleName = `view_${user.username}`;
+      
+      // Tìm role "view con" trong sub roles
+      let viewSubRole = rolesGrouped.sub.find((r) => r.name === viewSubRoleName);
+      
+      // Nếu chưa có role "view con", sẽ tạo mới (backend sẽ xử lý)
+      const viewSubRoleId = viewSubRole?.id || 0;
+      
+      console.log('🔍 Debug role "view con":', {
+        username: user.username,
+        viewSubRoleName,
+        viewSubRole,
+        viewSubRoleId,
+        viewRolePermissions: viewRolePermissions.length,
+        viewRoleDepartments: viewRoleDepartments.length
+      });
+      
+      // Tạo rolePermissions cho role "view con"
+      const viewRolePermissionsData = viewRolePermissions.map(permissionId => ({
+        roleId: viewSubRoleId,
+        permissionId,
+        isActive: true
+      }));
+      
+      const saveData = {
+        departmentIds: viewRoleDepartments,
+        roleIds: [viewRole.id, viewSubRoleId], // Thêm cả role "view con"
+        permissionIds: viewRolePermissions,
+        rolePermissions: viewRolePermissionsData,
+        viewSubRoleName: viewSubRoleName, // Thêm thông tin để backend tạo role "view con"
+      };
+      
+      console.log('📤 Gửi dữ liệu lên backend:', saveData);
+      
+      await onSave(saveData);
+    } else {
+      // Logic lưu cho các role khác (giữ nguyên như cũ)
+      const subRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
+      const uniqueRolePermissions = rolePermissionsState.filter(
+        (rp) => subRoleIds.includes(rp.roleId)
+      );
+      const permissionIds = Array.from(
+        new Set(uniqueRolePermissions.filter(rp => rp.isActive).map(rp => rp.permissionId))
+      );
+      await onSave({
+        departmentIds: selectedDepartments,
+        roleIds: [...selectedMainRoles, ...selectedSubRoles],
+        permissionIds,
+        rolePermissions: uniqueRolePermissions,
+      });
+    }
+    
     setSaving(false);
     setShowConfirm(false);
+    
+    // Thông báo cho parent component refresh dữ liệu
+    if (onSaveSuccess) {
+      onSaveSuccess();
+    }
+    
     onClose();
   };
   const handleCancel = () => {
@@ -452,7 +635,114 @@ export default function UserRoleAndPermissionModal({
           </DialogTitle>
           {loadingPermissions ? (
             <div className="text-center py-8">Đang tải quyền thực tế...</div>
+          ) : isViewRoleSelected ? (
+            // Giao diện cho role "view"
+            <>
+              <div className="mb-4">
+                <GradientTitle className="text-lg mb-2 block">
+                  VAI TRÒ CHÍNH
+                </GradientTitle>
+                <MultiSelectCombobox
+                  options={mainRoleOptions}
+                  value={selectedMainRoles}
+                  onChange={handleMainRoleChange}
+                  placeholder="Chọn vai trò chính..."
+                />
+              </div>
+              
+              <div className="mb-4">
+                <GradientTitle className="text-lg mb-2 block">
+                  📁 PHÒNG BAN CÓ THỂ XEM
+                </GradientTitle>
+                <div className="mb-2">
+                  <label className="flex items-center gap-2">
+                    <Checkbox
+                      checked={viewRoleDepartments.length === departments.length}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setViewRoleDepartments(departments.map(d => d.id));
+                        } else {
+                          setViewRoleDepartments([]);
+                        }
+                      }}
+                    />
+                    <span className="font-semibold">Tất cả phòng ban</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                  {departments.map((dep) => (
+                    <label key={dep.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={viewRoleDepartments.includes(dep.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setViewRoleDepartments(prev => [...prev, dep.id]);
+                          } else {
+                            setViewRoleDepartments(prev => prev.filter(id => id !== dep.id));
+                          }
+                        }}
+                      />
+                      {dep.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <GradientTitle className="text-lg mb-2 block">
+                  🔧 CHỨC NĂNG CÓ THỂ XEM
+                </GradientTitle>
+                                  <div className="mb-2">
+                    <label className="flex items-center gap-2">
+                      <Checkbox
+                        checked={viewRolePermissions.length === permissions.filter(p => p.action === 'read' || p.action === 'export').length}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setViewRolePermissions(permissions.filter(p => p.action === 'read' || p.action === 'export').map(p => p.id));
+                          } else {
+                            setViewRolePermissions([]);
+                          }
+                        }}
+                      />
+                      <span className="font-semibold">Tất cả chức năng (read & export)</span>
+                    </label>
+                  </div>
+                
+                {Object.entries(viewRolePermissionGroups).map(([key, group]) => (
+                  <div key={key} className="mb-4">
+                    <div className="font-semibold text-base mb-2">{group.name}</div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                      {group.permissions.map((permission) => (
+                        <label key={permission.id} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={viewRolePermissions.includes(permission.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setViewRolePermissions(prev => [...prev, permission.id]);
+                              } else {
+                                setViewRolePermissions(prev => prev.filter(id => id !== permission.id));
+                              }
+                            }}
+                          />
+                          {permission.name} ({permission.action})
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <DialogFooter>
+                <Button variant="gradient" onClick={handleSave} disabled={saving}>
+                  {saving ? "Đang lưu..." : "Lưu"}
+                </Button>
+                <Button variant="outline" onClick={onClose} disabled={saving}>
+                  Đóng
+                </Button>
+              </DialogFooter>
+            </>
           ) : (
+            // Giao diện cho các role khác (giữ nguyên như cũ)
             <>
               <div className="mb-4">
                 <GradientTitle className="text-lg mb-2 block">

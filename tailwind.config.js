@@ -33,6 +33,9 @@ module.exports = {
         "bounce-soft": "bounce-soft 2s ease-in-out infinite",
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
         float: "float 3s ease-in-out infinite",
+  // slide animations
+  slideUp: "slideUp 0.6s ease-out forwards",
+  slideIn: "slideIn 0.5s ease-out forwards",
       },
       keyframes: {
         "bell-shake": {
@@ -72,6 +75,27 @@ module.exports = {
           },
           "50%": {
             transform: "translateY(-2px)",
+          },
+        },
+        // slide keyframes
+        slideUp: {
+          from: {
+            opacity: "0",
+            transform: "translateY(20px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
+        slideIn: {
+          from: {
+            opacity: "0",
+            transform: "translateX(-20px)",
+          },
+          to: {
+            opacity: "1",
+            transform: "translateX(0)",
           },
         },
       },

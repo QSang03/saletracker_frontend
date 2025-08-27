@@ -17,6 +17,8 @@ import PaginatedTable, {
 import OrderManagement from "@/components/order/manager-order/OrderManagement";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useCustomerCount } from "@/hooks/useCustomerCount";
+import { CustomerListDialog } from "@/components/order/manager-order/CustomerListDialog";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
 import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
 import {
@@ -138,6 +140,10 @@ function ManagerOrderContent() {
     { value: "3", label: "Cảnh báo 3" },
     { value: "4", label: "Bình thường" },
   ];
+
+  // 💡 Hiển thị số lượng khách hàng ở tiêu đề
+  const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount();
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
 
   // Lấy danh sách nhân viên từ filter options
   const allEmployeeOptions = filterOptions.departments.reduce((acc, dept) => {
@@ -848,8 +854,23 @@ function ManagerOrderContent() {
 
       <Card className="w-full max-w-full">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-xl font-bold">
+          <CardTitle className="text-xl font-bold flex items-center gap-2">
             📦 Quản lý đơn hàng
+            {/* Badge số khách hàng */}
+            {customerCountLoading ? (
+              <span className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full animate-pulse">Đang tải...</span>
+            ) : typeof customerCount === 'number' ? (
+              <button
+                type="button"
+                className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full hover:from-blue-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 font-semibold cursor-pointer"
+                title="Xem danh sách khách hàng"
+                onClick={() => setCustomerDialogOpen(true)}
+              >
+                👥 {customerCount.toLocaleString()} khách hàng
+              </button>
+            ) : customerCountError ? (
+              <span className="ml-2 px-2 py-1 text-xs bg-red-200 text-red-600 rounded-full">Lỗi tải dữ liệu</span>
+            ) : null}
           </CardTitle>
           <div className="flex gap-2 flex-wrap">
             <Button
@@ -1001,6 +1022,17 @@ function ManagerOrderContent() {
           onClose={() => setAlert(null)}
         />
       )}
+
+      {/* Dialog danh sách khách hàng */}
+      <CustomerListDialog
+        open={customerDialogOpen}
+        onOpenChange={setCustomerDialogOpen}
+        onSelectCustomer={(name: string) => {
+          setCustomerDialogOpen(false);
+          // Điều hướng nhanh bằng search theo tên khách hàng có sẵn
+          performCustomerSearch(name);
+        }}
+      />
     </div>
   );
 }

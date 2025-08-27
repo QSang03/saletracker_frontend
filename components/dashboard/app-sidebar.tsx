@@ -24,6 +24,8 @@ import {
 import { hasRole } from "@/lib/role";
 import type { User } from "@/types";
 import { navItems as navItemsRaw } from "@/lib/nav-items";
+import { usePermission } from "@/hooks/usePermission";
+import { canAccessUrl } from "@/lib/url-permission-mapping";
 
 const iconMap = {
   FileBarChart2,
@@ -52,6 +54,8 @@ export function AppSidebar({
   setActiveUrl: (url: string) => void;
   currentUser: User | null;
 }) {
+  const { getAllUserPermissions } = usePermission();
+  
   const teams = [
     {
       name: "SaleTracker",
@@ -63,10 +67,11 @@ export function AppSidebar({
   // Lọc navItems và từng item con theo role
   // Nếu user không phải admin và không có role PM thì ẩn hẳn nhóm 'Product Manager'
   const isAdmin = hasRole(currentUser, 'admin');
-  const isPMRole = currentUser?.roles?.some(r => {
+  const isPMRole = currentUser?.roles?.some((r: any) => {
     const n = (r.name || '').toLowerCase();
     return n === 'pm' || n.startsWith('pm-');
   });
+  const isViewRole = currentUser?.roles?.some((r: any) => r.name === 'view');
 
   const effectiveNavItems = navItems.filter(group => {
   // Show Product Manager group only to admin or users with any pm role
@@ -79,7 +84,17 @@ export function AppSidebar({
   const filteredNavItems = effectiveNavItems
     .map(item => {
       // First filter by roles defined on sub-items
-      let itemsFiltered = item.items.filter(subItem => !subItem.roles || hasRole(currentUser, subItem.roles));
+      let itemsFiltered = item.items.filter(subItem => {
+        // Nếu user có role "view", kiểm tra permissions từ database
+        if (isViewRole) {
+          const userPermissions = getAllUserPermissions();
+          return canAccessUrl(subItem.url, userPermissions);
+        }
+        
+        // Logic cũ cho các role khác
+        return !subItem.roles || hasRole(currentUser, subItem.roles);
+      });
+      
       // If user is PM (and not admin), hide the debt-statistics sub-item
       if (!isAdmin && isPMRole && item.title === 'Thống kê') {
         itemsFiltered = itemsFiltered.filter(si => si.title !== 'Thống kê công nợ');

@@ -418,6 +418,10 @@ export default function ElegantTransactionsPage() {
     overdue: number;
   } | null>(null);
 
+  // ✅ Thêm state cho pagination khách hàng
+  const [customerPage, setCustomerPage] = useState(1);
+  const customerPageSize = 20; // Hiển thị 20 khách hàng mỗi trang
+
   useEffect(() => {
     setRange(getPresetRange(period));
   }, [period]);
@@ -1169,7 +1173,7 @@ export default function ElegantTransactionsPage() {
                       >
                         <Users className="w-5 h-5 text-white" />
                       </motion.div>
-                      Thống kê theo khách hàng
+                      Thống kê theo khách hàng ({customerStats.length} khách hàng)
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6 p-6">
@@ -1180,10 +1184,11 @@ export default function ElegantTransactionsPage() {
                     ) : (
                       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                         <div className="xl:col-span-2 space-y-4">
+                          {/* Hiển thị toàn bộ khách hàng với pagination */}
                           {customerStats
                             .slice()
                             .sort((a, b) => b.total - a.total)
-                            .slice(0, 15)
+                            .slice((customerPage - 1) * customerPageSize, customerPage * customerPageSize)
                             .map((c, idx) => (
                               <motion.div key={c.name} variants={itemVariants}>
                                 <div className="p-4 rounded-xl border bg-white/80 dark:bg-slate-900/70 backdrop-blur-sm shadow-sm">
@@ -1235,6 +1240,38 @@ export default function ElegantTransactionsPage() {
                                 </div>
                               </motion.div>
                             ))}
+
+                          {/* Pagination cho khách hàng */}
+                          {customerStats.length > customerPageSize && (
+                            <div className="flex items-center justify-between p-4 bg-slate-50/80 dark:bg-slate-800/80 rounded-lg">
+                              <div className="text-sm text-slate-600 dark:text-slate-400">
+                                Hiển thị {((customerPage - 1) * customerPageSize) + 1} - {Math.min(customerPage * customerPageSize, customerStats.length)} trong tổng số {customerStats.length} khách hàng
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCustomerPage(Math.max(1, customerPage - 1))}
+                                  disabled={customerPage <= 1}
+                                  className="rounded-md"
+                                >
+                                  ← Trước
+                                </Button>
+                                <span className="text-sm font-medium px-3 py-1 bg-white/80 dark:bg-slate-800/80 rounded-md">
+                                  {customerPage} / {Math.ceil(customerStats.length / customerPageSize)}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCustomerPage(Math.min(Math.ceil(customerStats.length / customerPageSize), customerPage + 1))}
+                                  disabled={customerPage >= Math.ceil(customerStats.length / customerPageSize)}
+                                  className="rounded-md"
+                                >
+                                  Sau →
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div className="space-y-4">
                           <div className="p-4 rounded-xl border bg-white/80 dark:bg-slate-900/70 backdrop-blur-sm shadow-sm">

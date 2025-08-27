@@ -1,5 +1,5 @@
 // hooks/usePermission.ts
-import { useContext } from "react";
+import { useContext, useState, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import {
   PermissionCheckParams,
@@ -10,6 +10,53 @@ import {
 
 export const usePermission = () => {
   const { user } = useContext(AuthContext);
+  const [dbPermissions, setDbPermissions] = useState<Permission[]>([]);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
+
+  // Load permissions from database for view role
+  const loadDbPermissions = async () => {
+    if (!user) return;
+    
+    // Chỉ load từ database nếu user có role "view"
+    const hasViewRole = user.roles?.some((role: Role) => role.name === "view");
+    if (!hasViewRole) return;
+
+    setIsLoadingPermissions(true);
+    try {
+      // Lấy token từ localStorage và parse nếu cần
+      let token = localStorage.getItem('access_token');
+      if (token) {
+        try {
+          // Nếu token được lưu dưới dạng JSON string, parse nó
+          const parsed = JSON.parse(token);
+          token = parsed;
+        } catch {
+          // Nếu không phải JSON, sử dụng trực tiếp
+          token = token;
+        }
+      }
+
+      const response = await fetch(`/api/users/${user.id}/permissions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDbPermissions(data.permissions || []);
+      }
+    } catch (error) {
+      console.error('Error loading permissions from database:', error);
+    } finally {
+      setIsLoadingPermissions(false);
+    }
+  };
+
+  // Load permissions khi component mount hoặc user thay đổi
+  useEffect(() => {
+    loadDbPermissions();
+  }, [user?.id]);
 
   // Helper function để lấy tất cả permissions từ roles (thông qua rolePermissions)
   const getUserPermissions = (user: UserWithPermissions): Permission[] => {
@@ -44,10 +91,15 @@ export const usePermission = () => {
     const isPM = user.roles?.some((role: Role) => role.name === "PM");
     if (isPM) return true;
 
-    // Kiểm tra role "view" - chỉ cho phép action "read" và "export"
+    // Kiểm tra role "view" - sử dụng permissions từ database
     const isViewRole = user.roles?.some((role: Role) => role.name === "view");
     if (isViewRole) {
-      return action === "read" || action === "export";
+      // Kiểm tra trong database permissions
+      const hasPermission = dbPermissions.some(
+        (permission) =>
+          permission.name === departmentSlug && permission.action === action
+      );
+      return hasPermission;
     }
 
     // Kiểm tra user có role manager của department này không
@@ -95,25 +147,32 @@ export const usePermission = () => {
   // Helper function để lấy tất cả permissions của user
   const getAllUserPermissions = (): Permission[] => {
     if (!user) return [];
+    
+    // Nếu có role "view", trả về permissions từ database
+    const isViewRole = user.roles?.some((role: Role) => role.name === "view");
+    if (isViewRole) {
+      return dbPermissions;
+    }
+    
     return getUserPermissions(user);
   };
 
   // Helper function để lấy tất cả roles của user
-  const getAllUserRoles = () => {
+  const getAllUserRoles = (): Role[] => {
     return user?.roles || [];
   };
 
-  // Helper function để lấy tất cả departments của user
-  const getAllUserDepartments = () => {
-    return user?.departments || [];
+  // Function để refresh permissions từ database
+  const refreshPermissions = () => {
+    loadDbPermissions();
   };
 
   return {
-    user,
+  user,
     canAccess,
-    checkPermission,
     getAllUserPermissions,
-    getAllUserRoles,
-    getAllUserDepartments,
+  getAllUserRoles,
+    refreshPermissions,
+    isLoadingPermissions,
   };
 };

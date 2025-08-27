@@ -20,3 +20,5 @@ if (typeof window !== 'undefined') {
     setupAxiosInterceptors(api);
   });
 }
+
+// NOTE: Avoid setting non-safelisted headers on GET to prevent CORS preflight
