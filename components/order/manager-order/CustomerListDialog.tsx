@@ -185,13 +185,15 @@ export function CustomerListDialog({
     }
   }, [total]);
 
-  // Simplified filtering logic
+  // ✅ Enhanced filtering logic - tìm kiếm theo cả customer_name và sale_name
   const filteredItems = React.useMemo(() => {
     if (!Array.isArray(items)) return [];
     if (!searchTerm.trim()) return items;
     
+    const searchLower = searchTerm.toLowerCase().trim();
     return items.filter(item => 
-      item?.customer_name?.toLowerCase()?.includes(searchTerm.toLowerCase().trim())
+      item?.customer_name?.toLowerCase()?.includes(searchLower) ||
+      item?.sale_name?.toLowerCase()?.includes(searchLower)
     );
   }, [items, searchTerm]);
 
@@ -363,7 +365,7 @@ export function CustomerListDialog({
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <Input
-                  placeholder="🔍 Tìm kiếm khách hàng..."
+                  placeholder="🔍 Tìm kiếm khách hàng hoặc sale..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-12 h-12 border-2 border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-200 rounded-xl text-base font-medium placeholder:text-gray-400 bg-white/70 backdrop-blur transition-all duration-200"
@@ -453,6 +455,8 @@ export function CustomerListDialog({
                                 {(item.orders || 0).toLocaleString()} đơn hàng
                               </span>
                             </div>
+                            
+                            {/* ✅ Hiển thị thông tin sale nếu có */}
                             {item.sale_name && (
                               <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl border border-green-200 shadow-sm">
                                 <User className="w-4 h-4 text-green-600" />
