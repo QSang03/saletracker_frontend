@@ -18,6 +18,7 @@ export interface CampaignFilters {
   singleDate?: string;
   sort_field?: string;
   sort_order?: "asc" | "desc";
+  sort?: string; // e.g. "created_at:desc" or "start_date:desc"
 }
 
 export interface CampaignResponse {

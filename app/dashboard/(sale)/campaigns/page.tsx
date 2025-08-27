@@ -93,18 +93,19 @@ const useCampaignData = (
       setLoading(true);
       setError(null);
       
+      // ✅ Default backend sort to align with modal data recency
+      const defaultSort = "start_date:desc,end_date:desc,created_at:desc";
+      const requestFilters = {
+        ...paginationState.filters,
+        page: paginationState.page,
+        pageSize: paginationState.pageSize,
+        sort: paginationState.filters?.sort || defaultSort,
+      } as any;
+
       // ✅ GỌI API KHÁC TÙY THEO isArchived
       const response = isArchived 
-        ? await campaignAPI.getAllArchived({
-            ...paginationState.filters,
-            page: paginationState.page,
-            pageSize: paginationState.pageSize,
-          })
-        : await campaignAPI.getAll({
-            ...paginationState.filters,
-            page: paginationState.page,
-            pageSize: paginationState.pageSize,
-          });
+        ? await campaignAPI.getAllArchived(requestFilters)
+        : await campaignAPI.getAll(requestFilters);
 
       // Apply a stable default sort so initial view matches expected order
       const list = (response.data || []).slice();
@@ -249,7 +250,7 @@ export default function CampaignPage() {
   // Event handlers với pagination sync
   const handleFilterChange = useCallback(
     (filters: Filters) => {
-      const campaignFilters: CampaignFilters = {
+  const campaignFilters: CampaignFilters = {
         search: filters.search?.trim() || undefined,
         campaign_types:
           filters.categories.length > 0
@@ -272,8 +273,9 @@ export default function CampaignPage() {
             ? filters.singleDate
             : filters.singleDate.toISOString().split("T")[0]
           : undefined,
-        page: 1, // ✅ ALWAYS reset to page 1 when filters change
+  page: 1, // ✅ ALWAYS reset to page 1 when filters change
   pageSize: pagination.pageSize,
+  sort: "start_date:desc,end_date:desc,created_at:desc",
       };
       
       // ✅ UPDATE: Use pagination hook
