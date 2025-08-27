@@ -6,6 +6,17 @@ interface CustomerCountFilters {
   toDate?: string;
   employeeId?: number;
   departmentId?: number;
+  // Full order filters
+  search?: string;
+  status?: string;
+  date?: string;
+  dateRange?: { start: string; end: string };
+  employee?: string;
+  employees?: string;
+  departments?: string;
+  products?: string;
+  warningLevel?: string;
+  quantity?: number | string;
 }
 
 export const useCustomerCount = (filters?: CustomerCountFilters) => {
@@ -24,6 +35,18 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
       if (filters?.toDate) url.searchParams.set('toDate', filters.toDate);
       if (filters?.employeeId) url.searchParams.set('employeeId', filters.employeeId.toString());
       if (filters?.departmentId) url.searchParams.set('departmentId', filters.departmentId.toString());
+      if (filters?.search) url.searchParams.set('search', String(filters.search));
+      if (filters?.status) url.searchParams.set('status', String(filters.status));
+      if (filters?.date) url.searchParams.set('date', String(filters.date));
+      if (filters?.dateRange && filters.dateRange.start && filters.dateRange.end) {
+        url.searchParams.set('dateRange', JSON.stringify(filters.dateRange));
+      }
+      if (filters?.employee) url.searchParams.set('employee', String(filters.employee));
+      if (filters?.employees) url.searchParams.set('employees', String(filters.employees));
+      if (filters?.departments) url.searchParams.set('departments', String(filters.departments));
+      if (filters?.products) url.searchParams.set('products', String(filters.products));
+      if (filters?.warningLevel) url.searchParams.set('warningLevel', String(filters.warningLevel));
+      if (filters?.quantity !== undefined) url.searchParams.set('quantity', String(filters.quantity));
 
       const response = await fetch(url.toString(), {
         headers: {

@@ -16,6 +16,8 @@ export interface CampaignFilters {
   employees?: string[];
   departments?: string[];
   singleDate?: string;
+  sort_field?: string;
+  sort_order?: "asc" | "desc";
 }
 
 export interface CampaignResponse {

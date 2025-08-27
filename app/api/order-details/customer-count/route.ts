@@ -29,17 +29,16 @@ export async function GET(request: NextRequest) {
 
     // Lấy query parameters từ request
     const { searchParams } = new URL(request.url);
-    const fromDate = searchParams.get('fromDate');
-    const toDate = searchParams.get('toDate');
-    const employeeId = searchParams.get('employeeId');
-    const departmentId = searchParams.get('departmentId');
-
-    // Tạo URL với query parameters
+    // Forward all supported filters
     const apiUrl = new URL(`${apiBaseUrl}/order-details/customer-count`);
-    if (fromDate) apiUrl.searchParams.set('fromDate', fromDate);
-    if (toDate) apiUrl.searchParams.set('toDate', toDate);
-    if (employeeId) apiUrl.searchParams.set('employeeId', employeeId);
-    if (departmentId) apiUrl.searchParams.set('departmentId', departmentId);
+    const forwardKeys = [
+      'fromDate','toDate','employeeId','departmentId',
+      'search','status','date','dateRange','employee','employees','departments','products','warningLevel','quantity'
+    ];
+    for (const key of forwardKeys) {
+      const v = searchParams.get(key);
+      if (v !== null) apiUrl.searchParams.set(key, v);
+    }
 
     console.log('📡 Calling backend URL:', apiUrl.toString());
     console.log('🔑 Token length:', token.length);

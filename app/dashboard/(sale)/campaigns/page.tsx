@@ -106,7 +106,27 @@ const useCampaignData = (
             pageSize: paginationState.pageSize,
           });
 
-      setCampaigns(response.data || []);
+      // Apply a stable default sort so initial view matches expected order
+      const list = (response.data || []).slice();
+      const sorted = list.sort((a, b) => {
+        // Prefer start_date desc when present
+        const ad = a.start_date ? new Date(a.start_date).getTime() : 0;
+        const bd = b.start_date ? new Date(b.start_date).getTime() : 0;
+        if (ad !== bd) return bd - ad;
+        // Then end_date desc
+        const ae = a.end_date ? new Date(a.end_date).getTime() : 0;
+        const be = b.end_date ? new Date(b.end_date).getTime() : 0;
+        if (ae !== be) return be - ae;
+        // Then created_at desc
+        const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bc = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (ac !== bc) return bc - ac;
+        // Finally by customer_count desc
+        const acc = a.customer_count ?? 0;
+        const bcc = b.customer_count ?? 0;
+        return bcc - acc;
+      });
+      setCampaigns(sorted);
       setTotalCount(response.total || 0);
       setStats(response.stats || DEFAULT_STATS);
     } catch (error: any) {
@@ -253,13 +273,13 @@ export default function CampaignPage() {
             : filters.singleDate.toISOString().split("T")[0]
           : undefined,
         page: 1, // ✅ ALWAYS reset to page 1 when filters change
-        pageSize: pagination.pageSize,
+  pageSize: pagination.pageSize,
       };
       
       // ✅ UPDATE: Use pagination hook
       pagination.setFilters(campaignFilters);
     },
-    [pagination]
+  [pagination]
   );
 
   const handleResetFilter = useCallback(() => {
@@ -269,14 +289,16 @@ export default function CampaignPage() {
       localStorage.setItem(PAGE_SIZE_KEY, defaultPageSize.toString());
     }
     
-    // ✅ Reset pagination state với pageSize mặc định
+  // ✅ Reset pagination state với pageSize mặc định
     pagination.setPageSize(defaultPageSize);
     pagination.setFilters({});
     pagination.setPage(1);
+  // ✅ Force reload after reset to avoid stale state preventing next filters
+  loadCampaigns();
     
     // ✅ Reset department selection
     handleDepartmentChange([]);
-  }, [pagination, handleDepartmentChange]);
+  }, [pagination, handleDepartmentChange, loadCampaigns]);
 
   const handleDepartmentFilterChange = useCallback(
     (departments: (string | number)[]) => {

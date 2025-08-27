@@ -147,7 +147,31 @@ function ManagerOrderContent() {
     toDate: filters.dateRange?.end,
     employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
     departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
-  }), [filters.dateRange?.start, filters.dateRange?.end, filters.employees, filters.departments]);
+    // Forward all filters from manager
+    search: filters.search,
+    status: filters.status,
+    date: filters.date,
+    dateRange: filters.dateRange,
+    employee: filters.employee,
+    employees: filters.employees,
+    departments: filters.departments,
+    products: filters.products,
+    warningLevel: filters.warningLevel,
+    quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
+  }), [
+    filters.dateRange?.start,
+    filters.dateRange?.end,
+    filters.employees,
+    filters.departments,
+    filters.search,
+    filters.status,
+    filters.date,
+    JSON.stringify(filters.dateRange),
+    filters.employee,
+    filters.products,
+    filters.warningLevel,
+    filters.quantity,
+  ]);
 
   const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount(customerCountFilters);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -1031,14 +1055,25 @@ function ManagerOrderContent() {
       )}
 
       {/* Dialog danh sách khách hàng */}
-      <CustomerListDialog
+    <CustomerListDialog
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
         filters={{
-          fromDate: filters.dateRange?.start,
-          toDate: filters.dateRange?.end,
-          employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
-          departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+      fromDate: filters.dateRange?.start,
+      toDate: filters.dateRange?.end,
+      employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
+      departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+      // Forward all manager filters so list matches
+      search: filters.search,
+      status: filters.status,
+      date: filters.date,
+      dateRange: filters.dateRange,
+      employee: filters.employee,
+      employees: filters.employees,
+      departments: filters.departments,
+      products: filters.products,
+      warningLevel: filters.warningLevel,
+      quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
         }}
         onSelectCustomer={(name: string) => {
           setCustomerDialogOpen(false);

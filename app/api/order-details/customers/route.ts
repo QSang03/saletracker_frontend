@@ -20,9 +20,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'API URL not configured' }, { status: 500 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const apiUrl = new URL(`${apiBaseUrl}/order-details/customers`);
-    searchParams.forEach((value, key) => apiUrl.searchParams.set(key, value));
+  const { searchParams } = new URL(request.url);
+  const apiUrl = new URL(`${apiBaseUrl}/order-details/customers`);
+  // Forward all query params
+  searchParams.forEach((value, key) => apiUrl.searchParams.set(key, value));
 
     const response = await fetch(apiUrl.toString(), {
       method: 'GET',

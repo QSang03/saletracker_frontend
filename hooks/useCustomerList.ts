@@ -13,6 +13,17 @@ export interface CustomerListFilters {
   toDate?: string;
   employeeId?: number;
   departmentId?: number;
+  // Full order filters
+  search?: string;
+  status?: string;
+  date?: string;
+  dateRange?: { start: string; end: string };
+  employee?: string;
+  employees?: string;
+  departments?: string;
+  products?: string;
+  warningLevel?: string;
+  quantity?: number | string;
 }
 
 export function useCustomerList(
@@ -56,6 +67,18 @@ export function useCustomerList(
       if (filtersToUse?.toDate) url.searchParams.set('toDate', filtersToUse.toDate);
       if (filtersToUse?.employeeId) url.searchParams.set('employeeId', String(filtersToUse.employeeId));
       if (filtersToUse?.departmentId) url.searchParams.set('departmentId', String(filtersToUse.departmentId));
+      if (filtersToUse?.search) url.searchParams.set('search', String(filtersToUse.search));
+      if (filtersToUse?.status) url.searchParams.set('status', String(filtersToUse.status));
+      if (filtersToUse?.date) url.searchParams.set('date', String(filtersToUse.date));
+      if (filtersToUse?.dateRange && filtersToUse.dateRange.start && filtersToUse.dateRange.end) {
+        url.searchParams.set('dateRange', JSON.stringify(filtersToUse.dateRange));
+      }
+      if (filtersToUse?.employee) url.searchParams.set('employee', String(filtersToUse.employee));
+      if (filtersToUse?.employees) url.searchParams.set('employees', String(filtersToUse.employees));
+      if (filtersToUse?.departments) url.searchParams.set('departments', String(filtersToUse.departments));
+      if (filtersToUse?.products) url.searchParams.set('products', String(filtersToUse.products));
+      if (filtersToUse?.warningLevel) url.searchParams.set('warningLevel', String(filtersToUse.warningLevel));
+      if (filtersToUse?.quantity !== undefined) url.searchParams.set('quantity', String(filtersToUse.quantity));
 
       const res = await fetch(url.toString(), {
         headers: {

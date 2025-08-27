@@ -392,6 +392,15 @@ export default function CompleteScheduleApp() {
   const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
   const [editingSchedule, setEditingSchedule] =
     useState<DepartmentSchedule | null>(null);
+  // Focus target for auto-scroll/highlight
+  const [focusTarget, setFocusTarget] = useState<
+    | {
+        date: string; // YYYY-MM-DD
+        time?: string; // HH:mm (start of slot)
+        scheduleId?: string;
+      }
+    | null
+  >(null);
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -493,6 +502,49 @@ export default function CompleteScheduleApp() {
     setBulkPreview({ weeks: [], months: [] });
   }, []);
 
+  // Utils for focus/scroll
+  const formatDateStr = useCallback((d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  // Auto-scroll to target cell when focusTarget or view changes
+  useEffect(() => {
+    if (!focusTarget) return;
+
+    const tryScroll = () => {
+      if (activeView === "week" && focusTarget.time) {
+        const el = document.querySelector(
+          `[data-slot-date="${focusTarget.date}"][data-time="${focusTarget.time}"]`
+        ) as HTMLElement | null;
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      } else if (activeView === "month") {
+        const el = document.querySelector(
+          `[data-day-date="${focusTarget.date}"]`
+        ) as HTMLElement | null;
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }
+    };
+
+    // Run after paint
+    const t1 = setTimeout(tryScroll, 50);
+    const t2 = setTimeout(tryScroll, 200); // retry once more in case of late paint
+
+    // Clear highlight after a moment
+    const clear = setTimeout(() => setFocusTarget(null), 3500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(clear);
+    };
+  }, [focusTarget, activeView, currentWeek, currentMonth]);
+
   const canOpenBulk = useMemo(() => {
     if (!selectedDepartment || !isDepartmentEditable(selectedDepartment))
       return false;
@@ -573,6 +625,63 @@ export default function CompleteScheduleApp() {
       return matchesSearch && matchesStatus && matchesType && matchesDepartment;
     });
   }, [schedules, searchTerm, statusFilter, typeFilter, visibleDepartments]);
+
+  // Find earliest occurrence date (and time for weekly) of a schedule
+  const getFirstOccurrence = useCallback(
+    (schedule: DepartmentSchedule): { date: Date; time?: string } | null => {
+      if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
+        const cfg = schedule.schedule_config as DailyDatesConfig;
+        if (!cfg.dates.length) return null;
+        // Pick earliest by year/month/day
+        const sorted = [...cfg.dates].sort((a, b) => {
+          const ay = a.year ?? new Date().getFullYear();
+          const by = b.year ?? new Date().getFullYear();
+          if (ay !== by) return ay - by;
+          if (a.month !== b.month) return a.month - b.month;
+          return a.day_of_month - b.day_of_month;
+        });
+        const d0 = sorted[0];
+        const y = d0.year ?? new Date().getFullYear();
+        return { date: new Date(y, d0.month - 1, d0.day_of_month) };
+      } else {
+        const cfg = schedule.schedule_config as HourlySlotsConfig;
+        if (!cfg.slots.length) return null;
+        // Prefer specific_date slots first, else next upcoming in current week by day_of_week
+        const specific = cfg.slots
+          .filter((s) => !!s.applicable_date)
+          .sort((a, b) => a.applicable_date!.localeCompare(b.applicable_date!));
+        if (specific.length) {
+          const d = new Date(specific[0].applicable_date!);
+          return { date: d, time: specific[0].start_time };
+        }
+        // Fall back: pick the smallest day_of_week then use current week date
+        const generic = [...cfg.slots].sort((a, b) => a.day_of_week - b.day_of_week);
+        const s0 = generic[0];
+        const week = getWeekDates();
+        const uiIdx = dowToUi(s0.day_of_week); // 0..6
+        return { date: week[uiIdx], time: s0.start_time };
+      }
+    }, [getWeekDates]
+  );
+
+  const focusScheduleInCalendar = useCallback(
+    (schedule: DepartmentSchedule) => {
+      const occ = getFirstOccurrence(schedule);
+      if (!occ) return;
+      const dateStr = formatDateStr(occ.date);
+      if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
+        setActiveView("month");
+        // Ensure currentMonth matches the occurrence month
+        setCurrentMonth(new Date(occ.date.getFullYear(), occ.date.getMonth(), 1));
+        setFocusTarget({ date: dateStr, scheduleId: schedule.id });
+      } else {
+        setActiveView("week");
+        // Ensure currentWeek covers the occurrence date
+        setCurrentWeek(new Date(occ.date));
+        setFocusTarget({ date: dateStr, time: occ.time, scheduleId: schedule.id });
+      }
+    }, [getFirstOccurrence, formatDateStr, setActiveView, setCurrentMonth, setCurrentWeek, setFocusTarget]
+  );
 
   const getSchedulesForDay = useCallback(
     (date: number, month: number, year: number) => {
@@ -3047,6 +3156,8 @@ export default function CompleteScheduleApp() {
                                 return (
                                   <div
                                     key={dayIndex}
+                                    data-slot-date={specificDate}
+                                    data-time={time}
                                     className={`p-1 border-r last:border-r-0 min-h-[40px] relative
                                     ${
                                       dayIndex === 6 // Chủ nhật
@@ -3103,6 +3214,12 @@ export default function CompleteScheduleApp() {
                                         : selectedDepartment && !isConflicted
                                         ? "hover:bg-gray-50 hover:border-blue-200 hover:shadow-sm"
                                         : "hover:bg-slate-50"
+                                    } ${
+                                      focusTarget &&
+                                      focusTarget.date === specificDate &&
+                                      focusTarget.time === time
+                                        ? "ring-2 ring-blue-400"
+                                        : ""
                                     }`}
                                     onMouseDown={(e) =>
                                       canInteract &&
@@ -3305,6 +3422,12 @@ export default function CompleteScheduleApp() {
                         return (
                           <div
                             key={index}
+                            data-day-date={`${currentMonth.getFullYear()}-${String(
+                              currentMonth.getMonth() + 1
+                            ).padStart(2, "0")}-${String(day.date).padStart(
+                              2,
+                              "0"
+                            )}`}
                             className={`min-h-[80px] p-2 border-r border-b transition-all relative hover:shadow-sm
                               ${
                                 !day.isCurrentMonth
@@ -3336,6 +3459,16 @@ export default function CompleteScheduleApp() {
                                   : daySchedules.length > 0
                                   ? "bg-green-50 cursor-pointer hover:bg-green-100"
                                   : "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
+                              } ${
+                                focusTarget &&
+                                focusTarget.date === `${currentMonth.getFullYear()}-${String(
+                                  currentMonth.getMonth() + 1
+                                ).padStart(2, "0")}-${String(day.date).padStart(
+                                  2,
+                                  "0"
+                                )}`
+                                  ? "ring-2 ring-blue-400"
+                                  : ""
                               }`}
                             onMouseDown={(e) => {
                               if (canInteract) {
@@ -3776,6 +3909,7 @@ export default function CompleteScheduleApp() {
                                     ? "opacity-60"
                                     : ""
                                 }`}
+                                onClick={() => focusScheduleInCalendar(schedule)}
                               >
                                 <CardContent className="p-3">
                                   <div className="flex items-start justify-between mb-2">
