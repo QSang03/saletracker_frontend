@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -41,15 +41,26 @@ const AddToBlacklistModal: React.FC<AddToBlacklistModalProps> = ({
   onConfirm,
   loading = false,
 }) => {
-  const [reason, setReason] = useState("");
+  // Quick reason type: 'internal' | 'supplier' | 'custom'
+  const [reasonType, setReasonType] = useState<"internal" | "supplier" | "custom">("custom");
+  const [customReason, setCustomReason] = useState("");
+
+  // Final reason sent to backend based on selection
+  const reason = useMemo(() => {
+    if (reasonType === "internal") return "nội bộ";
+    if (reasonType === "supplier") return "nhà cung cấp";
+    return customReason;
+  }, [reasonType, customReason]);
 
   const handleConfirm = () => {
     onConfirm(reason.trim() || undefined);
-    setReason("");
+  setCustomReason("");
+  setReasonType("custom");
   };
 
   const handleClose = () => {
-    setReason("");
+  setCustomReason("");
+  setReasonType("custom");
     onClose();
   };
 
@@ -240,15 +251,49 @@ const AddToBlacklistModal: React.FC<AddToBlacklistModalProps> = ({
                     Lý do (tùy chọn)
                   </Label>
 
+                  {/* Quick select reasons */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      { key: "internal", label: "Nội bộ" },
+                      { key: "supplier", label: "Nhà cung cấp" },
+                      { key: "custom", label: "Tự viết" },
+                    ].map((opt) => {
+                      const active = reasonType === (opt.key as typeof reasonType);
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => setReasonType(opt.key as typeof reasonType)}
+                          disabled={loading}
+                          className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-300 ${
+                            active
+                              ? "bg-purple-600 text-white border-purple-600 shadow"
+                              : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                          }`}
+                          aria-pressed={active}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <div className="relative group">
                     <div className="absolute inset-0 bg-gradient-to-r from-slate-200 to-purple-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
                     <div className="relative">
                       <Textarea
                         id="reason"
-                        placeholder="🤔 Nhập lý do thêm vào blacklist..."
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        disabled={loading}
+                        placeholder={
+                          reasonType === "custom"
+                            ? "🤔 Nhập lý do thêm vào blacklist..."
+                            : `Lý do: ${reason} (được chọn nhanh)`
+                        }
+                        value={reasonType === "custom" ? customReason : reason}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (reasonType === "custom") setCustomReason(val);
+                        }}
+                        disabled={loading || reasonType !== "custom"}
                         className="relative text-base border-2 border-slate-200 rounded-xl bg-white shadow-sm hover:shadow-md focus:shadow-lg transition-all duration-200 focus:border-purple-300 resize-none min-h-[120px] pl-12 pt-4"
                       />
 
@@ -261,12 +306,12 @@ const AddToBlacklistModal: React.FC<AddToBlacklistModalProps> = ({
                       <div className="absolute bottom-3 right-3 text-xs text-gray-400 bg-white/80 px-2 py-1 rounded-full border border-gray-200">
                         <span
                           className={`transition-colors duration-200 ${
-                            reason.length > 0
+                            (reason?.length || 0) > 0
                               ? "text-purple-600 font-medium"
                               : ""
                           }`}
                         >
-                          {reason.length} ký tự
+                          {(reason?.length || 0)} ký tự
                         </span>
                       </div>
                     </div>
@@ -295,7 +340,7 @@ const AddToBlacklistModal: React.FC<AddToBlacklistModalProps> = ({
                 <Button
                   onClick={handleConfirm}
                   disabled={
-                    loading || !customerId || reason.trim().length === 0
+                    loading || !customerId || (reason?.trim().length || 0) === 0
                   }
                   className="group relative overflow-hidden flex items-center gap-3 px-6 py-3 text-base font-bold bg-gradient-to-r from-purple-500 via-violet-600 to-slate-600 hover:from-purple-600 hover:via-violet-700 hover:to-slate-700 border-0 shadow-2xl hover:shadow-purple-500/50 transform hover:scale-110 hover:-translate-y-1 transition-all duration-500 ease-out rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-[180px] justify-center"
                 >

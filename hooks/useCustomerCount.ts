@@ -40,7 +40,13 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
           const url = new URL('/api/order-details/customer-count', window.location.origin);
           if (filters?.fromDate) url.searchParams.set('fromDate', filters.fromDate);
           if (filters?.toDate) url.searchParams.set('toDate', filters.toDate);
-          if (filters?.employeeId) url.searchParams.set('employeeId', String(filters.employeeId));
+          // For per-employee requests, ensure we set the employee id for THIS request
+          // Do NOT reuse filters.employeeId (that would point to the same employee across requests)
+          if (id) {
+            url.searchParams.set('employeeId', String(id));
+            // also set employees param to single id to be defensive for APIs that accept either
+            url.searchParams.set('employees', String(id));
+          }
           if (filters?.departmentId) url.searchParams.set('departmentId', String(filters.departmentId));
           if (filters?.search) url.searchParams.set('search', String(filters.search));
           if (filters?.status) url.searchParams.set('status', String(filters.status));
@@ -48,8 +54,6 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
           if (filters?.dateRange && filters.dateRange.start && filters.dateRange.end) {
             url.searchParams.set('dateRange', JSON.stringify(filters.dateRange));
           }
-          // Set employees param to single id for this request
-          url.searchParams.set('employees', id);
           if (filters?.departments) url.searchParams.set('departments', String(filters.departments));
           if (filters?.products) url.searchParams.set('products', String(filters.products));
           if (filters?.warningLevel) url.searchParams.set('warningLevel', String(filters.warningLevel));
