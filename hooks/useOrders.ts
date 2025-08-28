@@ -123,7 +123,7 @@ interface UseOrdersReturn {
   error: string | null;
 
   // ✅ Customer search navigation functions
-  performCustomerSearch: (customerName: string) => void;
+  performCustomerSearch: (customerName: string, baseFilters?: Partial<OrderFilters>) => void;
   restorePreviousState: () => Promise<void>;
   isInCustomerSearchMode: boolean;
   setIsInCustomerSearchMode: (value: boolean) => void;
@@ -1466,10 +1466,13 @@ export const useOrders = (): UseOrdersReturn => {
   );
 
   // ✅ Customer search function
+  // Allow optional baseFilters so callers can provide the exact filters that should be
+  // used as the "current" filters when starting a customer search (prevents race/stale state)
   const performCustomerSearch = useCallback(
-    (customerName: string) => {
-      const currentFilters = { ...filters };
-      setPreviousFilters(currentFilters);
+    (customerName: string, baseFilters?: Partial<OrderFilters>) => {
+      // Determine the snapshot of filters that we'll treat as the "previous" filters
+      const currentFilters = baseFilters ? { ...filters, ...baseFilters } : { ...filters };
+      setPreviousFilters(currentFilters as OrderFilters);
 
       // ✅ Trước khi push customer search state, replace current state với previousFilters info
       const currentState = getCurrentHistoryState();
@@ -1491,14 +1494,32 @@ export const useOrders = (): UseOrdersReturn => {
         setCanGoBack(true);
       });
 
-      const searchFilters = {
-        ...filters,
+      const searchFiltersPartial: Partial<OrderFilters> = {
+        ...currentFilters,
         search: customerName,
         page: 1,
       };
 
+      // Ensure we pass a complete OrderFilters object to updateFiltersAndUrl
+      const searchFiltersFull: OrderFilters = {
+        page: searchFiltersPartial.page ?? 1,
+        pageSize: (searchFiltersPartial as any).pageSize ?? filters.pageSize ?? 10,
+        search: searchFiltersPartial.search ?? "",
+        status: searchFiltersPartial.status ?? "",
+        date: searchFiltersPartial.date ?? "",
+        dateRange: searchFiltersPartial.dateRange ?? undefined,
+        employee: searchFiltersPartial.employee ?? "",
+        employees: searchFiltersPartial.employees ?? "",
+        departments: searchFiltersPartial.departments ?? "",
+        products: searchFiltersPartial.products ?? "",
+        warningLevel: searchFiltersPartial.warningLevel ?? "",
+        quantity: typeof (searchFiltersPartial as any).quantity === 'number' ? (searchFiltersPartial as any).quantity : undefined,
+        sortField: (searchFiltersPartial as any).sortField ?? null,
+        sortDirection: (searchFiltersPartial as any).sortDirection ?? null,
+      };
+
       // Update filters and URL using the new mechanism with customer search flag
-      updateFiltersAndUrl(searchFilters, false, true, currentFilters);
+      updateFiltersAndUrl(searchFiltersFull, false, true, searchFiltersFull);
     },
     [filters, updateFiltersAndUrl]
   );

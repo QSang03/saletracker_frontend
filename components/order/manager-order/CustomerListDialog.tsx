@@ -142,7 +142,14 @@ export function CustomerListDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   filters?: CustomerListFilters;
-  onSelectCustomer?: (name: string) => void;
+  // changed: pass customerName, optional saleName/saleId and the full applied filters + modal state
+  onSelectCustomer?: (payload: {
+    customerName: string;
+    saleName?: string;
+    saleId?: number;
+    appliedFilters?: CustomerListFilters;
+    modalState?: { page: number; pageSize: number; searchTerm: string };
+  }) => void;
 }) {
   const { 
     items = [], 
@@ -469,10 +476,16 @@ export function CustomerListDialog({
                         </div>
                         
                         <Button 
-                          onClick={() => onSelectCustomer?.(item.customer_name)}
+                          onClick={() => onSelectCustomer?.({
+                            customerName: item.customer_name,
+                            saleName: item.sale_name,
+                            saleId: item.sale_id,
+                            appliedFilters: filters,
+                            modalState: { page, pageSize, searchTerm }
+                          })}
                           className="flex-shrink-0 flex items-center whitespace-nowrap bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white h-12 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 font-semibold"
                         >
-                                                    <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-2 whitespace-nowrap">
                             <Eye className="w-4 h-4" />
                             <span>Xem đơn hàng</span>
                           </span>

@@ -1075,10 +1075,45 @@ function ManagerOrderContent() {
       warningLevel: filters.warningLevel,
       quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
         }}
-        onSelectCustomer={(name: string) => {
+        onSelectCustomer={(payload) => {
+          // Close dialog
           setCustomerDialogOpen(false);
-          // Điều hướng nhanh bằng search theo tên khách hàng có sẵn
-          performCustomerSearch(name);
+
+          // Build a single merged filters object from modal-applied filters + sale info
+          const mergedBase: Partial<OrderFilters> = {};
+
+          if (payload.appliedFilters) {
+            const af = payload.appliedFilters;
+            mergedBase.search = af.search ?? undefined;
+            mergedBase.status = af.status ?? undefined;
+            mergedBase.date = af.date ?? undefined;
+            mergedBase.dateRange = af.dateRange ?? undefined;
+            mergedBase.employees = af.employees ?? undefined;
+            mergedBase.employee = af.employee ?? undefined;
+            mergedBase.departments = af.departments ?? undefined;
+            mergedBase.products = af.products ?? undefined;
+            mergedBase.warningLevel = af.warningLevel ?? undefined;
+            if (af.quantity !== undefined) mergedBase.quantity = typeof af.quantity === 'string' ? Number(af.quantity) : af.quantity;
+          }
+
+          // Ensure sale is represented in employees (CSV of ids) so the select shows it as selected
+          if (payload.saleId !== undefined) {
+            mergedBase.employees = String(payload.saleId);
+            // prefer employees over employee field
+            mergedBase.employee = undefined;
+          } else if (payload.saleName) {
+            // if we don't have id, set employee name as fallback
+            mergedBase.employee = payload.saleName;
+          }
+
+          // Always reset to first page when applying modal filters
+          mergedBase.page = 1;
+
+          // Apply merged filters once (updates URL and internal state)
+          setFilters(mergedBase);
+
+          // Trigger customer search and pass the exact base filters so performCustomerSearch sees same state
+          performCustomerSearch(payload.customerName, mergedBase);
         }}
       />
     </div>

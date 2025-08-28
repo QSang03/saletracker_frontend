@@ -920,6 +920,47 @@ export default function PaginatedTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPageSize, isRestoring]);
 
+  // If parent signals a restoring/resetting state, force clear internal filters UI immediately
+  useEffect(() => {
+    if (isRestoring) {
+      const reset: Filters = {
+        search: "",
+        departments: [],
+        roles: [],
+        statuses: [],
+        zaloLinkStatuses: [],
+        categories: [],
+        brands: [],
+        warningLevels: [],
+        quantity: defaultQuantity || 1,
+        conversationType: [],
+        dateRange: { from: undefined, to: undefined },
+        singleDate: undefined,
+        employees: [],
+        sort: undefined,
+      };
+
+      // Force update internal UI state
+      setFilters(reset);
+      setHasUserInteracted(false);
+
+      // Notify parent immediately so external state can sync as well
+      if (onFilterChange) {
+        try {
+          const json = JSON.stringify(reset);
+          if (lastFiltersRef.current !== json) {
+            lastFiltersRef.current = json;
+            onFilterChange(reset);
+          }
+        } catch (e) {
+          // ignore
+          onFilterChange(reset);
+        }
+      }
+    }
+    // Only trigger when isRestoring flips
+  }, [isRestoring, defaultQuantity, onFilterChange]);
+
   // State cho input "đi tới trang"
   const [gotoPageInput, setGotoPageInput] = useState<string>("");
   useEffect(() => {
