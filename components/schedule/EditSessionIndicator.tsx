@@ -31,7 +31,10 @@ export const EditSessionIndicator = ({ session, className = "" }: EditSessionInd
           >
             <div className="flex items-center gap-2">
               <Avatar className="w-6 h-6 border border-white">
-                <AvatarImage src={`/api/avatars/${session.userId}`} alt={session.userName} />
+                <AvatarImage 
+                  src={session.avatar_zalo || `/api/avatars/${session.userId}`} 
+                  alt={session.userName} 
+                />
                 <AvatarFallback className={`${departmentColor.bg} text-white text-xs`}>
                   {session.userName.charAt(0).toUpperCase()}
                 </AvatarFallback>

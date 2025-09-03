@@ -72,7 +72,10 @@ export const EditActivityToast = ({
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
-          <AvatarImage src={`/api/avatars/${userId}`} alt={fixedUserName} />
+                          <AvatarImage 
+                  src={editSessions[0]?.avatar_zalo || `/api/avatars/${userId}`} 
+                  alt={fixedUserName} 
+                />
           <AvatarFallback className={`${departmentColor.bg} text-white text-sm font-medium`}>
             {fixedUserName && fixedUserName.length > 0 ? fixedUserName.charAt(0).toUpperCase() : 'U'}
           </AvatarFallback>

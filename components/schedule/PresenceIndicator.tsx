@@ -40,7 +40,10 @@ export const PresenceIndicator = ({ presence, isEditing = false, className = "" 
           >
             <div className="relative">
               <Avatar className="w-8 h-8 border-2 border-white shadow-md">
-                <AvatarImage src={`/api/avatars/${presence.userId}`} alt={fixedUserName} />
+                <AvatarImage 
+                  src={presence.avatar_zalo || `/api/avatars/${presence.userId}`} 
+                  alt={fixedUserName} 
+                />
                 <AvatarFallback className={`${departmentColor.bg} text-white text-xs font-medium`}>
                   {fixedUserName.charAt(0).toUpperCase()}
                 </AvatarFallback>

@@ -918,14 +918,18 @@ export default function CompleteScheduleApp() {
 
       let newDays: SelectedDay[];
       if (existingIndex !== -1) {
+        // ✅ THÊM: Nếu đã chọn rồi thì xóa đi (toggle)
         newDays = currentSelections.days.filter(
           (_, index) => index !== existingIndex
         );
+        toast.success("Đã xóa ngày này khỏi lịch");
       } else {
+        // ✅ THÊM: Nếu chưa chọn thì thêm vào
         newDays = [
           ...currentSelections.days,
           { date, month, year, department_id: selectedDepartment },
         ];
+        toast.success("Đã thêm ngày này vào lịch");
       }
 
       updateDepartmentSelections(selectedDepartment, {
@@ -2188,7 +2192,30 @@ export default function CompleteScheduleApp() {
         if (otherUserId === user?.id) {
           console.log('[ScheduleApp] User clicking on own selected cell, clearing it');
           const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
-          clearMySelections('explicit', [fieldId]);
+          
+          // Xóa selection
+          const currentSelections = getCurrentDepartmentSelections();
+          const dayOfWeek = uiToDow(dayIndex);
+          const newTimeSlots = currentSelections.timeSlots.filter(
+            (slot) =>
+              !(slot.day_of_week === dayOfWeek &&
+                slot.start_time === time &&
+                (!slot.applicable_date ||
+                  !specificDate ||
+                  slot.applicable_date === specificDate))
+          );
+          
+          updateDepartmentSelections(selectedDepartment, {
+            ...currentSelections,
+            timeSlots: newTimeSlots,
+          });
+          
+          // Clear edit session
+          if (clearMySelections) {
+            clearMySelections('explicit', [fieldId]);
+          }
+          
+          toast.success("Đã xóa ô này khỏi lịch");
           return;
         }
         
@@ -2377,6 +2404,7 @@ export default function CompleteScheduleApp() {
           userName: (user.fullName || user.nickName || user.username || 'Unknown').replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống'),
           departmentId: user.departments?.[0]?.id || 0,
           departmentName: user.departments?.[0]?.name || 'Unknown',
+          avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
           position: { 
             x: e.clientX, 
             y: e.clientY,
@@ -2425,6 +2453,7 @@ export default function CompleteScheduleApp() {
           userName: user.fullName || user.nickName || user.username || 'Unknown',
           departmentId: user.departments?.[0]?.id || 0,
           departmentName: user.departments?.[0]?.name || 'Unknown',
+          avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
           position: { 
             x: e.clientX, 
             y: e.clientY,
@@ -2452,6 +2481,7 @@ export default function CompleteScheduleApp() {
             userName: user.fullName || user.nickName || user.username || 'Unknown',
             departmentId: user.departments?.[0]?.id || 0,
             departmentName: user.departments?.[0]?.name || 'Unknown',
+            avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
             position: { 
               x: e.clientX, 
               y: e.clientY,
@@ -2488,6 +2518,7 @@ export default function CompleteScheduleApp() {
         userName: user.fullName || user.nickName || user.username || 'Unknown',
         departmentId: user.departments?.[0]?.id || 0,
         departmentName: user.departments?.[0]?.name || 'Unknown',
+        avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
         position: { 
           x: 0, 
           y: 0,
@@ -3968,6 +3999,37 @@ export default function CompleteScheduleApp() {
                                         return;
                                       }
                                       
+                                      // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ô này thì xóa nó
+                                      if (isSelectedByCurrentDept && selectedDepartment) {
+                                        console.log('[ScheduleApp] User clicking on own selected cell, clearing it');
+                                        const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
+                                        
+                                        // Xóa selection
+                                        const currentSelections = getCurrentDepartmentSelections();
+                                        const dayOfWeek = uiToDow(dayIndex);
+                                        const newTimeSlots = currentSelections.timeSlots.filter(
+                                          (slot) =>
+                                            !(slot.day_of_week === dayOfWeek &&
+                                              slot.start_time === time &&
+                                              (!slot.applicable_date ||
+                                                !specificDate ||
+                                                slot.applicable_date === specificDate))
+                                        );
+                                        
+                                        updateDepartmentSelections(selectedDepartment, {
+                                          ...currentSelections,
+                                          timeSlots: newTimeSlots,
+                                        });
+                                        
+                                        // Clear edit session
+                                        if (clearMySelections) {
+                                          clearMySelections('explicit', [fieldId]);
+                                        }
+                                        
+                                        toast.success("Đã xóa ô này khỏi lịch");
+                                        return;
+                                      }
+                                      
                                       // Check if field is locked by another user
                                       const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
                                       if (isFieldLocked(fieldId)) {
@@ -4316,6 +4378,34 @@ export default function CompleteScheduleApp() {
                                   return;
                                 }
                                 
+                                // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
+                                if (isSelectedByCurrentDept && selectedDepartment) {
+                                  console.log('[ScheduleApp] User clicking on own selected day, clearing it');
+                                  
+                                  // Xóa selection
+                                  const currentSelections = getCurrentDepartmentSelections();
+                                  const newDays = currentSelections.days.filter(
+                                    (d) =>
+                                      !(d.date === day.date &&
+                                        d.month === currentMonth.getMonth() &&
+                                        d.year === currentMonth.getFullYear())
+                                  );
+                                  
+                                  updateDepartmentSelections(selectedDepartment, {
+                                    ...currentSelections,
+                                    days: newDays,
+                                  });
+                                  
+                                  // Clear edit session
+                                  const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                                  if (clearMySelections) {
+                                    clearMySelections('explicit', [fieldId]);
+                                  }
+                                  
+                                  toast.success("Đã xóa ngày này khỏi lịch");
+                                  return;
+                                }
+                                
                                 handleDayMouseDown(
                                   day.date,
                                   day.isCurrentMonth,
@@ -4344,6 +4434,34 @@ export default function CompleteScheduleApp() {
                                 // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại
                                 if (daySchedules.length > 0) {
                                   toast.error("Ngày này đã có lịch hoạt động, không thể chỉnh sửa");
+                                  return;
+                                }
+                                
+                                // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
+                                if (isSelectedByCurrentDept && selectedDepartment) {
+                                  console.log('[ScheduleApp] User clicking on own selected day, clearing it');
+                                  
+                                  // Xóa selection
+                                  const currentSelections = getCurrentDepartmentSelections();
+                                  const newDays = currentSelections.days.filter(
+                                    (d) =>
+                                      !(d.date === day.date &&
+                                        d.month === currentMonth.getMonth() &&
+                                        d.year === currentMonth.getFullYear())
+                                  );
+                                  
+                                  updateDepartmentSelections(selectedDepartment, {
+                                    ...currentSelections,
+                                    days: newDays,
+                                  });
+                                  
+                                  // Clear edit session
+                                  const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                                  if (clearMySelections) {
+                                    clearMySelections('explicit', [fieldId]);
+                                  }
+                                  
+                                  toast.success("Đã xóa ngày này khỏi lịch");
                                   return;
                                 }
                                 

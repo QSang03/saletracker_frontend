@@ -96,6 +96,7 @@ export const useScheduleCollaboration = (roomId: string) => {
       userId: user.id,
       userName: fixEncoding(user.fullName || user.nickName || user.username || 'Unknown'),
       departmentId: user.departments?.[0]?.id || 0,
+      avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
       fieldId,
       fieldType,
       coordinates,
@@ -179,6 +180,7 @@ export const useScheduleCollaboration = (roomId: string) => {
         userId: user.id,
         userName: fixEncoding(user.fullName || user.nickName || user.username || 'Unknown'),
         departmentId: user.departments?.[0]?.id || 0,
+        avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
         fieldId,
         content,
         selection,

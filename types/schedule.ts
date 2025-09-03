@@ -78,6 +78,7 @@ export interface SchedulePresence {
   userName: string;
   departmentId: number;
   departmentName: string;
+  avatar_zalo?: string; // ✅ THÊM: Avatar Zalo của user
   position: {
     x: number;
     y: number;
@@ -98,6 +99,7 @@ export interface ScheduleEditSession {
   userId: number;
   userName: string;
   departmentId: number;
+  avatar_zalo?: string; // ✅ THÊM: Avatar Zalo của user
   fieldId: string;
   fieldType: 'calendar_cell' | 'form_field';
   coordinates?: {
@@ -116,6 +118,7 @@ export interface SchedulePreviewPatch {
   userId: number;
   userName: string;
   departmentId: number;
+  avatar_zalo?: string; // ✅ THÊM: Avatar Zalo của user
   fieldId: string;
   content: string;
   selection?: {

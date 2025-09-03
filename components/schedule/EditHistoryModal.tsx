@@ -114,7 +114,10 @@ export const EditHistoryModal = ({
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center gap-3">
               <Avatar className="w-12 h-12 border-2 border-white shadow-sm">
-                <AvatarImage src={`/api/avatars/${userId}`} alt={fixedUserName} />
+                <AvatarImage 
+                  src={editSessions[0]?.avatar_zalo || `/api/avatars/${userId}`} 
+                  alt={fixedUserName} 
+                />
                 <AvatarFallback className={`${departmentColor.bg} text-white text-lg font-medium`}>
                   {fixedUserName.charAt(0).toUpperCase()}
                 </AvatarFallback>

@@ -33,7 +33,10 @@ export const LivePreview = ({ patch, currentValue, className = "" }: LivePreview
       {/* Typing indicator */}
       <div className="absolute -top-6 left-0 flex items-center gap-2">
         <Avatar className="w-4 h-4 border border-white">
-          <AvatarImage src={`/api/avatars/${patch.userId}`} alt={patch.userName} />
+                          <AvatarImage 
+                  src={patch.avatar_zalo || `/api/avatars/${patch.userId}`} 
+                  alt={patch.userName} 
+                />
           <AvatarFallback className={`${departmentColor.bg} text-white text-xs`}>
             {patch.userName.charAt(0).toUpperCase()}
           </AvatarFallback>
@@ -93,10 +96,11 @@ export const TypingIndicator = ({ patches, className = "" }: TypingIndicatorProp
         userId: patch.userId,
         userName: patch.userName,
         departmentId: patch.departmentId,
+        avatar_zalo: patch.avatar_zalo, // ✅ THÊM: Avatar Zalo của user
       });
     }
     return acc;
-  }, [] as Array<{ userId: number; userName: string; departmentId: number }>);
+  }, [] as Array<{ userId: number; userName: string; departmentId: number; avatar_zalo?: string }>);
 
   if (typingUsers.length === 0) return null;
 
@@ -112,7 +116,10 @@ export const TypingIndicator = ({ patches, className = "" }: TypingIndicatorProp
           const departmentColor = getDepartmentColor(user.departmentId);
           return (
             <Avatar key={user.userId} className="w-5 h-5 border border-white">
-              <AvatarImage src={`/api/avatars/${user.userId}`} alt={user.userName} />
+                              <AvatarImage 
+                  src={user.avatar_zalo || `/api/avatars/${user.userId}`} 
+                  alt={user.userName} 
+                />
               <AvatarFallback className={`${departmentColor.bg} text-white text-xs`}>
                 {user.userName.charAt(0).toUpperCase()}
               </AvatarFallback>
