@@ -804,6 +804,18 @@ export default function CompleteScheduleApp() {
     [getSchedulesForDay, selectedDepartment, isEditMode, editingSchedule]
   );
 
+  // ✅ THÊM: Kiểm tra xem ngày có bị chặn bởi lịch đã có không (bất kỳ phòng ban nào)
+  const isDayBlockedByExistingSchedule = useCallback(
+    (date: number, month: number, year: number) => {
+      const daySchedules = getSchedulesForDay(date, month, year);
+      return daySchedules.some(
+        (schedule) =>
+          schedule.status === ScheduleStatus.ACTIVE
+      );
+    },
+    [getSchedulesForDay]
+  );
+
   const isDayConflicted = useCallback(
     (date: number, month: number, year: number) => {
       if (isPastDay(date, month, year)) {
@@ -1437,6 +1449,18 @@ export default function CompleteScheduleApp() {
     [getSchedulesForSlot, selectedDepartment, isEditMode, editingSchedule]
   );
 
+  // ✅ THÊM: Kiểm tra xem ô có bị chặn bởi lịch đã có không (bất kỳ phòng ban nào)
+  const isSlotBlockedByExistingSchedule = useCallback(
+    (dayIndex: number, time: string, specificDate: string) => {
+      const slotSchedules = getSchedulesForSlot(dayIndex, time, specificDate);
+      return slotSchedules.some(
+        (schedule) =>
+          schedule.status === ScheduleStatus.ACTIVE
+      );
+    },
+    [getSchedulesForSlot]
+  );
+
   const isSlotBlockedByHiddenDepartment = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
       const dayOfWeek = uiToDow(dayIndex);
@@ -1670,6 +1694,7 @@ export default function CompleteScheduleApp() {
         !isPastDay(date, month, year) &&
         !isDayConflicted(date, month, year) &&
         !isDayHasExistingSchedule(date, month, year) &&
+        !isDayBlockedByExistingSchedule(date, month, year) && // ✅ THÊM: Bỏ qua ngày bị chặn bởi lịch đã có
         !isBlockedByHidden &&
         !isSunday
       ) {
@@ -1687,6 +1712,7 @@ export default function CompleteScheduleApp() {
     isPastDay,
     isDayConflicted,
     isDayHasExistingSchedule,
+    isDayBlockedByExistingSchedule, // ✅ THÊM dependency
     isDayBlockedByHiddenDepartment,
   ]);
 
@@ -1951,6 +1977,7 @@ export default function CompleteScheduleApp() {
         if (isPastTimeSlot(day, time, specificDate)) continue;
         if (isTimeSlotConflicted(day, time, specificDate)) continue;
         if (isSlotHasExistingSchedule(day, time, specificDate)) continue;
+        if (isSlotBlockedByExistingSchedule(day, time, specificDate)) continue; // ✅ THÊM: Bỏ qua ô bị chặn bởi lịch đã có
         const { isBlocked } = isSlotBlockedByHiddenDepartment(
           day,
           time,
@@ -1976,6 +2003,7 @@ export default function CompleteScheduleApp() {
     dragState.currentSlot,
     isTimeSlotConflicted,
     isSlotHasExistingSchedule,
+    isSlotBlockedByExistingSchedule, // ✅ THÊM dependency
     isPastTimeSlot,
     isSlotBlockedByHiddenDepartment,
     isTimeSlotSelectedByAnyDept,
@@ -2500,10 +2528,9 @@ export default function CompleteScheduleApp() {
     if (isDataReady && user) {
       console.log('[ScheduleApp] Loading cell selections from Redis...');
       
-      // Clear only own selections when component mounts (user reloaded)
-      // Don't clear other users' selections from cellSelections
-      setDepartmentSelections(new Map());
-      setSelectedDepartment(null);
+      // ✅ SỬA: Không clear local state khi mount, chỉ load từ Redis
+      // setDepartmentSelections(new Map());
+      // setSelectedDepartment(null);
       
       getCellSelections();
     }
@@ -2520,14 +2547,27 @@ export default function CompleteScheduleApp() {
         if (userId === user?.id && selections.departmentSelections) {
           console.log('[ScheduleApp] Found own selections, restoring:', selections);
           
-          // Restore department selections (merge with existing, don't replace)
+          // ✅ SỬA: Chỉ restore khi local state trống hoặc có sự thay đổi từ Redis
           setDepartmentSelections(prev => {
-            const newDepartmentSelections = new Map(prev);
-            for (const [deptId, deptSelections] of Object.entries(selections.departmentSelections)) {
-              newDepartmentSelections.set(parseInt(deptId), deptSelections as DepartmentSelections);
+            // Nếu local state đã có selections, chỉ merge những gì mới từ Redis
+            if (prev.size > 0) {
+              const newDepartmentSelections = new Map(prev);
+              for (const [deptId, deptSelections] of Object.entries(selections.departmentSelections)) {
+                const typedSelections = deptSelections as DepartmentSelections;
+                // Chỉ cập nhật nếu Redis có data mới hơn
+                if (typedSelections.timeSlots.length > 0 || typedSelections.days.length > 0) {
+                  newDepartmentSelections.set(parseInt(deptId), typedSelections);
+                }
+              }
+              return newDepartmentSelections;
+            } else {
+              // Local state trống, restore toàn bộ từ Redis
+              const newDepartmentSelections = new Map();
+              for (const [deptId, deptSelections] of Object.entries(selections.departmentSelections)) {
+                newDepartmentSelections.set(parseInt(deptId), deptSelections as DepartmentSelections);
+              }
+              return newDepartmentSelections;
             }
-
-            return newDepartmentSelections;
           });
           
           // Restore selected department
@@ -2540,11 +2580,9 @@ export default function CompleteScheduleApp() {
         }
       }
       
-      // If no own selections found, clear local state
-      if (!foundOwnSelections) {
-        console.log('[ScheduleApp] No own selections found, clearing local state');
-        setDepartmentSelections(new Map());
-        setSelectedDepartment(null);
+      // ✅ SỬA: Không clear local state nếu đang có selections
+      if (!foundOwnSelections && departmentSelections.size === 0) {
+        console.log('[ScheduleApp] No own selections found and local state is empty, keeping current state');
       }
       
       // Keep other users' selections in cellSelections state (don't clear them)
@@ -2552,12 +2590,12 @@ export default function CompleteScheduleApp() {
       console.log('[ScheduleApp] Other users selections:', otherUsersSelections);
 
     } else {
-      // cellSelections is empty, clear local state
-      console.log('[ScheduleApp] cellSelections is empty, clearing local state');
-      setDepartmentSelections(new Map());
-      setSelectedDepartment(null);
+      // ✅ SỬA: Chỉ clear local state nếu thực sự cần thiết
+      if (departmentSelections.size === 0) {
+        console.log('[ScheduleApp] cellSelections is empty and local state is empty, keeping current state');
+      }
     }
-  }, [cellSelections, user]);
+  }, [cellSelections, user, departmentSelections.size]);
 
   // Ping Redis to refresh TTL for cell selections
   useEffect(() => {
@@ -3658,6 +3696,7 @@ export default function CompleteScheduleApp() {
                                   !isPast &&
                                   !isBlockedByHidden &&
                                   !hasExistingSchedule &&
+                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate) && // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
                                   !(
                                     isSelectedByAny &&
                                     selectedByDeptId !== selectedDepartment
@@ -3670,7 +3709,8 @@ export default function CompleteScheduleApp() {
                                   !isPast &&
                                   !isBlockedByHidden &&
                                   !isConflicted &&
-                                  !isLunchBreak;
+                                  !isLunchBreak &&
+                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate); // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
                                 const isPreviewDeselection =
                                   isInDragRange &&
                                   !dragState.isSelecting &&
@@ -3678,7 +3718,8 @@ export default function CompleteScheduleApp() {
                                   !isPast &&
                                   !isBlockedByHidden &&
                                   !isConflicted &&
-                                  !isLunchBreak;
+                                  !isLunchBreak &&
+                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate); // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
 
                                 return (
                                   <div
@@ -4015,7 +4056,8 @@ export default function CompleteScheduleApp() {
                           !isConflicted &&
                           !isPast &&
                           !isBlockedByHidden &&
-                          !hasExistingSchedule;
+                          !hasExistingSchedule &&
+                          !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()); // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
 
                         return (
                           <div
@@ -4131,14 +4173,16 @@ export default function CompleteScheduleApp() {
                                   !isSelectedByCurrentDept &&
                                   !isPast &&
                                   !isSunday &&
-                                  !isConflicted;
+                                  !isConflicted &&
+                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()); // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
                                 const isPreviewDeselection =
                                   isInDragRange &&
                                   !monthlyDragState.isSelecting &&
                                   isSelectedByCurrentDept &&
                                   !isPast &&
                                   !isSunday &&
-                                  !isConflicted;
+                                  !isConflicted &&
+                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()); // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
 
                                 if (isPreviewSelection) {
                                   return (
