@@ -114,10 +114,10 @@ export default function DebtSettingManagement({
   }, [data]);
 
   // Tạo mảng đủ số dòng (dữ liệu thật + dòng ảo) từ localData
-  // Áp dụng offset theo page để các hành động (Xem Lịch Sử, Xem Chi Tiết, Sửa, ...) tham chiếu đúng phần tử trên trang hiện tại
-  const startIndex = Math.max(0, (page - 1) * pageSize);
-  const rows = Array.from({ length: pageSize }).map(
-    (_, idx) => localData[startIndex + idx] || null
+  // Lưu ý: backend đã trả về dữ liệu cho đúng trang (server-side pagination),
+  // nên `localData` chứa chỉ các phần tử của trang hiện tại. Không cần áp offset.
+  const rows = Array.from({ length: pageSize }).map((_, idx) =>
+    localData[idx] || null
   );
 
   const [confirmState, setConfirmState] = useState({

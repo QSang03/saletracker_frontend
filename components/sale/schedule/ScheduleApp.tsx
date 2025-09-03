@@ -224,6 +224,12 @@ export default function CompleteScheduleApp() {
   const uiToDow = (dayIndex: number) => ((dayIndex + 1) % 7) + 1;
   const dowToUi = (dow: number) => (dow === 1 ? 6 : dow - 2);
 
+  // ✅ THÊM: Helper chuẩn hóa fieldId - luôn dùng day_of_week (1..7). Nếu truyền vào là dayIndex (0..6) thì convert.
+  const makeTimeSlotFieldId = (dayIndexOrDow: number, time: string, specificDate?: string) => {
+    const dow = dayIndexOrDow >= 1 && dayIndexOrDow <= 7 ? dayIndexOrDow : uiToDow(dayIndexOrDow);
+    return `time-slot-${dow}-${time}-${specificDate || ''}`;
+  };
+
   // Kiểm tra xem user có phải admin không
   const isAdmin = useMemo(() => {
     if (!user) return false;
@@ -529,7 +535,11 @@ export default function CompleteScheduleApp() {
           for (const [deptId, selection] of newMap.entries()) {
             if (selection.timeSlots && selection.timeSlots.length > 0) {
               for (const timeSlot of selection.timeSlots) {
-                const fieldId = `time-slot-${timeSlot.day_of_week}-${timeSlot.start_time}-${timeSlot.applicable_date}`;
+                const fieldId = makeTimeSlotFieldId(
+                  timeSlot.day_of_week!, 
+                  timeSlot.start_time, 
+                  timeSlot.applicable_date
+                );
                 editingCells.push(fieldId);
               }
             }
@@ -888,6 +898,14 @@ export default function CompleteScheduleApp() {
       if (isDayHasExistingSchedule(date, month, year)) {
         toast.error(
           "Ngày này đã có lịch hoạt động trong hệ thống, không thể chỉnh sửa"
+        );
+        return;
+      }
+      
+      // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
+      if (isDayBlockedByExistingSchedule(date, month, year)) {
+        toast.error(
+          "Ngày này đã có lịch hoạt động của phòng ban khác, không thể chỉnh sửa"
         );
         return;
       }
@@ -1643,6 +1661,7 @@ export default function CompleteScheduleApp() {
         isPastDay(date, month, year) ||
         isDayConflicted(date, month, year) ||
         isDayHasExistingSchedule(date, month, year) ||
+        isDayBlockedByExistingSchedule(date, month, year) || // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
         isBlockedByHidden ||
         isSunday
       ) {
@@ -1694,6 +1713,12 @@ export default function CompleteScheduleApp() {
         !isPastDay(date, month, year) &&
         !isDayConflicted(date, month, year) &&
         !isDayHasExistingSchedule(date, month, year) &&
+        !isDayBlockedByExistingSchedule(date, month, year) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+        // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
+        !(() => {
+          const daySchedules = getSchedulesForDay(date, month, year);
+          return daySchedules.length > 0;
+        })() &&
         !isBlockedByHidden &&
         !isSunday
       ) {
@@ -1755,8 +1780,14 @@ export default function CompleteScheduleApp() {
         isCurrentMonth &&
         !isPastDay(date, month, year) &&
         !isDayConflicted(date, month, year) &&
+        !isDayHasExistingSchedule(date, month, year) && // ✅ THÊM: Kiểm tra ngày đã có lịch của chính mình
         // ✅ SỬA: Chỉ kiểm tra ngày bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
         !isDayBlockedByExistingSchedule(date, month, year) &&
+        // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
+        !(() => {
+          const daySchedules = getSchedulesForDay(date, month, year);
+          return daySchedules.length > 0;
+        })() &&
         !isBlockedByHidden &&
         !isSunday
       ) {
@@ -1929,20 +1960,30 @@ export default function CompleteScheduleApp() {
       if (isPastTimeSlot(dayIndex, time, specificDate)) return;
       if (isTimeSlotConflicted(dayIndex, time, specificDate)) return;
       if (isSlotHasExistingSchedule(dayIndex, time, specificDate)) return;
+      
+      // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
+      if (isSlotBlockedByExistingSchedule(dayIndex, time, specificDate)) return;
+      
+      // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại (bất kỳ phòng ban nào)
+      const slotSchedules = getSchedulesForSlot(dayIndex, time, specificDate);
+      if (slotSchedules.length > 0) return;
+      
       const { isBlocked } = isSlotBlockedByHiddenDepartment(
         dayIndex,
         time,
         specificDate
       );
       if (isBlocked) return;
+      
       const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
         isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
-      if (isSelectedByOther && otherDeptId !== selectedDepartment) return;
+      if (isSelectedByOther && otherUserId !== user?.id) return; // ✅ SỬA: Chỉ cho phép chọn ô của chính mình
       
-      // Kiểm tra ô đang được chỉnh sửa bởi user khác
-      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+      // Kiểm tra ô đang được chỉnh sửa bởi user khác (dùng khóa chuẩn hoá)
+      const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
       const lockedBy = getFieldLockedBy(fieldId);
-      if (lockedBy) return;
+      if (lockedBy && lockedBy.userId !== user?.id) return; // ✅ SỬA: Chỉ cho phép chỉnh sửa ô của chính mình
+      
       if (dragState.isDragging && dragState.startSlot) {
         const startDate = weekDates[dragState.startSlot.day]
           .toISOString()
@@ -1960,12 +2001,14 @@ export default function CompleteScheduleApp() {
     [
       dragState.isDragging,
       isTimeSlotConflicted,
-      isSlotHasExistingSchedule, // ✅ THÊM dependency
+      isSlotHasExistingSchedule,
+      isSlotBlockedByExistingSchedule, // ✅ THÊM dependency
       isPastTimeSlot,
       isSlotBlockedByHiddenDepartment,
       isTimeSlotSelectedByAnyDept,
       getFieldLockedBy,
       selectedDepartment,
+      user, // ✅ THÊM dependency
       weekDates,
     ]
   );
@@ -2005,6 +2048,10 @@ export default function CompleteScheduleApp() {
         if (isTimeSlotConflicted(day, time, specificDate)) continue;
         // ✅ SỬA: Chỉ kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
         if (isSlotBlockedByExistingSchedule(day, time, specificDate)) continue;
+        
+        // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại (bất kỳ phòng ban nào)
+        const slotSchedules = getSchedulesForSlot(day, time, specificDate);
+        if (slotSchedules.length > 0) continue;
         const { isBlocked } = isSlotBlockedByHiddenDepartment(
           day,
           time,
@@ -2015,8 +2062,8 @@ export default function CompleteScheduleApp() {
           isTimeSlotSelectedByAnyDept(day, time, specificDate);
         if (isSelectedByOther && otherUserId !== user?.id) continue; // ✅ SỬA: Chỉ cho phép chọn ô của chính mình
         
-        // Kiểm tra ô đang được chỉnh sửa bởi user khác
-        const fieldId = `time-slot-${day}-${time}-${specificDate}`;
+        // Kiểm tra ô đang được chỉnh sửa bởi user khác (dùng khóa chuẩn hoá)
+        const fieldId = makeTimeSlotFieldId(day, time, specificDate);
         const lockedBy = getFieldLockedBy(fieldId);
         if (lockedBy && lockedBy.userId !== user?.id) continue; // ✅ SỬA: Chỉ cho phép chỉnh sửa ô của chính mình
 
@@ -2104,6 +2151,14 @@ export default function CompleteScheduleApp() {
         );
         return;
       }
+      
+      // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
+      if (isSlotBlockedByExistingSchedule(dayIndex, time, specificDate)) {
+        toast.error(
+          "Ô này đã có lịch hoạt động của phòng ban khác, không thể chỉnh sửa"
+        );
+        return;
+      }
 
       if (
         isTimeSlotConflicted(
@@ -2132,7 +2187,7 @@ export default function CompleteScheduleApp() {
         // Nếu chính mình đang chọn ô này, thì xóa nó
         if (otherUserId === user?.id) {
           console.log('[ScheduleApp] User clicking on own selected cell, clearing it');
-          const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+          const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
           clearMySelections('explicit', [fieldId]);
           return;
         }
@@ -2148,7 +2203,7 @@ export default function CompleteScheduleApp() {
       }
 
       // Kiểm tra ô đang được chỉnh sửa bởi user khác
-      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+      const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
       const lockedBy = getFieldLockedBy(fieldId);
       if (lockedBy) {
         // Nếu chính mình đang chỉnh sửa ô này, thì xóa nó
@@ -2738,7 +2793,11 @@ export default function CompleteScheduleApp() {
         for (const [deptId, selection] of departmentSelections.entries()) {
           if (selection.timeSlots && selection.timeSlots.length > 0) {
             for (const timeSlot of selection.timeSlots) {
-              const fieldId = `time-slot-${timeSlot.day_of_week}-${timeSlot.start_time}-${timeSlot.applicable_date}`;
+              const fieldId = makeTimeSlotFieldId(
+                timeSlot.day_of_week!, 
+                timeSlot.start_time, 
+                timeSlot.applicable_date
+              );
               editingCells.push(fieldId);
             }
           }
@@ -3798,7 +3857,15 @@ export default function CompleteScheduleApp() {
                                     isSelectedByAny &&
                                     selectedByDeptId !== selectedDepartment
                                   ) &&
-                                  selectedDepartment;
+                                  selectedDepartment &&
+                                  // ✅ THÊM: Kiểm tra ô đang được chỉnh sửa bởi user khác
+                                  !(() => {
+                                    const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
+                                    const lockedBy = getFieldLockedBy(fieldId);
+                                    return lockedBy && lockedBy.userId !== user?.id;
+                                  })() &&
+                                  // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại (bất kỳ phòng ban nào)
+                                  slotSchedules.length === 0;
                                 const isPreviewSelection =
                                   isInDragRange &&
                                   dragState.isSelecting &&
@@ -3807,7 +3874,9 @@ export default function CompleteScheduleApp() {
                                   !isBlockedByHidden &&
                                   !isConflicted &&
                                   !isLunchBreak &&
-                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate); // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
+                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate) && // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
+                                  // ✅ THÊM: Không cho preview selection cho ô đã có lịch
+                                  slotSchedules.length === 0;
                                 const isPreviewDeselection =
                                   isInDragRange &&
                                   !dragState.isSelecting &&
@@ -3816,7 +3885,9 @@ export default function CompleteScheduleApp() {
                                   !isBlockedByHidden &&
                                   !isConflicted &&
                                   !isLunchBreak &&
-                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate); // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
+                                  !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate) && // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
+                                  // ✅ THÊM: Không cho preview deselection cho ô đã có lịch
+                                  slotSchedules.length === 0;
 
                                 return (
                                   <div
@@ -3837,6 +3908,8 @@ export default function CompleteScheduleApp() {
                                           selectedByDeptId !==
                                             selectedDepartment // **THÊM ĐIỀU KIỆN NÀY**
                                         ? "bg-orange-200 opacity-60 cursor-not-allowed border-orange-200 border-2"
+                                        : hasExistingSchedule // ✅ THÊM: Styling cho ô đã có lịch
+                                        ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
                                         : isConflicted &&
                                           !isLunchBreak &&
                                           !isPast
@@ -3889,8 +3962,14 @@ export default function CompleteScheduleApp() {
                                     onMouseDown={(e) => {
                                       if (!canInteract) return;
                                       
+                                      // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại
+                                      if (slotSchedules.length > 0) {
+                                        toast.error("Ô này đã có lịch hoạt động, không thể chỉnh sửa");
+                                        return;
+                                      }
+                                      
                                       // Check if field is locked by another user
-                                      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+                                      const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
                                       if (isFieldLocked(fieldId)) {
                                         const lockedBy = getFieldLockedBy(fieldId);
                                         if (lockedBy) {
@@ -3951,6 +4030,18 @@ export default function CompleteScheduleApp() {
                                       </div>
                                     )}
                                     
+                                    {/* ✅ THÊM: Hiển thị cho ô đã có lịch bị khóa */}
+                                    {hasExistingSchedule && (
+                                      <div className="absolute inset-0 bg-red-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-red-300 border-dashed">
+                                        <div className="flex items-center gap-2 p-2 rounded-lg bg-white shadow-md">
+                                          <Lock className="w-4 h-4 text-red-600" />
+                                          <span className="text-xs font-medium text-red-600">
+                                            Đã có lịch
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    
                                     {/* Selection indicators */}
                                     {isSelectedByCurrentDept &&
                                       selectedDepartment &&
@@ -3979,7 +4070,7 @@ export default function CompleteScheduleApp() {
                                       const { isSelected: isSelectedByRemote, userId: remoteUserId } = isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
                                       
                                       // Kiểm tra ô đang được chỉnh sửa bởi user khác
-                                      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+                                      const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
                                       const lockedBy = getFieldLockedBy(fieldId);
                                       
                                       // Nếu ô được chọn HOẶC đang được chỉnh sửa bởi user khác
@@ -4154,7 +4245,15 @@ export default function CompleteScheduleApp() {
                           !isPast &&
                           !isBlockedByHidden &&
                           !hasExistingSchedule &&
-                          !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()); // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+                          !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+                          // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
+                          !(() => {
+                            const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                            const lockedBy = getFieldLockedBy(fieldId);
+                            return lockedBy && lockedBy.userId !== user?.id;
+                          })() &&
+                          // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
+                          daySchedules.length === 0;
 
                         return (
                           <div
@@ -4193,6 +4292,8 @@ export default function CompleteScheduleApp() {
                                   ? `${
                                       getDepartmentColor(blockedByDeptId).light
                                     } opacity-30 border-dashed`
+                                  : hasExistingSchedule // ✅ THÊM: Styling cho ngày đã có lịch
+                                  ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
                                   : daySchedules.length > 0
                                   ? "bg-green-50 cursor-pointer hover:bg-green-100"
                                   : "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
@@ -4209,6 +4310,12 @@ export default function CompleteScheduleApp() {
                               }`}
                             onMouseDown={(e) => {
                               if (canInteract) {
+                                // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại
+                                if (daySchedules.length > 0) {
+                                  toast.error("Ngày này đã có lịch hoạt động, không thể chỉnh sửa");
+                                  return;
+                                }
+                                
                                 handleDayMouseDown(
                                   day.date,
                                   day.isCurrentMonth,
@@ -4218,6 +4325,11 @@ export default function CompleteScheduleApp() {
                             }}
                             onMouseEnter={() => {
                               if (canInteract) {
+                                // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại
+                                if (daySchedules.length > 0) {
+                                  return; // Không cho phép drag vào ngày đã có lịch
+                                }
+                                
                                 handleDayMouseEnter(
                                   day.date,
                                   day.isCurrentMonth
@@ -4229,6 +4341,12 @@ export default function CompleteScheduleApp() {
                             }
                             onClick={() => {
                               if (canInteract) {
+                                // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại
+                                if (daySchedules.length > 0) {
+                                  toast.error("Ngày này đã có lịch hoạt động, không thể chỉnh sửa");
+                                  return;
+                                }
+                                
                                 handleDayClick(day.date, day.isCurrentMonth);
                               }
                             }}
@@ -4271,7 +4389,9 @@ export default function CompleteScheduleApp() {
                                   !isPast &&
                                   !isSunday &&
                                   !isConflicted &&
-                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()); // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+                                  // ✅ THÊM: Không cho preview selection cho ngày đã có lịch
+                                  daySchedules.length === 0;
                                 const isPreviewDeselection =
                                   isInDragRange &&
                                   !monthlyDragState.isSelecting &&
@@ -4279,7 +4399,9 @@ export default function CompleteScheduleApp() {
                                   !isPast &&
                                   !isSunday &&
                                   !isConflicted &&
-                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()); // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
+                                  // ✅ THÊM: Không cho preview deselection cho ngày đã có lịch
+                                  daySchedules.length === 0;
 
                                 if (isPreviewSelection) {
                                   return (
@@ -4312,6 +4434,18 @@ export default function CompleteScheduleApp() {
                             {isBlockedByHidden && blockedByDeptId && (
                               <div className="absolute top-1 left-1 bg-slate-300 bg-opacity-20 rounded flex items-center justify-center border border-slate-400 border-dashed p-1">
                                 <EyeOff className="w-3 h-3 text-slate-500 opacity-60" />
+                              </div>
+                            )}
+                            
+                            {/* ✅ THÊM: Hiển thị cho ngày đã có lịch bị khóa */}
+                            {hasExistingSchedule && (
+                              <div className="absolute top-1 right-1 bg-red-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-red-300 border-dashed p-1">
+                                <div className="flex items-center gap-1">
+                                  <Lock className="w-3 h-3 text-red-600" />
+                                  <span className="text-xs font-medium text-red-600">
+                                    Lịch
+                                  </span>
+                                </div>
                               </div>
                             )}
 
@@ -4946,7 +5080,7 @@ export default function CompleteScheduleApp() {
                     <div className="mt-2 space-y-2">
                       <Select
                         value={editingDepartment.toString()}
-                        onValueChange={(value) =>
+                        onValueChange={(value: string) =>
                           handleChangeDepartmentInEdit(Number(value))
                         }
                       >

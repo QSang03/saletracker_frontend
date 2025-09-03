@@ -28,6 +28,7 @@ import StatBox from "@/components/common/StatBox";
 import CampaignModal from "@/components/sale/CampaignModal";
 import { useCampaignFilters } from "@/hooks/useCampaignFilters";
 import { usePaginationSync } from "@/hooks/usePaginationSync"; // ✅ NEW IMPORT
+import { transformToCampaignWithDetails } from "@/utils/campaignUtils";
 
 // Types
 interface CampaignStats {
@@ -107,8 +108,9 @@ const useCampaignData = (
         ? await campaignAPI.getAllArchived(requestFilters)
         : await campaignAPI.getAll(requestFilters);
 
-      // ✅ Respect backend ordering and pagination (10 per page)
-      setCampaigns(response.data || []);
+  // ✅ Respect backend ordering and pagination (10 per page)
+  // Ensure each campaign has required defaults (including created_by)
+  setCampaigns((response.data || []).map(transformToCampaignWithDetails));
       setTotalCount(response.total || 0);
       setStats(response.stats || DEFAULT_STATS);
     } catch (error: any) {
