@@ -629,10 +629,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Prefer stored filters as the previous snapshot to ensure 'back' restores user's last saved filters
   const storedPrev = getPmFiltersFromStorage();
   const previous = storedPrev || getCurrentPmFilters();
+    // Build next filters from previous but explicitly clear date filters so
+    // customer search does not accidentally keep a date/dateRange filter.
     const next: PmFilters = {
       ...previous,
       page: 1,
       search: customerName.trim(),
+      // Keep single `date` token from previous filters, but ensure any custom range is cleared
+      dateRange: undefined,
     };
 
     setIsInCustomerSearchMode(true);

@@ -584,36 +584,110 @@ export default function CompleteScheduleApp() {
   const handleClearAllMine = useCallback(() => {
     console.log('[ScheduleApp] handleClearAllMine: Clearing only own selections');
     
+    // ✅ SỬA: Xóa hoàn toàn tất cả selections của user hiện tại
+    const currentSelections = getCurrentDepartmentSelections();
+    const allFieldIds: string[] = [];
+    
+    // Thu thập tất cả fieldIds cần clear
+    if (currentSelections.timeSlots.length > 0) {
+      currentSelections.timeSlots.forEach(slot => {
+        if (slot.day_of_week) {
+          const weekDates = getWeekDates();
+          const dayIndex = dowToUi(slot.day_of_week);
+          const specificDate = slot.applicable_date || weekDates[dayIndex]?.toISOString().split("T")[0];
+          const fieldId = makeTimeSlotFieldId(dayIndex, slot.start_time, specificDate);
+          allFieldIds.push(fieldId);
+        }
+      });
+    }
+    
+    if (currentSelections.days.length > 0) {
+      currentSelections.days.forEach(day => {
+        const fieldId = `day-${day.date}-${day.month}-${day.year}`;
+        allFieldIds.push(fieldId);
+      });
+    }
+    
+    console.log('[ScheduleApp] Clearing fieldIds:', allFieldIds);
+    
     // 1) Xóa local state của chính mình
     setDepartmentSelections(new Map());
     setSelectedDepartment(null);
     setIsBulkMode(false);
     setBulkScheduleConfig(prev => ({ ...prev, enabled: false }));
     setBulkPreview({ weeks: [], months: [] });
+    
+    // ✅ SỬA: Reset drag states
+    setDragState({
+      isDragging: false,
+      startSlot: null,
+      currentSlot: null,
+      isSelecting: false,
+    });
+    
+    setMonthlyDragState({
+      isDragging: false,
+      startDay: null,
+      currentDay: null,
+      isSelecting: false,
+    });
 
-    // ✅ THÊM: Xóa local storage
+    // ✅ SỬA: Xóa hoàn toàn local storage
     try {
+      // Xóa key chính
       localStorage.removeItem(storageKey);
-      console.log('[ScheduleApp] Cleared local storage:', storageKey);
+      console.log('[ScheduleApp] Cleared main storage key:', storageKey);
+      
+      // ✅ SỬA: Không cần flag, sẽ xóa hoàn toàn Redis
+      
+      // ✅ THÊM: Xóa tất cả keys liên quan đến schedule selections
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key.includes('schedule:selections') ||
+          key.includes('schedule:selections') ||
+          key.includes('schedule:bulk') ||
+          key.includes('schedule:config')
+        )) {
+          keysToRemove.push(key);
+        }
+      }
+      
+      // Xóa tất cả keys tìm thấy
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+        console.log('[ScheduleApp] Cleared related storage key:', key);
+      });
+      
+      console.log('[ScheduleApp] Total cleared keys:', keysToRemove.length + 1);
     } catch (error) {
       console.error('[ScheduleApp] Error clearing local storage:', error);
     }
 
-    // 2) Phát sự kiện chỉ cho user hiện tại (không đụng selections của người khác)
+    // ✅ SỬA: Clear tất cả edit sessions và selections trong Redis
+    if (clearMySelections) {
+      console.log('[ScheduleApp] Clearing all edit sessions and selections in Redis');
+      clearMySelections('explicit');
+    }
+
+    // ✅ SỬA: Gửi payload rỗng để xóa hết selections trong Redis
     const emptyPayload = {
       departmentSelections: {},
       selectedDepartment: null,
       activeView,
     };
     
-    if (clearMySelections) {
-      clearMySelections('explicit');
-    } else {
+    // Gửi payload rỗng để xóa hết selections trong Redis
+    sendCellSelections(emptyPayload);
+    
+    // ✅ THÊM: Đợi một chút rồi gửi lại để đảm bảo Redis đã clear
+    setTimeout(() => {
       sendCellSelections(emptyPayload);
-    }
+    }, 100);
 
-    toast.success("Đã xóa các ô bạn đang chọn.");
-  }, [sendCellSelections, activeView, setDepartmentSelections, setSelectedDepartment, setIsBulkMode, setBulkScheduleConfig, setBulkPreview, user, storageKey, clearMySelections]);
+    toast.success("Đã xóa tất cả các ô bạn đang chọn.");
+  }, [sendCellSelections, activeView, setDepartmentSelections, setSelectedDepartment, setIsBulkMode, setBulkScheduleConfig, setBulkPreview, user, storageKey, clearMySelections, getCurrentDepartmentSelections, getWeekDates, makeTimeSlotFieldId, dowToUi]);
 
   // Utils for focus/scroll
   const formatDateStr = useCallback((d: Date) => {
@@ -1007,12 +1081,19 @@ export default function CompleteScheduleApp() {
     let newDays = [...currentSelections.days];
 
     if (monthlyDragState.isSelecting) {
-      // Thêm các ngày chưa được chọn
+      // ✅ THÊM: Logic toggle selection - Nếu ngày đã chọn thì xóa, nếu chưa chọn thì thêm
       range.forEach(({ date, month, year }) => {
         const exists = newDays.some(
           (day) => day.date === date && day.month === month && day.year === year
         );
-        if (!exists) {
+        if (exists) {
+          // Nếu ngày đã chọn thì xóa (toggle off)
+          newDays = newDays.filter(
+            (day) =>
+              !(day.date === date && day.month === month && day.year === year)
+          );
+        } else {
+          // Nếu ngày chưa chọn thì thêm (toggle on)
           newDays.push({
             date,
             month,
@@ -1022,19 +1103,89 @@ export default function CompleteScheduleApp() {
         }
       });
     } else {
-      // Hủy chọn các ngày đã chọn
+      // ✅ THÊM: Logic toggle selection ngược lại - Nếu ngày đã chọn thì xóa, nếu chưa chọn thì thêm
       range.forEach(({ date, month, year }) => {
-        newDays = newDays.filter(
-          (day) =>
-            !(day.date === date && day.month === month && day.year === year)
+        const exists = newDays.some(
+          (day) => day.date === date && day.month === month && day.year === year
         );
+        if (exists) {
+          // Nếu ngày đã chọn thì xóa (toggle off)
+          newDays = newDays.filter(
+            (day) =>
+              !(day.date === date && day.month === month && day.year === year)
+          );
+        } else {
+          // Nếu ngày chưa chọn thì thêm (toggle on)
+          newDays.push({
+            date,
+            month,
+            year,
+            department_id: selectedDepartment,
+          });
+        }
       });
     }
 
+    // ✅ THÊM: Xóa edit sessions và clear selections trong Redis cho các ngày bị toggle off
+    const removedDays: string[] = [];
+    const addedDays: string[] = [];
+    
+    // So sánh selections cũ và mới để xác định ngày nào bị xóa
+    currentSelections.days.forEach(oldDay => {
+      const exists = newDays.some(newDay => 
+        newDay.date === oldDay.date &&
+        newDay.month === oldDay.month &&
+        newDay.year === oldDay.year
+      );
+      
+      if (!exists) {
+        // Ngày này bị xóa - tạo fieldId để clear
+        const fieldId = `day-${oldDay.date}-${oldDay.month}-${oldDay.year}`;
+        removedDays.push(fieldId);
+      }
+    });
+    
+    // So sánh selections mới và cũ để xác định ngày nào được thêm
+    newDays.forEach(newDay => {
+      const exists = currentSelections.days.some(oldDay => 
+        oldDay.date === newDay.date &&
+        oldDay.month === newDay.month &&
+        oldDay.year === newDay.year
+      );
+      
+      if (!exists) {
+        // Ngày này được thêm - tạo fieldId để track
+        const fieldId = `day-${newDay.date}-${newDay.month}-${newDay.year}`;
+        addedDays.push(fieldId);
+      }
+    });
+    
+    // Cập nhật selections trong localStorage
     updateDepartmentSelections(selectedDepartment, {
       ...currentSelections,
       days: newDays,
     });
+    
+    // ✅ THÊM: Clear edit sessions và selections trong Redis cho các ngày bị xóa
+    if (removedDays.length > 0 && clearMySelections) {
+      console.log('[ScheduleApp] Clearing edit sessions for removed days:', removedDays);
+      clearMySelections('explicit', removedDays);
+    }
+    
+    // ✅ THÊM: Start edit sessions trong Redis cho các ngày được thêm
+    if (addedDays.length > 0) {
+      addedDays.forEach(fieldId => {
+        startEditSession(fieldId, 'calendar_cell', {
+          userId: user?.id,
+          userName: user?.fullName || user?.nickName || user?.username || 'Unknown',
+          departmentId: selectedDepartment,
+          departmentName: departments.find(d => d.id === selectedDepartment)?.name || 'Unknown',
+          avatar_zalo: user?.avatarZalo,
+          startedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 30000).toISOString(),
+        });
+      });
+    }
 
     setMonthlyDragState({
       isDragging: false,
@@ -1047,6 +1198,10 @@ export default function CompleteScheduleApp() {
     selectedDepartment,
     getCurrentDepartmentSelections,
     updateDepartmentSelections,
+    clearMySelections,
+    startEditSession,
+    user,
+    departments,
   ]);
 
   // Schedule operations
@@ -1660,6 +1815,31 @@ export default function CompleteScheduleApp() {
         year
       );
 
+      // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
+      const fieldId = `day-${date}-${month}-${year}`;
+      const lockedBy = getFieldLockedBy(fieldId);
+      
+      if (lockedBy) {
+        if (lockedBy.userId === user?.id) {
+          // Nếu chính mình đang chọn ngày này, thì cho phép bắt đầu drag để quét
+          console.log('[ScheduleApp] User starting drag from own selected day, will toggle selection during drag');
+          // Không xóa ngay - để cho phép drag để quét
+          // Logic toggle sẽ được xử lý trong handleDayMouseUp
+        } else {
+          // Người khác đang chọn ngày này
+          toast.error(`Ngày này đang được ${lockedBy.userName} chọn`);
+          return;
+        }
+      }
+      
+      // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì cho phép drag để quét
+      const isCurrentlySelected = isDaySelected(date, month, year);
+      if (isCurrentlySelected) {
+        console.log('[ScheduleApp] User starting drag from own selected day, will toggle selection during drag');
+        // Không xóa ngay - để cho phép drag để quét
+        // Logic toggle sẽ được xử lý trong handleDayMouseUp
+      }
+
       // Kiểm tra các điều kiện như cũ
       if (
         isPastDay(date, month, year) ||
@@ -1672,8 +1852,7 @@ export default function CompleteScheduleApp() {
         return;
       }
 
-      // Xác định trạng thái chọn/hủy chọn
-      const isCurrentlySelected = isDaySelected(date, month, year);
+
 
       setMonthlyDragState({
         isDragging: true,
@@ -1683,7 +1862,7 @@ export default function CompleteScheduleApp() {
       });
     },
     [
-      isAdmin,
+      user?.id,
       selectedDepartment,
       currentMonth,
       isPastDay,
@@ -1691,6 +1870,7 @@ export default function CompleteScheduleApp() {
       isDayHasExistingSchedule,
       isDayBlockedByHiddenDepartment,
       isDaySelected,
+      getFieldLockedBy,
     ]
   );
 
@@ -1713,16 +1893,24 @@ export default function CompleteScheduleApp() {
         year
       );
 
+      // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
+      const fieldId = `day-${date}-${month}-${year}`;
+      const lockedBy = getFieldLockedBy(fieldId);
+      if (lockedBy && lockedBy.userId !== user?.id) {
+        return; // Bỏ qua ngày bị người khác chọn
+      }
+
+      // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
+      const daySchedules = getSchedulesForDay(date, month, year);
+      if (daySchedules.length > 0) {
+        return; // Bỏ qua ngày có lịch đã tồn tại
+      }
+
       if (
         !isPastDay(date, month, year) &&
         !isDayConflicted(date, month, year) &&
         !isDayHasExistingSchedule(date, month, year) &&
         !isDayBlockedByExistingSchedule(date, month, year) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
-        // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
-        !(() => {
-          const daySchedules = getSchedulesForDay(date, month, year);
-          return daySchedules.length > 0;
-        })() &&
         !isBlockedByHidden &&
         !isSunday
       ) {
@@ -1735,6 +1923,7 @@ export default function CompleteScheduleApp() {
     [
       monthlyDragState.isDragging,
       currentMonth,
+      user?.id,
       isPastDay,
       isDayConflicted,
       isDayHasExistingSchedule,
@@ -1774,11 +1963,20 @@ export default function CompleteScheduleApp() {
         year
       );
 
+      // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
+      const fieldId = `day-${date}-${month}-${year}`;
+      const lockedBy = getFieldLockedBy(fieldId);
+      if (lockedBy && lockedBy.userId !== user?.id) {
+        continue; // Bỏ qua ngày bị người khác chọn
+      }
+
       // ✅ THÊM: Kiểm tra ngày đang được chọn bởi người khác
       const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
         date, month, year
       );
-      if (isSelectedByOther && otherUserId !== user?.id) continue; // ✅ THÊM: Chỉ cho phép chọn ngày của chính mình
+      if (isSelectedByOther && otherUserId !== user?.id) {
+        continue; // Bỏ qua ngày bị người khác chọn
+      }
 
       if (
         isCurrentMonth &&
@@ -1811,6 +2009,7 @@ export default function CompleteScheduleApp() {
     isDayBlockedByExistingSchedule, // ✅ SỬA: Chỉ giữ dependency này
     isDayBlockedByHiddenDepartment,
     isDaySelectedByAnyDept, // ✅ THÊM dependency
+    getFieldLockedBy, // ✅ THÊM dependency
     user, // ✅ THÊM dependency
   ]);
 
@@ -2188,35 +2387,12 @@ export default function CompleteScheduleApp() {
       const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
         isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
       if (isSelectedByOther) {
-        // Nếu chính mình đang chọn ô này, thì xóa nó
+        // Nếu chính mình đang chọn ô này, thì cho phép bắt đầu drag để quét
         if (otherUserId === user?.id) {
-          console.log('[ScheduleApp] User clicking on own selected cell, clearing it');
-          const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
+          console.log('[ScheduleApp] User starting drag from own selected cell, will toggle selection during drag');
           
-          // Xóa selection
-          const currentSelections = getCurrentDepartmentSelections();
-          const dayOfWeek = uiToDow(dayIndex);
-          const newTimeSlots = currentSelections.timeSlots.filter(
-            (slot) =>
-              !(slot.day_of_week === dayOfWeek &&
-                slot.start_time === time &&
-                (!slot.applicable_date ||
-                  !specificDate ||
-                  slot.applicable_date === specificDate))
-          );
-          
-          updateDepartmentSelections(selectedDepartment, {
-            ...currentSelections,
-            timeSlots: newTimeSlots,
-          });
-          
-          // Clear edit session
-          if (clearMySelections) {
-            clearMySelections('explicit', [fieldId]);
-          }
-          
-          toast.success("Đã xóa ô này khỏi lịch");
-          return;
+          // Không xóa ngay - để cho phép drag để quét
+          // Logic toggle sẽ được xử lý trong handleTimeSlotMouseUp
         }
         
         // Nếu người khác đang chọn ô này
@@ -2308,16 +2484,35 @@ export default function CompleteScheduleApp() {
     let newTimeSlots = [...currentSelections.timeSlots];
 
     if (dragState.isSelecting) {
-      // Chọn thêm các ô chưa được chọn
+      // ✅ THÊM: Logic toggle selection - Nếu ô đã chọn thì xóa, nếu chưa chọn thì thêm
       range.forEach(({ day, time }) => {
         const endTime = timeSlots[timeSlots.indexOf(time) + 1] || LAST_SLOT_END;
         const dayOfWeek = uiToDow(day);
+        const weekDates = getWeekDates();
+        const applicableDate = weekDates[day].toISOString().split("T")[0];
+        
+        // Kiểm tra xem ô này đã được chọn chưa
         const exists = newTimeSlots.some(
-          (slot) => slot.day_of_week === dayOfWeek && slot.start_time === time
+          (slot) => 
+            slot.day_of_week === dayOfWeek && 
+            slot.start_time === time &&
+            (!slot.applicable_date ||
+              !applicableDate ||
+              slot.applicable_date === applicableDate)
         );
-        if (!exists) {
-          const weekDates = getWeekDates();
-          const applicableDate = weekDates[day].toISOString().split("T")[0];
+        
+        if (exists) {
+          // Nếu ô đã chọn thì xóa (toggle off)
+          newTimeSlots = newTimeSlots.filter(
+            (slot) =>
+              !(slot.day_of_week === dayOfWeek && 
+                slot.start_time === time &&
+                (!slot.applicable_date ||
+                  !applicableDate ||
+                  slot.applicable_date === applicableDate))
+          );
+        } else {
+          // Nếu ô chưa chọn thì thêm (toggle on)
           newTimeSlots.push({
             day_of_week: dayOfWeek,
             start_time: time,
@@ -2328,20 +2523,115 @@ export default function CompleteScheduleApp() {
         }
       });
     } else {
-      // Hủy chọn các ô đã được chọn
+      // ✅ THÊM: Logic toggle selection ngược lại - Nếu ô đã chọn thì xóa, nếu chưa chọn thì thêm
       range.forEach(({ day, time }) => {
+        const endTime = timeSlots[timeSlots.indexOf(time) + 1] || LAST_SLOT_END;
         const dayOfWeek = uiToDow(day);
-        newTimeSlots = newTimeSlots.filter(
-          (slot) =>
-            !(slot.day_of_week === dayOfWeek && slot.start_time === time)
+        const weekDates = getWeekDates();
+        const applicableDate = weekDates[day].toISOString().split("T")[0];
+        
+        // Kiểm tra xem ô này đã được chọn chưa
+        const exists = newTimeSlots.some(
+          (slot) => 
+            slot.day_of_week === dayOfWeek && 
+            slot.start_time === time &&
+            (!slot.applicable_date ||
+              !applicableDate ||
+              slot.applicable_date === applicableDate)
         );
+        
+        if (exists) {
+          // Nếu ô đã chọn thì xóa (toggle off)
+          newTimeSlots = newTimeSlots.filter(
+            (slot) =>
+              !(slot.day_of_week === dayOfWeek && 
+                slot.start_time === time &&
+                (!slot.applicable_date ||
+                  !applicableDate ||
+                  slot.applicable_date === applicableDate))
+          );
+        } else {
+          // Nếu ô chưa chọn thì thêm (toggle on)
+          newTimeSlots.push({
+            day_of_week: dayOfWeek,
+            start_time: time,
+            end_time: endTime,
+            department_id: selectedDepartment,
+            applicable_date: applicableDate,
+          });
+        }
       });
     }
 
+    // ✅ THÊM: Xóa edit sessions và clear selections trong Redis cho các ô bị toggle off
+    const removedSlots: string[] = [];
+    const addedSlots: string[] = [];
+    
+    // So sánh selections cũ và mới để xác định ô nào bị xóa
+    currentSelections.timeSlots.forEach(oldSlot => {
+      const exists = newTimeSlots.some(newSlot => 
+        newSlot.day_of_week === oldSlot.day_of_week &&
+        newSlot.start_time === oldSlot.start_time &&
+        (!newSlot.applicable_date || !oldSlot.applicable_date || newSlot.applicable_date === oldSlot.applicable_date)
+      );
+      
+              if (!exists && oldSlot.day_of_week) {
+          // Ô này bị xóa - tạo fieldId để clear
+          const weekDates = getWeekDates();
+          const dayIndex = dowToUi(oldSlot.day_of_week);
+          const specificDate = oldSlot.applicable_date || weekDates[dayIndex]?.toISOString().split("T")[0];
+          const fieldId = makeTimeSlotFieldId(dayIndex, oldSlot.start_time, specificDate);
+          removedSlots.push(fieldId);
+        }
+    });
+    
+    // So sánh selections mới và cũ để xác định ô nào được thêm
+    newTimeSlots.forEach(newSlot => {
+      const exists = currentSelections.timeSlots.some(oldSlot => 
+        oldSlot.day_of_week === newSlot.day_of_week &&
+        oldSlot.start_time === newSlot.start_time &&
+        (!oldSlot.applicable_date || !newSlot.applicable_date || oldSlot.applicable_date === newSlot.applicable_date)
+      );
+      
+              if (!exists && newSlot.day_of_week) {
+          // Ô này được thêm - tạo fieldId để track
+          const weekDates = getWeekDates();
+          const dayIndex = dowToUi(newSlot.day_of_week);
+          const specificDate = newSlot.applicable_date || weekDates[dayIndex]?.toISOString().split("T")[0];
+          const fieldId = makeTimeSlotFieldId(dayIndex, newSlot.start_time, specificDate);
+          addedSlots.push(fieldId);
+        }
+    });
+    
+    // Cập nhật selections trong localStorage
     updateDepartmentSelections(selectedDepartment, {
       ...currentSelections,
       timeSlots: newTimeSlots,
     });
+    
+    // ✅ THÊM: Clear edit sessions và selections trong Redis cho các ô bị xóa
+    if (removedSlots.length > 0 && clearMySelections) {
+      console.log('[ScheduleApp] Clearing edit sessions for removed slots:', removedSlots);
+      clearMySelections('explicit', removedSlots);
+    }
+    
+    // ✅ THÊM: Start edit sessions cho các ô mới được thêm
+    if (addedSlots.length > 0) {
+      addedSlots.forEach(fieldId => {
+        // Parse fieldId để lấy thông tin
+        const match = fieldId.match(/time-slot-(\d+)-(.+)-(.+)/);
+        if (match) {
+          const [, dayOfWeek, time, specificDate] = match;
+          const dayIndex = dowToUi(parseInt(dayOfWeek));
+          
+          startEditSession(fieldId, 'calendar_cell', {
+            dayIndex,
+            time,
+            date: specificDate || undefined,
+          });
+        }
+      });
+    }
 
     setDragState({
       isDragging: false,
@@ -2674,36 +2964,43 @@ export default function CompleteScheduleApp() {
     }
   }, [departmentSelections, selectedDepartment, user, storageKey, roomId]);
 
-  // ✅ THÊM: Khôi phục selections từ local storage khi component mount
+  // ✅ SỬA: Khôi phục selections từ local storage khi component mount
   useEffect(() => {
     if (user && !isLoadingDepartments) {
       try {
         const savedData = localStorage.getItem(storageKey);
-                  if (savedData) {
-            const parsed = JSON.parse(savedData);
-            // ✅ SỬA: Chỉ khôi phục nếu là cùng tuần và data không quá cũ (trong vòng 1 giờ)
-            const isRecent = Date.now() - parsed.timestamp < 60 * 60 * 1000;
-            const currentWeekStart = new Date();
-            currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
-            const isSameWeek = parsed.weekStart === currentWeekStart.toISOString().split('T')[0];
-            
-            if (isRecent && isSameWeek && parsed.departmentSelections) {
-              console.log('[ScheduleApp] Restoring from local storage:', storageKey, parsed);
-              const restoredSelections = new Map(
-                Object.entries(parsed.departmentSelections).map(([key, value]) => [
-                  parseInt(key),
-                  value as DepartmentSelections
-                ])
-              );
-              setDepartmentSelections(restoredSelections);
-              if (parsed.selectedDepartment) {
-                setSelectedDepartment(parsed.selectedDepartment);
-              }
-            } else {
-              console.log('[ScheduleApp] Local storage data is outdated or from different week, clearing');
-              localStorage.removeItem(storageKey);
-            }
+        if (savedData) {
+          const parsed = JSON.parse(savedData);
+          // ✅ SỬA: Chỉ khôi phục nếu là cùng tuần và data không quá cũ (trong vòng 1 giờ)
+          const isRecent = Date.now() - parsed.timestamp < 60 * 60 * 1000;
+          const currentWeekStart = new Date();
+          currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
+          const isSameWeek = parsed.weekStart === currentWeekStart.toISOString().split('T')[0];
+          
+          // ✅ SỬA: Không restore nếu local state đã trống (user đã xóa)
+          if (departmentSelections.size === 0) {
+            console.log('[ScheduleApp] Local state is empty, not restoring from localStorage');
+            localStorage.removeItem(storageKey);
+            return;
           }
+          
+          if (isRecent && isSameWeek && parsed.departmentSelections) {
+            console.log('[ScheduleApp] Restoring from local storage:', storageKey, parsed);
+            const restoredSelections = new Map(
+              Object.entries(parsed.departmentSelections).map(([key, value]) => [
+                parseInt(key),
+                value as DepartmentSelections
+              ])
+            );
+            setDepartmentSelections(restoredSelections);
+            if (parsed.selectedDepartment) {
+              setSelectedDepartment(parsed.selectedDepartment);
+            }
+          } else {
+            console.log('[ScheduleApp] Local storage data is outdated or from different week, clearing');
+            localStorage.removeItem(storageKey);
+          }
+        }
       } catch (error) {
         console.error('[ScheduleApp] Error reading from local storage:', error);
         localStorage.removeItem(storageKey);
@@ -2711,10 +3008,13 @@ export default function CompleteScheduleApp() {
     }
   }, [user, isLoadingDepartments, storageKey, roomId]);
 
-  // Restore local selections from Redis data
+  // ✅ SỬA: Restore local selections from Redis data
   useEffect(() => {
     if (cellSelections.size > 0) {
-      console.log('[ScheduleApp] Restoring from cellSelections:', cellSelections);
+      // ✅ SỬA: Không restore nếu local state đã trống (user đã xóa)
+      if (departmentSelections.size === 0) {
+        return;
+      }
       
       // Find our own selections and restore them
       let foundOwnSelections = false;
@@ -3882,7 +4182,8 @@ export default function CompleteScheduleApp() {
                                   !isConflicted &&
                                   !isPast &&
                                   !isBlockedByHidden &&
-                                  !hasExistingSchedule &&
+                                  // ✅ SỬA: Cho phép tương tác với ô đã chọn để có thể drag quét
+                                  (!hasExistingSchedule || isSelectedByCurrentDept) &&
                                   !isSlotBlockedByExistingSchedule(dayIndex, time, specificDate) && // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có
                                   !(
                                     isSelectedByAny &&
@@ -3895,8 +4196,8 @@ export default function CompleteScheduleApp() {
                                     const lockedBy = getFieldLockedBy(fieldId);
                                     return lockedBy && lockedBy.userId !== user?.id;
                                   })() &&
-                                  // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại (bất kỳ phòng ban nào)
-                                  slotSchedules.length === 0;
+                                  // ✅ SỬA: Cho phép tương tác với ô đã chọn để có thể drag quét
+                                  (slotSchedules.length === 0 || isSelectedByCurrentDept);
                                 const isPreviewSelection =
                                   isInDragRange &&
                                   dragState.isSelecting &&
@@ -3999,34 +4300,22 @@ export default function CompleteScheduleApp() {
                                         return;
                                       }
                                       
-                                      // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ô này thì xóa nó
+                                      // ✅ THÊM: Logic mới - Nhấn giữ để quét từ ô đã chọn
                                       if (isSelectedByCurrentDept && selectedDepartment) {
-                                        console.log('[ScheduleApp] User clicking on own selected cell, clearing it');
+                                        console.log('[ScheduleApp] User starting drag from selected cell, will toggle selection during drag');
+                                        
+                                        // Bắt đầu drag với mode toggle (không xóa ngay)
                                         const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
                                         
-                                        // Xóa selection
-                                        const currentSelections = getCurrentDepartmentSelections();
-                                        const dayOfWeek = uiToDow(dayIndex);
-                                        const newTimeSlots = currentSelections.timeSlots.filter(
-                                          (slot) =>
-                                            !(slot.day_of_week === dayOfWeek &&
-                                              slot.start_time === time &&
-                                              (!slot.applicable_date ||
-                                                !specificDate ||
-                                                slot.applicable_date === specificDate))
-                                        );
-                                        
-                                        updateDepartmentSelections(selectedDepartment, {
-                                          ...currentSelections,
-                                          timeSlots: newTimeSlots,
+                                        // Start edit session
+                                        startEditSession(fieldId, 'calendar_cell', {
+                                          dayIndex,
+                                          time,
+                                          date: specificDate,
                                         });
                                         
-                                        // Clear edit session
-                                        if (clearMySelections) {
-                                          clearMySelections('explicit', [fieldId]);
-                                        }
-                                        
-                                        toast.success("Đã xóa ô này khỏi lịch");
+                                        // Gọi handleTimeSlotMouseDown với mode toggle
+                                        handleTimeSlotMouseDown(dayIndex, time, specificDate, e);
                                         return;
                                       }
                                       
@@ -4206,6 +4495,42 @@ export default function CompleteScheduleApp() {
                                         <X className="w-4 h-4 text-red-600 opacity-70" />
                                       </div>
                                     )}
+
+                                    {/* ✅ THÊM: Toggle Selection Visual Indicators */}
+                                    {(() => {
+                                      // Chỉ hiển thị khi đang drag và ô này trong drag range
+                                      if (!dragState.isDragging || !isInDragRange) return null;
+                                      
+                                      // Xác định trạng thái hiện tại của ô
+                                      const isCurrentlySelected = isTimeSlotSelected(dayIndex, time, specificDate);
+                                      
+                                      // Hiển thị dấu + cho ô chưa chọn, dấu X cho ô đã chọn
+                                      if (!isCurrentlySelected) {
+                                        // Ô chưa chọn - hiển thị dấu +
+                                        return (
+                                          <div
+                                            className={`absolute inset-0 ${
+                                              getSelectedDepartmentColor().light
+                                            } bg-opacity-50 rounded flex items-center justify-center border-2 ${
+                                              getSelectedDepartmentColor().border
+                                            } border-dashed animate-pulse`}
+                                          >
+                                            <Plus
+                                              className={`w-4 h-4 ${
+                                                getSelectedDepartmentColor().text
+                                              } opacity-70`}
+                                            />
+                                          </div>
+                                        );
+                                      } else {
+                                        // Ô đã chọn - hiển thị dấu X
+                                        return (
+                                          <div className="absolute inset-0 bg-red-100 bg-opacity-50 rounded flex items-center justify-center border-2 border-red-300 border-dashed animate-pulse">
+                                            <X className="w-4 h-4 text-red-600 opacity-70" />
+                                          </div>
+                                        );
+                                      }
+                                    })()}
                                   </div>
                                 );
                               })}
@@ -4301,21 +4626,28 @@ export default function CompleteScheduleApp() {
                             currentMonth.getMonth(),
                             currentMonth.getFullYear()
                           );
+                        // ✅ SỬA: Logic canInteract hoàn chỉnh giống weekly view
+                        const isLockedByOther = (() => {
+                          const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                          const lockedBy = getFieldLockedBy(fieldId);
+                          return lockedBy && lockedBy.userId !== user?.id;
+                        })();
+                        
+                        // ✅ SỬA: Logic canInteract hoàn toàn giống weekly view
                         const canInteract =
                           !isSunday &&
                           !isConflicted &&
                           !isPast &&
                           !isBlockedByHidden &&
-                          !hasExistingSchedule &&
+                          // ✅ SỬA: Cho phép tương tác với ngày đã chọn để có thể drag quét
+                          (!hasExistingSchedule || isSelectedByCurrentDept) &&
                           !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
-                          // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
-                          !(() => {
-                            const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
-                            const lockedBy = getFieldLockedBy(fieldId);
-                            return lockedBy && lockedBy.userId !== user?.id;
-                          })() &&
-                          // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
-                          daySchedules.length === 0;
+                          // ✅ SỬA: Không cho phép tương tác với ngày bị người khác khóa
+                          !isLockedByOther &&
+                          // ✅ SỬA: Cho phép tương tác với ngày đã chọn để có thể drag quét (giống weekly view)
+                          (daySchedules.length === 0 || isSelectedByCurrentDept) &&
+                          // ✅ THÊM: Cho phép tương tác với ô đã chọn để có thể drag quét
+                          (!isSelectedByCurrentDept || true); // Luôn cho phép tương tác với ô đã chọn
 
                         return (
                           <div
@@ -4354,6 +4686,8 @@ export default function CompleteScheduleApp() {
                                   ? `${
                                       getDepartmentColor(blockedByDeptId).light
                                     } opacity-30 border-dashed`
+                                  : isLockedByOther // ✅ THÊM: Styling cho ngày bị người khác khóa
+                                  ? "bg-yellow-100 opacity-70 cursor-not-allowed border-yellow-300 border-2"
                                   : hasExistingSchedule // ✅ THÊM: Styling cho ngày đã có lịch
                                   ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
                                   : daySchedules.length > 0
@@ -4378,39 +4712,11 @@ export default function CompleteScheduleApp() {
                                   return;
                                 }
                                 
-                                // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
-                                if (isSelectedByCurrentDept && selectedDepartment) {
-                                  console.log('[ScheduleApp] User clicking on own selected day, clearing it');
-                                  
-                                  // Xóa selection
-                                  const currentSelections = getCurrentDepartmentSelections();
-                                  const newDays = currentSelections.days.filter(
-                                    (d) =>
-                                      !(d.date === day.date &&
-                                        d.month === currentMonth.getMonth() &&
-                                        d.year === currentMonth.getFullYear())
-                                  );
-                                  
-                                  updateDepartmentSelections(selectedDepartment, {
-                                    ...currentSelections,
-                                    days: newDays,
-                                  });
-                                  
-                                  // Clear edit session
-                                  const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
-                                  if (clearMySelections) {
-                                    clearMySelections('explicit', [fieldId]);
-                                  }
-                                  
-                                  toast.success("Đã xóa ngày này khỏi lịch");
-                                  return;
-                                }
+                                // ✅ SỬA: Logic hoàn toàn giống weekly view - cho phép drag để quét
+                                console.log('[ScheduleApp] User starting interaction with day, will handle in mouseUp');
                                 
-                                handleDayMouseDown(
-                                  day.date,
-                                  day.isCurrentMonth,
-                                  e
-                                );
+                                // Gọi handleDayMouseDown để bắt đầu drag (giống weekly view)
+                                handleDayMouseDown(day.date, day.isCurrentMonth, e);
                               }
                             }}
                             onMouseEnter={() => {
@@ -4437,61 +4743,44 @@ export default function CompleteScheduleApp() {
                                   return;
                                 }
                                 
-                                // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
-                                if (isSelectedByCurrentDept && selectedDepartment) {
-                                  console.log('[ScheduleApp] User clicking on own selected day, clearing it');
-                                  
-                                  // Xóa selection
-                                  const currentSelections = getCurrentDepartmentSelections();
-                                  const newDays = currentSelections.days.filter(
-                                    (d) =>
-                                      !(d.date === day.date &&
-                                        d.month === currentMonth.getMonth() &&
-                                        d.year === currentMonth.getFullYear())
-                                  );
-                                  
-                                  updateDepartmentSelections(selectedDepartment, {
-                                    ...currentSelections,
-                                    days: newDays,
-                                  });
-                                  
-                                  // Clear edit session
-                                  const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
-                                  if (clearMySelections) {
-                                    clearMySelections('explicit', [fieldId]);
-                                  }
-                                  
-                                  toast.success("Đã xóa ngày này khỏi lịch");
-                                  return;
-                                }
+                                // ✅ SỬA: Logic hoàn toàn giống weekly view - cho phép drag để quét
+                                console.log('[ScheduleApp] User starting interaction with day, will handle in mouseUp');
                                 
+                                // Gọi handleDayClick để xử lý click (giống weekly view)
                                 handleDayClick(day.date, day.isCurrentMonth);
                               }
                             }}
                           >
-                            {/* Day number */}
-                            <div
-                              className={`font-medium text-sm mb-1 
-                              ${
-                                day.date === new Date().getDate() &&
-                                currentMonth.getMonth() ===
-                                  new Date().getMonth() &&
-                                currentMonth.getFullYear() ===
-                                  new Date().getFullYear() &&
-                                day.isCurrentMonth &&
-                                !isSunday
-                                  ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-md"
-                                  : isSelectedByCurrentDept &&
-                                    selectedDepartment &&
-                                    !isSunday
-                                  ? `${
-                                      getSelectedDepartmentColor().text
-                                    } font-bold`
-                                  : isSunday
-                                  ? "w-6 h-6 text-red-400"
-                                  : "w-6 h-6"
-                              }`}
-                            >
+                                                          {/* ✅ THÊM: Indicator cho ngày bị người khác khóa */}
+                              {isLockedByOther && (
+                                <div className="absolute top-1 left-1">
+                                  <div className="w-2 h-2 bg-yellow-500 rounded-full" />
+                                </div>
+                              )}
+                              
+                              {/* Day number */}
+                              <div
+                                className={`font-medium text-sm mb-1 
+                                ${
+                                  day.date === new Date().getDate() &&
+                                  currentMonth.getMonth() ===
+                                    new Date().getMonth() &&
+                                  currentMonth.getFullYear() ===
+                                    new Date().getFullYear() &&
+                                  day.isCurrentMonth &&
+                                  !isSunday
+                                    ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-md"
+                                    : isSelectedByCurrentDept &&
+                                      selectedDepartment &&
+                                      !isSunday
+                                    ? `${
+                                        getSelectedDepartmentColor().text
+                                      } font-bold`
+                                    : isSunday
+                                    ? "w-6 h-6 text-red-400"
+                                    : "w-6 h-6"
+                                }`}
+                              >
                               {day.date}
                               {(() => {
                                 if (!day.isCurrentMonth) return null;
@@ -4613,6 +4902,85 @@ export default function CompleteScheduleApp() {
                                   />
                                 </div>
                               )}
+
+                            {/* ✅ THÊM: Toggle Selection Visual Indicators cho Monthly View */}
+                            {(() => {
+                              // Chỉ hiển thị khi đang drag và ngày này trong drag range
+                              if (!monthlyDragState.isDragging || !isDayInMonthlyDragRange(day.date, currentMonth.getMonth(), currentMonth.getFullYear())) return null;
+                              
+                              // Xác định trạng thái hiện tại của ngày
+                              const isCurrentlySelected = isDaySelected(day.date, currentMonth.getMonth(), currentMonth.getFullYear());
+                              
+                              // Hiển thị dấu + cho ngày chưa chọn, dấu X cho ngày đã chọn
+                              if (!isCurrentlySelected) {
+                                // Ngày chưa chọn - hiển thị dấu +
+                                return (
+                                  <div
+                                    className={`absolute inset-0 ${
+                                      getSelectedDepartmentColor().light
+                                    } bg-opacity-50 rounded flex items-center justify-center border-2 ${
+                                      getSelectedDepartmentColor().border
+                                    } border-dashed animate-pulse`}
+                                  >
+                                    <Plus
+                                      className={`w-4 h-4 ${
+                                        getSelectedDepartmentColor().text
+                                      } opacity-70`}
+                                    />
+                                  </div>
+                                );
+                              } else {
+                                // Ngày đã chọn - hiển thị dấu X
+                                return (
+                                  <div className="absolute inset-0 bg-red-100 bg-opacity-50 rounded flex items-center justify-center border-2 border-red-300 border-dashed animate-pulse">
+                                    <X className="w-4 h-4 text-red-600 opacity-70" />
+                                  </div>
+                                );
+                              }
+                            })()}
+                            
+                            {/* ✅ THÊM: Giao diện khóa ô người khác chọn */}
+                            {isLockedByOther && (
+                              <div className="absolute inset-0 bg-yellow-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-yellow-300 border-dashed">
+                                <div className="flex items-center gap-2">
+                                  <Lock className="w-4 h-4 text-yellow-600" />
+                                  <span className="text-xs font-medium text-yellow-600">
+                                    {(() => {
+                                      // Lấy thông tin người đang chọn giống weekly view
+                                      const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                                      const lockedBy = getFieldLockedBy(fieldId);
+                                      
+                                      if (lockedBy) {
+                                        // Lấy tên user từ nhiều nguồn giống weekly view
+                                        let userName = 'Unknown';
+                                        if (lockedBy.userName) {
+                                          userName = lockedBy.userName;
+                                        } else if (lockedBy.departmentId) {
+                                          const dept = departments.find(d => d.id === lockedBy.departmentId);
+                                          userName = dept ? `${dept.name} User` : 'Unknown User';
+                                        }
+                                        return `${userName} đang chọn`;
+                                      }
+                                      
+                                      // Fallback: Lấy từ cellSelections nếu có
+                                      const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
+                                        day.date, currentMonth.getMonth(), currentMonth.getFullYear()
+                                      );
+                                      
+                                      if (isSelectedByOther && otherUserId && otherUserId !== user?.id) {
+                                        // Tìm user trong presences
+                                        const targetUser = Array.from(presences.values()).find(p => p.userId === otherUserId);
+                                        if (targetUser?.userName) {
+                                          return `${targetUser.userName} đang chọn`;
+                                        }
+                                      }
+                                      
+                                      return 'Đang chọn';
+                                    })()}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}

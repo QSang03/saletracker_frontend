@@ -371,30 +371,36 @@ export default function CampaignModal({
   );
 
   // Handle campaign type change with reset logic
-  const handleCampaignTypeChange = useCallback(
-    (newType: CampaignType | "") => {
-      const previousType = selectedType;
-      
-      // Reset selected days when changing campaign type
-      if (previousType !== newType) {
-        setSelectedDays([]);
-        // Note: timeOfDay is not reset to preserve user's time selection
-        
-        // Reset day selection mode based on new type
-        if (newType === CampaignType.THREE_DAY_KM) {
-          setDaySelectionMode("adjacent");
-        } else if (
-          newType === CampaignType.WEEKLY_SP ||
-          newType === CampaignType.WEEKLY_BBG
-        ) {
-          setDaySelectionMode("single");
-        }
+  // Use functional state update so changes work correctly in edit mode
+  const handleCampaignTypeChange = useCallback((newType: CampaignType | "") => {
+    setSelectedType((previousType) => {
+      // If unchanged, allow deselect by setting to empty
+      if (previousType === newType) return newType;
+
+      // Clear schedule-related fields when changing type to avoid stale config
+      setSelectedDays([]);
+      setStartTime("");
+      setEndTime("");
+      setTimeOfDay("");
+
+      // Reset day selection mode based on new type
+      if (newType === CampaignType.THREE_DAY_KM) {
+        setDaySelectionMode("adjacent");
+      } else if (
+        newType === CampaignType.WEEKLY_SP ||
+        newType === CampaignType.WEEKLY_BBG
+      ) {
+        setDaySelectionMode("single");
+      } else {
+        setDaySelectionMode("single");
       }
-      
-      setSelectedType(newType);
-    },
-    [selectedType]
-  );
+
+      // NOTE: do NOT auto-navigate here. Navigation on initial load is handled
+      // by the effect that opens the modal so user can change type freely.
+
+      return newType;
+    });
+  }, []);
 
   const loadUsersWithEmail = useCallback(async () => {
     try {
@@ -832,25 +838,13 @@ export default function CampaignModal({
       );
       setVisitedSteps(allSteps);
     }
-  }, [mode, initialData, open, totalSteps, loadCampaignData]);
+  }, [mode, initialData, open, loadCampaignData]);
 
   useEffect(() => {
     if (open) {
       loadUsersWithEmail();
     }
   }, [open, loadUsersWithEmail]);
-  useEffect(() => {
-    if (mode === "edit" && initialData && open) {
-      console.log("📝 Loading campaign data for edit mode:", initialData);
-      loadCampaignData(initialData);
-
-      // Trong edit mode, cho phép truy cập tất cả steps
-      const allSteps = new Set(
-        Array.from({ length: totalSteps }, (_, i) => i + 1)
-      );
-      setVisitedSteps(allSteps);
-    }
-  }, [mode, initialData, open, totalSteps, loadCampaignData]);
 
   // Normalize phone helper (VN): keep digits, convert leading 84 to 0
   const normalizePhone = useCallback((p: string) => {
@@ -3015,18 +3009,21 @@ export default function CampaignModal({
                                         transition: { duration: 0.1 },
                                       }}
                                       whileTap={{ scale: 0.98 }}
-                                      type="button"
-                                      onClick={() =>
-                                        handleCampaignTypeChange(
-                                          isSelected ? "" : option.value
-                                        )
-                                      }
-                                      className={cn(
-                                        "p-4 rounded-lg border-2 transition-all duration-200 text-left",
-                                        isSelected
-                                          ? "border-blue-500 bg-blue-50 shadow-lg"
-                                          : "border-gray-200 hover:border-gray-300 hover:shadow-md"
-                                      )}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          handleCampaignTypeChange(
+                                            isSelected ? "" : option.value
+                                          );
+                                        }}
+                                        tabIndex={0}
+                                        className={cn(
+                                          "p-4 rounded-lg border-2 transition-all duration-200 text-left pointer-events-auto",
+                                          isSelected
+                                            ? "border-blue-500 bg-blue-50 shadow-lg"
+                                            : "border-gray-200 hover:border-gray-300 hover:shadow-md"
+                                        )}
                                     >
                                       <div className="flex items-center gap-3">
                                         <motion.span
