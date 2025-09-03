@@ -176,12 +176,18 @@ export default function CompleteScheduleApp() {
   const { user, getAllUserRoles } = usePermission();
   const { isViewRole } = useViewRole();
   
-  // Tạo roomId theo tuần hiện tại
+  // ✅ SỬA: Tạo roomId theo tuần hiện tại với prefix môi trường để tách biệt dev/production
   const roomId = useMemo(() => {
     const now = new Date();
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay()); // Chủ nhật
-    return `schedule:week:${startOfWeek.toISOString().split('T')[0]}`;
+    
+    // Tách biệt hoàn toàn giữa dev và production
+    const env = process.env.NODE_ENV || 'development';
+    const envPrefix = env === 'production' ? 'prod' : 'dev';
+    
+    // ✅ BỎ timestamp để giữ nguyên room khi F5, chỉ đổi khi đổi tuần
+    return `${envPrefix}:schedule:week:${startOfWeek.toISOString().split('T')[0]}`;
   }, []);
 
   // Schedule collaboration
@@ -208,6 +214,12 @@ export default function CompleteScheduleApp() {
     getPreviewPatchForField,
   } = useScheduleCollaboration(roomId);
 
+  // ✅ THÊM: Tạo storage key riêng cho từng môi trường
+  const storageKey = useMemo(() => {
+    const env = process.env.NODE_ENV || 'development';
+    const envPrefix = env === 'production' ? 'prod' : 'dev';
+    return `${envPrefix}:schedule:selections:${user?.id || 'anonymous'}`;
+  }, [user?.id]);
 
   const uiToDow = (dayIndex: number) => ((dayIndex + 1) % 7) + 1;
   const dowToUi = (dow: number) => (dow === 1 ? 6 : dow - 2);
@@ -558,7 +570,7 @@ export default function CompleteScheduleApp() {
     turnOffBulk();
   }, [turnOffBulk]);
 
-  // Handler chuyên dụng để xóa chỉ selections của chính mình
+  // ✅ THÊM: Handler chuyên dụng để xóa chỉ selections của chính mình
   const handleClearAllMine = useCallback(() => {
     console.log('[ScheduleApp] handleClearAllMine: Clearing only own selections');
     
@@ -569,14 +581,20 @@ export default function CompleteScheduleApp() {
     setBulkScheduleConfig(prev => ({ ...prev, enabled: false }));
     setBulkPreview({ weeks: [], months: [] });
 
+    // ✅ THÊM: Xóa local storage
+    try {
+      localStorage.removeItem(storageKey);
+      console.log('[ScheduleApp] Cleared local storage:', storageKey);
+    } catch (error) {
+      console.error('[ScheduleApp] Error clearing local storage:', error);
+    }
+
     // 2) Phát sự kiện chỉ cho user hiện tại (không đụng selections của người khác)
     const emptyPayload = {
       departmentSelections: {},
       selectedDepartment: null,
       activeView,
     };
-    
-
     
     if (clearMySelections) {
       clearMySelections('explicit');
@@ -585,7 +603,7 @@ export default function CompleteScheduleApp() {
     }
 
     toast.success("Đã xóa các ô bạn đang chọn.");
-  }, [sendCellSelections, activeView, setDepartmentSelections, setSelectedDepartment, setIsBulkMode, setBulkScheduleConfig, setBulkPreview, user]);
+  }, [sendCellSelections, activeView, setDepartmentSelections, setSelectedDepartment, setIsBulkMode, setBulkScheduleConfig, setBulkPreview, user, storageKey, clearMySelections]);
 
   // Utils for focus/scroll
   const formatDateStr = useCallback((d: Date) => {
@@ -917,6 +935,44 @@ export default function CompleteScheduleApp() {
       );
     },
     [getCurrentDepartmentSelections]
+  );
+
+  const isDaySelectedByAnyDept = useCallback(
+    (date: number, month: number, year: number) => {
+      // Check local selections first
+      for (const [deptId, selections] of departmentSelections) {
+        if (
+          selections.days &&
+          selections.days.some(
+            (day) =>
+              day.date === date && day.month === month && day.year === year
+          )
+        ) {
+          return { isSelected: true, departmentId: deptId, userId: user?.id };
+        }
+      }
+
+      // Check remote selections from Redis
+      for (const [userId, remoteSelections] of cellSelections) {
+        if (userId === user?.id) continue; // Skip own selections
+        
+        const remoteDeptSelections = remoteSelections.departmentSelections;
+        if (!remoteDeptSelections) continue;
+
+        for (const [deptId, selections] of Object.entries(remoteDeptSelections)) {
+          const typedSelections = selections as any;
+          if (typedSelections.days && typedSelections.days.some(
+            (day: any) =>
+              day.date === date && day.month === month && day.year === year
+          )) {
+            return { isSelected: true, departmentId: parseInt(deptId), userId };
+          }
+        }
+      }
+      
+      return { isSelected: false, departmentId: null, userId: null };
+    },
+    [departmentSelections, cellSelections, user]
   );
 
   // Handler cho mouse up
@@ -1689,12 +1745,18 @@ export default function CompleteScheduleApp() {
         year
       );
 
+      // ✅ THÊM: Kiểm tra ngày đang được chọn bởi người khác
+      const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
+        date, month, year
+      );
+      if (isSelectedByOther && otherUserId !== user?.id) continue; // ✅ THÊM: Chỉ cho phép chọn ngày của chính mình
+
       if (
         isCurrentMonth &&
         !isPastDay(date, month, year) &&
         !isDayConflicted(date, month, year) &&
-        !isDayHasExistingSchedule(date, month, year) &&
-        !isDayBlockedByExistingSchedule(date, month, year) && // ✅ THÊM: Bỏ qua ngày bị chặn bởi lịch đã có
+        // ✅ SỬA: Chỉ kiểm tra ngày bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
+        !isDayBlockedByExistingSchedule(date, month, year) &&
         !isBlockedByHidden &&
         !isSunday
       ) {
@@ -1711,9 +1773,10 @@ export default function CompleteScheduleApp() {
     currentMonth,
     isPastDay,
     isDayConflicted,
-    isDayHasExistingSchedule,
-    isDayBlockedByExistingSchedule, // ✅ THÊM dependency
+    isDayBlockedByExistingSchedule, // ✅ SỬA: Chỉ giữ dependency này
     isDayBlockedByHiddenDepartment,
+    isDaySelectedByAnyDept, // ✅ THÊM dependency
+    user, // ✅ THÊM dependency
   ]);
 
   const isDayInMonthlyDragRange = useCallback(
@@ -1762,43 +1825,7 @@ export default function CompleteScheduleApp() {
     [getCurrentDepartmentSelections]
   );
 
-  const isDaySelectedByAnyDept = useCallback(
-    (date: number, month: number, year: number) => {
-      // Check local selections first
-      for (const [deptId, selections] of departmentSelections) {
-        if (
-          selections.days &&
-          selections.days.some(
-            (day) =>
-              day.date === date && day.month === month && day.year === year
-          )
-        ) {
-          return { isSelected: true, departmentId: deptId, userId: user?.id };
-        }
-      }
-
-      // Check remote selections from Redis
-      for (const [userId, remoteSelections] of cellSelections) {
-        if (userId === user?.id) continue; // Skip own selections
-        
-        const remoteDeptSelections = remoteSelections.departmentSelections;
-        if (!remoteDeptSelections) continue;
-
-        for (const [deptId, selections] of Object.entries(remoteDeptSelections)) {
-          const typedSelections = selections as any;
-          if (typedSelections.days && typedSelections.days.some(
-            (day: any) =>
-              day.date === date && day.month === month && day.year === year
-          )) {
-            return { isSelected: true, departmentId: parseInt(deptId), userId };
-          }
-        }
-      }
-      
-      return { isSelected: false, departmentId: null, userId: null };
-    },
-    [departmentSelections, cellSelections, user]
-  );
+  
 
   const isTimeSlotSelectedByAnyDept = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
@@ -1976,8 +2003,8 @@ export default function CompleteScheduleApp() {
         const specificDate = weekDates[day]?.toISOString().split("T")[0];
         if (isPastTimeSlot(day, time, specificDate)) continue;
         if (isTimeSlotConflicted(day, time, specificDate)) continue;
-        if (isSlotHasExistingSchedule(day, time, specificDate)) continue;
-        if (isSlotBlockedByExistingSchedule(day, time, specificDate)) continue; // ✅ THÊM: Bỏ qua ô bị chặn bởi lịch đã có
+        // ✅ SỬA: Chỉ kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
+        if (isSlotBlockedByExistingSchedule(day, time, specificDate)) continue;
         const { isBlocked } = isSlotBlockedByHiddenDepartment(
           day,
           time,
@@ -1986,12 +2013,12 @@ export default function CompleteScheduleApp() {
         if (isBlocked) continue;
         const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
           isTimeSlotSelectedByAnyDept(day, time, specificDate);
-        if (isSelectedByOther && otherDeptId !== selectedDepartment) continue;
+        if (isSelectedByOther && otherUserId !== user?.id) continue; // ✅ SỬA: Chỉ cho phép chọn ô của chính mình
         
         // Kiểm tra ô đang được chỉnh sửa bởi user khác
         const fieldId = `time-slot-${day}-${time}-${specificDate}`;
         const lockedBy = getFieldLockedBy(fieldId);
-        if (lockedBy) continue;
+        if (lockedBy && lockedBy.userId !== user?.id) continue; // ✅ SỬA: Chỉ cho phép chỉnh sửa ô của chính mình
 
         range.push({ day, time, applicable_date: specificDate });
       }
@@ -2002,13 +2029,13 @@ export default function CompleteScheduleApp() {
     dragState.startSlot,
     dragState.currentSlot,
     isTimeSlotConflicted,
-    isSlotHasExistingSchedule,
-    isSlotBlockedByExistingSchedule, // ✅ THÊM dependency
+    isSlotBlockedByExistingSchedule, // ✅ SỬA: Chỉ giữ dependency này
     isPastTimeSlot,
     isSlotBlockedByHiddenDepartment,
     isTimeSlotSelectedByAnyDept,
     getFieldLockedBy,
     selectedDepartment,
+    user, // ✅ THÊM dependency
   ]);
 
   const handleTimeSlotMouseDown = useCallback(
@@ -2523,10 +2550,12 @@ export default function CompleteScheduleApp() {
     };
   }, [dragState.isDragging, monthlyDragState.isDragging, handleDayMouseUp]);
 
+
+
   // Load cell selections from Redis when component mounts
   useEffect(() => {
     if (isDataReady && user) {
-      console.log('[ScheduleApp] Loading cell selections from Redis...');
+      console.log('[ScheduleApp] Loading cell selections from Redis for room:', roomId);
       
       // ✅ SỬA: Không clear local state khi mount, chỉ load từ Redis
       // setDepartmentSelections(new Map());
@@ -2534,7 +2563,67 @@ export default function CompleteScheduleApp() {
       
       getCellSelections();
     }
-  }, [isDataReady, user, getCellSelections]);
+  }, [isDataReady, user, getCellSelections, roomId]);
+
+  // ✅ THÊM: Lưu selections vào local storage theo môi trường
+  useEffect(() => {
+    if (departmentSelections.size > 0 && user) {
+      try {
+        const dataToSave = {
+          departmentSelections: Object.fromEntries(departmentSelections),
+          selectedDepartment,
+          timestamp: Date.now(),
+          weekStart: (() => {
+            const now = new Date();
+            const startOfWeek = new Date(now);
+            startOfWeek.setDate(now.getDate() - now.getDay());
+            return startOfWeek.toISOString().split('T')[0];
+          })(),
+        };
+        localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+        console.log('[ScheduleApp] Saved selections to local storage:', storageKey, dataToSave);
+      } catch (error) {
+        console.error('[ScheduleApp] Error saving to local storage:', error);
+      }
+    }
+  }, [departmentSelections, selectedDepartment, user, storageKey, roomId]);
+
+  // ✅ THÊM: Khôi phục selections từ local storage khi component mount
+  useEffect(() => {
+    if (user && !isLoadingDepartments) {
+      try {
+        const savedData = localStorage.getItem(storageKey);
+                  if (savedData) {
+            const parsed = JSON.parse(savedData);
+            // ✅ SỬA: Chỉ khôi phục nếu là cùng tuần và data không quá cũ (trong vòng 1 giờ)
+            const isRecent = Date.now() - parsed.timestamp < 60 * 60 * 1000;
+            const currentWeekStart = new Date();
+            currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
+            const isSameWeek = parsed.weekStart === currentWeekStart.toISOString().split('T')[0];
+            
+            if (isRecent && isSameWeek && parsed.departmentSelections) {
+              console.log('[ScheduleApp] Restoring from local storage:', storageKey, parsed);
+              const restoredSelections = new Map(
+                Object.entries(parsed.departmentSelections).map(([key, value]) => [
+                  parseInt(key),
+                  value as DepartmentSelections
+                ])
+              );
+              setDepartmentSelections(restoredSelections);
+              if (parsed.selectedDepartment) {
+                setSelectedDepartment(parsed.selectedDepartment);
+              }
+            } else {
+              console.log('[ScheduleApp] Local storage data is outdated or from different week, clearing');
+              localStorage.removeItem(storageKey);
+            }
+          }
+      } catch (error) {
+        console.error('[ScheduleApp] Error reading from local storage:', error);
+        localStorage.removeItem(storageKey);
+      }
+    }
+  }, [user, isLoadingDepartments, storageKey, roomId]);
 
   // Restore local selections from Redis data
   useEffect(() => {
@@ -2636,6 +2725,14 @@ export default function CompleteScheduleApp() {
         setDepartmentSelections(new Map());
         setSelectedDepartment(null);
         
+        // ✅ THÊM: Xóa local storage
+        try {
+          localStorage.removeItem(storageKey);
+          console.log('[ScheduleApp] Cleared local storage:', storageKey);
+        } catch (error) {
+          console.error('[ScheduleApp] Error clearing local storage:', error);
+        }
+        
         // Tạo danh sách các ô đang được chỉnh sửa để xóa
         const editingCells: string[] = [];
         for (const [deptId, selection] of departmentSelections.entries()) {
@@ -2693,7 +2790,7 @@ export default function CompleteScheduleApp() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user, isDataReady, activeView, sendCellSelections]);
+  }, [user, isDataReady, activeView, sendCellSelections, storageKey]); // ✅ THÊM storageKey dependency
 
   // Helper function
   const getWeekDatesForDate = useCallback((date: Date) => {

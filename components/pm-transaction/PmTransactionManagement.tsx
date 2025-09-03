@@ -726,16 +726,17 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           setDateFilter("all");
           setDateRangeState(null);
         }
-      } else if (
-        f.dateRange &&
-        (f.dateRange as any).from &&
-        (f.dateRange as any).to
-      ) {
+      } else if (f.dateRange && (f.dateRange as any).from && (f.dateRange as any).to) {
         try {
-          const fromDate = (f.dateRange as any).from;
-          const toDate = (f.dateRange as any).to;
-          
-          // Kiểm tra xem các ngày có hợp lệ không
+          // Mirror manager-order: accept Date objects or date-like strings and
+          // convert to en-CA (YYYY-MM-DD) strings for API/URL params.
+          const fromDate = (f.dateRange as any).from instanceof Date
+            ? (f.dateRange as any).from
+            : new Date((f.dateRange as any).from);
+          const toDate = (f.dateRange as any).to instanceof Date
+            ? (f.dateRange as any).to
+            : new Date((f.dateRange as any).to);
+
           if (fromDate && toDate && !isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
             const from = fromDate.toLocaleDateString("en-CA");
             const to = toDate.toLocaleDateString("en-CA");

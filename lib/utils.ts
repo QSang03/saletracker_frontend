@@ -70,3 +70,13 @@ export const getDepartmentColor = (departmentId: number) => {
   ];
   return colors[departmentId % colors.length];
 };
+
+/**
+ * Return a human-friendly display name for a user object.
+ * Preference order: fullName, nickName, username, email, then fallback '-'.
+ */
+export const getDisplayName = (user?: { fullName?: string | null; nickName?: string | null; username?: string | null; email?: string | null } | null): string => {
+  if (!user) return "-";
+  const v = (user.fullName || user.nickName || user.username || user.email || "").toString().trim();
+  return v || "-";
+};

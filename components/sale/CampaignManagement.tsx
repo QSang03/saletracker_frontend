@@ -45,7 +45,7 @@ import { campaignAPI } from "@/lib/campaign-api";
 import { toast } from "sonner";
 import { usePermission } from "@/hooks/usePermission";
 import { useViewRole } from "@/hooks/useViewRole";
-import { cn } from "@/lib/utils";
+import { cn, getDisplayName } from "@/lib/utils";
 import CampaignCustomersModal from "./CampaignCustomersModal";
 import CampaignModal from "./CampaignModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -476,8 +476,8 @@ const CampaignRow = React.memo(
           </div>
         </TableCell>
 
-        <TableCell className="text-center text-sm text-gray-700">
-          {campaign.created_by?.fullName || "-"}
+        <TableCell className="text-center text-sm text-gray-700" title={getDisplayName(campaign.created_by)}>
+          {getDisplayName(campaign.created_by)}
         </TableCell>
 
         <TableCell className="text-center text-sm text-gray-500">
