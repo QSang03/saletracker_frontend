@@ -1075,8 +1075,19 @@ export default function CompleteScheduleApp() {
   const handleDayMouseUp = useCallback(() => {
     if (!monthlyDragState.isDragging || !selectedDepartment) return;
 
+    // ✅ THÊM: Log để debug
+    console.log('[handleDayMouseUp] Processing mouse up:', { 
+      isDragging: monthlyDragState.isDragging, 
+      selectedDepartment,
+      startDay: monthlyDragState.startDay,
+      currentDay: monthlyDragState.currentDay
+    });
+
     const currentSelections = getCurrentDepartmentSelections();
     const range = getMonthlyDragSelectionRange();
+    
+    // ✅ THÊM: Log range
+    console.log('[handleDayMouseUp] Drag range:', range);
 
     let newDays = [...currentSelections.days];
 
@@ -1172,18 +1183,20 @@ export default function CompleteScheduleApp() {
       clearMySelections('explicit', removedDays);
     }
     
-    // ✅ THÊM: Start edit sessions trong Redis cho các ngày được thêm
+    // ✅ THÊM: Start edit sessions cho các ngày mới được thêm
     if (addedDays.length > 0) {
       addedDays.forEach(fieldId => {
-        startEditSession(fieldId, 'calendar_cell', {
-          userId: user?.id,
-          userName: user?.fullName || user?.nickName || user?.username || 'Unknown',
-          departmentId: selectedDepartment,
-          departmentName: departments.find(d => d.id === selectedDepartment)?.name || 'Unknown',
-          avatar_zalo: user?.avatarZalo,
-          startedAt: new Date().toISOString(),
-          expiresAt: new Date(Date.now() + 30000).toISOString(),
-        });
+        // Parse fieldId để lấy thông tin
+        const match = fieldId.match(/day-(\d+)-(\d+)-(\d+)/);
+        if (match) {
+          const [, date, month, year] = match;
+          
+          startEditSession(fieldId, 'calendar_cell', {
+            date: parseInt(date),
+            month: parseInt(month),
+            year: parseInt(year),
+          });
+        }
       });
     }
 
@@ -1198,10 +1211,6 @@ export default function CompleteScheduleApp() {
     selectedDepartment,
     getCurrentDepartmentSelections,
     updateDepartmentSelections,
-    clearMySelections,
-    startEditSession,
-    user,
-    departments,
   ]);
 
   // Schedule operations
@@ -1815,31 +1824,6 @@ export default function CompleteScheduleApp() {
         year
       );
 
-      // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
-      const fieldId = `day-${date}-${month}-${year}`;
-      const lockedBy = getFieldLockedBy(fieldId);
-      
-      if (lockedBy) {
-        if (lockedBy.userId === user?.id) {
-          // Nếu chính mình đang chọn ngày này, thì cho phép bắt đầu drag để quét
-          console.log('[ScheduleApp] User starting drag from own selected day, will toggle selection during drag');
-          // Không xóa ngay - để cho phép drag để quét
-          // Logic toggle sẽ được xử lý trong handleDayMouseUp
-        } else {
-          // Người khác đang chọn ngày này
-          toast.error(`Ngày này đang được ${lockedBy.userName} chọn`);
-          return;
-        }
-      }
-      
-      // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì cho phép drag để quét
-      const isCurrentlySelected = isDaySelected(date, month, year);
-      if (isCurrentlySelected) {
-        console.log('[ScheduleApp] User starting drag from own selected day, will toggle selection during drag');
-        // Không xóa ngay - để cho phép drag để quét
-        // Logic toggle sẽ được xử lý trong handleDayMouseUp
-      }
-
       // Kiểm tra các điều kiện như cũ
       if (
         isPastDay(date, month, year) ||
@@ -1852,7 +1836,68 @@ export default function CompleteScheduleApp() {
         return;
       }
 
+      // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
+      if (isDaySelected(date, month, year) && selectedDepartment) {
+        console.log('[ScheduleApp] User clicking on own selected day, clearing it');
+        
+        // Xóa selection
+        const currentSelections = getCurrentDepartmentSelections();
+        const newDays = currentSelections.days.filter(
+          (d) =>
+            !(d.date === date &&
+              d.month === month &&
+              d.year === year)
+        );
+        
+        updateDepartmentSelections(selectedDepartment, {
+          ...currentSelections,
+          days: newDays,
+        });
+        
+        // Clear edit session
+        const fieldId = `day-${date}-${month}-${year}`;
+        if (clearMySelections) {
+          clearMySelections('explicit', [fieldId]);
+        }
+        
+        toast.success("Đã xóa ngày này khỏi lịch");
+        return;
+      }
 
+      // ✅ THÊM: Kiểm tra ô đang được chỉnh sửa bởi user khác
+      const fieldId = `day-${date}-${month}-${year}`;
+      const lockedBy = getFieldLockedBy(fieldId);
+      if (lockedBy) {
+        // Nếu chính mình đang chỉnh sửa ô này, thì xóa nó
+        if (lockedBy.userId === user?.id) {
+          console.log('[ScheduleApp] User clicking on own editing day, clearing it');
+          clearMySelections('explicit', [fieldId]);
+          return;
+        }
+        
+        const lockedByUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
+        const userName = lockedByUser?.userName || lockedBy.userName || 'Unknown User';
+        toast.error(`Ngày này đang được chỉnh sửa bởi ${userName}`);
+        return;
+      }
+
+      // Xác định trạng thái chọn/hủy chọn
+      const isCurrentlySelected = isDaySelected(date, month, year);
+
+      // ✅ THÊM: Log để debug
+      console.log('[handleDayMouseDown] Starting drag:', { 
+        date, month, year, 
+        isCurrentlySelected, 
+        fieldId,
+        isSelecting: !isCurrentlySelected
+      });
+
+      // ✅ THÊM: Start edit session
+      startEditSession(fieldId, 'calendar_cell', {
+        date,
+        month,
+        year,
+      });
 
       setMonthlyDragState({
         isDragging: true,
@@ -1860,9 +1905,17 @@ export default function CompleteScheduleApp() {
         currentDay: { date, month, year },
         isSelecting: !isCurrentlySelected,
       });
+      
+      // ✅ THÊM: Log sau khi set state
+      console.log('[handleDayMouseDown] Drag state set:', { 
+        isDragging: true,
+        startDay: { date, month, year },
+        currentDay: { date, month, year },
+        isSelecting: !isCurrentlySelected,
+      });
     },
     [
-      user?.id,
+      isAdmin,
       selectedDepartment,
       currentMonth,
       isPastDay,
@@ -1870,13 +1923,17 @@ export default function CompleteScheduleApp() {
       isDayHasExistingSchedule,
       isDayBlockedByHiddenDepartment,
       isDaySelected,
-      getFieldLockedBy,
+      getCurrentDepartmentSelections,
+      updateDepartmentSelections,
+      clearMySelections,
+      startEditSession,
+      user,
     ]
   );
 
   const handleDayMouseEnter = useCallback(
     (date: number, isCurrentMonth: boolean) => {
-      // ✅ FIX: Chỉ xử lý drag cho ngày thuộc tháng hiện tại
+      // ✅ FIX: Làm giống hệt như lịch tuần
       if (!isCurrentMonth || !monthlyDragState.isDragging) {
         return;
       }
@@ -1884,50 +1941,15 @@ export default function CompleteScheduleApp() {
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth();
 
-      const currentDate = new Date(year, month, date);
-      const isSunday = currentDate.getDay() === 0;
-
-      const { isBlocked: isBlockedByHidden } = isDayBlockedByHiddenDepartment(
-        date,
-        month,
-        year
-      );
-
-      // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
-      const fieldId = `day-${date}-${month}-${year}`;
-      const lockedBy = getFieldLockedBy(fieldId);
-      if (lockedBy && lockedBy.userId !== user?.id) {
-        return; // Bỏ qua ngày bị người khác chọn
-      }
-
-      // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
-      const daySchedules = getSchedulesForDay(date, month, year);
-      if (daySchedules.length > 0) {
-        return; // Bỏ qua ngày có lịch đã tồn tại
-      }
-
-      if (
-        !isPastDay(date, month, year) &&
-        !isDayConflicted(date, month, year) &&
-        !isDayHasExistingSchedule(date, month, year) &&
-        !isDayBlockedByExistingSchedule(date, month, year) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
-        !isBlockedByHidden &&
-        !isSunday
-      ) {
-        setMonthlyDragState((prev) => ({
-          ...prev,
-          currentDay: { date, month, year },
-        }));
-      }
+      // ✅ SỬA: Luôn cập nhật currentDay để tránh bị đơ, giống như lịch tuần
+      setMonthlyDragState((prev) => ({
+        ...prev,
+        currentDay: { date, month, year },
+      }));
     },
     [
       monthlyDragState.isDragging,
       currentMonth,
-      user?.id,
-      isPastDay,
-      isDayConflicted,
-      isDayHasExistingSchedule,
-      isDayBlockedByHiddenDepartment,
     ]
   );
 
@@ -1943,6 +1965,14 @@ export default function CompleteScheduleApp() {
     // Đảm bảo startDate <= endDate
     const minDate = startDate <= endDate ? startDate : endDate;
     const maxDate = startDate <= endDate ? endDate : startDate;
+
+    // ✅ THÊM: Log để debug
+    console.log('[getMonthlyDragSelectionRange] Calculating range:', { 
+      start: { date: start.date, month: start.month, year: start.year },
+      end: { date: end.date, month: end.month, year: end.year },
+      minDate: minDate.toISOString(),
+      maxDate: maxDate.toISOString()
+    });
 
     const range = [];
     const currentDate = new Date(minDate);
@@ -1963,42 +1993,39 @@ export default function CompleteScheduleApp() {
         year
       );
 
-      // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
-      const fieldId = `day-${date}-${month}-${year}`;
-      const lockedBy = getFieldLockedBy(fieldId);
-      if (lockedBy && lockedBy.userId !== user?.id) {
-        continue; // Bỏ qua ngày bị người khác chọn
-      }
-
-      // ✅ THÊM: Kiểm tra ngày đang được chọn bởi người khác
-      const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
-        date, month, year
-      );
-      if (isSelectedByOther && otherUserId !== user?.id) {
-        continue; // Bỏ qua ngày bị người khác chọn
-      }
-
+      // ✅ SỬA: Làm giống hệt như lịch tuần - cho phép quét qua tất cả các ngày nhưng chỉ select những ngày hợp lệ
       if (
         isCurrentMonth &&
         !isPastDay(date, month, year) &&
-        !isDayConflicted(date, month, year) &&
-        !isDayHasExistingSchedule(date, month, year) && // ✅ THÊM: Kiểm tra ngày đã có lịch của chính mình
-        // ✅ SỬA: Chỉ kiểm tra ngày bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
-        !isDayBlockedByExistingSchedule(date, month, year) &&
-        // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại (bất kỳ phòng ban nào)
-        !(() => {
-          const daySchedules = getSchedulesForDay(date, month, year);
-          return daySchedules.length > 0;
-        })() &&
-        !isBlockedByHidden &&
-        !isSunday
+        !isSunday &&
+        !isBlockedByHidden
       ) {
-        range.push({ date, month, year });
+        // ✅ THÊM: Kiểm tra các điều kiện khác để quyết định có thể chọn hay không
+        const canSelect = 
+          !isDayConflicted(date, month, year) &&
+          !isDayHasExistingSchedule(date, month, year) &&
+          !isDayBlockedByExistingSchedule(date, month, year);
+        
+        const daySchedules = getSchedulesForDay(date, month, year);
+        const hasExistingSchedules = daySchedules.length > 0;
+        
+        // ✅ THÊM: Kiểm tra ngày đang được chọn bởi người khác
+        const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
+          date, month, year
+        );
+        const isSelectedByOtherUser = isSelectedByOther && otherUserId !== user?.id;
+        
+        // ✅ SỬA: Chỉ thêm vào range nếu có thể chọn và không bị người khác chọn
+        if (canSelect && !hasExistingSchedules && !isSelectedByOtherUser) {
+          range.push({ date, month, year });
+        }
       }
 
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
+    // ✅ THÊM: Log kết quả
+    console.log('[getMonthlyDragSelectionRange] Final range:', range);
     return range;
   }, [
     monthlyDragState.startDay,
@@ -2009,7 +2036,6 @@ export default function CompleteScheduleApp() {
     isDayBlockedByExistingSchedule, // ✅ SỬA: Chỉ giữ dependency này
     isDayBlockedByHiddenDepartment,
     isDaySelectedByAnyDept, // ✅ THÊM dependency
-    getFieldLockedBy, // ✅ THÊM dependency
     user, // ✅ THÊM dependency
   ]);
 
@@ -2023,12 +2049,35 @@ export default function CompleteScheduleApp() {
         year === currentMonth.getFullYear();
       if (!isCurrentMonth) return false;
 
-      const range = getMonthlyDragSelectionRange();
-      return range.some(
-        (day) => day.date === date && day.month === month && day.year === year
-      );
+      // ✅ SỬA: Làm giống hệt như lịch tuần - kiểm tra xem ngày có trong drag range thực tế không
+      // (không phải range đã được lọc bởi getMonthlyDragSelectionRange)
+      if (!monthlyDragState.startDay || !monthlyDragState.currentDay) return false;
+
+      const start = monthlyDragState.startDay;
+      const end = monthlyDragState.currentDay;
+
+      const startDate = new Date(start.year, start.month, start.date);
+      const endDate = new Date(end.year, end.month, end.date);
+
+      // Đảm bảo startDate <= endDate
+      const minDate = startDate <= endDate ? startDate : endDate;
+      const maxDate = startDate <= endDate ? endDate : startDate;
+
+      const currentDate = new Date(minDate);
+      while (currentDate <= maxDate) {
+        if (
+          currentDate.getDate() === date &&
+          currentDate.getMonth() === month &&
+          currentDate.getFullYear() === year
+        ) {
+          return true;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      return false;
     },
-    [monthlyDragState.isDragging, currentMonth, getMonthlyDragSelectionRange] // ✅ Thêm currentMonth
+    [monthlyDragState.isDragging, monthlyDragState.startDay, monthlyDragState.currentDay, currentMonth]
   );
 
   const getSelectedDepartmentColor = useCallback(() => {
@@ -4570,13 +4619,14 @@ export default function CompleteScheduleApp() {
                         const {
                           isSelected: isSelectedByAny,
                           departmentId: selectedByDeptId,
+                          userId: selectedByUserId,
                         } = day.isCurrentMonth
                           ? isDaySelectedByAnyDept(
                               day.date,
                               currentMonth.getMonth(),
                               currentMonth.getFullYear()
                             )
-                          : { isSelected: false, departmentId: null };
+                          : { isSelected: false, departmentId: null, userId: null };
 
                         const {
                           isBlocked: isBlockedByHidden,
@@ -4626,28 +4676,30 @@ export default function CompleteScheduleApp() {
                             currentMonth.getMonth(),
                             currentMonth.getFullYear()
                           );
-                        // ✅ SỬA: Logic canInteract hoàn chỉnh giống weekly view
-                        const isLockedByOther = (() => {
-                          const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
-                          const lockedBy = getFieldLockedBy(fieldId);
-                          return lockedBy && lockedBy.userId !== user?.id;
-                        })();
-                        
-                        // ✅ SỬA: Logic canInteract hoàn toàn giống weekly view
+                        // ✅ SỬA: Không cho phép tương tác với ngày đang được người khác chọn
                         const canInteract =
                           !isSunday &&
                           !isConflicted &&
                           !isPast &&
                           !isBlockedByHidden &&
-                          // ✅ SỬA: Cho phép tương tác với ngày đã chọn để có thể drag quét
-                          (!hasExistingSchedule || isSelectedByCurrentDept) &&
+                          // ✅ SỬA: Không cho phép tương tác với ngày đã có lịch
+                          !hasExistingSchedule &&
                           !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
-                          // ✅ SỬA: Không cho phép tương tác với ngày bị người khác khóa
-                          !isLockedByOther &&
-                          // ✅ SỬA: Cho phép tương tác với ngày đã chọn để có thể drag quét (giống weekly view)
-                          (daySchedules.length === 0 || isSelectedByCurrentDept) &&
-                          // ✅ THÊM: Cho phép tương tác với ô đã chọn để có thể drag quét
-                          (!isSelectedByCurrentDept || true); // Luôn cho phép tương tác với ô đã chọn
+                          // ✅ THÊM: Kiểm tra ngày đang được chỉnh sửa bởi user khác
+                          !(() => {
+                            const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                            const lockedBy = getFieldLockedBy(fieldId);
+                            return lockedBy && lockedBy.userId !== user?.id;
+                          })() &&
+                          // ✅ THÊM: Kiểm tra ngày đang được chọn bởi người khác
+                          !(() => {
+                            const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
+                              day.date, currentMonth.getMonth(), currentMonth.getFullYear()
+                            );
+                            return isSelectedByOther && otherUserId !== user?.id;
+                          })() &&
+                          // ✅ SỬA: Không cho phép tương tác với ngày đã có lịch
+                          daySchedules.length === 0;
 
                         return (
                           <div
@@ -4668,6 +4720,11 @@ export default function CompleteScheduleApp() {
                                   ? "bg-red-50 text-red-400 cursor-not-allowed opacity-60"
                                   : isBlockedByHidden
                                   ? "bg-slate-200 opacity-40 cursor-not-allowed border-dashed border-slate-400"
+                                  : isSelectedByAny &&
+                                    selectedByDeptId !== selectedDepartment // **THÊM ĐIỀU KIỆN NÀY**
+                                  ? "bg-orange-200 opacity-60 cursor-not-allowed border-orange-200 border-2"
+                                  : hasExistingSchedule // ✅ THÊM: Styling cho ngày đã có lịch
+                                  ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
                                   : isConflicted
                                   ? "cursor-not-allowed opacity-90"
                                   : isSelectedByCurrentDept &&
@@ -4682,17 +4739,15 @@ export default function CompleteScheduleApp() {
                                       getDepartmentColor(selectedByDeptId)
                                         .border
                                     } border-2 cursor-pointer shadow-sm`
-                                  : isBlockedByHidden && blockedByDeptId
+                                  : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
                                   ? `${
                                       getDepartmentColor(blockedByDeptId).light
                                     } opacity-30 border-dashed`
-                                  : isLockedByOther // ✅ THÊM: Styling cho ngày bị người khác khóa
-                                  ? "bg-yellow-100 opacity-70 cursor-not-allowed border-yellow-300 border-2"
-                                  : hasExistingSchedule // ✅ THÊM: Styling cho ngày đã có lịch
-                                  ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
                                   : daySchedules.length > 0
                                   ? "bg-green-50 cursor-pointer hover:bg-green-100"
-                                  : "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
+                                  : selectedDepartment && !isConflicted
+                                  ? "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
+                                  : "hover:bg-slate-50"
                               } ${
                                 focusTarget &&
                                 focusTarget.date === `${currentMonth.getFullYear()}-${String(
@@ -4712,20 +4767,54 @@ export default function CompleteScheduleApp() {
                                   return;
                                 }
                                 
-                                // ✅ SỬA: Logic hoàn toàn giống weekly view - cho phép drag để quét
-                                console.log('[ScheduleApp] User starting interaction with day, will handle in mouseUp');
+                                // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
+                                if (isSelectedByCurrentDept && selectedDepartment) {
+                                  console.log('[ScheduleApp] User clicking on own selected day, clearing it');
+                                  
+                                  // Xóa selection
+                                  const currentSelections = getCurrentDepartmentSelections();
+                                  const newDays = currentSelections.days.filter(
+                                    (d) =>
+                                      !(d.date === day.date &&
+                                        d.month === currentMonth.getMonth() &&
+                                        d.year === currentMonth.getFullYear())
+                                  );
+                                  
+                                  updateDepartmentSelections(selectedDepartment, {
+                                    ...currentSelections,
+                                    days: newDays,
+                                  });
+                                  
+                                  // Clear edit session
+                                  const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                                  if (clearMySelections) {
+                                    clearMySelections('explicit', [fieldId]);
+                                  }
+                                  
+                                  toast.success("Đã xóa ngày này khỏi lịch");
+                                  return;
+                                }
                                 
-                                // Gọi handleDayMouseDown để bắt đầu drag (giống weekly view)
-                                handleDayMouseDown(day.date, day.isCurrentMonth, e);
+                                handleDayMouseDown(
+                                  day.date,
+                                  day.isCurrentMonth,
+                                  e
+                                );
                               }
                             }}
                             onMouseEnter={() => {
+                              // ✅ THÊM: Log để debug
+                              console.log('[Calendar onMouseEnter] Day:', { 
+                                date: day.date, 
+                                isCurrentMonth: day.isCurrentMonth, 
+                                canInteract,
+                                daySchedulesLength: daySchedules.length,
+                                isDragging: monthlyDragState.isDragging
+                              });
+                              
+                              // ✅ SỬA: Chỉ gọi handleDayMouseEnter cho những ngày có thể tương tác
                               if (canInteract) {
-                                // ✅ THÊM: Kiểm tra ngày có schedule đã tồn tại
-                                if (daySchedules.length > 0) {
-                                  return; // Không cho phép drag vào ngày đã có lịch
-                                }
-                                
+                                console.log('[Calendar onMouseEnter] Calling handleDayMouseEnter');
                                 handleDayMouseEnter(
                                   day.date,
                                   day.isCurrentMonth
@@ -4743,44 +4832,61 @@ export default function CompleteScheduleApp() {
                                   return;
                                 }
                                 
-                                // ✅ SỬA: Logic hoàn toàn giống weekly view - cho phép drag để quét
-                                console.log('[ScheduleApp] User starting interaction with day, will handle in mouseUp');
+                                // ✅ THÊM: Kiểm tra nếu chính mình đang chọn ngày này thì xóa nó
+                                if (isSelectedByCurrentDept && selectedDepartment) {
+                                  console.log('[ScheduleApp] User clicking on own selected day, clearing it');
+                                  
+                                  // Xóa selection
+                                  const currentSelections = getCurrentDepartmentSelections();
+                                  const newDays = currentSelections.days.filter(
+                                    (d) =>
+                                      !(d.date === day.date &&
+                                        d.month === currentMonth.getMonth() &&
+                                        d.year === currentMonth.getFullYear())
+                                  );
+                                  
+                                  updateDepartmentSelections(selectedDepartment, {
+                                    ...currentSelections,
+                                    days: newDays,
+                                  });
+                                  
+                                  // Clear edit session
+                                  const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                                  if (clearMySelections) {
+                                    clearMySelections('explicit', [fieldId]);
+                                  }
+                                  
+                                  toast.success("Đã xóa ngày này khỏi lịch");
+                                  return;
+                                }
                                 
-                                // Gọi handleDayClick để xử lý click (giống weekly view)
                                 handleDayClick(day.date, day.isCurrentMonth);
                               }
                             }}
                           >
-                                                          {/* ✅ THÊM: Indicator cho ngày bị người khác khóa */}
-                              {isLockedByOther && (
-                                <div className="absolute top-1 left-1">
-                                  <div className="w-2 h-2 bg-yellow-500 rounded-full" />
-                                </div>
-                              )}
-                              
-                              {/* Day number */}
-                              <div
-                                className={`font-medium text-sm mb-1 
-                                ${
-                                  day.date === new Date().getDate() &&
-                                  currentMonth.getMonth() ===
-                                    new Date().getMonth() &&
-                                  currentMonth.getFullYear() ===
-                                    new Date().getFullYear() &&
-                                  day.isCurrentMonth &&
-                                  !isSunday
-                                    ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-md"
-                                    : isSelectedByCurrentDept &&
-                                      selectedDepartment &&
-                                      !isSunday
-                                    ? `${
-                                        getSelectedDepartmentColor().text
-                                      } font-bold`
-                                    : isSunday
-                                    ? "w-6 h-6 text-red-400"
-                                    : "w-6 h-6"
-                                }`}
-                              >
+                            {/* Day number */}
+                            <div
+                              className={`font-medium text-sm mb-1 
+                              ${
+                                day.date === new Date().getDate() &&
+                                currentMonth.getMonth() ===
+                                  new Date().getMonth() &&
+                                currentMonth.getFullYear() ===
+                                  new Date().getFullYear() &&
+                                day.isCurrentMonth &&
+                                !isSunday
+                                  ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-md"
+                                  : isSelectedByCurrentDept &&
+                                    selectedDepartment &&
+                                    !isSunday
+                                  ? `${
+                                      getSelectedDepartmentColor().text
+                                    } font-bold`
+                                  : isSunday
+                                  ? "w-6 h-6 text-red-400"
+                                  : "w-6 h-6"
+                              }`}
+                            >
                               {day.date}
                               {(() => {
                                 if (!day.isCurrentMonth) return null;
@@ -4789,26 +4895,17 @@ export default function CompleteScheduleApp() {
                                   currentMonth.getMonth(),
                                   currentMonth.getFullYear()
                                 );
+                                // ✅ SỬA: Chỉ hiển thị preview cho những ngày thực sự có thể select (không phải ô cấm)
                                 const isPreviewSelection =
                                   isInDragRange &&
                                   monthlyDragState.isSelecting &&
                                   !isSelectedByCurrentDept &&
-                                  !isPast &&
-                                  !isSunday &&
-                                  !isConflicted &&
-                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
-                                  // ✅ THÊM: Không cho preview selection cho ngày đã có lịch
-                                  daySchedules.length === 0;
+                                  canInteract; // ✅ THÊM: Chỉ preview cho ngày có thể tương tác
                                 const isPreviewDeselection =
                                   isInDragRange &&
                                   !monthlyDragState.isSelecting &&
                                   isSelectedByCurrentDept &&
-                                  !isPast &&
-                                  !isSunday &&
-                                  !isConflicted &&
-                                  !isDayBlockedByExistingSchedule(day.date, currentMonth.getMonth(), currentMonth.getFullYear()) && // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có
-                                  // ✅ THÊM: Không cho preview deselection cho ngày đã có lịch
-                                  daySchedules.length === 0;
+                                  canInteract; // ✅ THÊM: Chỉ preview cho ngày có thể tương tác
 
                                 if (isPreviewSelection) {
                                   return (
@@ -4903,7 +5000,65 @@ export default function CompleteScheduleApp() {
                                 </div>
                               )}
 
-                            {/* ✅ THÊM: Toggle Selection Visual Indicators cho Monthly View */}
+                            {/* ✅ THÊM: Remote user selection/editing indicators - PADLOCK cho Monthly View - giống hệt như lịch tuần */}
+                            {(() => {
+                              // Kiểm tra ngày được chọn bởi user khác
+                              const { isSelected: isSelectedByRemote, userId: remoteUserId } = isDaySelectedByAnyDept(day.date, currentMonth.getMonth(), currentMonth.getFullYear());
+                              
+                              // Kiểm tra ngày đang được chỉnh sửa bởi user khác
+                              const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
+                              const lockedBy = getFieldLockedBy(fieldId);
+                              
+                              // Nếu ngày được chọn HOẶC đang được chỉnh sửa bởi user khác
+                              if ((isSelectedByRemote && remoteUserId && remoteUserId !== user?.id) || lockedBy) {
+                                // Lấy thông tin user
+                                let targetUser = null;
+                                let title = '';
+                                
+                                if (isSelectedByRemote && remoteUserId) {
+                                  targetUser = Array.from(presences.values()).find(p => p.userId === remoteUserId);
+                                  title = `Được chọn bởi ${targetUser?.userName || 'Unknown'}`;
+                                } else if (lockedBy) {
+                                  targetUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
+                                  title = `Đang chỉnh sửa bởi ${targetUser?.userName || lockedBy.userName}`;
+                                }
+                                
+                                if (targetUser || lockedBy) {
+                                  // Lấy tên user từ nhiều nguồn
+                                  let userName = 'Unknown';
+                                  if (targetUser?.userName) {
+                                    userName = targetUser.userName;
+                                  } else if (lockedBy?.userName) {
+                                    userName = lockedBy.userName;
+                                  } else if (targetUser?.departmentName) {
+                                    userName = `${targetUser.departmentName} User`;
+                                  } else if (lockedBy?.departmentId) {
+                                    const dept = departments.find(d => d.id === lockedBy.departmentId);
+                                    userName = dept ? `${dept.name} User` : 'Unknown User';
+                                  }
+                                  
+                                  return (
+                                    <motion.div
+                                      initial={{ scale: 0, opacity: 0 }}
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      exit={{ scale: 0, opacity: 0 }}
+                                      className="absolute inset-0 bg-slate-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-orange-300 border-dashed"
+                                      title={title}
+                                    >
+                                      <div className="flex items-center gap-2 p-2 rounded-lg bg-white shadow-md">
+                                        <Lock className="w-4 h-4 text-orange-600" />
+                                        <span className="text-xs font-medium text-orange-600">
+                                          {userName}
+                                        </span>
+                                      </div>
+                                    </motion.div>
+                                  );
+                                }
+                              }
+                              return null;
+                            })()}
+
+                            {/* ✅ THÊM: Toggle Selection Visual Indicators cho Monthly View - giống hệt như lịch tuần */}
                             {(() => {
                               // Chỉ hiển thị khi đang drag và ngày này trong drag range
                               if (!monthlyDragState.isDragging || !isDayInMonthlyDragRange(day.date, currentMonth.getMonth(), currentMonth.getFullYear())) return null;
@@ -4938,49 +5093,6 @@ export default function CompleteScheduleApp() {
                                 );
                               }
                             })()}
-                            
-                            {/* ✅ THÊM: Giao diện khóa ô người khác chọn */}
-                            {isLockedByOther && (
-                              <div className="absolute inset-0 bg-yellow-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-yellow-300 border-dashed">
-                                <div className="flex items-center gap-2">
-                                  <Lock className="w-4 h-4 text-yellow-600" />
-                                  <span className="text-xs font-medium text-yellow-600">
-                                    {(() => {
-                                      // Lấy thông tin người đang chọn giống weekly view
-                                      const fieldId = `day-${day.date}-${currentMonth.getMonth()}-${currentMonth.getFullYear()}`;
-                                      const lockedBy = getFieldLockedBy(fieldId);
-                                      
-                                      if (lockedBy) {
-                                        // Lấy tên user từ nhiều nguồn giống weekly view
-                                        let userName = 'Unknown';
-                                        if (lockedBy.userName) {
-                                          userName = lockedBy.userName;
-                                        } else if (lockedBy.departmentId) {
-                                          const dept = departments.find(d => d.id === lockedBy.departmentId);
-                                          userName = dept ? `${dept.name} User` : 'Unknown User';
-                                        }
-                                        return `${userName} đang chọn`;
-                                      }
-                                      
-                                      // Fallback: Lấy từ cellSelections nếu có
-                                      const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
-                                        day.date, currentMonth.getMonth(), currentMonth.getFullYear()
-                                      );
-                                      
-                                      if (isSelectedByOther && otherUserId && otherUserId !== user?.id) {
-                                        // Tìm user trong presences
-                                        const targetUser = Array.from(presences.values()).find(p => p.userId === otherUserId);
-                                        if (targetUser?.userName) {
-                                          return `${targetUser.userName} đang chọn`;
-                                        }
-                                      }
-                                      
-                                      return 'Đang chọn';
-                                    })()}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
