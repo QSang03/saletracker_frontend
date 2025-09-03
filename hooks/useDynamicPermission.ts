@@ -54,6 +54,11 @@ export const useDynamicPermission = () => {
     return userRoles.includes("view");
   }, [userRoles]);
 
+  // Kiểm tra role "analysis"
+  const isAnalysisRole = useMemo(() => {
+    return userRoles.includes("analysis");
+  }, [userRoles]);
+
   // Kiểm tra manager (bất kỳ loại manager nào)
   const isManager = useMemo(() => {
     return userRoles.some(role => role === "manager" || role.startsWith("manager-"));
@@ -234,9 +239,10 @@ export const useDynamicPermission = () => {
     userDepartments,
     isAdmin,
     isViewRole,
+    isAnalysisRole,
     isManager,
     isPM,
-  getPMDepartments,
+    getPMDepartments,
     checkDynamicPermission,
     checkAnyPermission,
     checkAllPermissions,

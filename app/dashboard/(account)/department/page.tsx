@@ -169,6 +169,8 @@ export default function DepartmentPage() {
   const handleFilterChange = (filters: any) => {
     setSearch(filters.search || "");
     setPage(1);
+    // Force update to refetch data with new search term
+    setTimeout(() => forceUpdate(), 100);
   };
 
   // Update alert when there's an error

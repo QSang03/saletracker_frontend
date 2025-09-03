@@ -37,6 +37,7 @@ import {
   Trash2,
   Calendar,
   Clock,
+  Lock,
   Users,
   Target,
   CheckCircle,
@@ -52,6 +53,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
+import { getDepartmentColor } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   DepartmentSchedule,
@@ -64,6 +66,13 @@ import {
 import { ScheduleService } from "@/lib/schedule-api";
 import { usePermission } from "@/hooks/usePermission";
 import { useViewRole } from "@/hooks/useViewRole";
+import { useScheduleCollaboration } from "@/hooks/useScheduleCollaboration";
+import { PresenceList, CursorIndicator } from "@/components/schedule/PresenceIndicator";
+
+import { TypingIndicator } from "@/components/schedule/LivePreview";
+import { CellSelectionIndicator } from "@/components/schedule/CellSelectionIndicator";
+import { EditActivityToastsContainer } from "@/components/schedule/EditActivityToast";
+import { EditHistoryModal } from "@/components/schedule/EditHistoryModal";
 
 // Types
 interface Department {
@@ -126,71 +135,6 @@ interface BulkScheduleConfig {
 }
 
 // Constants
-const getDepartmentColor = (departmentId: number) => {
-  const colors = [
-    {
-      bg: "bg-blue-500",
-      light: "bg-blue-100",
-      border: "border-blue-300",
-      text: "text-blue-700",
-    },
-    {
-      bg: "bg-green-500",
-      light: "bg-green-100",
-      border: "border-green-300",
-      text: "text-green-700",
-    },
-    {
-      bg: "bg-purple-500",
-      light: "bg-purple-100",
-      border: "border-purple-300",
-      text: "text-purple-700",
-    },
-    {
-      bg: "bg-orange-500",
-      light: "bg-orange-100",
-      border: "border-orange-300",
-      text: "text-orange-700",
-    },
-    {
-      bg: "bg-pink-500",
-      light: "bg-pink-100",
-      border: "border-pink-300",
-      text: "text-pink-700",
-    },
-    {
-      bg: "bg-teal-500",
-      light: "bg-teal-100",
-      border: "border-teal-300",
-      text: "text-teal-700",
-    },
-    {
-      bg: "bg-indigo-500",
-      light: "bg-indigo-100",
-      border: "border-indigo-300",
-      text: "text-indigo-700",
-    },
-    {
-      bg: "bg-red-500",
-      light: "bg-red-100",
-      border: "border-red-300",
-      text: "text-red-700",
-    },
-    {
-      bg: "bg-yellow-500",
-      light: "bg-yellow-100",
-      border: "border-yellow-300",
-      text: "text-yellow-700",
-    },
-    {
-      bg: "bg-cyan-500",
-      light: "bg-cyan-100",
-      border: "border-cyan-300",
-      text: "text-cyan-700",
-    },
-  ];
-  return colors[departmentId % colors.length];
-};
 
 const timeSlots = [
   "08:00",
@@ -231,6 +175,40 @@ export default function CompleteScheduleApp() {
   // Permission check
   const { user, getAllUserRoles } = usePermission();
   const { isViewRole } = useViewRole();
+  
+  // Tạo roomId theo tuần hiện tại
+  const roomId = useMemo(() => {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Chủ nhật
+    return `schedule:week:${startOfWeek.toISOString().split('T')[0]}`;
+  }, []);
+
+  // Schedule collaboration
+  const {
+    presences,
+    editSessions,
+    previewPatches,
+    conflicts,
+    versions,
+    cellSelections,
+    updatePresence,
+    sendPresence,
+    startEditSession,
+    renewEditSession,
+    stopEditSession,
+    sendPreviewPatch,
+    updateVersion,
+    sendCellSelections,
+    clearMySelections,
+    getCellSelections,
+    pingCellSelections,
+    isFieldLocked,
+    getFieldLockedBy,
+    getPreviewPatchForField,
+  } = useScheduleCollaboration(roomId);
+
+
   const uiToDow = (dayIndex: number) => ((dayIndex + 1) % 7) + 1;
   const dowToUi = (dow: number) => (dow === 1 ? 6 : dow - 2);
 
@@ -319,15 +297,7 @@ export default function CompleteScheduleApp() {
         const department = departments.find((dept) => dept.id === departmentId);
         const canEdit =
           department && userManagerDepartmentSlugs.includes(department.slug);
-        console.log(
-          `[Permission Debug] isDepartmentEditable(${departmentId}):`,
-          {
-            department,
-            userManagerDepartmentSlugs,
-            canEdit,
-            isDataReady,
-          }
-        );
+
         return canEdit || false;
       }
 
@@ -392,6 +362,35 @@ export default function CompleteScheduleApp() {
   const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
   const [editingSchedule, setEditingSchedule] =
     useState<DepartmentSchedule | null>(null);
+  
+  // Edit history modal state
+  const [isEditHistoryModalOpen, setIsEditHistoryModalOpen] = useState(false);
+  const [selectedUserForHistory, setSelectedUserForHistory] = useState<{
+    userId: number;
+    userName: string;
+    departmentId: number;
+    departmentName: string;
+  } | null>(null);
+
+  // Handle view history callback
+  const handleViewHistory = useCallback((userId: number) => {
+    // Find user info from edit sessions or preview patches
+    const userSession = Array.from(editSessions.values()).find(session => session.userId === userId);
+    const userPatch = Array.from(previewPatches.values()).find(patch => patch.userId === userId);
+    
+    if (userSession || userPatch) {
+      const userInfo = userSession || userPatch!;
+      // Get department name from departments array
+      const department = departments.find(dept => dept.id === userInfo.departmentId);
+      setSelectedUserForHistory({
+        userId: userInfo.userId,
+        userName: userInfo.userName,
+        departmentId: userInfo.departmentId,
+        departmentName: department?.name || 'Unknown',
+      });
+      setIsEditHistoryModalOpen(true);
+    }
+  }, [editSessions, previewPatches, departments]);
   // Focus target for auto-scroll/highlight
   const [focusTarget, setFocusTarget] = useState<
     | {
@@ -487,13 +486,62 @@ export default function CompleteScheduleApp() {
 
   const updateDepartmentSelections = useCallback(
     (departmentId: number, selections: DepartmentSelections) => {
+      console.log('[ScheduleApp] updateDepartmentSelections called:', { departmentId, selections });
+      
       setDepartmentSelections((prev) => {
         const newMap = new Map(prev);
-        newMap.set(departmentId, selections);
+        
+        // Check if this is a deselection (empty selections)
+        const isEmptySelection = !selections.timeSlots || selections.timeSlots.length === 0;
+        const hadPreviousSelections = prev.has(departmentId) && 
+          prev.get(departmentId)?.timeSlots && 
+          prev.get(departmentId)!.timeSlots.length > 0;
+        
+        if (isEmptySelection && hadPreviousSelections) {
+          // User deselected all time slots for this department
+          console.log('[ScheduleApp] User deselected all time slots for department:', departmentId);
+          newMap.delete(departmentId);
+        } else {
+          newMap.set(departmentId, selections);
+        }
+        
+        // Send cell selections to Redis for real-time collaboration
+        if (user && isDataReady) {
+          const currentSelections = Array.from(newMap.entries()).reduce((acc, [deptId, sel]) => {
+            acc[deptId] = sel;
+            return acc;
+          }, {} as Record<string, any>);
+          
+          // Tạo danh sách các ô đang được chỉnh sửa
+          const editingCells: string[] = [];
+          for (const [deptId, selection] of newMap.entries()) {
+            if (selection.timeSlots && selection.timeSlots.length > 0) {
+              for (const timeSlot of selection.timeSlots) {
+                const fieldId = `time-slot-${timeSlot.day_of_week}-${timeSlot.start_time}-${timeSlot.applicable_date}`;
+                editingCells.push(fieldId);
+              }
+            }
+          }
+          
+          const payload = {
+            departmentSelections: currentSelections,
+            selectedDepartment,
+            activeView,
+            editingCells, // Thêm thông tin các ô đang chỉnh sửa
+            userId: user.id,
+          };
+          
+
+          
+          sendCellSelections(payload);
+        } else {
+          console.log('[ScheduleApp] Not sending cell selections:', { user: !!user, isDataReady });
+        }
+        
         return newMap;
       });
     },
-    []
+    [user, isDataReady, selectedDepartment, activeView, sendCellSelections]
   );
 
   const turnOffBulk = useCallback(() => {
@@ -501,6 +549,43 @@ export default function CompleteScheduleApp() {
     setBulkScheduleConfig((prev) => ({ ...prev, enabled: false }));
     setBulkPreview({ weeks: [], months: [] });
   }, []);
+
+  // Clear only local state without sending to Redis
+  const clearLocalSelections = useCallback(() => {
+    console.log('[ScheduleApp] Clearing local selections only');
+    setDepartmentSelections(new Map());
+    setSelectedDepartment(null);
+    turnOffBulk();
+  }, [turnOffBulk]);
+
+  // Handler chuyên dụng để xóa chỉ selections của chính mình
+  const handleClearAllMine = useCallback(() => {
+    console.log('[ScheduleApp] handleClearAllMine: Clearing only own selections');
+    
+    // 1) Xóa local state của chính mình
+    setDepartmentSelections(new Map());
+    setSelectedDepartment(null);
+    setIsBulkMode(false);
+    setBulkScheduleConfig(prev => ({ ...prev, enabled: false }));
+    setBulkPreview({ weeks: [], months: [] });
+
+    // 2) Phát sự kiện chỉ cho user hiện tại (không đụng selections của người khác)
+    const emptyPayload = {
+      departmentSelections: {},
+      selectedDepartment: null,
+      activeView,
+    };
+    
+
+    
+    if (clearMySelections) {
+      clearMySelections('explicit');
+    } else {
+      sendCellSelections(emptyPayload);
+    }
+
+    toast.success("Đã xóa các ô bạn đang chọn.");
+  }, [sendCellSelections, activeView, setDepartmentSelections, setSelectedDepartment, setIsBulkMode, setBulkScheduleConfig, setBulkPreview, user]);
 
   // Utils for focus/scroll
   const formatDateStr = useCallback((d: Date) => {
@@ -1653,26 +1738,50 @@ export default function CompleteScheduleApp() {
 
   const isDaySelectedByAnyDept = useCallback(
     (date: number, month: number, year: number) => {
+      // Check local selections first
       for (const [deptId, selections] of departmentSelections) {
         if (
+          selections.days &&
           selections.days.some(
             (day) =>
               day.date === date && day.month === month && day.year === year
           )
         ) {
-          return { isSelected: true, departmentId: deptId };
+          return { isSelected: true, departmentId: deptId, userId: user?.id };
         }
       }
-      return { isSelected: false, departmentId: null };
+
+      // Check remote selections from Redis
+      for (const [userId, remoteSelections] of cellSelections) {
+        if (userId === user?.id) continue; // Skip own selections
+        
+        const remoteDeptSelections = remoteSelections.departmentSelections;
+        if (!remoteDeptSelections) continue;
+
+        for (const [deptId, selections] of Object.entries(remoteDeptSelections)) {
+          const typedSelections = selections as any;
+          if (typedSelections.days && typedSelections.days.some(
+            (day: any) =>
+              day.date === date && day.month === month && day.year === year
+          )) {
+            return { isSelected: true, departmentId: parseInt(deptId), userId };
+          }
+        }
+      }
+      
+      return { isSelected: false, departmentId: null, userId: null };
     },
-    [departmentSelections]
+    [departmentSelections, cellSelections, user]
   );
 
   const isTimeSlotSelectedByAnyDept = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
       const dayOfWeek = uiToDow(dayIndex);
+      
+      // Check local selections first
       for (const [deptId, selections] of departmentSelections) {
         if (
+          selections.timeSlots &&
           selections.timeSlots.some(
             (slot) =>
               slot.day_of_week === dayOfWeek &&
@@ -1682,12 +1791,38 @@ export default function CompleteScheduleApp() {
                 slot.applicable_date === specificDate)
           )
         ) {
-          return { isSelected: true, departmentId: deptId };
+          return { isSelected: true, departmentId: deptId, userId: user?.id };
         }
       }
-      return { isSelected: false, departmentId: null };
+
+      // Check remote selections from Redis
+      for (const [userId, remoteSelections] of cellSelections) {
+        if (userId === user?.id) {
+          continue; // Skip own selections
+        }
+        
+        const remoteDeptSelections = remoteSelections.departmentSelections;
+        if (!remoteDeptSelections) {
+          continue;
+        }
+        for (const [deptId, selections] of Object.entries(remoteDeptSelections)) {
+          const typedSelections = selections as any;
+          if (typedSelections.timeSlots && typedSelections.timeSlots.some(
+            (slot: any) =>
+              slot.day_of_week === dayOfWeek &&
+              slot.start_time === time &&
+              (!slot.applicable_date ||
+                !specificDate ||
+                slot.applicable_date === specificDate)
+          )) {
+            return { isSelected: true, departmentId: parseInt(deptId), userId };
+          }
+        }
+      }
+      
+      return { isSelected: false, departmentId: null, userId: null };
     },
-    [departmentSelections]
+    [departmentSelections, cellSelections, user]
   );
 
   const isTimeSlotConflicted = useCallback(
@@ -1747,9 +1882,14 @@ export default function CompleteScheduleApp() {
         specificDate
       );
       if (isBlocked) return;
-      const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
+      const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
         isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
       if (isSelectedByOther && otherDeptId !== selectedDepartment) return;
+      
+      // Kiểm tra ô đang được chỉnh sửa bởi user khác
+      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+      const lockedBy = getFieldLockedBy(fieldId);
+      if (lockedBy) return;
       if (dragState.isDragging && dragState.startSlot) {
         const startDate = weekDates[dragState.startSlot.day]
           .toISOString()
@@ -1771,6 +1911,7 @@ export default function CompleteScheduleApp() {
       isPastTimeSlot,
       isSlotBlockedByHiddenDepartment,
       isTimeSlotSelectedByAnyDept,
+      getFieldLockedBy,
       selectedDepartment,
       weekDates,
     ]
@@ -1816,9 +1957,14 @@ export default function CompleteScheduleApp() {
           specificDate
         );
         if (isBlocked) continue;
-        const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
+        const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
           isTimeSlotSelectedByAnyDept(day, time, specificDate);
         if (isSelectedByOther && otherDeptId !== selectedDepartment) continue;
+        
+        // Kiểm tra ô đang được chỉnh sửa bởi user khác
+        const fieldId = `time-slot-${day}-${time}-${specificDate}`;
+        const lockedBy = getFieldLockedBy(fieldId);
+        if (lockedBy) continue;
 
         range.push({ day, time, applicable_date: specificDate });
       }
@@ -1833,6 +1979,7 @@ export default function CompleteScheduleApp() {
     isPastTimeSlot,
     isSlotBlockedByHiddenDepartment,
     isTimeSlotSelectedByAnyDept,
+    getFieldLockedBy,
     selectedDepartment,
   ]);
 
@@ -1924,13 +2071,41 @@ export default function CompleteScheduleApp() {
         return;
       }
 
-      const { isSelected: isSelectedByOther, departmentId: otherDeptId } =
+      const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
         isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
-      if (isSelectedByOther && otherDeptId !== selectedDepartment) {
-        const otherDeptName = departments.find(
-          (d) => d.id === otherDeptId
-        )?.name;
-        toast.error(`Ô này đang được chọn bởi ${otherDeptName}`);
+      if (isSelectedByOther) {
+        // Nếu chính mình đang chọn ô này, thì xóa nó
+        if (otherUserId === user?.id) {
+          console.log('[ScheduleApp] User clicking on own selected cell, clearing it');
+          const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+          clearMySelections('explicit', [fieldId]);
+          return;
+        }
+        
+        // Nếu người khác đang chọn ô này
+        if (otherDeptId !== selectedDepartment) {
+          const otherDeptName = departments.find(
+            (d) => d.id === otherDeptId
+          )?.name;
+          toast.error(`Ô này đang được chọn bởi ${otherDeptName}`);
+          return;
+        }
+      }
+
+      // Kiểm tra ô đang được chỉnh sửa bởi user khác
+      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+      const lockedBy = getFieldLockedBy(fieldId);
+      if (lockedBy) {
+        // Nếu chính mình đang chỉnh sửa ô này, thì xóa nó
+        if (lockedBy.userId === user?.id) {
+          console.log('[ScheduleApp] User clicking on own editing cell, clearing it');
+          clearMySelections('explicit', [fieldId]);
+          return;
+        }
+        
+        const lockedByUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
+        const userName = lockedByUser?.userName || lockedBy.userName || 'Unknown User';
+        toast.error(`Ô này đang được chỉnh sửa bởi ${userName}`);
         return;
       }
 
@@ -1962,7 +2137,10 @@ export default function CompleteScheduleApp() {
       isTimeSlotConflicted,
       isSlotBlockedByHiddenDepartment,
       isTimeSlotSelectedByAnyDept,
+      getFieldLockedBy,
       getCurrentDepartmentSelections,
+      clearMySelections,
+      user,
       departments,
     ]
   );
@@ -2061,6 +2239,157 @@ export default function CompleteScheduleApp() {
 
     fetchDepartments();
   }, []);
+
+  // Presence tracking với cell selection
+  useEffect(() => {
+    if (!user || !isDataReady) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const calendarCell = target.closest('[data-slot-date], [data-day-date]');
+      
+      if (calendarCell) {
+        // Lấy thông tin cell đang hover
+        let cellInfo = {};
+        if (calendarCell.hasAttribute('data-slot-date')) {
+          const date = calendarCell.getAttribute('data-slot-date')!;
+          const time = calendarCell.getAttribute('data-time')!;
+          const dayIndex = parseInt(calendarCell.getAttribute('data-day-index') || '0');
+          cellInfo = { dayIndex, time, date, cellType: 'timeSlot' };
+        } else if (calendarCell.hasAttribute('data-day-date')) {
+          const date = calendarCell.getAttribute('data-day-date')!;
+          const [year, month, day] = date.split('-').map(Number);
+          cellInfo = { date: day, month: month - 1, year, cellType: 'day' };
+        }
+        
+        sendPresence({
+          userId: user.id,
+          userName: (user.fullName || user.nickName || user.username || 'Unknown').replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống'),
+          departmentId: user.departments?.[0]?.id || 0,
+          departmentName: user.departments?.[0]?.name || 'Unknown',
+          position: { 
+            x: e.clientX, 
+            y: e.clientY,
+            ...cellInfo
+          },
+          isEditing: false,
+          lastSeen: new Date().toISOString(),
+        });
+      }
+    };
+
+    // Thêm tracking cho click events để hiển thị selection
+    const handleCellClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Tìm tất cả các loại cell có thể click
+      const calendarCell = target.closest('[data-slot-date], [data-day-date], .time-slot, .day-cell, td[data-day], td[data-time]');
+      
+      if (calendarCell) {
+        // Gửi thông tin về cell được click
+        let cellInfo = {};
+        
+        // Kiểm tra các data attributes khác nhau
+        if (calendarCell.hasAttribute('data-slot-date')) {
+          const date = calendarCell.getAttribute('data-slot-date')!;
+          const time = calendarCell.getAttribute('data-time')!;
+          const dayIndex = parseInt(calendarCell.getAttribute('data-day-index') || '0');
+          cellInfo = { dayIndex, time, date, cellType: 'timeSlot', action: 'clicked' };
+        } else if (calendarCell.hasAttribute('data-day-date')) {
+          const date = calendarCell.getAttribute('data-day-date')!;
+          const [year, month, day] = date.split('-').map(Number);
+          cellInfo = { date: day, month: month - 1, year, cellType: 'day', action: 'clicked' };
+        } else if (calendarCell.hasAttribute('data-day')) {
+          const day = calendarCell.getAttribute('data-day')!;
+          cellInfo = { date: parseInt(day), cellType: 'day', action: 'clicked' };
+        } else if (calendarCell.hasAttribute('data-time')) {
+          const time = calendarCell.getAttribute('data-time')!;
+          cellInfo = { time, cellType: 'timeSlot', action: 'clicked' };
+        } else {
+          // Fallback: gửi thông tin cơ bản
+          cellInfo = { cellType: 'unknown', action: 'clicked' };
+        }
+        
+        const presenceData = {
+          userId: user.id,
+          userName: user.fullName || user.nickName || user.username || 'Unknown',
+          departmentId: user.departments?.[0]?.id || 0,
+          departmentName: user.departments?.[0]?.name || 'Unknown',
+          position: { 
+            x: e.clientX, 
+            y: e.clientY,
+            ...cellInfo
+          },
+          isEditing: true, // Đánh dấu là đang tương tác
+          lastSeen: new Date().toISOString(),
+        };
+        
+        sendPresence(presenceData);
+      }
+    };
+
+    // Throttle mouse move events để tránh spam
+    let timeoutId: NodeJS.Timeout;
+    const throttledMouseMove = (e: MouseEvent) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleMouseMove(e);
+        
+        // Gửi mouse position real-time
+        if (user) {
+          const presenceData = {
+            userId: user.id,
+            userName: user.fullName || user.nickName || user.username || 'Unknown',
+            departmentId: user.departments?.[0]?.id || 0,
+            departmentName: user.departments?.[0]?.name || 'Unknown',
+            position: { 
+              x: e.clientX, 
+              y: e.clientY,
+              cellType: 'timeSlot' as const,
+              action: 'move' as const
+            },
+            isEditing: false,
+            lastSeen: new Date().toISOString(),
+          };
+          sendPresence(presenceData);
+        }
+      }, 50); // Giảm delay để real-time hơn
+    };
+
+    document.addEventListener('mousemove', throttledMouseMove);
+    document.addEventListener('click', handleCellClick);
+    document.addEventListener('mousedown', handleCellClick);
+    document.addEventListener('mouseup', handleCellClick);
+
+    return () => {
+      document.removeEventListener('mousemove', throttledMouseMove);
+      document.removeEventListener('click', handleCellClick);
+      document.removeEventListener('mousedown', handleCellClick);
+      document.removeEventListener('mouseup', handleCellClick);
+      clearTimeout(timeoutId);
+    };
+  }, [user, isDataReady, sendPresence]);
+
+  // Tự động gửi presence khi component mount
+  useEffect(() => {
+    if (user && isDataReady) {
+      const initialPresence = {
+        userId: user.id,
+        userName: user.fullName || user.nickName || user.username || 'Unknown',
+        departmentId: user.departments?.[0]?.id || 0,
+        departmentName: user.departments?.[0]?.name || 'Unknown',
+        position: { 
+          x: 0, 
+          y: 0,
+          cellType: 'timeSlot' as const,
+          action: 'move' as const
+        },
+        isEditing: false,
+        lastSeen: new Date().toISOString(),
+      };
+      sendPresence(initialPresence);
+    }
+  }, [user, isDataReady, sendPresence]);
 
   // Cập nhật visible departments dựa trên quyền truy cập
   useEffect(() => {
@@ -2165,6 +2494,168 @@ export default function CompleteScheduleApp() {
       document.body.style.userSelect = "";
     };
   }, [dragState.isDragging, monthlyDragState.isDragging, handleDayMouseUp]);
+
+  // Load cell selections from Redis when component mounts
+  useEffect(() => {
+    if (isDataReady && user) {
+      console.log('[ScheduleApp] Loading cell selections from Redis...');
+      
+      // Clear only own selections when component mounts (user reloaded)
+      // Don't clear other users' selections from cellSelections
+      setDepartmentSelections(new Map());
+      setSelectedDepartment(null);
+      
+      getCellSelections();
+    }
+  }, [isDataReady, user, getCellSelections]);
+
+  // Restore local selections from Redis data
+  useEffect(() => {
+    if (cellSelections.size > 0) {
+      console.log('[ScheduleApp] Restoring from cellSelections:', cellSelections);
+      
+      // Find our own selections and restore them
+      let foundOwnSelections = false;
+      for (const [userId, selections] of cellSelections) {
+        if (userId === user?.id && selections.departmentSelections) {
+          console.log('[ScheduleApp] Found own selections, restoring:', selections);
+          
+          // Restore department selections (merge with existing, don't replace)
+          setDepartmentSelections(prev => {
+            const newDepartmentSelections = new Map(prev);
+            for (const [deptId, deptSelections] of Object.entries(selections.departmentSelections)) {
+              newDepartmentSelections.set(parseInt(deptId), deptSelections as DepartmentSelections);
+            }
+
+            return newDepartmentSelections;
+          });
+          
+          // Restore selected department
+          if (selections.selectedDepartment) {
+            setSelectedDepartment(selections.selectedDepartment);
+          }
+          
+          foundOwnSelections = true;
+          break;
+        }
+      }
+      
+      // If no own selections found, clear local state
+      if (!foundOwnSelections) {
+        console.log('[ScheduleApp] No own selections found, clearing local state');
+        setDepartmentSelections(new Map());
+        setSelectedDepartment(null);
+      }
+      
+      // Keep other users' selections in cellSelections state (don't clear them)
+      const otherUsersSelections = Array.from(cellSelections.entries()).filter(([userId]) => userId !== user?.id);
+      console.log('[ScheduleApp] Other users selections:', otherUsersSelections);
+
+    } else {
+      // cellSelections is empty, clear local state
+      console.log('[ScheduleApp] cellSelections is empty, clearing local state');
+      setDepartmentSelections(new Map());
+      setSelectedDepartment(null);
+    }
+  }, [cellSelections, user]);
+
+  // Ping Redis to refresh TTL for cell selections
+  useEffect(() => {
+    if (!user || !isDataReady) return;
+
+    const pingInterval = setInterval(() => {
+      pingCellSelections();
+    }, 60000); // Ping every minute
+
+    return () => clearInterval(pingInterval);
+  }, [user, isDataReady, pingCellSelections]);
+
+  // Cleanup edit sessions on unmount
+  useEffect(() => {
+    return () => {
+      // Stop all active edit sessions when component unmounts
+      editSessions.forEach((session) => {
+        if (session.userId === user?.id) {
+          stopEditSession(session.fieldId);
+        }
+      });
+    };
+  }, [editSessions, user, stopEditSession]);
+
+  // Clear own selections when user leaves the page or switches tabs
+  useEffect(() => {
+    if (!user || !isDataReady) return;
+
+    const handleBeforeUnload = () => {
+      // Chỉ xóa khi mình đang chỉnh sửa (có selections)
+      const hasOwnSelections = departmentSelections && 
+        Object.keys(departmentSelections).length > 0;
+      
+      if (hasOwnSelections && user?.id) {
+        console.log('[ScheduleApp] F5 detected, clearing own selections for user:', user.id);
+        
+        // Clear local state immediately
+        setDepartmentSelections(new Map());
+        setSelectedDepartment(null);
+        
+        // Tạo danh sách các ô đang được chỉnh sửa để xóa
+        const editingCells: string[] = [];
+        for (const [deptId, selection] of departmentSelections.entries()) {
+          if (selection.timeSlots && selection.timeSlots.length > 0) {
+            for (const timeSlot of selection.timeSlots) {
+              const fieldId = `time-slot-${timeSlot.day_of_week}-${timeSlot.start_time}-${timeSlot.applicable_date}`;
+              editingCells.push(fieldId);
+            }
+          }
+        }
+        
+        console.log('[ScheduleApp] Clearing cells for user', user.id, ':', editingCells);
+        
+        if (clearMySelections) {
+          clearMySelections('leave', editingCells);
+        } else {
+          const emptyPayload = {
+            departmentSelections: {},
+            selectedDepartment: null,
+            activeView,
+            editingCells: [], // Xóa tất cả ô đang chỉnh sửa
+            userId: user.id, // Chỉ xóa ô của user này
+          };
+          sendCellSelections(emptyPayload);
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && user) {
+        // TẠM THỜI COMMENT OUT để test
+        // console.log('[ScheduleApp] Tab hidden, clearing own selections');
+        // if (clearMySelections) {
+        //   clearMySelections('hidden');
+        // } else {
+        //   const emptyPayload = {
+        //     departmentSelections: {},
+        //     selectedDepartment: null,
+        //     activeView,
+        //   };
+        //   sendCellSelections(emptyPayload);
+        // }
+      } else if (document.visibilityState === 'visible' && user) {
+        // Quay lại tab -> chỉ GET, KHÔNG clear
+        console.log('[ScheduleApp] Tab visible, getting selections');
+        getCellSelections();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      // Chỉ remove event listeners, không gọi handleBeforeUnload khi unmount
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, isDataReady, activeView, sendCellSelections]);
 
   // Helper function
   const getWeekDatesForDate = useCallback((date: Date) => {
@@ -2477,7 +2968,17 @@ export default function CompleteScheduleApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 relative">
+      {/* Cursor indicators for other users */}
+      <AnimatePresence>
+        {Array.from(presences.values()).map((presence) => (
+          <CursorIndicator key={presence.userId} presence={presence} />
+        ))}
+      </AnimatePresence>
+      
+      {/* Cell selection indicators for other users */}
+      <CellSelectionIndicator presences={presences} />
+      
       <div className="max-w-full p-5 mx-auto">
         {/* Header */}
         <motion.div
@@ -2497,6 +2998,29 @@ export default function CompleteScheduleApp() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Collaboration Status */}
+              <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-sm text-green-700 font-medium">
+                  {presences.size} người đang xem
+                  {presences.size > 0 && ` (${Array.from(presences.values()).map(p => {
+                    // Fix encoding for display
+                    const fixedName = p.userName.replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống');
+                    return fixedName;
+                  }).join(', ')})`}
+                </span>
+                {presences.size > 0 && (
+                  <PresenceList presences={Array.from(presences.values())} maxDisplay={3} />
+                )}
+              </div>
+              
+
+              
+              {/* Typing Indicators */}
+              {previewPatches.size > 0 && (
+                <TypingIndicator patches={Array.from(previewPatches.values())} />
+              )}
+              
               <Button
                 onClick={() =>
                   setActiveView(activeView === "week" ? "month" : "week")
@@ -2516,6 +3040,8 @@ export default function CompleteScheduleApp() {
                   </span>
                 )}
               </Button>
+              
+
             </div>
           </div>
 
@@ -3084,6 +3610,7 @@ export default function CompleteScheduleApp() {
                                 const {
                                   isSelected: isSelectedByAny,
                                   departmentId: selectedByDeptId,
+                                  userId: selectedByUserId,
                                 } = isTimeSlotSelectedByAnyDept(
                                   dayIndex,
                                   time,
@@ -3221,15 +3748,28 @@ export default function CompleteScheduleApp() {
                                         ? "ring-2 ring-blue-400"
                                         : ""
                                     }`}
-                                    onMouseDown={(e) =>
-                                      canInteract &&
-                                      handleTimeSlotMouseDown(
+                                    onMouseDown={(e) => {
+                                      if (!canInteract) return;
+                                      
+                                      // Check if field is locked by another user
+                                      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+                                      if (isFieldLocked(fieldId)) {
+                                        const lockedBy = getFieldLockedBy(fieldId);
+                                        if (lockedBy) {
+                                          toast.error(`Ô này đang được chỉnh sửa bởi ${lockedBy.userName}`);
+                                          return;
+                                        }
+                                      }
+                                      
+                                      // Start edit session
+                                      startEditSession(fieldId, 'calendar_cell', {
                                         dayIndex,
                                         time,
-                                        specificDate,
-                                        e
-                                      )
-                                    }
+                                        date: specificDate,
+                                      });
+                                      
+                                      handleTimeSlotMouseDown(dayIndex, time, specificDate, e);
+                                    }}
                                     onMouseEnter={() =>
                                       canInteract &&
                                       handleTimeSlotMouseEnter(
@@ -3272,7 +3812,7 @@ export default function CompleteScheduleApp() {
                                         <EyeOff className="w-4 h-4 text-slate-500 opacity-60" />
                                       </div>
                                     )}
-
+                                    
                                     {/* Selection indicators */}
                                     {isSelectedByCurrentDept &&
                                       selectedDepartment &&
@@ -3294,6 +3834,64 @@ export default function CompleteScheduleApp() {
                                           />
                                         </motion.div>
                                       )}
+
+                                    {/* Remote user selection/editing indicators - PADLOCK */}
+                                    {(() => {
+                                      // Kiểm tra ô được chọn bởi user khác
+                                      const { isSelected: isSelectedByRemote, userId: remoteUserId } = isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
+                                      
+                                      // Kiểm tra ô đang được chỉnh sửa bởi user khác
+                                      const fieldId = `time-slot-${dayIndex}-${time}-${specificDate}`;
+                                      const lockedBy = getFieldLockedBy(fieldId);
+                                      
+                                      // Nếu ô được chọn HOẶC đang được chỉnh sửa bởi user khác
+                                      if ((isSelectedByRemote && remoteUserId && remoteUserId !== user?.id) || lockedBy) {
+                                        // Lấy thông tin user
+                                        let targetUser = null;
+                                        let title = '';
+                                        
+                                        if (isSelectedByRemote && remoteUserId) {
+                                          targetUser = Array.from(presences.values()).find(p => p.userId === remoteUserId);
+                                          title = `Được chọn bởi ${targetUser?.userName || 'Unknown'}`;
+                                        } else if (lockedBy) {
+                                          targetUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
+                                          title = `Đang chỉnh sửa bởi ${targetUser?.userName || lockedBy.userName}`;
+                                        }
+                                        
+                                        if (targetUser || lockedBy) {
+                                          // Lấy tên user từ nhiều nguồn
+                                          let userName = 'Unknown';
+                                          if (targetUser?.userName) {
+                                            userName = targetUser.userName;
+                                          } else if (lockedBy?.userName) {
+                                            userName = lockedBy.userName;
+                                          } else if (targetUser?.departmentName) {
+                                            userName = `${targetUser.departmentName} User`;
+                                          } else if (lockedBy?.departmentId) {
+                                            const dept = departments.find(d => d.id === lockedBy.departmentId);
+                                            userName = dept ? `${dept.name} User` : 'Unknown User';
+                                          }
+                                          
+                                          return (
+                                            <motion.div
+                                              initial={{ scale: 0, opacity: 0 }}
+                                              animate={{ scale: 1, opacity: 1 }}
+                                              exit={{ scale: 0, opacity: 0 }}
+                                              className="absolute inset-0 bg-slate-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-orange-300 border-dashed"
+                                              title={title}
+                                            >
+                                              <div className="flex items-center gap-2 p-2 rounded-lg bg-white shadow-md">
+                                                <Lock className="w-4 h-4 text-orange-600" />
+                                                <span className="text-xs font-medium text-orange-600">
+                                                  {userName}
+                                                </span>
+                                              </div>
+                                            </motion.div>
+                                          );
+                                        }
+                                      }
+                                      return null;
+                                    })()}
 
                                     {/* Drag preview */}
                                     {isPreviewSelection && (
@@ -3830,28 +4428,24 @@ export default function CompleteScheduleApp() {
                       </Button>
                         )}
 
-                      {!isViewRole && (
-                        <Button
-                        onClick={() => {
-                          setDepartmentSelections(new Map());
-                          setSelectedDepartment(null);
-                          turnOffBulk();
-                        }}
-                        variant="outline"
-                        disabled={
-                          !(
-                            isAdmin ||
-                            isScheduler ||
-                            userManagerDepartmentSlugs.length > 0
-                          )
-                        }
-                        className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="flex items-center gap-2">
-                          <X className="w-4 h-4" />
-                          Xóa tất cả
-                        </span>
-                      </Button>
+                                              {!isViewRole && (
+                          <Button
+                            onClick={handleClearAllMine}
+                            variant="outline"
+                            disabled={
+                              !(
+                                isAdmin ||
+                                isScheduler ||
+                                userManagerDepartmentSlugs.length > 0
+                              )
+                            }
+                            className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="flex items-center gap-2">
+                              <X className="w-4 h-4" />
+                              Xóa tất cả
+                            </span>
+                          </Button>
                         )}
                     </CardContent>
                   </Card>
@@ -4175,15 +4769,34 @@ export default function CompleteScheduleApp() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="name">Tên lịch hoạt động *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    className="mt-2 border-slate-200 focus:border-blue-400"
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, name: e.target.value }))
-                    }
-                    placeholder="Nhập tên lịch..."
-                  />
+                  <div className="relative">
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      className="mt-2 border-slate-200 focus:border-blue-400"
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, name: e.target.value }));
+                        // Send preview patch
+                        sendPreviewPatch('schedule-name', e.target.value);
+                      }}
+                      placeholder="Nhập tên lịch..."
+                    />
+                    
+                    {/* Live Preview */}
+                    {(() => {
+                      const patch = getPreviewPatchForField('schedule-name');
+                      if (patch && patch.content !== formData.name) {
+                        return (
+                          <div className="absolute inset-0 pointer-events-none">
+                            <div className="text-sm text-blue-600 opacity-60 mt-2">
+                              {patch.userName}: {patch.content}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                 </div>
 
                 <div>
@@ -4257,19 +4870,38 @@ export default function CompleteScheduleApp() {
 
               <div>
                 <Label htmlFor="description">Mô tả</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  className="mt-2 border-slate-200 focus:border-blue-400"
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      description: e.target.value,
-                    }))
-                  }
-                  placeholder="Mô tả chi tiết về lịch hoạt động..."
-                  rows={3}
-                />
+                <div className="relative">
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    className="mt-2 border-slate-200 focus:border-blue-400"
+                    onChange={(e) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }));
+                      // Send preview patch
+                      sendPreviewPatch('schedule-description', e.target.value);
+                    }}
+                    placeholder="Mô tả chi tiết về lịch hoạt động..."
+                    rows={3}
+                  />
+                  
+                  {/* Live Preview */}
+                  {(() => {
+                    const patch = getPreviewPatchForField('schedule-description');
+                    if (patch && patch.content !== formData.description) {
+                      return (
+                        <div className="absolute inset-0 pointer-events-none">
+                          <div className="text-sm text-blue-600 opacity-60 mt-2">
+                            {patch.userName}: {patch.content}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               </div>
 
               {/* Schedule Details */}
@@ -4489,6 +5121,31 @@ export default function CompleteScheduleApp() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Edit Activity Toasts */}
+        <EditActivityToastsContainer
+          editSessions={editSessions}
+          previewPatches={previewPatches}
+          departments={departments}
+          onViewHistory={handleViewHistory}
+        />
+
+        {/* Edit History Modal */}
+        {selectedUserForHistory && (
+          <EditHistoryModal
+            isOpen={isEditHistoryModalOpen}
+            onClose={() => {
+              setIsEditHistoryModalOpen(false);
+              setSelectedUserForHistory(null);
+            }}
+            userId={selectedUserForHistory.userId}
+            userName={selectedUserForHistory.userName}
+            departmentId={selectedUserForHistory.departmentId}
+            departmentName={selectedUserForHistory.departmentName}
+            editSessions={Array.from(editSessions.values()).filter(session => session.userId === selectedUserForHistory.userId)}
+            previewPatches={Array.from(previewPatches.values()).filter(patch => patch.userId === selectedUserForHistory.userId)}
+          />
+        )}
       </div>
     </div>
   );

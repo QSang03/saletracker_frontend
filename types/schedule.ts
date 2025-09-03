@@ -71,3 +71,79 @@ export interface QueryDepartmentScheduleDto {
   sort?: string;
   order?: 'ASC' | 'DESC';
 }
+
+// Schedule Collaboration Types
+export interface SchedulePresence {
+  userId: number;
+  userName: string;
+  departmentId: number;
+  departmentName: string;
+  position: {
+    x: number;
+    y: number;
+    dayIndex?: number;
+    time?: string;
+    date?: number;
+    month?: number;
+    year?: number;
+    cellType?: 'timeSlot' | 'day';
+    action?: 'clicked' | 'hover' | 'move';
+  };
+  isEditing: boolean;
+  editingField?: string;
+  lastSeen: string;
+}
+
+export interface ScheduleEditSession {
+  userId: number;
+  userName: string;
+  departmentId: number;
+  fieldId: string;
+  fieldType: 'calendar_cell' | 'form_field';
+  coordinates?: {
+    dayIndex?: number;
+    time?: string;
+    date?: number;
+    month?: number;
+    year?: number;
+  };
+  startedAt: string;
+  expiresAt: string;
+  isRenewed: boolean;
+}
+
+export interface SchedulePreviewPatch {
+  userId: number;
+  userName: string;
+  departmentId: number;
+  fieldId: string;
+  content: string;
+  selection?: {
+    start: number;
+    end: number;
+  };
+  timestamp: string;
+}
+
+export interface ScheduleConflict {
+  scheduleId: string;
+  conflictingUsers: Array<{
+    userId: number;
+    userName: string;
+    departmentId: number;
+  }>;
+  conflictType: 'version' | 'edit_session';
+  detectedAt: string;
+}
+
+export interface ScheduleVersion {
+  scheduleId: string;
+  version: number;
+  updatedBy: number;
+  updatedAt: string;
+  changes: Array<{
+    field: string;
+    oldValue: any;
+    newValue: any;
+  }>;
+}

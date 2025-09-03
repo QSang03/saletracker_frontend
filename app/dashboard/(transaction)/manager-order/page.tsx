@@ -77,7 +77,7 @@ function ManagerOrderContent() {
     products: Array<{ value: number; label: string }>;
   }>({ departments: [], products: [] });
 
-  const { canExportInDepartment, user } = useDynamicPermission();
+  const { canExportInDepartment, user, isPM, isAnalysisRole, isAdmin } = useDynamicPermission();
   const {
     orders,
     total,
@@ -141,20 +141,32 @@ function ManagerOrderContent() {
     { value: "4", label: "Bình thường" },
   ];
 
+  // Xác định xem user có phải là PM (có thể có hoặc không có role analysis)
+  const isPMUser = isPM;
+  
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
+  // PM users chỉ thấy số lượng khách hàng của chính họ
   const customerCountFilters = useMemo(() => ({
     fromDate: filters.dateRange?.start,
     toDate: filters.dateRange?.end,
-    employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
-    departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+    employeeId: isPMUser 
+      ? user?.id 
+      : filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
+    departmentId: isPMUser 
+      ? undefined // PM user không cần department
+      : filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
     // Forward all filters from manager
     search: filters.search,
     status: filters.status,
     date: filters.date,
     dateRange: filters.dateRange,
     employee: filters.employee,
-    employees: filters.employees,
-    departments: filters.departments,
+    employees: isPMUser 
+      ? (user?.id ? String(user.id) : undefined)
+      : filters.employees,
+    departments: isPMUser 
+      ? undefined // PM user không cần department
+      : filters.departments,
     products: filters.products,
     warningLevel: filters.warningLevel,
     quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
@@ -171,10 +183,14 @@ function ManagerOrderContent() {
     filters.products,
     filters.warningLevel,
     filters.quantity,
+    isPMUser,
+    user?.id,
   ]);
 
   const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount(customerCountFilters);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  // Toggle: admin may include hidden items when exporting
+  const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
 
   // Lấy danh sách nhân viên từ filter options
   const allEmployeeOptions = filterOptions.departments.reduce((acc, dept) => {
@@ -198,6 +214,11 @@ function ManagerOrderContent() {
 
   // ✅ Filter employees theo departments đã chọn
   const filteredEmployeeOptions = useMemo(() => {
+    // Nếu user là PM, không hiển thị employees khác
+    if (isPMUser) {
+      return [];
+    }
+    
     if (!filters.departments || typeof filters.departments !== 'string' || filters.departments === "") {
       return allEmployeeOptions; // Nếu không chọn department nào, hiển thị tất cả
     }
@@ -223,9 +244,9 @@ function ManagerOrderContent() {
       }, [] as { label: string; value: string }[]);
 
     return filtered;
-  }, [filters.departments, filterOptions.departments, allEmployeeOptions]);
+  }, [filters.departments, filterOptions.departments, allEmployeeOptions, isPMUser]);
 
-  const departmentOptions = filterOptions.departments.map((dept) => ({
+  const departmentOptions = isPMUser ? [] : filterOptions.departments.map((dept) => ({
     label: dept.label,
     value: dept.value.toString(),
   }));
@@ -268,16 +289,28 @@ function ManagerOrderContent() {
       }
 
       // Handle employees
-      const employeesValue =
-        paginatedFilters.employees.length > 0
-          ? paginatedFilters.employees.join(",")
-          : "";
+      let employeesValue = "";
+      if (isPMUser) {
+        // Nếu user là PM, chỉ hiển thị đơn hàng của chính họ (giống như user thường)
+        employeesValue = user?.id ? String(user.id) : "";
+      } else {
+        employeesValue =
+          paginatedFilters.employees.length > 0
+            ? paginatedFilters.employees.join(",")
+            : "";
+      }
 
       // Handle departments
-      const departmentsValue =
-        paginatedFilters.departments.length > 0
-          ? paginatedFilters.departments.join(",")
-          : "";
+      let departmentsValue = "";
+      if (isPMUser) {
+        // Nếu user là PM, không set department để backend filter theo user hiện tại
+        departmentsValue = "";
+      } else {
+        departmentsValue =
+          paginatedFilters.departments.length > 0
+            ? paginatedFilters.departments.join(",")
+            : "";
+      }
 
       // Handle products/categories
       const productsValue =
@@ -333,6 +366,8 @@ function ManagerOrderContent() {
       filters.search,
       filters.page,
       warningLevelOptions,
+      isPMUser,
+      user?.id,
     ]
   );
 
@@ -577,9 +612,18 @@ function ManagerOrderContent() {
       );
     }
   if (typeof filters.quantity === "number") params.append("quantity", String(filters.quantity));
-    if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
-    if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
-    if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
+  // Admin can include hidden items when exporting all
+  if (isAdmin && includeHiddenExport) params.append("includeHidden", "1");
+    
+    // Nếu user là PM, chỉ export đơn hàng của chính họ (giống như user thường)
+    if (isPMUser) {
+      if (user?.id) params.append("employees", String(user.id));
+      // Không set departments để backend filter theo user hiện tại
+    } else {
+      if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
+      if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
+      if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
+    }
     if (filters.products?.trim()) params.append("products", filters.products.trim());
     if (filters.warningLevel?.trim()) params.append("warningLevel", filters.warningLevel.trim());
     if (filters.sortField) params.append("sortField", filters.sortField);
@@ -662,7 +706,7 @@ function ManagerOrderContent() {
     ]);
 
     return rows;
-  }, [filters]);
+  }, [filters, isPMUser, user?.id, isAdmin, includeHiddenExport]);
 
   // ✅ Handle search từ double-click tên khách hàng
   const handleSearch = useCallback(
@@ -800,7 +844,9 @@ function ManagerOrderContent() {
 
     const result = {
       search: filters.search || "",
-      departments: filters.departments
+      departments: isPMUser 
+        ? [] // PM user không cần filter theo department
+        : filters.departments
         ? filters.departments.split(",").filter((d) => d)
         : [],
       roles: [],
@@ -819,7 +865,9 @@ function ManagerOrderContent() {
           : { from: undefined, to: undefined },
       singleDate: filters.date ? new Date(filters.date) : undefined,
       quantity: filters.quantity || 1, // Thêm quantity filter
-      employees: filters.employees
+      employees: isPMUser
+        ? user?.id ? [String(user.id)] : [] // PM user chỉ hiển thị đơn hàng của chính họ (giống như user thường)
+        : filters.employees
         ? filters.employees.split(",").filter((e) => e)
         : [],
     };
@@ -837,6 +885,8 @@ function ManagerOrderContent() {
     filters.quantity,
     filters.employees,
     JSON.stringify(warningLevelOptions), // Include warningLevelOptions to handle mapping changes
+    isPMUser,
+    user?.id,
   ]);
 
   if (!user) {
@@ -919,15 +969,15 @@ function ManagerOrderContent() {
             enableStatusFilter={true}
             enableSingleDateFilter={true}
             enableDateRangeFilter={true}
-            enableEmployeeFilter={true}
-            enableDepartmentFilter={true}
+            enableEmployeeFilter={!isPMUser}
+            enableDepartmentFilter={!isPMUser}
             enableCategoriesFilter={true} // Sử dụng cho products
             enableWarningLevelFilter={true} // Thêm warning level filter
             enablePageSize={true}
             enableGoToPage={true}
             availableStatuses={statusOptions}
-            availableEmployees={filteredEmployeeOptions}
-            availableDepartments={departmentOptions}
+            availableEmployees={isPMUser ? [] : filteredEmployeeOptions}
+            availableDepartments={isPMUser ? [] : departmentOptions}
             availableCategories={productOptions} // Products mapped to categories
             availableWarningLevels={warningLevelOptions} // Thay thế availableBrands
             enableQuantityFilter={true} // Bật bộ lọc số lượng
@@ -1020,6 +1070,19 @@ function ManagerOrderContent() {
             })}
             getExportAllData={getExportAllData}
             initialFilters={memoizedInitialFilters}
+            toggles={
+              isAdmin
+                ? [
+                    {
+                      id: "includeHiddenExport",
+                      label: "Xuất kèm đơn bị ẩn",
+                      tooltip: "Chỉ dành cho Admin",
+                      checked: includeHiddenExport,
+                      onChange: setIncludeHiddenExport,
+                    },
+                  ]
+                : []
+            }
           >
             <OrderManagement
               orders={orders}
@@ -1061,16 +1124,24 @@ function ManagerOrderContent() {
         filters={{
       fromDate: filters.dateRange?.start,
       toDate: filters.dateRange?.end,
-      employeeId: filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
-      departmentId: filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+      employeeId: isPMUser 
+        ? user?.id 
+        : filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
+      departmentId: isPMUser 
+        ? undefined // PM user không cần department
+        : filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
       // Forward all manager filters so list matches
       search: filters.search,
       status: filters.status,
       date: filters.date,
       dateRange: filters.dateRange,
       employee: filters.employee,
-      employees: filters.employees,
-      departments: filters.departments,
+      employees: isPMUser 
+        ? (user?.id ? String(user.id) : undefined)
+        : filters.employees,
+      departments: isPMUser 
+        ? undefined // PM user không cần department
+        : filters.departments,
       products: filters.products,
       warningLevel: filters.warningLevel,
       quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
@@ -1097,7 +1168,11 @@ function ManagerOrderContent() {
           }
 
           // Ensure sale is represented in employees (CSV of ids) so the select shows it as selected
-          if (payload.saleId !== undefined) {
+          if (isPMUser) {
+            // PM user luôn chỉ hiển thị đơn hàng của chính họ (giống như user thường)
+            mergedBase.employees = user?.id ? String(user.id) : undefined;
+            mergedBase.employee = undefined;
+          } else if (payload.saleId !== undefined) {
             mergedBase.employees = String(payload.saleId);
             // prefer employees over employee field
             mergedBase.employee = undefined;

@@ -76,9 +76,8 @@ export function AppSidebar({
   const effectiveNavItems = navItems.filter(group => {
   // Show Product Manager group only to admin or users with any pm role
   if (group.title === 'Product Manager' && !isAdmin && !isPMRole) return false;
-  // Hide the whole 'Giao dịch' group for PM users (who are not admin)
-  if (group.title === 'Giao dịch' && !isAdmin && isPMRole) return false;
-    return true;
+  // Không ẩn nhóm 'Giao dịch' cho PM users nữa - để họ có thể thấy "Quản lý đơn hàng"
+  return true;
   });
 
   const filteredNavItems = effectiveNavItems

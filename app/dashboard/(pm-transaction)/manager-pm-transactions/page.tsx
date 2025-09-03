@@ -10,19 +10,19 @@ import PmTransactionManagement from '@/components/pm-transaction/PmTransactionMa
 
 export default function ManagerPMTransactionsPage() {
   const router = useRouter();
-  const { isPM, isViewRole, getPMDepartments, isAdmin, getAccessibleDepartments, user } = useDynamicPermission();
+  const { isPM, isViewRole, isAnalysisRole, getPMDepartments, isAdmin, getAccessibleDepartments, user } = useDynamicPermission();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Chờ user được load để tránh redirect sớm khi user chưa sẵn sàng
     if (!user) return;
-    // Kiểm tra quyền truy cập: cho phép PM, admin, hoặc view (xem-only)
-    if (!isPM && !isAdmin && !isViewRole) {
+    // Kiểm tra quyền truy cập: cho phép PM, admin, view (xem-only), hoặc analysis
+    if (!isPM && !isAdmin && !isViewRole && !isAnalysisRole) {
       router.push('/dashboard');
       return;
     }
     setIsLoading(false);
-  }, [user, isPM, isAdmin, isViewRole, router]);
+  }, [user, isPM, isAdmin, isViewRole, isAnalysisRole, router]);
 
   // Đăng ký đường dẫn hiện tại là lastVisitedUrl để reload giữ đúng trang PM
   useEffect(() => {
@@ -47,12 +47,15 @@ export default function ManagerPMTransactionsPage() {
   }
 
   // Kiểm tra nếu user không có quyền truy cập
-  if (!isPM && !isAdmin && !isViewRole) {
+  if (!isPM && !isAdmin && !isViewRole && !isAnalysisRole) {
     return null;
   }
 
   const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments();
   const hasSpecificPMRole = isAdmin || (pmDepartments && pmDepartments.length > 0);
+  
+  // Nếu user có role analysis, chỉ hiển thị đơn hàng của chính họ
+  const isAnalysisUser = isAnalysisRole && !isAdmin && !isPM;
 
   return (
     <div className="h-full overflow-hidden relative">
@@ -65,7 +68,7 @@ export default function ManagerPMTransactionsPage() {
         </div>
 
         {/* Hiển thị thông báo nếu chỉ có role PM mà không có pm_{phong_ban} */}
-        {!isAdmin && !hasSpecificPMRole && (
+        {!isAdmin && !hasSpecificPMRole && !isAnalysisUser && (
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
@@ -75,11 +78,21 @@ export default function ManagerPMTransactionsPage() {
           </Alert>
         )}
 
+        {/* Hiển thị thông báo cho user có role analysis */}
+        {isAnalysisUser && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Bạn có quyền truy cập vào chức năng này với role analysis. Bạn sẽ chỉ thấy đơn hàng của chính mình.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Hiển thị thông tin phòng ban được phân quyền */}
     {/* Department permission card removed per request */}
 
         {/* Component quản lý giao dịch */}
-        <PmTransactionManagement />
+        <PmTransactionManagement isAnalysisUser={isAnalysisUser} />
       </div>
     </div>
   );

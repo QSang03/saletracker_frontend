@@ -768,12 +768,19 @@ export default function ElegantTransactionsPage() {
   const employeeStats = useMemo(() => {
     const arr = employeeStatsRaw.slice();
     if (employeeSort === "orders") arr.sort((a, b) => b.orders - a.orders);
-    else if (employeeSort === "customers")
-      arr.sort((a, b) => b.customers - a.customers);
-    else if (employeeSort === "conversion")
-      arr.sort((a, b) => b.conversion - a.conversion);
-    return arr.slice(0, 12);
+    else if (employeeSort === "customers") arr.sort((a, b) => b.customers - a.customers);
+    else if (employeeSort === "conversion") arr.sort((a, b) => b.conversion - a.conversion);
+    // return full sorted list; paging is handled separately so user can browse all employees
+    return arr;
   }, [employeeStatsRaw, employeeSort]);
+
+  // Pagination for employee stats (allow browsing full list)
+  const [employeePage, setEmployeePage] = useState(1);
+  const employeePageSize = 12;
+  const pagedEmployeeStats = useMemo(() => {
+    const start = (employeePage - 1) * employeePageSize;
+    return employeeStats.slice(start, start + employeePageSize);
+  }, [employeeStats, employeePage]);
 
   const handleToggleSeries = (key: keyof typeof chartConfig) => {
     setVisibleSeries((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1368,8 +1375,9 @@ export default function ElegantTransactionsPage() {
                         <LoadingSpinner size={48} />
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {employeeStats.map((e) => (
+                      <div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {pagedEmployeeStats.map((e) => (
                           <div
                             key={e.id}
                             className="p-4 rounded-xl border bg-white/80 dark:bg-slate-900/70 backdrop-blur-sm shadow-sm"
@@ -1412,7 +1420,31 @@ export default function ElegantTransactionsPage() {
                               />
                             </div>
                           </div>
-                        ))}
+                          ))}
+                        </div>
+
+                        {/* Pagination controls for employee list */}
+                        <div className="flex items-center justify-center gap-3 mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEmployeePage((p) => Math.max(1, p - 1))}
+                            disabled={employeePage <= 1}
+                          >
+                            ← Trước
+                          </Button>
+                          <div className="text-sm">
+                            Trang {employeePage} / {Math.max(1, Math.ceil(employeeStats.length / employeePageSize))}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEmployeePage((p) => Math.min(Math.ceil(employeeStats.length / employeePageSize), p + 1))}
+                            disabled={employeePage >= Math.ceil(employeeStats.length / employeePageSize)}
+                          >
+                            Sau →
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -1426,12 +1458,13 @@ export default function ElegantTransactionsPage() {
 
         {/* Enhanced Detail Modal */}
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="!max-w-6xl p-0 rounded-xl shadow-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-0">
+          <DialogContent className="!max-w-none w-[75vw] h-[80vh] !max-h-[80vh] overflow-hidden flex flex-col p-0 rounded-xl shadow-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-0">
+            {/* Animate header separately so body can scroll */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="p-6"
+              className="p-6 flex-shrink-0"
             >
               <DialogHeader className="pb-4">
                 <DialogTitle className="text-xl font-bold flex items-center gap-3">
@@ -1453,7 +1486,10 @@ export default function ElegantTransactionsPage() {
                   </div>
                 </DialogTitle>
               </DialogHeader>
+            </motion.div>
 
+            {/* Scrollable body */}
+            <div className="p-6 overflow-auto flex-1">
               <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1592,7 +1628,7 @@ export default function ElegantTransactionsPage() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </DialogContent>
         </Dialog>
       </motion.main>

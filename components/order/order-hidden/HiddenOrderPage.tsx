@@ -25,15 +25,23 @@ export default function HiddenOrderPage() {
     setAlert(prev => ({ ...prev, show: false }));
   };
 
-  const handleReload = () => {
-    hiddenOrdersHook.refreshData();
-    showAlert("info", "Đã làm mới dữ liệu thành công");
+  const handleReload = async () => {
+    try {
+      await hiddenOrdersHook.refreshData();
+      showAlert("success", "Đã làm mới dữ liệu thành công");
+    } catch (error) {
+      showAlert("error", "Lỗi khi làm mới dữ liệu");
+    }
   };
 
   // ✅ THÊM: Handle reset filter with localStorage clear
-  const handleResetFilter = () => {
-    hiddenOrdersHook.resetFilters();
-    showAlert("info", "Đã xóa tất cả filter và làm mới dữ liệu");
+  const handleResetFilter = async () => {
+    try {
+      hiddenOrdersHook.resetFilters();
+      showAlert("success", "Đã xóa tất cả bộ lọc và làm mới dữ liệu");
+    } catch (error) {
+      showAlert("error", "Lỗi khi xóa bộ lọc");
+    }
   };
 
   return (
@@ -58,13 +66,9 @@ export default function HiddenOrderPage() {
               size="sm" 
               onClick={handleReload}
               disabled={hiddenOrdersHook.loading}
+              title="Làm mới dữ liệu (giữ nguyên bộ lọc)"
             >
-              {hiddenOrdersHook.loading ? (
-                "🔄"
-              ) : (
-                "🔄"
-              )}
-              Làm mới
+              {hiddenOrdersHook.loading ? "⏳" : "🔄"} Làm mới
             </Button>
             {/* ✅ THÊM: Reset Filter Button */}
             <Button 
@@ -72,8 +76,9 @@ export default function HiddenOrderPage() {
               size="sm" 
               onClick={handleResetFilter}
               disabled={hiddenOrdersHook.loading}
+              title="Xóa tất cả bộ lọc và làm mới dữ liệu"
             >
-              🗑️ Xóa Filter
+              🧹 Xóa Bộ Lọc
             </Button>
           </div>
         </CardHeader>
