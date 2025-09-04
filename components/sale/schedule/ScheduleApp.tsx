@@ -954,17 +954,21 @@ export default function CompleteScheduleApp() {
       if (hasScheduleConflict) return true;
       
       // ✅ THÊM: Kiểm tra xung đột với selections đang có của các phòng ban khác
+      // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót xung đột
       for (const [deptId, selections] of departmentSelections) {
         if (deptId !== selectedDepartment) {
           const hasSelectionConflict = selections.days.some(
             (day) =>
-              day.date === date && day.month === month && day.year === year
+              day.date === date && 
+              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.year === year
           );
           if (hasSelectionConflict) return true;
         }
       }
       
       // ✅ THÊM: Kiểm tra xung đột với selections từ Redis (người khác đang chọn)
+      // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế
       for (const [userId, remoteSelections] of cellSelections) {
         if (userId === user?.id) continue; // Skip own selections
         
@@ -975,7 +979,9 @@ export default function CompleteScheduleApp() {
           const typedSelections = selections as any;
           if (typedSelections.days && typedSelections.days.some(
             (day: any) =>
-              day.date === date && day.month === month && day.year === year
+              day.date === date && 
+              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.year === year
           )) {
             return true;
           }
@@ -1097,8 +1103,11 @@ export default function CompleteScheduleApp() {
   const isDaySelected = useCallback(
     (date: number, month: number, year: number) => {
       const currentSelections = getCurrentDepartmentSelections();
+      // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót
       return currentSelections.days.some(
-        (day) => day.date === date && day.month === month && day.year === year
+        (day) => day.date === date && 
+        (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+        day.year === year
       );
     },
     [getCurrentDepartmentSelections]
@@ -1106,20 +1115,22 @@ export default function CompleteScheduleApp() {
 
   const isDaySelectedByAnyDept = useCallback(
     (date: number, month: number, year: number) => {
-      // Check local selections first
+      // ✅ SỬA: Check local selections first - Kiểm tra cả tháng hiện tại và tháng thực tế
       for (const [deptId, selections] of departmentSelections) {
         if (
           selections.days &&
           selections.days.some(
             (day) =>
-              day.date === date && day.month === month && day.year === year
+              day.date === date && 
+              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.year === year
           )
         ) {
           return { isSelected: true, departmentId: deptId, userId: user?.id };
         }
       }
 
-      // Check remote selections from Redis
+      // ✅ SỬA: Check remote selections from Redis - Kiểm tra cả tháng hiện tại và tháng thực tế
       for (const [userId, remoteSelections] of cellSelections) {
         if (userId === user?.id) continue; // Skip own selections
         
@@ -1130,7 +1141,9 @@ export default function CompleteScheduleApp() {
           const typedSelections = selections as any;
           if (typedSelections.days && typedSelections.days.some(
             (day: any) =>
-              day.date === date && day.month === month && day.year === year
+              day.date === date && 
+              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.year === year
           )) {
             return { isSelected: true, departmentId: parseInt(deptId), userId };
           }
@@ -1214,9 +1227,10 @@ export default function CompleteScheduleApp() {
     
     // So sánh selections cũ và mới để xác định ngày nào bị xóa
     currentSelections.days.forEach(oldDay => {
+      // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót
       const exists = newDays.some(newDay => 
         newDay.date === oldDay.date &&
-        newDay.month === oldDay.month &&
+        (newDay.month === oldDay.month || newDay.month === oldDay.month - 1 || newDay.month === oldDay.month + 1) &&
         newDay.year === oldDay.year
       );
       
@@ -1229,9 +1243,10 @@ export default function CompleteScheduleApp() {
     
     // So sánh selections mới và cũ để xác định ngày nào được thêm
     newDays.forEach(newDay => {
+      // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót
       const exists = currentSelections.days.some(oldDay => 
         oldDay.date === newDay.date &&
-        oldDay.month === newDay.month &&
+        (oldDay.month === newDay.month || oldDay.month === newDay.month - 1 || oldDay.month === newDay.month + 1) &&
         oldDay.year === newDay.year
       );
       
@@ -1832,12 +1847,16 @@ export default function CompleteScheduleApp() {
 
   const isDayBlockedByHiddenDepartment = useCallback(
     (date: number, month: number, year: number) => {
-      // Kiểm tra selections từ phòng ban bị ẩn
+      // ✅ SỬA: Kiểm tra selections từ phòng ban bị ẩn
+      // Vấn đề: departmentSelections có thể được lưu với tháng cũ (currentMonth.getMonth())
+      // Giải pháp: Kiểm tra cả tháng hiện tại và tháng thực tế
       for (const [deptId, selections] of departmentSelections) {
         if (!visibleDepartments.includes(deptId)) {
           const hasSelection = selections.days.some(
             (day) =>
-              day.date === date && day.month === month && day.year === year
+              day.date === date && 
+              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.year === year
           );
           if (hasSelection) return { isBlocked: true, departmentId: deptId };
         }
@@ -6121,6 +6140,9 @@ export default function CompleteScheduleApp() {
             departmentName={selectedUserForHistory.departmentName}
             editSessions={Array.from(editSessions.values()).filter(session => session.userId === selectedUserForHistory.userId)}
             previewPatches={Array.from(previewPatches.values()).filter(patch => patch.userId === selectedUserForHistory.userId)}
+            currentView={activeView}
+            currentDate={activeView === 'week' ? currentWeek : currentMonth}
+            timeSlots={timeSlots}
             onSelectActivity={(activity) => {
               // Debug: Log ra thông tin để kiểm tra
               console.log('[ScheduleApp] onSelectActivity called:', activity);
@@ -6169,9 +6191,6 @@ export default function CompleteScheduleApp() {
                 console.log('[ScheduleApp] No date found in activity');
               }
             }}
-            currentView={activeView}
-            currentDate={activeView === 'week' ? currentWeek : currentMonth}
-            timeSlots={timeSlots}
           />
         )}
       </div>
