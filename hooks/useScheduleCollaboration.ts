@@ -10,17 +10,10 @@ import {
 } from '@/types/schedule';
 import { usePermission } from '@/hooks/usePermission';
 
-// Utility function to fix encoding issues
+// Utility function to fix encoding issues - DISABLED
 const fixEncoding = (text: string): string => {
-  if (!text || !text.includes('Ã')) return text;
-  
-  try {
-    // Try to decode the double-encoded string
-    return decodeURIComponent(escape(text));
-  } catch (error) {
-    console.log('[ScheduleCollaboration] Failed to decode text:', error);
-    return text;
-  }
+  // Bỏ fixEncoding để không làm hỏng data
+  return text;
 };
 
 export const useScheduleCollaboration = (roomId: string) => {
@@ -243,11 +236,17 @@ export const useScheduleCollaboration = (roomId: string) => {
   useEffect(() => {
     // Listen for WebSocket events using subscribe pattern
     const handlePresenceUpdate = (data: any) => {
+      console.log('[ScheduleCollaboration] Received presence update:', data);
+      
       // Fix encoding issue - decode if needed
       data.userName = fixEncoding(data.userName);
+      console.log('[ScheduleCollaboration] After fixEncoding userName:', data.userName);
       
       if (data.userId !== user?.id) { // Ignore own events
+        console.log('[ScheduleCollaboration] Updating presence for user:', data.userId);
         updatePresence(data);
+        
+
       }
     };
 

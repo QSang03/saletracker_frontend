@@ -51,7 +51,20 @@ export function getRefreshToken(): string | null {
 export function base64UrlDecode(str: string): string {
   str = str.replace(/-/g, "+").replace(/_/g, "/");
   while (str.length % 4) str += "=";
-  return atob(str);
+  
+  try {
+    // Sử dụng TextDecoder để xử lý UTF-8 đúng cách
+    const binaryString = atob(str);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (error) {
+    console.error('Error decoding base64 with UTF-8:', error);
+    // Fallback to original method
+    return atob(str);
+  }
 }
 
 export function getUserFromToken(token: string): any | null {

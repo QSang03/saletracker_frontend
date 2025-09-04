@@ -289,7 +289,7 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                 <RTooltip 
                   content={
                     <SmartTooltip 
-                      title="🚀 Analytics Details"
+                      title="🚀 Chi tiết phân tích"
                       customConfig={customConfig}
                       customFields={activeFilters}
                     />

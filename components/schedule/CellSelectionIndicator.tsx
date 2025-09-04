@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, User, MousePointer } from "lucide-react";
+import { Check, MousePointer } from "lucide-react";
 import { SchedulePresence } from "@/types/schedule";
 import { getDepartmentColor } from "@/lib/utils";
 
@@ -51,19 +51,7 @@ export const CellSelectionIndicator = ({ presences, className = "" }: CellSelect
                   )}
                 </div>
                 
-                {/* User info tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap">
-                  <div className="flex items-center gap-1">
-                    <User className="w-3 h-3" />
-                    {presence.userName}
-                  </div>
-                  <div className="text-gray-300">
-                    {presence.position?.cellType === 'timeSlot' 
-                      ? `${presence.position?.time} - ${presence.position?.date}`
-                      : `Ngày ${presence.position?.date}/${(presence.position?.month || 0) + 1}`
-                    }
-                  </div>
-                </div>
+
               </div>
             </motion.div>
           );

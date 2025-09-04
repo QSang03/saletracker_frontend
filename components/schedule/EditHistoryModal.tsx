@@ -20,6 +20,11 @@ interface EditHistoryModalProps {
   departmentName: string;
   editSessions: ScheduleEditSession[];
   previewPatches: SchedulePreviewPatch[];
+  onSelectActivity?: (activity: { date: string; time?: string; fieldId: string; fieldType: string }) => void;
+  // Thêm thông tin cần thiết để tính toán vị trí ô
+  currentView: 'week' | 'month';
+  currentDate: Date;
+  timeSlots: string[];
 }
 
 export const EditHistoryModal = ({
@@ -31,18 +36,16 @@ export const EditHistoryModal = ({
   departmentName,
   editSessions,
   previewPatches,
+  onSelectActivity,
+  currentView,
+  currentDate,
+  timeSlots,
 }: EditHistoryModalProps) => {
   const departmentColor = getDepartmentColor(departmentId);
   
-  // Fix encoding for display and provide safe fallback
-  const fixedUserName = userName
-    ? userName.replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống')
-    : 'Unknown User';
-
-  // Normalize department name encoding
-  const fixedDepartmentName = departmentName
-    ? departmentName.replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống')
-    : 'Unknown';
+  // Hiển thị trực tiếp data từ WebSocket
+  const fixedUserName = userName || 'Unknown User';
+  const fixedDepartmentName = departmentName || 'Unknown';
   
   // Sort activities by timestamp
   const allActivities = [
@@ -87,9 +90,188 @@ export const EditHistoryModal = ({
 
   const getActivityDescription = (type: 'edit' | 'preview', data: any) => {
     if (type === 'edit') {
+      // Sửa: Hiển thị thông tin đã được parse và điều chỉnh
+      if (data.fieldId && data.fieldId.startsWith('day-')) {
+        const datePart = data.fieldId.replace('day-', '');
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+          const [day, month, year] = parts;
+          const monthNumber = parseInt(month);
+          const adjustedMonth = monthNumber + 1;
+          const correctedDate = `${String(day).padStart(2, '0')}/${String(adjustedMonth).padStart(2, '0')}/${year}`;
+          return `Field ID: day-${day}-${adjustedMonth}-${year} (${correctedDate})`;
+        }
+      }
       return `Field ID: ${data.fieldId}`;
     }
     return `Nội dung: ${data.content?.substring(0, 50)}${data.content?.length > 50 ? '...' : ''}`;
+  };
+
+  const handleActivityClick = (activity: any) => {
+    if (!onSelectActivity) return;
+    
+    // Lấy thông tin về ô từ activity data
+    let date = '';
+    let time = '';
+    
+    // Debug: Log ra toàn bộ activity data để xem cấu trúc
+    console.log('[EditHistoryModal] Full activity data:', activity);
+    console.log('[EditHistoryModal] Activity data fields:', {
+      fieldId: activity.data.fieldId,
+      fieldType: activity.data.fieldType,
+      coordinates: activity.data.coordinates,
+      applicable_date: activity.data.applicable_date,
+      date: activity.data.date,
+      startedAt: activity.data.startedAt
+    });
+    
+    if (activity.data.fieldType === 'calendar_cell') {
+      // Lấy trực tiếp từ fieldId - đơn giản thôi
+      if (activity.data.fieldId) {
+        console.log('[EditHistoryModal] FieldId:', activity.data.fieldId);
+        
+        // Format: day-13-8-2025 -> lấy 13-8-2025
+        if (activity.data.fieldId.startsWith('day-')) {
+          const datePart = activity.data.fieldId.replace('day-', '');
+          // Chuyển 13-8-2025 thành 2025-08-13
+          const parts = datePart.split('-');
+          if (parts.length === 3) {
+            const [day, month, year] = parts;
+            
+            // Sửa: month trong fieldId là 0-11, cần +1 để thành 1-12
+            const monthNumber = parseInt(month);
+            const adjustedMonth = monthNumber + 1;
+            
+            date = `${year}-${String(adjustedMonth).padStart(2, '0')}-${day.padStart(2, '0')}`;
+            console.log('[EditHistoryModal] Parsed day fieldId:', { 
+              originalFieldId: activity.data.fieldId,
+              datePart,
+              parts,
+              day, 
+              month, 
+              year,
+              monthNumber,
+              adjustedMonth,
+              finalDate: date 
+            });
+            
+            // Nếu là tháng view, cần chuyển qua tháng mới
+            if (currentView !== 'month') {
+              console.log('[EditHistoryModal] Switching to month view for day activity');
+            }
+          }
+        }
+        // Format: time-slot-1-10:00-2024-01-15 -> lấy 10:00 và 2024-01-15
+        else if (activity.data.fieldId.startsWith('time-slot-')) {
+          const parts = activity.data.fieldId.split('-');
+          if (parts.length >= 5) {
+            time = parts[3]; // 10:00
+            const datePart = parts.slice(4).join('-'); // 2024-01-15
+            if (datePart.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              date = datePart;
+            }
+            console.log('[EditHistoryModal] Parsed time-slot fieldId:', { date, time });
+          }
+        }
+      }
+      
+      // Nếu không có từ fieldId, thử từ coordinates
+      if (!date && activity.data.coordinates) {
+        console.log('[EditHistoryModal] Using coordinates:', activity.data.coordinates);
+        
+        if (activity.data.coordinates.cellType === 'timeSlot') {
+          // Tuần view - sửa lại logic tính toán
+          // Lấy time slot từ y coordinate (hàng)
+          const timeIndex = Math.floor(activity.data.coordinates.y / 80); // Giả sử mỗi ô cao 80px
+          if (timeIndex >= 0 && timeIndex < timeSlots.length) {
+            time = timeSlots[timeIndex];
+          }
+          
+          // Lấy ngày từ x coordinate (cột)
+          const dayIndex = Math.floor(activity.data.coordinates.x / 150); // Giả sử mỗi ô rộng 150px
+          if (dayIndex >= 0 && dayIndex < 7) {
+            const weekDate = new Date(currentDate);
+            weekDate.setDate(currentDate.getDate() - currentDate.getDay() + dayIndex);
+            date = weekDate.toISOString().split('T')[0];
+          }
+          
+          console.log('[EditHistoryModal] Calculated from coordinates (week):', { 
+            date, 
+            time, 
+            dayIndex, 
+            timeIndex,
+            coordinates: activity.data.coordinates,
+            // Debug kích thước ô
+            cellHeight: 80,
+            cellWidth: 150,
+            calculatedY: Math.floor(activity.data.coordinates.y / 80),
+            calculatedX: Math.floor(activity.data.coordinates.x / 150)
+          });
+        } else if (activity.data.coordinates.cellType === 'day') {
+          // Tháng view - lấy trực tiếp từ data thay vì tính toán
+          console.log('[EditHistoryModal] Month view activity:', activity.data);
+          
+          // Thử lấy từ fieldId trước
+          if (activity.data.fieldId) {
+            const fieldIdParts = activity.data.fieldId.split('-');
+            // Tìm pattern ngày trong fieldId
+            for (let i = 0; i < fieldIdParts.length - 1; i++) {
+              const potentialDate = `${fieldIdParts[i]}-${fieldIdParts[i + 1]}`;
+              if (potentialDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                date = potentialDate;
+                console.log('[EditHistoryModal] Found date in fieldId:', date);
+                break;
+              }
+            }
+          }
+          
+
+        }
+      }
+    }
+    
+
+    
+    // Nếu vẫn không có date, thử từ các field khác
+    if (!date) {
+      if (activity.data.applicable_date) {
+        date = activity.data.applicable_date;
+        console.log('[EditHistoryModal] Using applicable_date as fallback:', date);
+      } else if (activity.data.date) {
+        date = activity.data.date;
+        console.log('[EditHistoryModal] Using date field as fallback:', date);
+      } else if (activity.data.startedAt) {
+        try {
+          const startedDate = new Date(activity.data.startedAt);
+          if (!isNaN(startedDate.getTime())) {
+            date = startedDate.toISOString().split('T')[0];
+            console.log('[EditHistoryModal] Using startedAt as fallback:', date);
+          }
+        } catch (error) {
+          console.log('[EditHistoryModal] Error parsing startedAt:', error);
+        }
+      }
+    }
+    
+    // Debug: Log ra thông tin cuối cùng
+    console.log('[EditHistoryModal] Final result:', {
+      date,
+      time,
+      fieldId: activity.data.fieldId,
+      fieldType: activity.data.fieldType,
+      fallbackUsed: !date ? 'No fallback available' : 'Fallback used'
+    });
+    
+    // Gọi callback để scroll đến ô
+    onSelectActivity({
+      date,
+      time,
+      fieldId: activity.data.fieldId,
+      fieldType: activity.data.fieldType,
+    });
+    
+    // Đóng modal sau khi chọn
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -160,7 +342,11 @@ export const EditHistoryModal = ({
                 </div>
 
                 {allActivities.map((activity, index) => (
-                  <Card key={index} className="border-l-4 border-l-blue-500">
+                  <Card 
+                    key={index} 
+                    className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => handleActivityClick(activity)}
+                  >
                     <CardContent className="p-4">
                       <div className="flex items-start gap-3">
                         <div className={`p-2 rounded-full ${departmentColor.bg} text-white`}>

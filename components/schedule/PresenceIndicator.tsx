@@ -4,7 +4,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SchedulePresence } from "@/types/schedule";
 import { getDepartmentColor } from "@/lib/utils";
 import { MousePointer, Edit, Eye } from "lucide-react";
@@ -18,84 +17,51 @@ interface PresenceIndicatorProps {
 export const PresenceIndicator = ({ presence, isEditing = false, className = "" }: PresenceIndicatorProps) => {
   const departmentColor = getDepartmentColor(presence.departmentId);
   
-  // Fix encoding for display
-  const fixedUserName = presence.userName
-    ? presence.userName.replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống')
-    : 'Unknown User';
-
-  // Normalize department name encoding (same fix as userName) to avoid mojibake
-  const fixedDepartmentName = presence.departmentName
-    ? presence.departmentName.replace(/Ã/g, 'ă').replace(/á»/g, 'ộ').replace(/viÃªn/g, 'viên').replace(/há»/g, 'hệ').replace(/thá»/g, 'thống')
-    : 'Unknown';
+  // Hiển thị trực tiếp data từ WebSocket
+  const fixedUserName = presence.userName || 'Unknown User';
+  const fixedDepartmentName = presence.departmentName || 'Unknown';
   
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <motion.div
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0, opacity: 0 }}
+      className={`relative ${className}`}
+    >
+      <div className="relative">
+        <Avatar className="w-8 h-8 border-2 border-white shadow-md">
+          <AvatarImage 
+            src={presence.avatar_zalo || `/api/avatars/${presence.userId}`} 
+            alt={fixedUserName} 
+          />
+          <AvatarFallback className={`${departmentColor.bg} text-white text-xs font-medium`}>
+            {fixedUserName.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        
+        {/* Editing indicator */}
+        {isEditing && (
           <motion.div
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            className={`relative ${className}`}
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 1, repeat: Infinity }}
+            className={`absolute -top-1 -right-1 w-3 h-3 ${departmentColor.bg} rounded-full border-2 border-white shadow-sm flex items-center justify-center`}
           >
-            <div className="relative">
-              <Avatar className="w-8 h-8 border-2 border-white shadow-md">
-                <AvatarImage 
-                  src={presence.avatar_zalo || `/api/avatars/${presence.userId}`} 
-                  alt={fixedUserName} 
-                />
-                <AvatarFallback className={`${departmentColor.bg} text-white text-xs font-medium`}>
-                  {fixedUserName.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              
-              {/* Editing indicator */}
-              {isEditing && (
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                  className={`absolute -top-1 -right-1 w-3 h-3 ${departmentColor.bg} rounded-full border-2 border-white shadow-sm flex items-center justify-center`}
-                >
-                  <Edit className="w-2 h-2 text-white" />
-                </motion.div>
-              )}
-              
-              {/* Viewing indicator */}
-              {!isEditing && (
-                <motion.div
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className={`absolute -top-1 -right-1 w-3 h-3 ${departmentColor.bg} rounded-full border-2 border-white shadow-sm flex items-center justify-center`}
-                >
-                  <Eye className="w-2 h-2 text-white" />
-                </motion.div>
-              )}
-            </div>
+            <Edit className="w-2 h-2 text-white" />
           </motion.div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs">
-          <div className="space-y-1">
-            <div className="font-medium text-sm">{fixedUserName}</div>
-            <div className="text-xs text-muted-foreground">{fixedDepartmentName}</div>
-            {isEditing && (
-              <Badge variant="secondary" className="text-xs">
-                <Edit className="w-3 h-3 mr-1" />
-                Đang chỉnh sửa
-              </Badge>
-            )}
-            {!isEditing && (
-              <Badge variant="outline" className="text-xs">
-                <Eye className="w-3 h-3 mr-1" />
-                Đang xem
-              </Badge>
-            )}
-            <div className="text-xs text-muted-foreground">
-              Hoạt động {new Date(presence.lastSeen).toLocaleTimeString('vi-VN')}
-            </div>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+        )}
+        
+        {/* Viewing indicator */}
+        {!isEditing && (
+          <motion.div
+            animate={{ scale: [1, 1.1, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className={`absolute -top-1 -right-1 w-3 h-3 ${departmentColor.bg} rounded-full border-2 border-white shadow-sm flex items-center justify-center`}
+          >
+            <Eye className="w-2 h-2 text-white" />
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
   );
 };
 
