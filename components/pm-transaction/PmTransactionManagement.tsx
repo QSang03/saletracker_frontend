@@ -112,6 +112,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
   const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
+  const [filtersRestored, setFiltersRestored] = useState(false);
   const previousPmFiltersRef = useRef<PmFilters | null>(null);
 
   type PmFilters = {
@@ -469,6 +470,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // Wait until filter options are loaded/mapped to departments to avoid
       // firing an initial fetch before default departments are applied.
       if (!filtersLoaded) return;
+      // Also wait for filters to be restored from localStorage
+      if (!filtersRestored) return;
       fetchOrders();
       fetchStats();
     }
@@ -487,6 +490,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     employeesSelected,
     warningLevelFilter,
     filtersLoaded,
+    filtersRestored,
     minQuantity,
     conversationTypesSelected,
   ]);
@@ -591,6 +595,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // prefer stored filters and do not reset
       applyPmFilters(stored, true);
       window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+      setFiltersRestored(true); // Mark that filters have been restored
     } else {
       const state = window.history.state as any;
       if (!state || !state.pmFilters) {
@@ -598,6 +603,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
         // Không lưu vào localStorage khi không có stored filters
       }
+      setFiltersRestored(true); // Mark that initialization is complete
     }
   }, [filtersLoaded]); // Add filtersLoaded as dependency
 
