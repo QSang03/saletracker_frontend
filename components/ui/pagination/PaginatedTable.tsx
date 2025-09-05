@@ -1287,19 +1287,19 @@ export default function PaginatedTable({
                   onChange={(e) => {
                     const raw = e.target.value;
                     if (raw === "") {
-                      // user cleared input -> remove quantity filter
-                      updateFilter("quantity", undefined as any);
+                      // user cleared input -> reset to default quantity
+                      updateFilter("quantity", defaultQuantity as any);
                       return;
                     }
                     const n = parseInt(raw, 10);
-                    updateFilter("quantity", Number.isNaN(n) ? undefined as any : n as any);
+                    updateFilter("quantity", Number.isNaN(n) ? defaultQuantity as any : n as any);
                   }}
                   onBlur={(e) => {
                     // Ensure parent receives filter immediately on blur (bypass debounce)
                     try {
                       const raw = e.currentTarget.value;
-                      const parsed = raw === "" ? undefined : parseInt(raw, 10);
-                      const n = Number.isNaN(parsed as any) ? undefined : (parsed as any);
+                      const parsed = raw === "" ? defaultQuantity : parseInt(raw, 10);
+                      const n = Number.isNaN(parsed as any) ? defaultQuantity : (parsed as any);
                       const newFilters = { ...filters, quantity: n } as Filters;
                       if (onFilterChange) {
                         const json = JSON.stringify(newFilters);
@@ -1461,7 +1461,12 @@ export default function PaginatedTable({
               className={`min-w-0 ${
                 canExport && getExportData ? "w-1/2" : "w-full"
               } ${buttonClassNames.reset ?? ""}`}
-              onClick={handleResetFilter}
+              onClick={() => {
+                handleResetFilter();
+                if (onResetFilter) {
+                  onResetFilter();
+                }
+              }}
             >
               Xóa filter
             </Button>

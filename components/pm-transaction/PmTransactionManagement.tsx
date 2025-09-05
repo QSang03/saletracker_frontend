@@ -246,7 +246,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         }
 
         setWarningLevelFilter(f.warningLevel || "");
-        setMinQuantity(typeof f.quantity === "number" ? f.quantity : undefined);
+        setMinQuantity(typeof f.quantity === "number" ? f.quantity : 3);
         setConversationTypesSelected(
           f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
         );
@@ -839,7 +839,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       ) {
         setMinQuantity((f as any).quantity as number);
       } else {
-        setMinQuantity(undefined);
+        // Khi reset filter hoặc quantity không hợp lệ, về lại mặc định là 3
+        setMinQuantity(3);
       }
 
       // conversation type (group / private)
@@ -1028,7 +1029,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       departments: "",
       employees: "",
       warningLevel: "",
-      quantity: undefined,
+      quantity: 3, // PM luôn reset về 3
       conversationType: "",
     };
 
@@ -1043,7 +1044,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       setEmployeesSelected([]);
       setDepartmentsSelected([]);
       setWarningLevelFilter("");
-      setMinQuantity(undefined);
+      setMinQuantity(3); // PM luôn reset về 3
       setConversationTypesSelected([]);
       
       // ✅ Save reset data vào localStorage (giống useOrders)
