@@ -731,7 +731,7 @@ function ManagerOrderContent() {
   // ✅ Handle sort từ OrderManagement
   const handleSort = useCallback(
     (
-      field: "quantity" | "unit_price" | "created_at" | null,
+      field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
       direction: "asc" | "desc" | null
     ) => {
       // ✅ Batch update tất cả cùng lúc

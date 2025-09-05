@@ -155,27 +155,25 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     let departmentsCsv = "";
     let employeesCsv = "";
     
-    // Nếu là analysis user, không set departments và employees để backend filter theo user hiện tại
-    if (!isAnalysisUser) {
-      departmentsCsv =
-        Array.isArray(departmentsSelected) && departmentsSelected.length > 0
-          ? departmentsSelected.join(",")
-          : isPM && !isViewRole && Array.isArray(pmDepartments) && pmDepartments.length > 0
-          ? pmDepartments.join(",")
-          : "";
-      
-      employeesCsv =
-        Array.isArray(employeesSelected) && employeesSelected.length > 0
-          ? employeesSelected.join(",")
-          : "";
-    }
+    // Luôn lưu departments và employees vào localStorage để restore
+    departmentsCsv =
+      Array.isArray(departmentsSelected) && departmentsSelected.length > 0
+        ? departmentsSelected.join(",")
+        : isPM && !isViewRole && Array.isArray(pmDepartments) && pmDepartments.length > 0
+        ? pmDepartments.join(",")
+        : "";
+    
+    employeesCsv =
+      Array.isArray(employeesSelected) && employeesSelected.length > 0
+        ? employeesSelected.join(",")
+        : "";
     
     return {
       page: currentPage,
       pageSize,
       search: searchTerm || "",
       status: statusFilter !== "all" ? statusFilter : "",
-      date: dateRangeState ? undefined : (dateFilter && dateFilter !== "all" ? dateFilter : ""),
+      date: dateFilter && dateFilter !== "all" && dateFilter !== "custom" ? dateFilter : "",
       dateRange:
         dateRangeState && dateRangeState.start && dateRangeState.end
           ? { start: dateRangeState.start, end: dateRangeState.end }
@@ -201,14 +199,17 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       setSearchTerm(f.search || "");
       setStatusFilter(f.status && f.status.length > 0 ? f.status : "all");
 
+      // Apply dateRange if present
       if (f.dateRange && f.dateRange.start && f.dateRange.end) {
         setDateRangeState({ start: f.dateRange.start, end: f.dateRange.end });
-        setDateFilter("custom");
-      } else if (f.date && f.date.length > 0) {
-        setDateRangeState(null);
-        setDateFilter(f.date);
       } else {
         setDateRangeState(null);
+      }
+      
+      // Apply single date if present (independent of dateRange)
+      if (f.date && f.date.length > 0) {
+        setDateFilter(f.date);
+      } else {
         setDateFilter("all");
       }
 
@@ -327,11 +328,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         params.set("status", statusFilter);
       }
 
-      // date handling: if custom date range provided, send dateRange as JSON, else send date short token
-      if (dateRangeState && dateRangeState.start && dateRangeState.end) {
-        params.set("dateRange", JSON.stringify({ start: dateRangeState.start, end: dateRangeState.end }));
-      } else if (dateFilter && dateFilter !== "all") {
+      // date handling: send both date and dateRange if they have values
+      if (dateFilter && dateFilter !== "all" && dateFilter !== "custom") {
         params.set("date", dateFilter);
+      }
+      
+      if (dateRangeState && dateRangeState.start && dateRangeState.end) {
+        const dateRangeParam = JSON.stringify({ start: dateRangeState.start, end: dateRangeState.end });
+        params.set("dateRange", dateRangeParam);
       }
 
       // optional filters for departments / employees (CSV)
@@ -385,7 +389,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         departmentsSelected
       );
       // eslint-disable-next-line no-console
-      console.debug("[PM] token present:", !!token);
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -402,26 +405,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         data = await response.json();
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.debug("[PM] fetchOrders: failed to parse json response", e);
         const text = await response.text();
         // eslint-disable-next-line no-console
-        console.debug(
-          "[PM] fetchOrders response text:",
-          text.slice ? text.slice(0, 2000) : text
-        );
         throw e;
       }
-      // eslint-disable-next-line no-console
-      console.debug(
-        "[PM] fetchOrders result count:",
-        Array.isArray(data?.data)
-          ? data.data.length
-          : Array.isArray(data)
-          ? data.length
-          : 0,
-        "total:",
-        data?.total
-      );
       setOrders(data.data || []);
       const total = Number(data.total || 0);
       setTotalItems(total);
@@ -551,7 +538,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
             if (mapped.length > 0) {
               // eslint-disable-next-line no-console
-              console.debug("[PM] mapped pm departments ->", mapped);
               // just set state; the consolidated effect will trigger fetchOrders
               setDepartmentsSelected(mapped);
             }
@@ -576,6 +562,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Initialize history state on mount for consistent back behavior
   useEffect(() => {
     if (typeof window === "undefined") return;
+    
+    // Wait for filter options to be loaded before applying stored filters
+    if (!filtersLoaded) return;
+    
     const stored = getPmFiltersFromStorage();
     if (stored) {
       // prefer stored filters and do not reset
@@ -589,7 +579,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         savePmFiltersToStorage(pmFilters);
       }
     }
-  }, []);
+  }, [filtersLoaded]); // Add filtersLoaded as dependency
 
   // Handle browser back/forward to restore filters like Order management
   useEffect(() => {
@@ -657,6 +647,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // When departments change, remove any selected employees that no longer belong to the available set
   useEffect(() => {
     if (!employeesSelected || employeesSelected.length === 0) return;
+    if (isRestoringRef.current) return; // Skip during restore to avoid clearing restored employees
+    if (!filtersLoaded) return; // Skip until filters are loaded
+    
     const allowed = new Set(availableEmployees.map((e) => String(e.value)));
     const filtered = employeesSelected.filter((v) => allowed.has(String(v)));
     // Only update when actually changed to avoid render loops
@@ -666,12 +659,37 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     if (!isSame) {
       setEmployeesSelected(filtered);
     }
-  }, [availableEmployees, employeesSelected]);
+  }, [availableEmployees, employeesSelected, filtersLoaded]);
+
+  // Auto-save filters to localStorage when they change (except during restore)
+  useEffect(() => {
+    if (isRestoringRef.current) return; // Skip saving during restore to avoid loops
+    if (!filtersLoaded) return; // Skip saving until filters are loaded
+    
+    try {
+      const currentFilters = getCurrentPmFilters();
+      savePmFiltersToStorage(currentFilters);
+    } catch (err) {
+      // ignore storage errors
+    }
+  }, [
+    currentPage,
+    pageSize,
+    searchTerm,
+    statusFilter,
+    dateFilter,
+    dateRangeState,
+    departmentsSelected,
+    employeesSelected,
+    warningLevelFilter,
+    minQuantity,
+    conversationTypesSelected,
+    filtersLoaded,
+  ]);
 
   const handleFilterChange = (f: PaginatedFilters) => {
     try {
       // eslint-disable-next-line no-console
-      console.debug("[PM] handleFilterChange", f);
       // search
       setSearchTerm(f.search || "");
 
@@ -745,7 +763,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             const from = fromDate.toLocaleDateString("en-CA");
             const to = toDate.toLocaleDateString("en-CA");
             setDateRangeState({ start: from, end: to });
-            setDateFilter("custom");
+            // Không ghi đè dateFilter để giữ nguyên ngày đơn đã chọn
           } else {
             console.warn("[PM] Invalid dateRange values:", { from: fromDate, to: toDate });
             setDateFilter("all");
@@ -775,7 +793,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           }
         );
         // eslint-disable-next-line no-console
-        console.debug("[PM] warning levels selected (mapped) ->", mappedLevels);
         setWarningLevelFilter(mappedLevels.join(","));
       } else {
         setWarningLevelFilter("");
@@ -807,12 +824,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       console.error("Error handling filters", e);
     }
     // Persist the updated filters snapshot so popstate and mount can read latest state
-    try {
-      const snapshot = getCurrentPmFilters();
-      savePmFiltersToStorage(snapshot);
-    } catch (err) {
-      // ignore storage errors
-    }
+    // Use setTimeout to ensure state updates are applied before saving
+    setTimeout(() => {
+      try {
+        const snapshot = getCurrentPmFilters();
+        savePmFiltersToStorage(snapshot);
+      } catch (err) {
+        // ignore storage errors
+      }
+    }, 0);
   };
 
   // Export data
@@ -960,6 +980,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     setDateRangeState(null);
     setPageSize(10);
     setCurrentPage(1);
+    setEmployeesSelected([]);
+    setDepartmentsSelected([]);
+    setWarningLevelFilter("");
+    setMinQuantity(undefined);
+    setConversationTypesSelected([]);
+    
+    // Xóa localStorage khi reset filter
+    clearPmFiltersFromStorage();
+    
     // Do not call fetchOrders() directly here; the consolidated effect will react to state changes.
   };
 
@@ -1245,10 +1274,46 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             onDepartmentChange={(vals) => {
               // immediate handler when user changes departments in the toolbar
               // eslint-disable-next-line no-console
-              console.debug("[PM] onDepartmentChange immediate", vals);
               setDepartmentsSelected(vals as (string | number)[]);
               setCurrentPage(1);
+              
               // do not call fetchOrders() here; consolidated effect will react to state changes
+            }}
+            onEmployeeChange={(vals) => {
+              // immediate handler when user changes employees in the toolbar
+              // eslint-disable-next-line no-console
+              setEmployeesSelected(vals as (string | number)[]);
+              setCurrentPage(1);
+              
+              // do not call fetchOrders() here; consolidated effect will react to state changes
+            }}
+            onWarningLevelChange={(vals) => {
+              // immediate handler when user changes warning levels in the toolbar
+              // eslint-disable-next-line no-console
+              
+              // PaginatedTable có thể truyền values trực tiếp, không cần map
+              const warningLevels = (vals as (string | number)[]).map(w => String(w));
+              
+              setWarningLevelFilter(warningLevels.join(","));
+              setCurrentPage(1);
+              
+              // do not call fetchOrders() here; consolidated effect will react to state changes
+            }}
+            onDateRangeChange={(dateRange) => {
+              if (dateRange && dateRange.from && dateRange.to) {
+                const from = dateRange.from instanceof Date 
+                  ? dateRange.from.toLocaleDateString("en-CA")
+                  : new Date(dateRange.from).toLocaleDateString("en-CA");
+                const to = dateRange.to instanceof Date 
+                  ? dateRange.to.toLocaleDateString("en-CA")
+                  : new Date(dateRange.to).toLocaleDateString("en-CA");
+                
+                setDateRangeState({ start: from, end: to });
+                setCurrentPage(1);
+              } else {
+                setDateRangeState(null);
+                setCurrentPage(1);
+              }
             }}
             onResetFilter={handleResetFilter}
             loading={loading}
@@ -1286,62 +1351,78 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             availableEmployees={availableEmployees}
             singleDateLabel="Ngày tạo"
             dateRangeLabel="Khoảng thời gian"
-            isRestoring={isRestoring}
-            initialFilters={{
-              search: searchTerm,
-              // do NOT pre-filter by departments; keep department selection empty so results are not restricted
-              departments: [],
-              statuses:
-                statusFilter && statusFilter !== "all"
-                  ? statusFilter.split(",")
-                  : [],
-              warningLevels: [],
-              dateRange: dateRangeState
-                ? (() => {
-                    try {
-                      const fromDate = new Date(dateRangeState.start || "");
-                      const toDate = new Date(dateRangeState.end || "");
-                      
-                      // Kiểm tra xem các ngày có hợp lệ không
-                      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-                        return {
-                          from: fromDate,
-                          to: toDate,
-                        };
-                      } else {
-                        console.warn("[PM] Invalid dateRange in initialFilters:", dateRangeState);
-                        return { from: undefined, to: undefined };
-                      }
-                    } catch (error) {
-                      console.warn("[PM] Error parsing dateRange in initialFilters:", error);
-                      return { from: undefined, to: undefined };
-                    }
-                  })()
-                : { from: undefined, to: undefined },
-              singleDate:
-                dateFilter && dateFilter !== "all"
-                  ? (() => {
-                      try {
-                        const date = new Date(dateFilter);
-                        if (!isNaN(date.getTime())) {
-                          return date;
-                        } else {
-                          console.warn("[PM] Invalid singleDate in initialFilters:", dateFilter);
-                          return undefined;
-                        }
-                      } catch (error) {
-                        console.warn("[PM] Error parsing singleDate in initialFilters:", error);
-                        return undefined;
-                      }
-                    })()
-                  : undefined,
-              employees: [],
-              quantity: minQuantity,
-              conversationType: conversationTypesSelected,
-            }}
-            enableQuantityFilter={true}
-            enableConversationTypeFilter={true}
-            defaultQuantity={3}
+                         isRestoring={isRestoring}
+             initialFilters={useMemo(() => {
+               return {
+                 search: searchTerm,
+                 // Hiển thị departments đã chọn từ localStorage
+                 departments: departmentsSelected,
+                 statuses:
+                   statusFilter && statusFilter !== "all"
+                     ? statusFilter.split(",")
+                     : [],
+                 // Hiển thị warning levels đã chọn từ localStorage
+                 warningLevels: warningLevelFilter
+                   ? warningLevelFilter.split(",")
+                   : [],
+                 dateRange: dateRangeState
+                   ? (() => {
+                       try {
+                         const fromDate = new Date(dateRangeState.start || "");
+                         const toDate = new Date(dateRangeState.end || "");
+                         
+                         // Kiểm tra xem các ngày có hợp lệ không
+                         if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
+                           return {
+                             from: fromDate,
+                             to: toDate,
+                           };
+                         } else {
+                           console.warn("[PM] Invalid dateRange in initialFilters:", dateRangeState);
+                           return { from: undefined, to: undefined };
+                         }
+                       } catch (error) {
+                         console.warn("[PM] Error parsing dateRange in initialFilters:", error);
+                         return { from: undefined, to: undefined };
+                       }
+                     })()
+                   : { from: undefined, to: undefined },
+                 singleDate:
+                   dateFilter && dateFilter !== "all"
+                     ? (() => {
+                         try {
+                           const date = new Date(dateFilter);
+                           if (!isNaN(date.getTime())) {
+                             return date;
+                           } else {
+                             console.warn("[PM] Invalid singleDate in initialFilters:", dateFilter);
+                             return undefined;
+                           }
+                         } catch (error) {
+                           console.warn("[PM] Error parsing singleDate in initialFilters:", error);
+                           return undefined;
+                         }
+                       })()
+                     : undefined,
+                 // Hiển thị employees đã chọn từ localStorage
+                 employees: employeesSelected,
+                 quantity: minQuantity,
+                 conversationType: conversationTypesSelected,
+               };
+             }, [
+               searchTerm,
+               statusFilter,
+               warningLevelFilter,
+               departmentsSelected,
+               employeesSelected,
+               minQuantity,
+               dateRangeState,
+               dateFilter,
+               conversationTypesSelected,
+             ])}
+             enableQuantityFilter={true}
+             enableConversationTypeFilter={true}
+             defaultQuantity={3}
           >
             {error && (
               <Alert className="mb-4">

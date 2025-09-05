@@ -109,6 +109,9 @@ interface PaginatedTableProps {
   onResetFilter?: () => void;
   preventEmptyFilterCall?: boolean;
   onDepartmentChange?: (departments: (string | number)[]) => void;
+  onEmployeeChange?: (employees: (string | number)[]) => void;
+  onWarningLevelChange?: (warningLevels: (string | number)[]) => void;
+  onDateRangeChange?: (dateRange: DateRange | undefined) => void;
   // When true, render only the controls (filters + pagination) without a content area
   controlsOnly?: boolean;
   // Hide the built-in pager (Prev/Next + page indicator). Useful when embedding this toolbar at the top
@@ -196,6 +199,9 @@ export default function PaginatedTable({
   onResetFilter,
   preventEmptyFilterCall = true,
   onDepartmentChange,
+  onEmployeeChange,
+  onWarningLevelChange,
+  onDateRangeChange,
   isRestoring = false,
   controlsOnly = false,
   hidePager = false,
@@ -638,6 +644,16 @@ export default function PaginatedTable({
       onDepartmentChange([]);
     }
 
+    // ✅ THÊM: Reset employee selection trong parent component
+    if (onEmployeeChange) {
+      onEmployeeChange([]);
+    }
+
+    // ✅ THÊM: Reset warning level selection trong parent component
+    if (onWarningLevelChange) {
+      onWarningLevelChange([]);
+    }
+
     if (onFilterChange) {
       onFilterChange(reset);
     }
@@ -651,7 +667,7 @@ export default function PaginatedTable({
     if (typeof onResetFilter === "function") {
       onResetFilter();
     }
-  }, [onPageChange, onResetFilter, onFilterChange, onDepartmentChange]);
+  }, [onPageChange, onResetFilter, onFilterChange, onDepartmentChange, onEmployeeChange, onWarningLevelChange]);
 
   // ✅ FIXED: Debounce filter với sync state management
   const debouncedSetFilters = useCallback(
@@ -764,8 +780,13 @@ export default function PaginatedTable({
   const handleEmployeesChange = useCallback(
     (vals: (string | number)[]) => {
       updateFilter("employees", vals);
+      
+      // Trigger employee change callback
+      if (onEmployeeChange) {
+        onEmployeeChange(vals);
+      }
     },
-    [updateFilter]
+    [updateFilter, onEmployeeChange]
   );
 
   const handleDepartmentsChange = useCallback(
@@ -850,8 +871,13 @@ export default function PaginatedTable({
   const handleWarningLevelsChange = useCallback(
     (vals: (string | number)[]) => {
       updateFilter("warningLevels", vals);
+      
+      // Trigger warning level change callback
+      if (onWarningLevelChange) {
+        onWarningLevelChange(vals);
+      }
     },
-    [updateFilter]
+    [updateFilter, onWarningLevelChange]
   );
 
   // ...existing code...
@@ -1172,6 +1198,11 @@ export default function PaginatedTable({
                         "dateRange",
                         dateRange || { from: undefined, to: undefined }
                       );
+                      
+                      // Call onDateRangeChange callback if provided
+                      if (onDateRangeChange) {
+                        onDateRangeChange(dateRange);
+                      }
                     }}
                     numberOfMonths={2}
                     locale={vi}

@@ -85,10 +85,10 @@ interface OrderManagementProps {
   onHide?: (orderDetail: OrderDetail, reason: string) => void;
   onSearch?: (searchTerm: string) => void;
   onSort?: (
-    field: "quantity" | "unit_price" | "created_at" | null,
+    field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
     direction: "asc" | "desc" | null
   ) => void;
-  currentSortField?: "quantity" | "unit_price" | "created_at" | null;
+  currentSortField?: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null;
   currentSortDirection?: "asc" | "desc" | null;
   loading?: boolean;
   showActions?: boolean;
@@ -687,7 +687,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   // Function để handle sort - 3 trạng thái: desc -> asc -> null
-  const handleSort = (field: "quantity" | "unit_price" | "created_at") => {
+  const handleSort = (field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end") => {
     if (!onSort) return;
 
     if (currentSortField !== field) {
@@ -761,7 +761,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const displayOrders = safeOrders;
 
   // Function để render sort icon
-  const renderSortIcon = (field: "quantity" | "unit_price" | "created_at") => {
+  const renderSortIcon = (field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end") => {
     if (currentSortField !== field) {
       return null; // Không hiển thị icon nếu không phải cột đang sort
     }
@@ -1110,10 +1110,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   >
                     📅 Thời gian{renderSortIcon("created_at")}
                   </TableHead> */}
-                  <TableHead className="font-bold text-slate-700 text-sm w-[150px] text-center">
+                  <TableHead
+                    className="font-bold text-slate-700 text-sm w-[150px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                    onDoubleClick={() => handleSort("conversation_start")}
+                    title="Double-click để sắp xếp theo thời gian bắt đầu"
+                  >
                     🕐 TG bắt đầu
                   </TableHead>
-                  <TableHead className="font-bold text-slate-700 text-sm w-[150px] text-center">
+                  <TableHead
+                    className="font-bold text-slate-700 text-sm w-[150px] text-center cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                    onDoubleClick={() => handleSort("conversation_end")}
+                    title="Double-click để sắp xếp theo thời gian kết thúc"
+                  >
                     🕔 TG kết thúc
                   </TableHead>
                   <TableHead className="font-bold text-slate-700 text-sm w-[220px] text-center">

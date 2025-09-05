@@ -29,7 +29,7 @@ interface OrderFilters {
   products?: string;
   warningLevel?: string;
   quantity?: number; // Thêm bộ lọc số lượng
-  sortField?: "quantity" | "unit_price" | "created_at" | null;
+  sortField?: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null;
   sortDirection?: "asc" | "desc" | null;
 }
 
@@ -66,7 +66,7 @@ interface UseOrdersReturn {
   setWarningLevel: (warningLevel: string, resetPage?: boolean) => void;
   setQuantity: (quantity: number, resetPage?: boolean) => void; // Thêm setter cho quantity
   setSortField: (
-    sortField: "quantity" | "unit_price" | "created_at" | null,
+    sortField: "quantity" | "unit_price" | "created_at" | "conversation_start" | null,
     resetPage?: boolean
   ) => void;
   setSortDirection: (
@@ -264,6 +264,8 @@ export const useOrders = (): UseOrdersReturn => {
       | "quantity"
       | "unit_price"
       | "created_at"
+      | "conversation_start"
+      | "conversation_end"
       | null;
     const sortDirection = searchParams.get("sortDirection") as
       | "asc"
@@ -280,7 +282,7 @@ export const useOrders = (): UseOrdersReturn => {
       }
     }
 
-    // Nếu có params từ URL, return luôn
+  // Nếu có params từ URL, return luôn
     if (searchParams.toString()) {
       return {
         page,
@@ -295,8 +297,9 @@ export const useOrders = (): UseOrdersReturn => {
         products,
         warningLevel,
         quantity,
-        sortField,
-        sortDirection,
+    // Nếu URL truyền sortField thì dùng, nếu không thì mặc định sort theo conversation_start desc
+  sortField: sortField || 'conversation_start',
+    sortDirection: sortDirection || 'desc',
       };
     }
 
@@ -315,8 +318,9 @@ export const useOrders = (): UseOrdersReturn => {
       products: savedFilters.products || "",
       warningLevel: savedFilters.warningLevel || "",
       quantity: savedFilters.quantity || 1, // Mặc định là 1
-      sortField: savedFilters.sortField || null,
-      sortDirection: savedFilters.sortDirection || null,
+  // Mặc định luôn sắp xếp theo conversation_start desc nếu không có saved value
+  sortField: savedFilters.sortField || 'conversation_start',
+  sortDirection: savedFilters.sortDirection || 'desc',
     };
   });
 
@@ -565,7 +569,7 @@ export const useOrders = (): UseOrdersReturn => {
 
   const setSortOptions = useCallback(
     (
-      sortField: "quantity" | "unit_price" | "created_at" | null,
+      sortField: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
       sortDirection: "asc" | "desc" | null,
       resetPage = true
     ) => {
@@ -845,7 +849,7 @@ export const useOrders = (): UseOrdersReturn => {
 
   const setSortField = useCallback(
     (
-      sortField: "quantity" | "unit_price" | "created_at" | null,
+      sortField: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
       resetPage = true
     ) => {
       const newFilters = {
