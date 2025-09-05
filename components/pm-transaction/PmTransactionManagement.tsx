@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -148,7 +149,20 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const clearPmFiltersFromStorage = () => {
     try {
       localStorage.removeItem(PM_FILTERS_KEY);
-    } catch {}
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  // ✅ Helper function để clear pageSize từ localStorage (giống useOrders)
+  const clearPmPageSizeFromStorage = (): void => {
+    if (typeof window === "undefined") return;
+
+    try {
+      localStorage.removeItem("pmPageSize");
+    } catch (error) {
+      console.warn("Error clearing PM pageSize from localStorage:", error);
+    }
   };
 
   const getCurrentPmFilters = (): PmFilters => {
@@ -193,45 +207,50 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     // Prevent loops and flickers during restore
     isRestoringRef.current = true;
     setIsRestoring(true);
+    
     try {
-      setPageSize(f.pageSize ?? 10);
-      setCurrentPage(f.page ?? 1);
-      setSearchTerm(f.search || "");
-      setStatusFilter(f.status && f.status.length > 0 ? f.status : "all");
+      // Use flushSync to force immediate state updates like useOrders
+      flushSync(() => {
+        setPageSize(f.pageSize ?? 10);
+        setCurrentPage(f.page ?? 1);
+        setSearchTerm(f.search || "");
+        setStatusFilter(f.status && f.status.length > 0 ? f.status : "all");
 
-      // Apply dateRange if present
-      if (f.dateRange && f.dateRange.start && f.dateRange.end) {
-        setDateRangeState({ start: f.dateRange.start, end: f.dateRange.end });
-      } else {
-        setDateRangeState(null);
-      }
+        // Apply dateRange if present
+        if (f.dateRange && f.dateRange.start && f.dateRange.end) {
+          setDateRangeState({ start: f.dateRange.start, end: f.dateRange.end });
+        } else {
+          setDateRangeState(null);
+        }
+        
+        // Apply single date if present (independent of dateRange)
+        if (f.date && f.date.length > 0) {
+          setDateFilter(f.date);
+        } else {
+          setDateFilter("all");
+        }
+
+        if (f.departments) {
+          const vals = f.departments.split(",").filter(Boolean);
+          setDepartmentsSelected(vals);
+        } else {
+          setDepartmentsSelected([]);
+        }
+
+        if (f.employees) {
+          const vals = f.employees.split(",").filter(Boolean);
+          setEmployeesSelected(vals);
+        } else {
+          setEmployeesSelected([]);
+        }
+
+        setWarningLevelFilter(f.warningLevel || "");
+        setMinQuantity(typeof f.quantity === "number" ? f.quantity : undefined);
+        setConversationTypesSelected(
+          f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
+        );
+      });
       
-      // Apply single date if present (independent of dateRange)
-      if (f.date && f.date.length > 0) {
-        setDateFilter(f.date);
-      } else {
-        setDateFilter("all");
-      }
-
-      if (f.departments) {
-        const vals = f.departments.split(",").filter(Boolean);
-        setDepartmentsSelected(vals);
-      } else {
-        setDepartmentsSelected([]);
-      }
-
-      if (f.employees) {
-        const vals = f.employees.split(",").filter(Boolean);
-        setEmployeesSelected(vals);
-      } else {
-        setEmployeesSelected([]);
-      }
-
-      setWarningLevelFilter(f.warningLevel || "");
-      setMinQuantity(typeof f.quantity === "number" ? f.quantity : undefined);
-      setConversationTypesSelected(
-        f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
-      );
       // Persist filters to localStorage unless caller explicitly asks to skip
       try {
         if (!skipSave) savePmFiltersToStorage(f);
@@ -239,11 +258,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         // ignore storage errors
       }
     } finally {
-      // small delay to let effects settle
+      // Small delay to let effects settle, then reset restoring flag
       setTimeout(() => {
         isRestoringRef.current = false;
         setIsRestoring(false);
-      }, 150);
+      }, 100);
     }
   };
 
@@ -576,7 +595,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       if (!state || !state.pmFilters) {
         const pmFilters = getCurrentPmFilters();
         window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-        savePmFiltersToStorage(pmFilters);
+        // Không lưu vào localStorage khi không có stored filters
       }
     }
   }, [filtersLoaded]); // Add filtersLoaded as dependency
@@ -644,7 +663,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   };
 
   // When departments change, remove any selected employees that no longer belong to the available set
-  // When departments change, remove any selected employees that no longer belong to the available set
   useEffect(() => {
     if (!employeesSelected || employeesSelected.length === 0) return;
     if (isRestoringRef.current) return; // Skip during restore to avoid clearing restored employees
@@ -657,6 +675,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       filtered.length === employeesSelected.length &&
       filtered.every((v, i) => String(v) === String(employeesSelected[i]));
     if (!isSame) {
+      console.log("[PM] Filtering employees after department change:", { 
+        available: availableEmployees.length, 
+        selected: employeesSelected.length, 
+        filtered: filtered.length 
+      });
       setEmployeesSelected(filtered);
     }
   }, [availableEmployees, employeesSelected, filtersLoaded]);
@@ -678,6 +701,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   useEffect(() => {
     if (isRestoringRef.current) return; // Skip saving during restore to avoid loops
     if (!filtersLoaded) return; // Skip saving until filters are loaded
+    if (isRestoring) return; // Skip saving during restore state
     
     try {
       const currentFilters = getCurrentPmFilters();
@@ -698,6 +722,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     minQuantity,
     conversationTypesSelected,
     filtersLoaded,
+    isRestoring,
   ]);
 
   const handleFilterChange = (f: PaginatedFilters) => {
@@ -967,8 +992,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const statusOptions = [
     { value: "completed", label: "Đã chốt" },
     { value: "pending", label: "Chờ xử lý" },
-    { value: "processing", label: "Đang xử lý" },
-    { value: "cancelled", label: "Đã hủy" },
+    { value: "demand", label: "Nhu cầu" },
+    { value: "quoted", label: "Chưa chốt" },
   ];
 
   const warningLevelOptions = [
@@ -978,25 +1003,70 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     { value: "4", label: "Bình thường" },
   ];
 
-  // Reset filters handler mapped to local state and refetch
-  const handleResetFilter = () => {
-    setSearchTerm("");
-    setStatusFilter("all");
-    setDateFilter("all");
-    setDateRangeState(null);
-    setPageSize(10);
-    setCurrentPage(1);
-    setEmployeesSelected([]);
-    setDepartmentsSelected([]);
-    setWarningLevelFilter("");
-    setMinQuantity(undefined);
-    setConversationTypesSelected([]);
-    
-    // Xóa localStorage khi reset filter
+  // Reset filters handler (giống useOrders hoàn toàn)
+  const handleResetFilter = useCallback(() => {
+    const defaultPageSize = 10;
+
+    // ✅ BLOCK tất cả operations khác ngay lập tức (giống useOrders)
+    isRestoringRef.current = true;
+    setIsRestoring(true);
+
+    // ✅ Clear localStorage TRƯỚC (giống useOrders)
+    clearPmPageSizeFromStorage();
     clearPmFiltersFromStorage();
-    
-    // Do not call fetchOrders() directly here; the consolidated effect will react to state changes.
-  };
+
+    const resetFiltersData: PmFilters = {
+      page: 1,
+      pageSize: defaultPageSize,
+      search: "",
+      status: "",
+      date: "",
+      dateRange: undefined,
+      departments: "",
+      employees: "",
+      warningLevel: "",
+      quantity: undefined,
+      conversationType: "",
+    };
+
+    // ✅ FORCE update state trước với flushSync (giống useOrders)
+    flushSync(() => {
+      setPageSize(defaultPageSize);
+      setCurrentPage(1);
+      setSearchTerm("");
+      setStatusFilter("all");
+      setDateFilter("all");
+      setDateRangeState(null);
+      setEmployeesSelected([]);
+      setDepartmentsSelected([]);
+      setWarningLevelFilter("");
+      setMinQuantity(undefined);
+      setConversationTypesSelected([]);
+      
+      // ✅ Save reset data vào localStorage (giống useOrders)
+      savePmFiltersToStorage(resetFiltersData);
+    });
+
+    // ✅ MANUAL history management để tránh router interference
+    const newUrl = window.location.pathname; // Clean URL
+    const resetHistoryState = {
+      pmFilters: resetFiltersData,
+      page: 1,
+      pageSize: defaultPageSize,
+      timestamp: Date.now(),
+      isCustomerSearch: false,
+      isReset: true,
+    };
+
+    // ✅ FORCE push reset state với manual history API
+    window.history.pushState(resetHistoryState, "", newUrl);
+
+    // ✅ Delay để prevent interference từ các components khác
+    setTimeout(() => {
+      isRestoringRef.current = false;
+      setIsRestoring(false);
+    }, 500);
+  }, []);
 
   // Export data helper (returns headers + mapped rows for current visible orders)
   // Match the manager-order export column order and formatting so PM exports are identical to Order exports

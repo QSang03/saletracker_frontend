@@ -996,6 +996,11 @@ function ManagerOrderContent() {
             total={total}
             pageSize={filters.pageSize}
             onFilterChange={handleFilterChange}
+            onClearSearch={() => {
+              // Clear the inline search and restore previous filters
+              setSearch("");
+              handleRestorePrevious();
+            }}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
             onResetFilter={handleResetFilter}

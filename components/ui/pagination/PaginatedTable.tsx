@@ -107,6 +107,8 @@ interface PaginatedTableProps {
   getExportAllData?: () => Promise<(string | number)[][]>;
   canExport?: boolean;
   onResetFilter?: () => void;
+  // Optional callback when the search tag is cleared (e.g., exit customer search mode)
+  onClearSearch?: () => void;
   preventEmptyFilterCall?: boolean;
   onDepartmentChange?: (departments: (string | number)[]) => void;
   onEmployeeChange?: (employees: (string | number)[]) => void;
@@ -197,6 +199,7 @@ export default function PaginatedTable({
   getExportAllData,
   canExport = true,
   onResetFilter,
+  onClearSearch,
   preventEmptyFilterCall = true,
   onDepartmentChange,
   onEmployeeChange,
@@ -725,23 +728,88 @@ export default function PaginatedTable({
   const [searchInput, setSearchInput] = useState(filters.search);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Immediate clear for search tag - update internal state and call parent immediately
+  const clearSearch = useCallback(() => {
+    try {
+      const newFilters = { ...filters, search: "", page: 1 } as Filters;
+      setSearchInput("");
+      // Immediately notify parent to refetch (bypass debounce)
+      if (onFilterChange) onFilterChange(newFilters);
+
+      // If parent provides onPageChange, reset to page 1
+      if (typeof onPageChange === "function") {
+        onPageChange(1);
+      }
+      // Notify parent to clear customer-search mode / restore previous filters if available
+      if (typeof onClearSearch === "function") {
+        try {
+          onClearSearch();
+        } catch (err) {
+          // ignore
+        }
+      }
+      // Also update localStorage: remove only the search value from saved orderFilters
+      try {
+        const raw = localStorage.getItem("orderFilters");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            parsed.search = "";
+            localStorage.setItem("orderFilters", JSON.stringify(parsed));
+          }
+        }
+      } catch (err) {
+        // ignore localStorage errors
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, [filters, onFilterChange, onPageChange, onClearSearch]);
+
   // Debounced search handler
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value;
       setSearchInput(value); // Update UI immediately
 
-      // Clear previous timeout
+      // If user cleared the input entirely, clear immediately and trigger fetch
+      if (value === "") {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+        // Use clearSearch to reset local state and notify parent immediately
+        clearSearch();
+        return;
+      }
+
+      // Clear previous timeout for debounced updates
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
 
-      // Debounce the actual filter update - ALWAYS fire, even for empty values
+      // Debounce the actual filter update for non-empty values
       searchTimeoutRef.current = setTimeout(() => {
         updateFilter("search", value); // This will save to localStorage via debouncedSetFilters
       }, 300);
     },
-    [updateFilter]
+    [updateFilter, clearSearch]
+  );
+
+  // Handle Enter key to commit search (wrap into tag UI)
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        const value = searchInput.trim();
+  const newFilters = { ...filters, search: value, page: 1 } as Filters;
+  setSearchInput(value);
+  if (onFilterChange) onFilterChange(newFilters);
+        // prevent form submit or default
+        e.currentTarget.blur();
+      } else if (e.key === "Escape") {
+        clearSearch();
+      }
+    },
+    [searchInput, filters, onFilterChange, clearSearch]
   );
 
   // Sync searchInput with filters.search when it changes externally
@@ -1015,12 +1083,54 @@ export default function PaginatedTable({
       <div className="mb-4">
         <div className="grid grid-cols-6 gap-3">
           {enableSearch && (
-            <Input
-              className={`min-w-0 w-full ${filterClassNames.search ?? ""}`}
-              placeholder="Tìm kiếm..."
-              value={searchInput}
-              onChange={handleSearchChange}
-            />
+            <div className="min-w-0 w-full">
+              <div>
+                <Input
+                  className={`min-w-0 w-full ${filterClassNames.search ?? ""}`}
+                  placeholder="Tìm kiếm..."
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  onInput={(e) => {
+                    const v = (e.target as HTMLInputElement).value;
+                    if (v === "") {
+                      // Catch browser clear (the little ×) which sometimes triggers input but not change
+                      try {
+                        clearSearch();
+                      } catch (err) {
+                        // ignore
+                      }
+                    }
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                />
+
+                {/* Streaming tag shown below the input */}
+                {searchInput && searchInput.trim() !== "" && (
+                  <div className="mt-2 inline-flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm w-auto">
+                    <span className="truncate max-w-[14rem]">{`"${searchInput}"`}</span>
+                    <button
+                      type="button"
+                      aria-label="Xóa tìm kiếm"
+                      onClick={() => {
+                        // Always clear local input first so UI updates immediately
+                        try {
+                          clearSearch();
+                        } catch (e) {
+                          // ignore
+                        }
+                        // Then notify parent to restore previous filters (if provided)
+                        if (typeof onClearSearch === "function") {
+                          onClearSearch();
+                        }
+                      }}
+                      className="p-0.5 rounded hover:bg-blue-200"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
           {enableEmployeeFilter && (
             <MultiSelectCombobox

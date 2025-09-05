@@ -330,6 +330,65 @@ const parseMessageContent = (content: string, contentType?: string) => {
         linkType: parsed.type || 0,
       };
     }
+
+    // ✅ ENHANCED: Handle UNKNOW contentType with bank account detection
+    if (contentType === "UNKNOW") {
+      try {
+        const parsedContent = JSON.parse(content);
+        
+        // Check if this is a bank account message by looking in customMsg
+        if (parsedContent.customMsg?.msg) {
+          const bankAccountInfo = parsedContent.customMsg.msg;
+          const hasBankAccountText = 
+            (bankAccountInfo.vi && bankAccountInfo.vi.includes("[Tài khoản ngân hàng]")) ||
+            (bankAccountInfo.en && bankAccountInfo.en.includes("[Bank account]")) ||
+            (typeof bankAccountInfo === "string" && 
+             (bankAccountInfo.includes("[Bank account]") || bankAccountInfo.includes("[Tài khoản ngân hàng]")));
+          
+          if (hasBankAccountText) {
+            const displayText = bankAccountInfo.vi || bankAccountInfo.en || "[Tài khoản ngân hàng]";
+            
+            return {
+              type: "bank_account",
+              displayText: processTextWithEmoji(displayText),
+              originalData: parsedContent,
+              icon: "🏦",
+              action: parsedContent.action || "",
+              params: parsedContent.params || "",
+            };
+          }
+        }
+        
+        // Also check if content string contains bank account text (fallback)
+        if (content.includes("[Bank account]") || content.includes("[Tài khoản ngân hàng]")) {
+          return {
+            type: "bank_account",
+            displayText: "[Tài khoản ngân hàng]",
+            originalData: parsedContent,
+            icon: "🏦",
+            action: parsedContent.action || "",
+            params: parsedContent.params || "",
+          };
+        }
+      } catch (parseError) {
+        // If JSON parsing fails, check for direct bank account text
+        if (content.includes("[Bank account]") || content.includes("[Tài khoản ngân hàng]")) {
+          return {
+            type: "bank_account",
+            displayText: "[Tài khoản ngân hàng]",
+            originalData: content,
+            icon: "🏦",
+          };
+        }
+      }
+      
+      // For other UNKNOW content, treat as regular text
+      return {
+        type: "text",
+        text: processTextWithEmoji(content),
+        hasEmoji: content.includes(":") && /:[a-zA-Z0-9_+-]+:/.test(content),
+      };
+    }
     
     // Handle regular text messages
     const text = parsed.text || content;
@@ -1430,6 +1489,93 @@ const ZaloChatMessage = ({
                           <span>Mở link</span>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            ) : parsedMessage.type === "bank_account" ? (
+              // ✅ NEW: Display bank account information
+              <div className="mb-3">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className={cn(
+                    "p-4 rounded-xl border-2 transition-all duration-200 hover:shadow-md",
+                    isStaff
+                      ? "bg-white/20 border-white/30 hover:bg-white/30"
+                      : isBot
+                      ? "bg-white/20 border-white/30 hover:bg-white/30"
+                      : "bg-green-50 border-green-200 hover:bg-green-100"
+                  )}
+                >
+                  <div className="flex items-center gap-4">
+                    {/* Bank Icon */}
+                    <div
+                      className={cn(
+                        "flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-2xl",
+                        isStaff
+                          ? "bg-white/30"
+                          : isBot
+                          ? "bg-white/30"
+                          : "bg-green-100"
+                      )}
+                    >
+                      <span className="text-2xl">🏦</span>
+                    </div>
+
+                    {/* Bank Account Details */}
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={cn(
+                          "font-bold text-sm mb-1",
+                          isStaff
+                            ? "text-white"
+                            : isBot
+                            ? "text-white"
+                            : "text-green-700"
+                        )}
+                      >
+                        <EmojiRenderer
+                          text={parsedMessage.displayText || "[Tài khoản ngân hàng]"}
+                          renderMode="image"
+                          className="inline"
+                        />
+                      </div>
+                      
+                      <div
+                        className={cn(
+                          "text-xs mb-2",
+                          isStaff
+                            ? "text-blue-100"
+                            : isBot
+                            ? "text-yellow-100"
+                            : "text-green-600"
+                        )}
+                      >
+                        Thông tin tài khoản ngân hàng
+                      </div>
+
+                      {/* Additional details if available */}
+                      {parsedMessage.action && (
+                        <div className="text-xs text-gray-500">
+                          <span className="font-medium">Hành động:</span> {parsedMessage.action}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status Badge */}
+                    <div
+                      className={cn(
+                        "flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium",
+                        isStaff
+                          ? "bg-white/20 text-white"
+                          : isBot
+                          ? "bg-white/20 text-white"
+                          : "bg-green-100 text-green-700"
+                      )}
+                    >
+                      🏦 Tài khoản
                     </div>
                   </div>
                 </motion.div>
