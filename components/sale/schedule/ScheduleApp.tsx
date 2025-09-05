@@ -548,8 +548,10 @@ export default function CompleteScheduleApp() {
             return acc;
           }, {} as Record<string, any>);
           
-          // Tạo danh sách các ô đang được chỉnh sửa
+          // Tạo danh sách các ô đang được chỉnh sửa với thông tin departmentId
           const editingCells: string[] = [];
+          const cellDepartmentMap: Record<string, number> = {}; // ✅ THÊM: Map fieldId -> departmentId
+          
           for (const [deptId, selection] of newMap.entries()) {
             if (selection.timeSlots && selection.timeSlots.length > 0) {
               for (const timeSlot of selection.timeSlots) {
@@ -559,6 +561,16 @@ export default function CompleteScheduleApp() {
                   timeSlot.applicable_date
                 );
                 editingCells.push(fieldId);
+                cellDepartmentMap[fieldId] = deptId; // ✅ THÊM: Lưu departmentId cho fieldId
+              }
+            }
+            
+            // ✅ THÊM: Xử lý days cho monthly view
+            if (selection.days && selection.days.length > 0) {
+              for (const day of selection.days) {
+                const fieldId = `day-${day.date}-${day.month}-${day.year}`;
+                editingCells.push(fieldId);
+                cellDepartmentMap[fieldId] = deptId; // ✅ THÊM: Lưu departmentId cho fieldId
               }
             }
           }
@@ -568,11 +580,13 @@ export default function CompleteScheduleApp() {
             selectedDepartment,
             activeView,
             editingCells, // Thêm thông tin các ô đang chỉnh sửa
+            cellDepartmentMap, // ✅ THÊM: Map fieldId -> departmentId để người khác biết màu nào hiển thị
             userId: user.id,
           };
           
 
           
+          console.log('[ScheduleApp] Sending cell selections:', payload);
           sendCellSelections(payload);
         } else {
           console.log('[ScheduleApp] Not sending cell selections:', { user: !!user, isDataReady });
@@ -1134,7 +1148,8 @@ export default function CompleteScheduleApp() {
       for (const [userId, remoteSelections] of cellSelections) {
         if (userId === user?.id) continue; // Skip own selections
         
-        const remoteDeptSelections = remoteSelections.departmentSelections;
+        const remoteDeptSelections = remoteSelections.selections?.departmentSelections;
+        const cellDepartmentMap = remoteSelections.selections?.cellDepartmentMap; // ✅ THÊM: Lấy cellDepartmentMap
         if (!remoteDeptSelections) continue;
 
         for (const [deptId, selections] of Object.entries(remoteDeptSelections)) {
@@ -1145,7 +1160,10 @@ export default function CompleteScheduleApp() {
               (day.month === month || day.month === month - 1 || day.month === month + 1) && 
               day.year === year
           )) {
-            return { isSelected: true, departmentId: parseInt(deptId), userId };
+            // ✅ SỬA: Sử dụng cellDepartmentMap để lấy departmentId chính xác
+            const fieldId = `day-${date}-${month}-${year}`;
+            const actualDeptId = cellDepartmentMap?.[fieldId];
+            return { isSelected: true, departmentId: actualDeptId || parseInt(deptId), userId };
           }
         }
       }
@@ -2224,7 +2242,8 @@ export default function CompleteScheduleApp() {
           continue; // Skip own selections
         }
         
-        const remoteDeptSelections = remoteSelections.departmentSelections;
+        const remoteDeptSelections = remoteSelections.selections?.departmentSelections;
+        const cellDepartmentMap = remoteSelections.selections?.cellDepartmentMap; // ✅ THÊM: Lấy cellDepartmentMap
         if (!remoteDeptSelections) {
           continue;
         }
@@ -2238,7 +2257,10 @@ export default function CompleteScheduleApp() {
                 !specificDate ||
                 slot.applicable_date === specificDate)
           )) {
-            return { isSelected: true, departmentId: parseInt(deptId), userId };
+            // ✅ SỬA: Sử dụng cellDepartmentMap để lấy departmentId chính xác
+            const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
+            const actualDeptId = cellDepartmentMap?.[fieldId];
+            return { isSelected: true, departmentId: actualDeptId || parseInt(deptId), userId };
           }
         }
       }
@@ -4602,19 +4624,18 @@ export default function CompleteScheduleApp() {
                                             // Nếu ô được chọn bởi user khác, dùng trực tiếp department ID từ isTimeSlotSelectedByAnyDept
                                             deptId = remoteDeptId;
                                           } else if (lockedBy) {
-                                            // Nếu ô đang bị khóa, lấy department ID từ lock
-                                            deptId = lockedBy.departmentId;
-                                          }
-                                          
-                                          // Nếu không có deptId, dùng selectedByDeptId làm fallback
-                                          if (!deptId) {
-                                            deptId = selectedByDeptId;
+                                            // ✅ SỬA: Lấy từ selectedDepartment của user đang lock
+                                            for (const [userId, remoteSelections] of cellSelections) {
+                                              if (userId === lockedBy.userId) {
+                                                deptId = remoteSelections.selections?.selectedDepartment;
+                                                break;
+                                              }
+                                            }
                                           }
                                           
                                           const deptColor = deptId ? getDepartmentColor(deptId) : null;
                                           
-                                          // ✅ THÊM: Debug log
-                                          console.log('[Weekly Remote indicators] DayIndex:', dayIndex, 'Time:', time, 'remoteDeptId:', remoteDeptId, 'lockedBy:', lockedBy?.userId, 'deptId:', deptId, 'deptColor:', deptColor);
+                                          
                                           
                                           return (
                                             <motion.div
@@ -5141,19 +5162,17 @@ export default function CompleteScheduleApp() {
                                     // Nếu ô được chọn bởi user khác, dùng trực tiếp department ID từ isDaySelectedByAnyDept
                                     deptId = remoteDeptId;
                                   } else if (lockedBy) {
-                                    // Nếu ô đang bị khóa, lấy department ID từ lock
-                                    deptId = lockedBy.departmentId;
-                                  }
-                                  
-                                  // Nếu không có deptId, dùng selectedByDeptId làm fallback
-                                  if (!deptId) {
-                                    deptId = selectedByDeptId;
+                                    // ✅ SỬA: Lấy từ selectedDepartment của user đang lock
+                                    for (const [userId, remoteSelections] of cellSelections) {
+                                      if (userId === lockedBy.userId) {
+                                        deptId = remoteSelections.selections?.selectedDepartment;
+                                        break;
+                                      }
+                                    }
                                   }
                                   
                                   const deptColor = deptId ? getDepartmentColor(deptId) : null;
                                   
-                                  // ✅ THÊM: Debug log
-                                  console.log('[Remote indicators] Day:', day.date, 'remoteDeptId:', remoteDeptId, 'lockedBy:', lockedBy?.userId, 'deptId:', deptId, 'deptColor:', deptColor);
                                   
                                   return (
                                     <motion.div

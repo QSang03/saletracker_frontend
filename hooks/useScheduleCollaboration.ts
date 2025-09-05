@@ -327,12 +327,15 @@ export const useScheduleCollaboration = (roomId: string) => {
     };
 
     const handleCellSelectionsUpdate = (data: any) => {
+      console.log('[CellSelections] Received update:', data);
       if (data?.roomId && data.roomId !== roomId) return;
       if (data.userId === user?.id) return; // Ignore own events
       
+      console.log('[CellSelections] Processing update for user:', data.userId);
       setCellSelections(prev => {
         const newSelections = new Map(prev);
         newSelections.set(data.userId, data);
+        console.log('[CellSelections] Updated cellSelections:', newSelections);
         return newSelections;
       });
     };
