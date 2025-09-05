@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
@@ -13,7 +13,7 @@ import RestoreDepartmentModal from "@/components/department/RestoreDepartmentMod
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { getAccessToken } from "@/lib/auth";
 import { useApiState } from "@/hooks/useApiState";
-import type { Department } from "@/types";
+import type { Department, User } from "@/types";
 import { PDynamic } from "@/components/common/PDynamic";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 
@@ -22,7 +22,16 @@ export default function DepartmentPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState<number | null>(null);
+  const [selectedManager, setSelectedManager] = useState<number | null>(null);
   const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  
+  // State for users (managers)
+  const [users, setUsers] = useState<User[]>([]);
+  
+  // State để lưu thông tin filter
+  const [selectedDepartmentName, setSelectedDepartmentName] = useState<string | null>(null);
+  const [selectedManagerName, setSelectedManagerName] = useState<string | null>(null);
   
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -39,9 +48,8 @@ export default function DepartmentPage() {
       throw new Error("No token available");
     }
 
-
-
-    let query = `?page=${page}&limit=${pageSize}`;
+    // Lấy tất cả departments (không phân trang để có thể filter client-side)
+    let query = `?page=1&limit=1000`; // Lấy tất cả
     if (search) {
       query += `&search=${encodeURIComponent(search)}`;
     }
@@ -58,13 +66,11 @@ export default function DepartmentPage() {
     }
 
     const result = await res.json();
-
-
     return {
       data: result.data || [],
       total: result.total || 0
     };
-  }, [page, pageSize, search]);
+  }, [search]);
 
   // Use the custom hook for departments
   const {
@@ -75,13 +81,124 @@ export default function DepartmentPage() {
   } = useApiState(fetchDepartments, { data: [], total: 0 });
 
   // Extract departments and total from data
-  const departments = departmentsData.data;
-  const total = departmentsData.total;
+  const allDepartments = departmentsData.data;
+  
+  // Filter data based on selected filters
+  const filteredDepartments = useMemo(() => {
+    let filteredData = [...allDepartments];
 
-  // Refetch when page or search changes
+    // Client-side filtering
+    if (selectedDepartment) {
+      // Lấy tất cả phòng ban có ID = selectedDepartment
+      const selectedDept = allDepartments.find((dept: Department) => dept.id === selectedDepartment);
+      if (selectedDept) {
+        // Tìm tất cả manager của phòng ban này
+        const managersOfDept = users.filter(user => 
+          user.departments && user.departments.some((dept: any) => dept.id === selectedDepartment)
+        );
+        
+        // Tạo 1 dòng duy nhất với tất cả manager
+        if (managersOfDept.length > 0) {
+          const allManagerNames = managersOfDept.map(manager => 
+            manager.fullName || manager.username
+          ).join(', ');
+          
+          filteredData = [{
+            id: selectedDept.id,
+            name: selectedDept.name,
+            slug: selectedDept.slug,
+            server_ip: selectedDept.server_ip,
+            createdAt: selectedDept.createdAt,
+            manager: {
+              id: managersOfDept[0].id, // Lấy ID của manager đầu tiên
+              fullName: allManagerNames, // Tất cả tên manager ngăn cách bằng dấu phẩy
+              username: managersOfDept[0].username
+            }
+          }];
+        } else {
+          // Nếu không có manager nào
+          filteredData = [selectedDept];
+        }
+      }
+    } else if (selectedManager) {
+      // Nếu chỉ chọn manager mà không chọn phòng ban
+      filteredData = filteredData.filter((dept: Department) => {
+        if (!dept.manager) return false;
+        return dept.manager.id === selectedManager;
+      });
+    } else {
+      // Khi không có filter nào, hiển thị tất cả phòng ban với tất cả manager
+      filteredData = allDepartments.map(dept => {
+        // Tìm tất cả manager của phòng ban này
+        const managersOfDept = users.filter(user => 
+          user.departments && user.departments.some((deptUser: any) => deptUser.id === dept.id)
+        );
+        
+        if (managersOfDept.length > 0) {
+          const allManagerNames = managersOfDept.map(manager => 
+            manager.fullName || manager.username
+          ).join(', ');
+          
+          return {
+            ...dept,
+            manager: {
+              id: managersOfDept[0].id,
+              fullName: allManagerNames,
+              username: managersOfDept[0].username
+            }
+          };
+        }
+        
+        return dept;
+      });
+    }
+
+    return filteredData;
+  }, [allDepartments, selectedDepartment, selectedManager, users]);
+
+  // Apply pagination
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const departments = filteredDepartments.slice(startIndex, endIndex);
+  const total = filteredDepartments.length;
+
+  // Fetch users for manager filter
+  useEffect(() => {
+    const fetchUsers = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/users?pageSize=10000`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setUsers(Array.isArray(data.data) ? data.data : []);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải danh sách người dùng:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  // Refetch when page, search, or filters change
   useEffect(() => {
     forceUpdate();
-  }, [page, search, forceUpdate]);
+  }, [page, search, selectedDepartment, selectedManager, forceUpdate]);
+
+  // Sync initialFilters when they change
+  useEffect(() => {
+    if (users.length > 0) {
+      forceUpdate();
+    }
+  }, [users, forceUpdate]);
 
   // Handle department operations
   const handleAddDepartment = async (departmentData: { name: string; description?: string }) => {
@@ -168,10 +285,34 @@ export default function DepartmentPage() {
   // Handle filter changes
   const handleFilterChange = (filters: any) => {
     setSearch(filters.search || "");
+    
+    // Cập nhật selectedDepartment và selectedDepartmentName
+    if (filters.departments && filters.departments.length > 0) {
+      const deptId = filters.departments[0];
+      setSelectedDepartment(deptId);
+      const selectedDept = departments.find(dept => dept.id === deptId);
+      setSelectedDepartmentName(selectedDept ? selectedDept.name : null);
+    } else {
+      setSelectedDepartment(null);
+      setSelectedDepartmentName(null);
+    }
+    
+    // Cập nhật selectedManager và selectedManagerName
+    if (filters.managers && filters.managers.length > 0) {
+      const managerId = filters.managers[0];
+      setSelectedManager(managerId);
+      const selectedUser = users.find(user => user.id === managerId);
+      setSelectedManagerName(selectedUser ? (selectedUser.fullName || selectedUser.username) : null);
+    } else {
+      setSelectedManager(null);
+      setSelectedManagerName(null);
+    }
+    
     setPage(1);
-    // Force update to refetch data with new search term
-    setTimeout(() => forceUpdate(), 100);
+    // Force update to refetch data with new filters
+    forceUpdate();
   };
+
 
   // Update alert when there's an error
   useEffect(() => {
@@ -248,6 +389,7 @@ export default function DepartmentPage() {
 
         <CardContent className="space-y-4">
           <PaginatedTable
+            key={`${users.length}-${departments.length}-${selectedManager}-${selectedDepartment}`}
             page={page}
             total={total}
             pageSize={pageSize}
@@ -255,7 +397,24 @@ export default function DepartmentPage() {
             canExport={canExportInDepartment('account')}
             emptyText="Không có phòng ban nào."
             enableSearch
+            enableDepartmentFilter
+            enableManagerFilter
+            availableDepartments={departments.map(dept => ({
+              value: dept.id,
+              label: dept.name
+            }))}
+            availableManagers={users.length > 0 ? users.map(user => ({
+              value: user.id,
+              label: user.fullName || user.username,
+              departments: user.departments
+            })) : []}
+            initialFilters={{
+              search: search,
+              departments: selectedDepartment ? [selectedDepartment] : [],
+              managers: selectedManager ? [selectedManager] : []
+            }}
             onFilterChange={handleFilterChange}
+            preserveFiltersOnEmpty={true}
           >
             <DepartmentTable
               departments={departments}

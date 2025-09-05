@@ -33,6 +33,7 @@ interface PaginatedTableProps {
   enableDepartmentFilter?: boolean;
   enableRoleFilter?: boolean;
   enableStatusFilter?: boolean;
+  enableManagerFilter?: boolean; // Thêm filter cho trưởng nhóm
   enableEmployeeFilter?: boolean;
   enableZaloLinkStatusFilter?: boolean;
   enableCategoriesFilter?: boolean;
@@ -47,6 +48,10 @@ interface PaginatedTableProps {
     | { value: number | string; label: string }[] // ✅ Support cả number và string
     | readonly { readonly value: number | string; readonly label: string }[];
   availableRoles?: string[];
+  availableManagers?: // Thêm danh sách trưởng nhóm
+    | string[]
+    | { value: number | string; label: string; departments?: any[] }[]
+    | readonly { readonly value: number | string; readonly label: string; departments?: any[] }[];
   availableStatuses?:
     | string[]
     | { value: string; label: string }[]
@@ -92,6 +97,7 @@ interface PaginatedTableProps {
     departments?: string;
     roles?: string;
     statuses?: string;
+    managers?: string;
     categories?: string;
     brands?: string;
     dateRange?: string;
@@ -135,6 +141,7 @@ export type Filters = {
   departments: (string | number)[];
   roles: (string | number)[];
   statuses: (string | number)[];
+  managers?: (string | number)[]; // Thêm filter cho trưởng nhóm
   zaloLinkStatuses?: (string | number)[];
   categories: (string | number)[];
   brands: (string | number)[];
@@ -153,6 +160,7 @@ export default function PaginatedTable({
   enableDepartmentFilter,
   enableRoleFilter,
   enableStatusFilter,
+  enableManagerFilter,
   enableEmployeeFilter,
   availableEmployees = [],
   // Thêm các props mới
@@ -170,6 +178,7 @@ export default function PaginatedTable({
   enablePageSize,
   availableDepartments = [],
   availableRoles = [],
+  availableManagers = [],
   availableStatuses = [
     { value: "active", label: "Đang hoạt động" },
     { value: "inactive", label: "Ngưng hoạt động" },
@@ -249,6 +258,8 @@ export default function PaginatedTable({
     () => availableRoles.map((r) => ({ label: r, value: r })),
     [availableRoles]
   );
+  
+  
   const statusOptions = useMemo(() => {
     if (!availableStatuses || availableStatuses.length === 0) {
       return [];
@@ -366,6 +377,7 @@ export default function PaginatedTable({
       departments: initialFilters?.departments || [],
       roles: initialFilters?.roles || [],
       statuses: initialFilters?.statuses || [],
+      managers: initialFilters?.managers || [], // Thêm filter trưởng nhóm
       zaloLinkStatuses: initialFilters?.zaloLinkStatuses || [],
       categories: initialFilters?.categories || [],
       brands: initialFilters?.brands || [],
@@ -384,12 +396,43 @@ export default function PaginatedTable({
     };
   });
 
+  const managerOptions = useMemo(() => {
+    if (!availableManagers || availableManagers.length === 0) {
+      return [];
+    }
+
+    // Lọc danh sách trưởng nhóm dựa trên phòng ban được chọn
+    let filteredManagers: any[] = [...availableManagers];
+    if (filters.departments && filters.departments.length > 0) {
+      const selectedDeptId = filters.departments[0];
+      filteredManagers = availableManagers.filter((manager: any) => {
+        if (typeof manager === 'string') return true; // Nếu là string thì không filter
+        if (typeof manager === 'object' && 'departments' in manager) {
+          const managerDepts = manager.departments;
+          return managerDepts && managerDepts.some((dept: any) => dept.id === selectedDeptId);
+        }
+        return true;
+      });
+    }
+
+    const firstItem = filteredManagers[0];
+    if (typeof firstItem === "string") {
+      return filteredManagers.map((m: any) => ({ label: m, value: m }));
+    } else {
+      return filteredManagers.map((m: any) => ({
+        label: m.label,
+        value: m.value,
+      }));
+    }
+  }, [availableManagers, filters.departments]);
+
   const isFiltersEmpty = useCallback((filters: Filters): boolean => {
     return (
       !filters.search.trim() &&
       filters.departments.length === 0 &&
       filters.roles.length === 0 &&
       filters.statuses.length === 0 &&
+      (filters.managers?.length || 0) === 0 &&
       (filters.zaloLinkStatuses?.length || 0) === 0 &&
       filters.categories.length === 0 &&
       filters.brands.length === 0 &&
@@ -411,6 +454,7 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.departments),
       JSON.stringify(initialFilters?.roles),
       JSON.stringify(initialFilters?.statuses),
+      JSON.stringify(initialFilters?.managers),
       JSON.stringify(initialFilters?.zaloLinkStatuses),
       JSON.stringify(initialFilters?.categories),
       JSON.stringify(initialFilters?.brands),
@@ -431,32 +475,13 @@ export default function PaginatedTable({
   );
 
   useEffect(() => {
-    // Only clear user modifications if initialFilters changed significantly
-    // AND it's not just due to API response differences
-    if (memoizedInitialFilters && previousInitialFiltersRef.current) {
-      const currentStringified = JSON.stringify(
-        previousInitialFiltersRef.current
-      );
-      const incomingStringified = JSON.stringify(memoizedInitialFilters);
-
-      // More sophisticated comparison - ignore changes that look like API responses
-      const significant = currentStringified !== incomingStringified;
-
-      if (significant) {
-        // Additional check: don't clear if the change is just about preserving user selections
-        const isPreservingUserSelections =
-          userModifiedFieldsRef.current.size > 0;
-
-        if (!isPreservingUserSelections) {
-          setHasUserInteracted(false);
-          userModifiedFieldsRef.current.clear();
-        } else {
-        }
-      }
-    } else if (memoizedInitialFilters && !previousInitialFiltersRef.current) {
-      setHasUserInteracted(false);
+    // Sync filters when initialFilters changes
+    if (memoizedInitialFilters) {
+      setFilters(prevFilters => ({
+        ...prevFilters,
+        ...memoizedInitialFilters
+      }));
     }
-    previousInitialFiltersRef.current = memoizedInitialFilters;
   }, [memoizedInitialFilters]);
 
   useEffect(() => {
@@ -479,10 +504,6 @@ export default function PaginatedTable({
       setFilters((prev) => {
         // ✅ Force sync nếu đang restore hoặc user chưa tương tác
         if (!hasUserInteracted || isRestoring) {
-          console.log("🔄 Force syncing filters from initialFilters", {
-            isRestoring,
-            hasUserInteracted,
-          });
           // Sync tất cả nếu user chưa tương tác hoặc đang restore
           const newFilters = {
             search:
@@ -501,6 +522,10 @@ export default function PaginatedTable({
               memoizedInitialFilters.statuses !== undefined
                 ? memoizedInitialFilters.statuses
                 : prev.statuses,
+            managers:
+              memoizedInitialFilters.managers !== undefined
+                ? memoizedInitialFilters.managers
+                : prev.managers,
             zaloLinkStatuses:
               memoizedInitialFilters.zaloLinkStatuses !== undefined
                 ? memoizedInitialFilters.zaloLinkStatuses
@@ -556,6 +581,7 @@ export default function PaginatedTable({
             "departments",
             "roles",
             "statuses",
+            "managers",
             "zaloLinkStatuses",
             "categories",
             "brands",
@@ -627,6 +653,7 @@ export default function PaginatedTable({
       departments: [],
       roles: [],
       statuses: [],
+      managers: [],
       zaloLinkStatuses: [],
       categories: [],
       brands: [],
@@ -893,17 +920,48 @@ export default function PaginatedTable({
 
       updateFilter("departments", departments);
 
+      // Reset trưởng nhóm nếu trưởng nhóm hiện tại không thuộc phòng ban mới được chọn
+      if (filters.managers && filters.managers.length > 0 && departments.length > 0) {
+        const selectedDeptId = departments[0];
+        const currentManagerId = filters.managers[0];
+        
+        const currentManager = availableManagers?.find((m: any) => {
+          if (typeof m === 'string') return m === currentManagerId.toString();
+          return m.value === currentManagerId;
+        });
+        
+        if (currentManager && typeof currentManager === 'object' && 'departments' in currentManager) {
+          const managerDepts = (currentManager as any).departments;
+          const isManagerInSelectedDept = managerDepts && managerDepts.some((dept: any) => dept.id === selectedDeptId);
+          
+          if (!isManagerInSelectedDept) {
+            updateFilter("managers", []);
+          }
+        }
+      } else if (departments.length === 0 && filters.managers && filters.managers.length > 0) {
+        // Nếu không chọn phòng ban nào, reset trưởng nhóm
+        updateFilter("managers", []);
+      }
+
       // Trigger department change callback
       if (onDepartmentChange) {
         onDepartmentChange(departments);
       }
     },
-    [updateFilter, onDepartmentChange, availableDepartments]
+    [updateFilter, onDepartmentChange, availableDepartments, availableManagers, filters.managers]
   );
 
   const handleRolesChange = useCallback(
     (vals: (string | number)[]) => {
       updateFilter("roles", vals);
+    },
+    [updateFilter]
+  );
+
+  const handleManagersChange = useCallback(
+    (vals: (string | number)[]) => {
+      console.log("handleManagersChange called with:", vals);
+      updateFilter("managers", vals);
     },
     [updateFilter]
   );
@@ -1022,6 +1080,7 @@ export default function PaginatedTable({
         departments: [],
         roles: [],
         statuses: [],
+        managers: [],
         zaloLinkStatuses: [],
         categories: [],
         brands: [],
@@ -1148,6 +1207,15 @@ export default function PaginatedTable({
               value={filters.departments.map((d) => d.toString())}
               options={departmentOptions}
               onChange={handleDepartmentsChange}
+            />
+          )}
+          {enableManagerFilter && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full ${filterClassNames.managers ?? ""}`}
+              placeholder="Trưởng nhóm"
+              value={filters.managers || []}
+              options={managerOptions}
+              onChange={handleManagersChange}
             />
           )}
           {enableRoleFilter && (

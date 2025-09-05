@@ -112,6 +112,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
   const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
+  const previousPmFiltersRef = useRef<PmFilters | null>(null);
 
   type PmFilters = {
     page: number;
@@ -638,6 +639,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Prefer stored filters as the previous snapshot to ensure 'back' restores user's last saved filters
   const storedPrev = getPmFiltersFromStorage();
   const previous = storedPrev || getCurrentPmFilters();
+  // keep a component-ref copy so clear handler can restore reliably
+  previousPmFiltersRef.current = previous;
     // Build next filters from previous but explicitly clear date filters so
     // customer search does not accidentally keep a date/dateRange filter.
     const next: PmFilters = {
@@ -1402,6 +1405,83 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               }
             }}
             onResetFilter={handleResetFilter}
+            onClearSearch={() => {
+              try {
+                // Force-clear storage first to avoid autosave races
+                try {
+                  const stored = getPmFiltersFromStorage();
+                  if (stored) {
+                    stored.search = "";
+                    savePmFiltersToStorage(stored);
+                  } else {
+                    const snapshot = getCurrentPmFilters();
+                    snapshot.search = "";
+                    savePmFiltersToStorage(snapshot);
+                  }
+                } catch (e) {
+                  // ignore storage errors
+                }
+
+                // Flush UI state synchronously so effects see the cleared state
+                try {
+                  flushSync(() => {
+                    setSearchTerm("");
+                    setCurrentPage(1);
+                    setIsInCustomerSearchMode(false);
+                  });
+                } catch (e) {
+                  // fallback to async updates
+                  setSearchTerm("");
+                  setCurrentPage(1);
+                  setIsInCustomerSearchMode(false);
+                }
+
+                // If we have a previous snapshot, restore it; otherwise apply the cleared snapshot
+                const prev = previousPmFiltersRef.current;
+                if (prev) {
+                  // restore previous snapshot (which should be the filters before customer-search)
+                  applyPmFilters(prev);
+                  try {
+                    savePmFiltersToStorage(prev);
+                  } catch (e) {
+                    // ignore
+                  }
+                  window.history.replaceState({ pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+                  previousPmFiltersRef.current = null;
+                } else {
+                  // No previous snapshot: apply current snapshot with search cleared to ensure backend sees cleared search
+                  try {
+                    const cleared = getCurrentPmFilters();
+                    cleared.search = "";
+                    applyPmFilters(cleared);
+                    try {
+                      savePmFiltersToStorage(cleared);
+                    } catch (e) {
+                      // ignore
+                    }
+                    window.history.replaceState({ pmFilters: cleared, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+                    // Extra guard: some other effect may re-save an older snapshot; ensure we overwrite shortly after
+                    try {
+                      setTimeout(() => {
+                        try {
+                          const nowStored = getPmFiltersFromStorage() || getCurrentPmFilters();
+                          nowStored.search = "";
+                          savePmFiltersToStorage(nowStored);
+                        } catch (e) {
+                          // ignore
+                        }
+                      }, 120);
+                    } catch (e) {
+                      // ignore
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                }
+              } catch (e) {
+                // swallow any errors
+              }
+            }}
             loading={loading}
             canExport={true}
             getExportData={getExportData}
