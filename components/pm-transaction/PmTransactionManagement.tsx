@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -661,6 +661,19 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     }
   }, [availableEmployees, employeesSelected, filtersLoaded]);
 
+  // Update filters and save to localStorage (similar to useOrders pattern)
+  const updatePmFiltersAndStorage = useCallback((newFilters: Partial<PmFilters>) => {
+    if (isRestoringRef.current) return; // Skip during restore
+    
+    try {
+      const currentFilters = getCurrentPmFilters();
+      const updatedFilters = { ...currentFilters, ...newFilters };
+      savePmFiltersToStorage(updatedFilters);
+    } catch (err) {
+      // ignore storage errors
+    }
+  }, []);
+
   // Auto-save filters to localStorage when they change (except during restore)
   useEffect(() => {
     if (isRestoringRef.current) return; // Skip saving during restore to avoid loops
@@ -725,7 +738,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         if (departmentsSelected.length > 0) setDepartmentsSelected([]);
       }
 
-      // date handling - thêm validation để tránh lỗi Invalid time value
+      // date handling - independent date and dateRange
       if (f.singleDate) {
         try {
           const d =
@@ -733,25 +746,23 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               ? f.singleDate
               : new Date(f.singleDate as string);
           
-          // Kiểm tra xem ngày có hợp lệ không
           if (!isNaN(d.getTime())) {
             const val = d.toLocaleDateString("en-CA");
             setDateFilter(val);
-            setDateRangeState(null);
+            // Save immediately to localStorage
+            updatePmFiltersAndStorage({ date: val });
           } else {
-            console.warn("[PM] Invalid singleDate value:", f.singleDate);
             setDateFilter("all");
-            setDateRangeState(null);
+            updatePmFiltersAndStorage({ date: "" });
           }
         } catch (error) {
-          console.warn("[PM] Error parsing singleDate:", error);
           setDateFilter("all");
-          setDateRangeState(null);
+          updatePmFiltersAndStorage({ date: "" });
         }
-      } else if (f.dateRange && (f.dateRange as any).from && (f.dateRange as any).to) {
+      }
+      
+      if (f.dateRange && (f.dateRange as any).from && (f.dateRange as any).to) {
         try {
-          // Mirror manager-order: accept Date objects or date-like strings and
-          // convert to en-CA (YYYY-MM-DD) strings for API/URL params.
           const fromDate = (f.dateRange as any).from instanceof Date
             ? (f.dateRange as any).from
             : new Date((f.dateRange as any).from);
@@ -763,21 +774,16 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             const from = fromDate.toLocaleDateString("en-CA");
             const to = toDate.toLocaleDateString("en-CA");
             setDateRangeState({ start: from, end: to });
-            // Không ghi đè dateFilter để giữ nguyên ngày đơn đã chọn
+            // Save immediately to localStorage
+            updatePmFiltersAndStorage({ dateRange: { start: from, end: to } });
           } else {
-            console.warn("[PM] Invalid dateRange values:", { from: fromDate, to: toDate });
-            setDateFilter("all");
             setDateRangeState(null);
+            updatePmFiltersAndStorage({ dateRange: undefined });
           }
         } catch (error) {
-          console.warn("[PM] Error parsing dateRange:", error);
-          setDateFilter("all");
           setDateRangeState(null);
+          updatePmFiltersAndStorage({ dateRange: undefined });
         }
-      } else {
-        // keep 'all' or previous
-        setDateFilter("all");
-        setDateRangeState(null);
       }
 
       // warning levels mapping (PaginatedTable passes labels)
@@ -1310,9 +1316,19 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                 
                 setDateRangeState({ start: from, end: to });
                 setCurrentPage(1);
+                
+                // Immediately save to localStorage with both date and dateRange
+                updatePmFiltersAndStorage({
+                  dateRange: { start: from, end: to }
+                });
               } else {
                 setDateRangeState(null);
                 setCurrentPage(1);
+                
+                // Clear dateRange from localStorage
+                updatePmFiltersAndStorage({
+                  dateRange: undefined
+                });
               }
             }}
             onResetFilter={handleResetFilter}

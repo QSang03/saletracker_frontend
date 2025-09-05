@@ -63,7 +63,12 @@ export async function middleware(request: NextRequest) {
 
   if (token) {
     try {
-      const payload = JSON.parse(base64UrlDecode(token.split('.')[1]));
+      const parts = token.split('.');
+      if (!parts || parts.length < 2 || !parts[1]) {
+        throw new Error('Invalid token format');
+      }
+      const decoded = base64UrlDecode(parts[1]);
+      const payload = JSON.parse(decoded);
       const exp = payload.exp;
       if (exp && typeof exp === 'number' && exp > 0) {
         isValid = Date.now() < exp * 1000;
@@ -81,7 +86,8 @@ export async function middleware(request: NextRequest) {
       }
 
     } catch (error) {
-      console.error('Token decode error:', error);
+      // Clear token cookies when middleware sees malformed token to avoid repeat errors
+      console.error('Token decode error in middleware:', error);
     }
   }
 
