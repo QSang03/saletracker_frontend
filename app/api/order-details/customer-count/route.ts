@@ -32,8 +32,9 @@ export async function GET(request: NextRequest) {
     // Forward all supported filters
     const apiUrl = new URL(`${apiBaseUrl}/order-details/customer-count`);
     const forwardKeys = [
-      'fromDate','toDate','employeeId','departmentId',
+  'fromDate','toDate','employeeId','departmentId',
       'search','status','date','dateRange','employee','employees','departments','products','warningLevel','quantity'
+  ,'countMode'
     ];
     for (const key of forwardKeys) {
       const v = searchParams.get(key);

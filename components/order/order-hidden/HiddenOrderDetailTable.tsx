@@ -39,6 +39,8 @@ interface HiddenOrderManagementProps {
   ) => Promise<{ success: boolean; message: string }>;
   onAlert: (type: AlertType, message: string) => void;
   resetFilters?: () => void;
+  isRestoring?: boolean;
+  resetKey?: number;
 }
 
 export default function HiddenOrderManagement({
@@ -58,6 +60,8 @@ export default function HiddenOrderManagement({
   singleSoftDelete,
   onAlert,
   resetFilters = () => {},
+  isRestoring = false,
+  resetKey,
 }: HiddenOrderManagementProps) {
   // ✅ THÊM: Current user context
   const { currentUser } = useCurrentUser();
@@ -125,9 +129,16 @@ export default function HiddenOrderManagement({
   };
 
   const handlePaginatedTableReset = () => {
-    // Reset selections
-    selectedIds.clear();
-    // Gọi resetFilters từ hook để clear localStorage
+    // Reset selections (create new Set to avoid mutating prop)
+    if (selectedIds && typeof selectedIds === "object") {
+      try {
+        // If parent passed setSelectedIds, prefer calling it; otherwise we rely on refresh
+        // But since this component only receives selectedIds Set, we'll trigger resetFilters in parent
+      } catch (e) {
+        // ignore
+      }
+    }
+    // Call parent reset which will clear localStorage, state and notify children
     if (typeof resetFilters === "function") {
       resetFilters();
     }
@@ -475,6 +486,7 @@ export default function HiddenOrderManagement({
   return (
     <>
       <PaginatedTable
+        key={resetKey !== undefined ? String(resetKey) : undefined}
         enableSearch={true}
         enableDepartmentFilter={true}
         enableRoleFilter={false}
@@ -504,7 +516,9 @@ export default function HiddenOrderManagement({
         total={total}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
-        initialFilters={paginatedFilters}
+  initialFilters={paginatedFilters}
+  // When parent indicates a restoring/reset action, force the PaginatedTable to clear internal UI
+  isRestoring={isRestoring}
         onFilterChange={handleFilterChange}
         loading={loading}
         canExport={true}

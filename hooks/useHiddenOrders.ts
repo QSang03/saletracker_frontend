@@ -92,6 +92,9 @@ export function useHiddenOrders() {
   });
 
   const filterTimeout = useRef<NodeJS.Timeout | null>(null);
+  const restoringTimeout = useRef<NodeJS.Timeout | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
   const apiBase = process.env.NEXT_PUBLIC_API_URL;
 
   // ✅ SỬA: Di chuyển clearFiltersFromStorage vào trong component
@@ -245,12 +248,36 @@ export function useHiddenOrders() {
     clearFiltersFromStorage();
 
     // Reset state
+    // Clear any pending debounced fetch to avoid it reapplying old filters after reset
+    if (filterTimeout.current) {
+      clearTimeout(filterTimeout.current);
+      filterTimeout.current = null;
+    }
+    // mark restoring so child PaginatedTable will force-reset its internal UI
+    setIsRestoring(true);
+
     setFilters(defaultFilters);
     setSelectedIds(new Set());
 
-    // Fetch with default filters
-    fetchData(defaultFilters);
+    // Fetch with default filters immediately
+    fetchData(defaultFilters).finally(() => {
+      // keep restoring true for a short moment so PaginatedTable can sync
+      if (restoringTimeout.current) clearTimeout(restoringTimeout.current);
+      restoringTimeout.current = setTimeout(() => {
+        setIsRestoring(false);
+        restoringTimeout.current = null;
+  // increment resetKey so child tables remount and clear internal UI state
+  setResetKey((k) => k + 1);
+      }, 350);
+    });
   }, [clearFiltersFromStorage, fetchData]);
+
+  // cleanup restoring timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (restoringTimeout.current) clearTimeout(restoringTimeout.current);
+    };
+  }, []);
 
   // ✅ Initialize - chỉ gọi 1 lần khi mount
   useEffect(() => {
@@ -427,6 +454,10 @@ export function useHiddenOrders() {
     singleUnhide,
     bulkSoftDelete,
     singleSoftDelete,
-    refreshData: () => fetchData(),
+  // Ensure refreshData always uses the latest filters from state
+  refreshData: () => fetchData(filters),
+  // Indicate to child table components that we're forcing a restore/reset
+  isRestoring,
+  resetKey,
   };
 }

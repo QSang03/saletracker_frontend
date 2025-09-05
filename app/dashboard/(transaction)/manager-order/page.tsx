@@ -170,6 +170,10 @@ function ManagerOrderContent() {
     products: filters.products,
     warningLevel: filters.warningLevel,
     quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
+  // If we are in customer search mode (badge triggered by selecting a customer),
+  // show countMode 'sale' to count sales instead of unique customers while customer filter is active.
+  // If user is in customer-search mode or there is a customer search text, count sales instead of customers
+  countMode: (isInCustomerSearchMode || (filters.search && String(filters.search).trim() !== '')) ? 'sale' : 'customer',
   }), [
     filters.dateRange?.start,
     filters.dateRange?.end,
@@ -189,6 +193,9 @@ function ManagerOrderContent() {
 
   const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount(customerCountFilters);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  // Badge label depends on whether we're counting sales (sale) or customers
+  const isCountingSales = isInCustomerSearchMode || (filters.search && String(filters.search).trim() !== '');
+  const customerCountLabel = isCountingSales ? 'nhân viên' : 'khách hàng';
   // Toggle: admin may include hidden items when exporting
   const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
 
@@ -938,7 +945,7 @@ function ManagerOrderContent() {
           <CardTitle className="text-xl font-bold flex items-center gap-2">
             📦 Quản lý đơn hàng
             {/* Badge số khách hàng */}
-            {customerCountLoading ? (
+      {customerCountLoading ? (
               <span className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full animate-pulse">Đang tải...</span>
             ) : typeof customerCount === 'number' ? (
               <button
@@ -947,7 +954,7 @@ function ManagerOrderContent() {
                 title="Xem danh sách khách hàng"
                 onClick={() => setCustomerDialogOpen(true)}
               >
-                👥 {customerCount.toLocaleString()} khách hàng
+        👥 {customerCount.toLocaleString()} {customerCountLabel}
               </button>
             ) : customerCountError ? (
               <span className="ml-2 px-2 py-1 text-xs bg-red-200 text-red-600 rounded-full">Lỗi tải dữ liệu</span>

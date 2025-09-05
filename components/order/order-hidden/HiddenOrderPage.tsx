@@ -27,9 +27,10 @@ export default function HiddenOrderPage() {
 
   const handleReload = async () => {
     try {
+      // Only refresh data using existing filters; do not show a success toast to keep UI minimal
       await hiddenOrdersHook.refreshData();
-      showAlert("success", "Đã làm mới dữ liệu thành công");
     } catch (error) {
+      // Only surface errors
       showAlert("error", "Lỗi khi làm mới dữ liệu");
     }
   };
@@ -86,6 +87,8 @@ export default function HiddenOrderPage() {
           <Suspense fallback={<div>Đang tải...</div>}>
             <HiddenOrderManagement
               {...hiddenOrdersHook}
+              isRestoring={hiddenOrdersHook.isRestoring}
+              resetKey={hiddenOrdersHook.resetKey}
               onAlert={showAlert}
             />
           </Suspense>

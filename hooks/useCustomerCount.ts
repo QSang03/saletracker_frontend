@@ -36,7 +36,7 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
           .map((s) => s.trim())
           .filter((s) => s);
 
-        const promises = ids.map(async (id) => {
+  const promises = ids.map(async (id) => {
           const url = new URL('/api/order-details/customer-count', window.location.origin);
           if (filters?.fromDate) url.searchParams.set('fromDate', filters.fromDate);
           if (filters?.toDate) url.searchParams.set('toDate', filters.toDate);
@@ -58,6 +58,7 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
           if (filters?.products) url.searchParams.set('products', String(filters.products));
           if (filters?.warningLevel) url.searchParams.set('warningLevel', String(filters.warningLevel));
           if (filters?.quantity !== undefined) url.searchParams.set('quantity', String(filters.quantity));
+          if ((filters as any)?.countMode) url.searchParams.set('countMode', String((filters as any).countMode));
 
           const res = await fetch(url.toString(), {
             headers: {
@@ -95,7 +96,8 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
         if (filters?.departments) url.searchParams.set('departments', String(filters.departments));
         if (filters?.products) url.searchParams.set('products', String(filters.products));
         if (filters?.warningLevel) url.searchParams.set('warningLevel', String(filters.warningLevel));
-        if (filters?.quantity !== undefined) url.searchParams.set('quantity', String(filters.quantity));
+  if (filters?.quantity !== undefined) url.searchParams.set('quantity', String(filters.quantity));
+  if ((filters as any)?.countMode) url.searchParams.set('countMode', String((filters as any).countMode));
 
         const response = await fetch(url.toString(), {
           headers: {
