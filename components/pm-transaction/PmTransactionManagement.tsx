@@ -1414,76 +1414,83 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             onResetFilter={handleResetFilter}
             onClearSearch={() => {
               try {
-                // Force-clear storage first to avoid autosave races
-                try {
-                  const stored = getPmFiltersFromStorage();
-                  if (stored) {
-                    stored.search = "";
-                    savePmFiltersToStorage(stored);
-                  } else {
-                    const snapshot = getCurrentPmFilters();
-                    snapshot.search = "";
-                    savePmFiltersToStorage(snapshot);
+                // Only restore previous state if we're in customer search mode
+                if (isInCustomerSearchMode) {
+                  // Force-clear storage first to avoid autosave races
+                  try {
+                    const stored = getPmFiltersFromStorage();
+                    if (stored) {
+                      stored.search = "";
+                      savePmFiltersToStorage(stored);
+                    } else {
+                      const snapshot = getCurrentPmFilters();
+                      snapshot.search = "";
+                      savePmFiltersToStorage(snapshot);
+                    }
+                  } catch (e) {
+                    // ignore storage errors
                   }
-                } catch (e) {
-                  // ignore storage errors
-                }
 
-                // Flush UI state synchronously so effects see the cleared state
-                try {
-                  flushSync(() => {
+                  // Flush UI state synchronously so effects see the cleared state
+                  try {
+                    flushSync(() => {
+                      setSearchTerm("");
+                      setCurrentPage(1);
+                      setIsInCustomerSearchMode(false);
+                    });
+                  } catch (e) {
+                    // fallback to async updates
                     setSearchTerm("");
                     setCurrentPage(1);
                     setIsInCustomerSearchMode(false);
-                  });
-                } catch (e) {
-                  // fallback to async updates
+                  }
+
+                  // If we have a previous snapshot, restore it; otherwise apply the cleared snapshot
+                  const prev = previousPmFiltersRef.current;
+                  if (prev) {
+                    // restore previous snapshot (which should be the filters before customer-search)
+                    applyPmFilters(prev);
+                    try {
+                      savePmFiltersToStorage(prev);
+                    } catch (e) {
+                      // ignore
+                    }
+                    window.history.replaceState({ pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+                    previousPmFiltersRef.current = null;
+                  } else {
+                    // No previous snapshot: apply current snapshot with search cleared to ensure backend sees cleared search
+                    try {
+                      const cleared = getCurrentPmFilters();
+                      cleared.search = "";
+                      applyPmFilters(cleared);
+                      try {
+                        savePmFiltersToStorage(cleared);
+                      } catch (e) {
+                        // ignore
+                      }
+                      window.history.replaceState({ pmFilters: cleared, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+                      // Extra guard: some other effect may re-save an older snapshot; ensure we overwrite shortly after
+                      try {
+                        setTimeout(() => {
+                          try {
+                            const nowStored = getPmFiltersFromStorage() || getCurrentPmFilters();
+                            nowStored.search = "";
+                            savePmFiltersToStorage(nowStored);
+                          } catch (e) {
+                            // ignore
+                          }
+                        }, 120);
+                      } catch (e) {
+                        // ignore
+                      }
+                    } catch (e) {
+                      // ignore
+                    }
+                  }
+                } else {
+                  // For normal search tag clearing, just clear the search term and let the filter change handle the rest
                   setSearchTerm("");
                   setCurrentPage(1);
-                  setIsInCustomerSearchMode(false);
-                }
-
-                // If we have a previous snapshot, restore it; otherwise apply the cleared snapshot
-                const prev = previousPmFiltersRef.current;
-                if (prev) {
-                  // restore previous snapshot (which should be the filters before customer-search)
-                  applyPmFilters(prev);
-                  try {
-                    savePmFiltersToStorage(prev);
-                  } catch (e) {
-                    // ignore
-                  }
-                  window.history.replaceState({ pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-                  previousPmFiltersRef.current = null;
-                } else {
-                  // No previous snapshot: apply current snapshot with search cleared to ensure backend sees cleared search
-                  try {
-                    const cleared = getCurrentPmFilters();
-                    cleared.search = "";
-                    applyPmFilters(cleared);
-                    try {
-                      savePmFiltersToStorage(cleared);
-                    } catch (e) {
-                      // ignore
-                    }
-                    window.history.replaceState({ pmFilters: cleared, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-                    // Extra guard: some other effect may re-save an older snapshot; ensure we overwrite shortly after
-                    try {
-                      setTimeout(() => {
-                        try {
-                          const nowStored = getPmFiltersFromStorage() || getCurrentPmFilters();
-                          nowStored.search = "";
-                          savePmFiltersToStorage(nowStored);
-                        } catch (e) {
-                          // ignore
-                        }
-                      }, 120);
-                    } catch (e) {
-                      // ignore
-                    }
-                  } catch (e) {
-                    // ignore
-                  }
                 }
               } catch (e) {
                 // swallow any errors
