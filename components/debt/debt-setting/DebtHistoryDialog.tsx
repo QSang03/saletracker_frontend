@@ -444,7 +444,7 @@ export default function DebtHistoryDialog({
         /* IMPORTANT: dialog internal scroll area - adjust to keep header + footer visible inside modal */
         .dialog-scroll {
           /* DialogContent max height is 85vh; subtract header + footer (approx 160px) */
-          max-height: calc(85vh - 160px);
+          max-height: calc(65vh - 160px);
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
         }
