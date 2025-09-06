@@ -1001,8 +1001,9 @@ function ManagerOrderContent() {
             pageSize={filters.pageSize}
             onFilterChange={handleFilterChange}
             onClearSearch={() => {
-              // Clear the inline search but keep other filters
-              setSearch("");
+              // clearSearch() already handles clearing search and calling onFilterChange
+              // Just trigger refetch to ensure data is updated with remaining filters
+              refetch();
               // Don't call handleRestorePrevious() as it will clear other filters like employees
             }}
             onPageChange={handlePageChange}

@@ -1000,7 +1000,47 @@ export const useOrders = (): UseOrdersReturn => {
 
       if (!res.ok)
         throw new Error(`Failed to fetch filter options: ${res.status}`);
-      return res.json();
+
+      const data = await res.json();
+
+      // Defensive: remove users that only have role 'view' from department user lists
+      try {
+        if (data && Array.isArray(data.departments)) {
+          data.departments = data.departments.map((dept: any) => {
+            if (!dept || !Array.isArray(dept.users)) return dept;
+
+            const filtered = dept.users.filter((u: any) => {
+              if (!u) return false;
+
+              // Roles can be array of objects { name } or array of strings, or single fields
+              const roles = u.roles ?? u.role ?? u.roleNames ?? u.roleName ?? null;
+
+              if (Array.isArray(roles)) {
+                return !roles.some((r: any) => {
+                  if (!r) return false;
+                  if (typeof r === "string") return r.toLowerCase() === "view" ? true : false;
+                  if (typeof r === "object" && r.name) return String(r.name).toLowerCase() === "view" ? true : false;
+                  return false;
+                });
+              }
+
+              if (typeof roles === "string") {
+                return roles.toLowerCase() !== "view";
+              }
+
+              // No role info -> keep user
+              return true;
+            });
+
+            return { ...dept, users: filtered };
+          });
+        }
+      } catch (e) {
+        // If anything goes wrong, fallback to raw data
+        console.error("Error processing filter options to remove view-role users:", e);
+      }
+
+      return data;
     });
   }, [handleApiCall, getAuthHeaders]);
 
