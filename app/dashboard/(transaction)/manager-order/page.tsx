@@ -221,11 +221,7 @@ function ManagerOrderContent() {
 
   // ✅ Filter employees theo departments đã chọn
   const filteredEmployeeOptions = useMemo(() => {
-    // Nếu user là PM, không hiển thị employees khác
-    if (isPMUser) {
-      return [];
-    }
-    
+    // PM cũng có thể chọn employees khác
     if (!filters.departments || typeof filters.departments !== 'string' || filters.departments === "") {
       return allEmployeeOptions; // Nếu không chọn department nào, hiển thị tất cả
     }
@@ -251,9 +247,9 @@ function ManagerOrderContent() {
       }, [] as { label: string; value: string }[]);
 
     return filtered;
-  }, [filters.departments, filterOptions.departments, allEmployeeOptions, isPMUser]);
+  }, [filters.departments, filterOptions.departments, allEmployeeOptions]);
 
-  const departmentOptions = isPMUser ? [] : filterOptions.departments.map((dept) => ({
+  const departmentOptions = filterOptions.departments.map((dept) => ({
     label: dept.label,
     value: dept.value.toString(),
   }));
@@ -298,8 +294,13 @@ function ManagerOrderContent() {
       // Handle employees
       let employeesValue = "";
       if (isPMUser) {
-        // Nếu user là PM, chỉ hiển thị đơn hàng của chính họ (giống như user thường)
-        employeesValue = user?.id ? String(user.id) : "";
+        // Nếu user là PM, cho phép chọn nhân viên khác hoặc mặc định là chính họ
+        if (paginatedFilters.employees.length > 0) {
+          employeesValue = paginatedFilters.employees.join(",");
+        } else {
+          // Nếu PM không chọn nhân viên nào, mặc định hiển thị đơn hàng của chính họ
+          employeesValue = user?.id ? String(user.id) : "";
+        }
       } else {
         employeesValue =
           paginatedFilters.employees.length > 0
@@ -310,8 +311,11 @@ function ManagerOrderContent() {
       // Handle departments
       let departmentsValue = "";
       if (isPMUser) {
-        // Nếu user là PM, không set department để backend filter theo user hiện tại
-        departmentsValue = "";
+        // Nếu user là PM, cho phép chọn departments khác
+        departmentsValue =
+          paginatedFilters.departments.length > 0
+            ? paginatedFilters.departments.join(",")
+            : "";
       } else {
         departmentsValue =
           paginatedFilters.departments.length > 0
@@ -976,8 +980,8 @@ function ManagerOrderContent() {
             enableStatusFilter={true}
             enableSingleDateFilter={true}
             enableDateRangeFilter={true}
-            enableEmployeeFilter={!isPMUser}
-            enableDepartmentFilter={!isPMUser}
+            enableEmployeeFilter={true}
+            enableDepartmentFilter={true}
             enableCategoriesFilter={true} // Sử dụng cho products
             enableWarningLevelFilter={true} // Thêm warning level filter
             enablePageSize={true}
@@ -997,9 +1001,9 @@ function ManagerOrderContent() {
             pageSize={filters.pageSize}
             onFilterChange={handleFilterChange}
             onClearSearch={() => {
-              // Clear the inline search and restore previous filters
+              // Clear the inline search but keep other filters
               setSearch("");
-              handleRestorePrevious();
+              // Don't call handleRestorePrevious() as it will clear other filters like employees
             }}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}

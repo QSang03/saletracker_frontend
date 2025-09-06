@@ -3383,6 +3383,11 @@ export default function CampaignModal({
                                 maxLength={10000}
                                 insertButtons={messageInsertButtons}
                                 showInsertButtons={true}
+                                // ✅ Bắt buộc phải có [QC] và tự động chèn đầu nội dung (có thể tắt)
+                                mustHavePatterns={["[QC]"]}
+                                autoPrefixPattern="[QC]"
+                                autoPrefixEnabledDefault={true}
+                                showAutoPrefixToggle={true}
                               />
                             </motion.div>
 
@@ -3538,6 +3543,11 @@ export default function CampaignModal({
                                             insertButtons={
                                               reminderInsertButtons
                                             }
+                                            // ✅ Bắt buộc phải có [QC] giống nội dung chính
+                                            mustHavePatterns={["[QC]"]}
+                                            autoPrefixPattern="[QC]"
+                                            autoPrefixEnabledDefault={true}
+                                            showAutoPrefixToggle={true}
                                             placeholder="VD: Ưu đãi sắp hết hạn! Nhanh tay nhận ngay..."
                                             rows={2}
                                             className="resize-none mt-1 transition-all duration-200"

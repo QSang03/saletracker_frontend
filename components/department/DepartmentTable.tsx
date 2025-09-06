@@ -60,7 +60,7 @@ export default function DepartmentTable({
             <TableHead className="px-3 py-2 text-left">Tên phòng ban</TableHead>
             <TableHead className="px-3 py-2 text-left">Slug</TableHead>
             <TableHead className="px-3 py-2 text-left">IP Server</TableHead>
-            <TableHead className="px-3 py-2 text-left">Trưởng nhóm</TableHead>
+              <TableHead className="px-3 py-2 text-left">Trưởng nhóm</TableHead>
             <TableHead className="px-3 py-2 text-left">Ngày tạo</TableHead>
             {!isViewRole && (
               <TableHead className="w-36 text-center px-3 py-2">
@@ -92,7 +92,12 @@ export default function DepartmentTable({
                     {dep.server_ip || "-"}
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    {dep.manager?.fullName || dep.manager?.username || "-"}
+                    {Array.isArray(dep.managers) && dep.managers.length > 0
+                      ? dep.managers
+                          .map((m) => m.fullName || m.username)
+                          .filter((s) => !!s && s.trim() !== "")
+                          .join(", ")
+                      : dep.manager?.fullName || dep.manager?.username || "-"}
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     {dep.createdAt

@@ -67,6 +67,78 @@ export const getDepartmentColor = (departmentId: number) => {
       border: "border-cyan-300",
       text: "text-cyan-700",
     },
+    {
+      bg: "bg-emerald-500",
+      light: "bg-emerald-100",
+      border: "border-emerald-300",
+      text: "text-emerald-700",
+    },
+    {
+      bg: "bg-lime-500",
+      light: "bg-lime-100",
+      border: "border-lime-300",
+      text: "text-lime-700",
+    },
+    {
+      bg: "bg-amber-500",
+      light: "bg-amber-100",
+      border: "border-amber-300",
+      text: "text-amber-700",
+    },
+    {
+      bg: "bg-sky-500",
+      light: "bg-sky-100",
+      border: "border-sky-300",
+      text: "text-sky-700",
+    },
+    {
+      bg: "bg-violet-500",
+      light: "bg-violet-100",
+      border: "border-violet-300",
+      text: "text-violet-700",
+    },
+    {
+      bg: "bg-fuchsia-500",
+      light: "bg-fuchsia-100",
+      border: "border-fuchsia-300",
+      text: "text-fuchsia-700",
+    },
+    {
+      bg: "bg-rose-500",
+      light: "bg-rose-100",
+      border: "border-rose-300",
+      text: "text-rose-700",
+    },
+    {
+      bg: "bg-slate-500",
+      light: "bg-slate-100",
+      border: "border-slate-300",
+      text: "text-slate-700",
+    },
+    {
+      bg: "bg-gray-500",
+      light: "bg-gray-100",
+      border: "border-gray-300",
+      text: "text-gray-700",
+    },
+    {
+      bg: "bg-zinc-500",
+      light: "bg-zinc-100",
+      border: "border-zinc-300",
+      text: "text-zinc-700",
+    },
+    {
+      bg: "bg-neutral-500",
+      light: "bg-neutral-100",
+      border: "border-neutral-300",
+      text: "text-neutral-700",
+    },
+    {
+      bg: "bg-stone-500",
+      light: "bg-stone-100",
+      border: "border-stone-300",
+      text: "text-stone-700",
+    },
   ];
   return colors[departmentId % colors.length];
 };

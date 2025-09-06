@@ -92,69 +92,27 @@ export default function DepartmentPage() {
       // Lấy tất cả phòng ban có ID = selectedDepartment
       const selectedDept = allDepartments.find((dept: Department) => dept.id === selectedDepartment);
       if (selectedDept) {
-        // Tìm tất cả manager của phòng ban này
-        const managersOfDept = users.filter(user => 
-          user.departments && user.departments.some((dept: any) => dept.id === selectedDepartment)
-        );
-        
-        // Tạo 1 dòng duy nhất với tất cả manager
-        if (managersOfDept.length > 0) {
-          const allManagerNames = managersOfDept.map(manager => 
-            manager.fullName || manager.username
-          ).join(', ');
-          
-          filteredData = [{
-            id: selectedDept.id,
-            name: selectedDept.name,
-            slug: selectedDept.slug,
-            server_ip: selectedDept.server_ip,
-            createdAt: selectedDept.createdAt,
-            manager: {
-              id: managersOfDept[0].id, // Lấy ID của manager đầu tiên
-              fullName: allManagerNames, // Tất cả tên manager ngăn cách bằng dấu phẩy
-              username: managersOfDept[0].username
-            }
-          }];
-        } else {
-          // Nếu không có manager nào
-          filteredData = [selectedDept];
-        }
+        filteredData = [selectedDept];
       }
     } else if (selectedManager) {
       // Nếu chỉ chọn manager mà không chọn phòng ban
       filteredData = filteredData.filter((dept: Department) => {
-        if (!dept.manager) return false;
-        return dept.manager.id === selectedManager;
+        // Match if any manager id matches
+        if (Array.isArray(dept.managers) && dept.managers.length > 0) {
+          return dept.managers.some((m) => m.id === selectedManager);
+        }
+        if (dept.manager) {
+          return dept.manager.id === selectedManager;
+        }
+        return false;
       });
     } else {
-      // Khi không có filter nào, hiển thị tất cả phòng ban với tất cả manager
-      filteredData = allDepartments.map(dept => {
-        // Tìm tất cả manager của phòng ban này
-        const managersOfDept = users.filter(user => 
-          user.departments && user.departments.some((deptUser: any) => deptUser.id === dept.id)
-        );
-        
-        if (managersOfDept.length > 0) {
-          const allManagerNames = managersOfDept.map(manager => 
-            manager.fullName || manager.username
-          ).join(', ');
-          
-          return {
-            ...dept,
-            manager: {
-              id: managersOfDept[0].id,
-              fullName: allManagerNames,
-              username: managersOfDept[0].username
-            }
-          };
-        }
-        
-        return dept;
-      });
+      // Khi không có filter nào, hiển thị dữ liệu như API trả về
+      filteredData = allDepartments;
     }
 
     return filteredData;
-  }, [allDepartments, selectedDepartment, selectedManager, users]);
+  }, [allDepartments, selectedDepartment, selectedManager]);
 
   // Apply pagination
   const startIndex = (page - 1) * pageSize;

@@ -28,6 +28,8 @@ export interface Department {
     fullName: string;
     username: string;
   };
+  // All managers in this department, if provided by API
+  managers?: { id: number; fullName: string; username: string }[];
 }
 
 export interface Permission {
