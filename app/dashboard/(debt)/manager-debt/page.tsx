@@ -105,6 +105,20 @@ export default function ManagerDebtPage() {
           // ✅ Dọn dẹp localStorage ngay lập tức, không dùng setTimeout
           localStorage.removeItem("managerDebtFilter");
 
+          // ✅ Ép gọi fetch với filter mới (tránh case: fetch đầu tiên chạy trước khi filter kịp áp)
+          // Gọi sau một frame để đảm bảo state đã commit
+          requestAnimationFrame(() => {
+            try {
+              // force debts list + stats to refresh with new filters
+              // these are no-ops if hook chưa khởi tạo xong
+              // nhưng ở frame tiếp theo đã sẵn sàng
+              // eslint-disable-next-line @typescript-eslint/no-use-before-define
+              forceUpdate();
+              // eslint-disable-next-line @typescript-eslint/no-use-before-define
+              refreshStats();
+            } catch {}
+          });
+
           // ✅ Reset initialFilters sau khi component đã render
           requestAnimationFrame(() => {
             setInitialFilters(undefined);
