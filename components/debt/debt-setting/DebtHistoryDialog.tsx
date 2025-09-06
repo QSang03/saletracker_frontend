@@ -63,7 +63,7 @@ export default function DebtHistoryDialog({
   } = useDebtHistory({
     debtConfigId,
   initialPageSize: currentPageSize,
-  enabled: false, // we'll manually control fetching and do client-side pagination
+  enabled: open, // allow fetching when modal mở
   });
 
   useEffect(() => {
@@ -82,13 +82,12 @@ export default function DebtHistoryDialog({
     }
   }, [open]);
 
-  // Fetch ALL histories once when modal opens; we'll filter + paginate client-side
+  // Fetch once when modal opens; request a large limit to get all items
   useEffect(() => {
     if (open && debtConfigId) {
-      // fetch a large page to cover all records
       fetchData(1, 10000);
     }
-  }, [open, debtConfigId, fetchData]);
+  }, [open, debtConfigId]);
 
   const handlePageChange = useCallback((newPage: number) => {
     if (newPage < 1) return;
