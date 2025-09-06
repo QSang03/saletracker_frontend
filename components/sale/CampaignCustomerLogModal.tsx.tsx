@@ -332,7 +332,7 @@ const parseMessageContent = (content: string, contentType?: string) => {
     }
 
     // ✅ ENHANCED: Handle UNKNOW contentType with bank account detection
-    if (contentType === "UNKNOW") {
+    if (contentType === "UNKNOWN") {
       try {
         const parsedContent = JSON.parse(content);
         

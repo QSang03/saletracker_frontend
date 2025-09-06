@@ -62,8 +62,8 @@ export default function DebtHistoryDialog({
     fetchData,
   } = useDebtHistory({
     debtConfigId,
-    initialPageSize: currentPageSize,
-    enabled: open,
+  initialPageSize: currentPageSize,
+  enabled: false, // we'll manually control fetching and do client-side pagination
   });
 
   useEffect(() => {
@@ -82,25 +82,40 @@ export default function DebtHistoryDialog({
     }
   }, [open]);
 
+  // Fetch ALL histories once when modal opens; we'll filter + paginate client-side
   useEffect(() => {
     if (open && debtConfigId) {
-      fetchData(currentPage, currentPageSize);
+      // fetch a large page to cover all records
+      fetchData(1, 10000);
     }
-  }, [currentPage, currentPageSize, open, debtConfigId, fetchData]);
+  }, [open, debtConfigId, fetchData]);
 
   const handlePageChange = useCallback((newPage: number) => {
     if (newPage < 1) return;
-    const totalPages = Math.max(1, Math.ceil((pagination.total || 0) / currentPageSize));
-    if (newPage > totalPages) return;
-    setCurrentPage(newPage);
-  }, [pagination.total, currentPageSize]);
+    setCurrentPage((prev) => {
+      const next = Math.min(Math.max(newPage, 1), Math.max(1, Math.ceil(clientTotal / currentPageSize)));
+      return next;
+    });
+  }, [currentPageSize]);
 
   const handlePageSizeChange = useCallback((newPageSize: number) => {
     setCurrentPageSize(newPageSize);
     setCurrentPage(1);
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil((pagination.total || 0) / currentPageSize));
+  // After filtering, compute totals and current slice
+  const filteredHistories: DebtHistoryItem[] = React.useMemo(
+    () => (histories || []).filter((h: DebtHistoryItem) => !!h?.send_at),
+    [histories]
+  );
+  const clientTotal = filteredHistories.length;
+  const totalPages = Math.max(1, Math.ceil(clientTotal / currentPageSize));
+  const startIndex = (currentPage - 1) * currentPageSize;
+  const endIndex = startIndex + currentPageSize;
+  const paginatedHistories = React.useMemo(
+    () => filteredHistories.slice(startIndex, endIndex),
+    [filteredHistories, startIndex, endIndex]
+  );
 
   const formatDate = (dateStr: string | null): DateInfo => {
     if (!dateStr) {
@@ -127,7 +142,7 @@ export default function DebtHistoryDialog({
 
   // 🎨 Enhanced table rows (kept your effects)
   const createTableRows = () => {
-    if (!loading && histories.length === 0) {
+  if (!loading && clientTotal === 0) {
       return (
         <TableRow>
           <TableCell colSpan={3} className="h-[400px] text-center">
@@ -145,8 +160,9 @@ export default function DebtHistoryDialog({
       );
     }
 
-    return histories.map((history: DebtHistoryItem, idx: number) => {
-      const globalIndex = (currentPage - 1) * currentPageSize + idx + 1;
+    return paginatedHistories.map((history: DebtHistoryItem, idx: number) => {
+      // STT is calculated based on filtered rows so numbering stays continuous
+      const globalIndex = startIndex + idx + 1;
       const dateInfo = formatDate(history.send_at);
 
       return (
@@ -500,12 +516,13 @@ export default function DebtHistoryDialog({
               <div className="px-2 py-2"> {/* placeholder for other controls you had */} 
                 <input className="w-16 border rounded px-2 py-1" value={currentPageSize} onChange={() => {}} readOnly />
               </div>
-              <div className="ml-4 text-sm">Tổng số dòng: <span className="text-pink-500">{pagination.total || 0}</span></div>
+              <div className="ml-4 text-sm">Tổng số dòng: <span className="text-pink-500">{clientTotal}</span></div>
             </div>
 
             {/* Scrollable table area */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <div className="dialog-scroll border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl overflow-hidden">
+            <div className="flex-1 min-h-0">
+              {/* NOTE: remove overflow-hidden so the inner scroll works to the very last row */}
+              <div className="dialog-scroll border border-slate-200/50 rounded-xl bg-white/95 backdrop-blur-sm shadow-xl">
                 <div className="h-full">
                   <Table className="w-full table-fixed">
                     <colgroup>
@@ -514,7 +531,7 @@ export default function DebtHistoryDialog({
                       <col className="w-25" />
                     </colgroup>
                     <TableHeader className="sticky top-0 z-10">
-                      <TableRow className="bg-gradient-to-r from-cyan-50/80 via-blue-50/80 to-purple-50/80 border-b-2 border-gradient-to-r from-cyan-200 via-blue-200 to-purple-200 backdrop-blur-sm">
+                      <TableRow className="bg-gradient-to-r from-cyan-50/80 via-blue-50/80 to-purple-50/80 border-b-2 backdrop-blur-sm">
                         <TableHead className="text-center font-bold text-slate-700 py-4 px-4 text-sm w-20">
                           <div className="flex items-center justify-center gap-2 group/head">
                             <Hexagon className="h-4 w-4 text-cyan-600 group-hover/head:animate-spin" />
@@ -558,7 +575,7 @@ export default function DebtHistoryDialog({
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
-                <div className="text-sm text-slate-500">Tổng: {pagination.total || 0}</div>
+                <div className="text-sm text-slate-500">Tổng: {clientTotal}</div>
               </div>
 
               <div className="flex items-center gap-3">
