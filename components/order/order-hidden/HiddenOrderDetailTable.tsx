@@ -281,6 +281,7 @@ export default function HiddenOrderManagement({
       "STT",
       "ID",
       "Khách Hàng",
+  "Nhân Viên",
       "Sản Phẩm",
       "Số Lượng",
       "Đơn Giá",
@@ -294,6 +295,7 @@ export default function HiddenOrderManagement({
       (filters.page - 1) * filters.pageSize + idx + 1,
       row.id ?? "--",
       row.customer_name || "--",
+  (row?.order?.sale_by?.fullName || row?.order?.sale_by?.username || "--"),
       getProductName(row),
       row.quantity ?? "--",
       row.unit_price
@@ -391,6 +393,7 @@ export default function HiddenOrderManagement({
       idx + 1,
       row.id ?? "--",
       row.customer_name || "--",
+  (row?.order?.sale_by?.fullName || row?.order?.sale_by?.username || "--"),
       getProductName(row),
       row.quantity ?? "--",
       row.unit_price
@@ -453,6 +456,9 @@ export default function HiddenOrderManagement({
       <TableCell className="min-w-[100px] py-4 px-6">
         <Skeleton className="h-4 w-12 rounded-lg animate-pulse" />
       </TableCell>
+        <TableCell className="min-w-[160px] py-4 px-6">
+          <Skeleton className="h-4 w-24 rounded-lg animate-pulse" />
+        </TableCell>
       <TableCell className="min-w-[250px] py-4 px-6">
         <Skeleton className="h-4 w-28 rounded-lg animate-pulse" />
       </TableCell>
@@ -628,6 +634,17 @@ export default function HiddenOrderManagement({
                     <span>ID</span>
                   </div>
                 </TableHead>
+                <TableHead className="min-w-[160px] font-bold text-sm text-blue-800 tracking-wide sticky top-0 bg-blue-100 py-4 px-6">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block animate-bounce text-xs"
+                      style={{ animationDelay: "0.05s" }}
+                    >
+                      👤
+                    </span>
+                    <span>Nhân viên</span>
+                  </div>
+                </TableHead>
                 <TableHead className="min-w-[250px] font-bold text-sm text-blue-800 tracking-wide sticky top-0 bg-blue-100 py-4 px-6">
                   <div className="flex items-center gap-2">
                     <span
@@ -637,6 +654,17 @@ export default function HiddenOrderManagement({
                       👤
                     </span>
                     <span>Khách hàng</span>
+                  </div>
+                </TableHead>
+                <TableHead className="min-w-[160px] font-bold text-sm text-blue-800 tracking-wide sticky top-0 bg-blue-100 py-4 px-6">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block animate-bounce text-xs"
+                      style={{ animationDelay: "0.15s" }}
+                    >
+                      🧑‍💼
+                    </span>
+                    <span>Nhân viên</span>
                   </div>
                 </TableHead>
                 <TableHead className="min-w-[320px] font-bold text-sm text-blue-800 tracking-wide sticky top-0 bg-blue-100 py-4 px-6">
@@ -727,7 +755,7 @@ export default function HiddenOrderManagement({
                 )
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-20">
+                    <TableCell colSpan={11} className="text-center py-20">
                     <div className="space-y-6">
                       <div className="text-6xl">👻</div>
                       <div className="text-xl font-bold bg-gradient-to-r from-gray-600 to-gray-800 bg-clip-text text-transparent">
@@ -763,6 +791,12 @@ export default function HiddenOrderManagement({
                       <TableCell className="min-w-[100px] py-4 px-6">
                         <div className="font-mono text-sm font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                           #{row.id}
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="min-w-[160px] py-4 px-6">
+                        <div className="text-sm text-gray-700" title={(row?.order?.sale_by?.fullName || row?.order?.sale_by?.username) ?? "—"}>
+                          {row?.order?.sale_by?.fullName || row?.order?.sale_by?.username || "—"}
                         </div>
                       </TableCell>
 
