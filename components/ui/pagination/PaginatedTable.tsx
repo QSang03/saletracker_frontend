@@ -167,6 +167,7 @@ export default function PaginatedTable({
   enableZaloLinkStatusFilter,
   enableCategoriesFilter,
   enableGoToPage = false,
+  enableConversationTypeFilter,
   availableZaloLinkStatuses = [
     { value: 0, label: "Chưa liên kết" },
     { value: 1, label: "Đã liên kết" },
@@ -1198,6 +1199,18 @@ export default function PaginatedTable({
               value={filters.employees}
               options={employeeOptions}
               onChange={handleEmployeesChange}
+            />
+          )}
+          {enableConversationTypeFilter && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full`}
+              placeholder="Loại hội thoại"
+              value={filters.conversationType || []}
+              options={[
+                { label: "Nhóm", value: "group" },
+                { label: "Cá nhân", value: "personal" },
+              ]}
+              onChange={(vals) => updateFilter("conversationType", vals as any)}
             />
           )}
           {enableDepartmentFilter && (

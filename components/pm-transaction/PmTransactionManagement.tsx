@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -103,6 +104,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     departments: any[];
     products?: any[];
   }>({ departments: [], products: [] });
+  // Toggle: admin or PM may include hidden items when exporting
+  const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
   const [departmentsSelected, setDepartmentsSelected] = useState<
     (string | number)[]
   >([]);
@@ -854,13 +857,28 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         (f as any).conversationType &&
         (f as any).conversationType.length > 0
       ) {
-        setConversationTypesSelected((f as any).conversationType as string[]);
+  const convArr = (f as any).conversationType as string[];
+  setConversationTypesSelected(convArr);
+  // Immediately persist to localStorage to avoid stale restores on F5
+  updatePmFiltersAndStorage({ conversationType: convArr.join(",") });
       } else {
-        setConversationTypesSelected([]);
+  setConversationTypesSelected([]);
+  // Immediately clear from localStorage when filter is removed
+  updatePmFiltersAndStorage({ conversationType: "" });
       }
 
       // reset to page 1 after filter change
       setCurrentPage(1);
+
+      // Proactively refetch to reflect changes immediately in UI (in addition to effect)
+      if (filtersLoaded && filtersRestored && !isRestoringRef.current) {
+        // Delay slightly to allow state to flush
+        setTimeout(() => {
+          try {
+            fetchOrders();
+          } catch {}
+        }, 0);
+      }
     } catch (e) {
       console.error("Error handling filters", e);
     }
@@ -1165,7 +1183,25 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       o.notes || "--",
     ]);
 
-    return { headers, data };
+    // Provide a small filtersDescription node that will be rendered inside the
+    // CSVExportPanel dialog. For admins we expose the switch to include hidden
+    // orders when exporting all data.
+    const filtersDescription = (
+      <div className="flex items-center justify-start gap-4">
+  { (isAdmin || isPM) && (
+          <div className="flex items-center gap-2">
+            <Switch
+              aria-label="Bao gồm đơn ẩn"
+              checked={includeHiddenExport}
+              onCheckedChange={(v: any) => setIncludeHiddenExport(Boolean(v))}
+            />
+            <div className="text-sm">Bao gồm đơn ẩn</div>
+          </div>
+        )}
+      </div>
+    );
+
+    return { headers, data, filtersDescription };
   };
 
   // Export all data helper - fetches all rows from backend respecting current filters
@@ -1214,6 +1250,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       conversationTypesSelected.length > 0
     ) {
       params.set("conversationType", conversationTypesSelected.join(","));
+    }
+
+    // Admin can include hidden items when exporting all
+    if ((isAdmin || isPM) && includeHiddenExport) {
+      params.set("includeHidden", "1");
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -1338,6 +1379,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             >
               🔄 Làm mới
             </Button>
+            {/* include hidden option moved into Export modal */}
           </div>
         </CardHeader>
         <CardContent className="p-6 space-y-4">

@@ -29,6 +29,7 @@ interface OrderFilters {
   products?: string;
   warningLevel?: string;
   quantity?: number; // Thêm bộ lọc số lượng
+  conversationType?: string; // CSV: 'group', 'personal'
   sortField?: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null;
   sortDirection?: "asc" | "desc" | null;
 }
@@ -189,6 +190,7 @@ const saveFiltersToStorage = (filters: OrderFilters): void => {
       departments: filters.departments || "",
       products: filters.products || "",
       warningLevel: filters.warningLevel || "",
+  conversationType: filters.conversationType || "",
       sortField: filters.sortField || null,
       sortDirection: filters.sortDirection || null,
   quantity: typeof filters.quantity === "number" ? filters.quantity : undefined,
@@ -259,6 +261,7 @@ export const useOrders = (): UseOrdersReturn => {
     const departments = searchParams.get("departments") || "";
     const products = searchParams.get("products") || "";
     const warningLevel = searchParams.get("warningLevel") || "";
+  const conversationType = searchParams.get("conversationType") || "";
     const quantity = parseInt(searchParams.get("quantity") || "1"); // Mặc định là 1
     const sortField = searchParams.get("sortField") as
       | "quantity"
@@ -296,6 +299,7 @@ export const useOrders = (): UseOrdersReturn => {
         departments,
         products,
         warningLevel,
+  conversationType,
         quantity,
     // Nếu URL truyền sortField thì dùng, nếu không thì mặc định sort theo conversation_start desc
   sortField: sortField || 'conversation_start',
@@ -317,6 +321,7 @@ export const useOrders = (): UseOrdersReturn => {
       departments: savedFilters.departments || "",
       products: savedFilters.products || "",
       warningLevel: savedFilters.warningLevel || "",
+  conversationType: (savedFilters as any).conversationType || "",
       quantity: savedFilters.quantity || 1, // Mặc định là 1
   // Mặc định luôn sắp xếp theo conversation_start desc nếu không có saved value
   sortField: savedFilters.sortField || 'conversation_start',
@@ -516,6 +521,9 @@ export const useOrders = (): UseOrdersReturn => {
         if (newFilters.warningLevel?.trim()) {
           searchParams.set("warningLevel", newFilters.warningLevel.trim());
         }
+        if (newFilters.conversationType?.trim()) {
+          searchParams.set("conversationType", newFilters.conversationType.trim());
+        }
         if (typeof newFilters.quantity === "number") {
           searchParams.set("quantity", String(newFilters.quantity));
         }
@@ -655,6 +663,9 @@ export const useOrders = (): UseOrdersReturn => {
         }
         if (currentFilters.warningLevel && currentFilters.warningLevel.trim()) {
           params.append("warningLevel", currentFilters.warningLevel.trim());
+        }
+        if (currentFilters.conversationType && currentFilters.conversationType.trim()) {
+          params.append("conversationType", currentFilters.conversationType.trim());
         }
         if (typeof currentFilters.quantity === "number") {
           params.append("quantity", String(currentFilters.quantity));
@@ -928,6 +939,7 @@ export const useOrders = (): UseOrdersReturn => {
       departments: "",
       products: "",
       warningLevel: "",
+  conversationType: "",
       quantity: 1, // Reset về mặc định 1
       sortField: null,
       sortDirection: null,

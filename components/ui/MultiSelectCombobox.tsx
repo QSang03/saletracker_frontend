@@ -14,7 +14,7 @@ export interface Option {
 
 interface MultiSelectComboboxProps {
   options: Option[];
-  value: (string | number)[];
+  value: (string | number)[] | any; // accept any, normalize internally
   onChange: (value: (string | number)[]) => void;
   placeholder?: string;
   className?: string; // ✅ Cho phép truyền className từ bên ngoài
@@ -27,14 +27,20 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
   placeholder = "Chọn...",
   className = "", // ✅ Mặc định rỗng
 }: MultiSelectComboboxProps) {
+  // Normalize value to array
+  const normalizedValue: (string | number)[] = Array.isArray(value)
+    ? value as (string | number)[]
+    : typeof value === 'string'
+      ? value.split(',').map(v => v.trim()).filter(Boolean)
+      : [];
   const [open, setOpen] = React.useState(false);
   const comboboxRef = React.useRef<HTMLDivElement>(null);
 
   const handleSelect = (val: string | number) => {
-    if (value.includes(val)) {
-      onChange(value.filter((v) => v !== val));
+    if (normalizedValue.includes(val)) {
+      onChange(normalizedValue.filter((v) => v !== val));
     } else {
-      onChange([...value, val]);
+      onChange([...normalizedValue, val]);
     }
   };
 
@@ -63,10 +69,10 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
         className="w-full justify-between"
         onClick={() => setOpen((o) => !o)}
       >
-        {value.length === 0
+    {normalizedValue.length === 0
           ? placeholder
           : options
-              .filter((opt) => value.includes(opt.value))
+      .filter((opt) => normalizedValue.includes(opt.value))
               .map((opt) => opt.label)
               .join(", ")}
         <span className="ml-2">&#9662;</span>
@@ -81,11 +87,11 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
                 <CommandItem
                   key={opt.value}
                   onSelect={() => handleSelect(opt.value)}
-                  className={value.includes(opt.value) ? "bg-blue-100" : ""}
+                  className={normalizedValue.includes(opt.value) ? "bg-blue-100" : ""}
                 >
                   <input
                     type="checkbox"
-                    checked={value.includes(opt.value)}
+                    checked={normalizedValue.includes(opt.value)}
                     readOnly
                     className="mr-2"
                   />
@@ -97,10 +103,10 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
         </div>
       )}
 
-      {value.length > 0 && (
+  {normalizedValue.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {options
-            .filter((opt) => value.includes(opt.value))
+    .filter((opt) => normalizedValue.includes(opt.value))
             .map((opt) => (
               <span
                 key={opt.value}
@@ -109,8 +115,19 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
                 {opt.label}
                 <button
                   type="button"
-                  className="ml-1 text-xs"
-                  onClick={() => handleSelect(opt.value)}
+                  className="ml-1 text-xs hover:text-red-600 focus:outline-none cursor-pointer"
+                  aria-label={`Bỏ chọn ${opt.label}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelect(opt.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleSelect(opt.value);
+                    }
+                  }}
                 >
                   ×
                 </button>

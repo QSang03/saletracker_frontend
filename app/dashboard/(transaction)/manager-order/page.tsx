@@ -7,16 +7,17 @@ import React, {
   useMemo,
   Suspense,
 } from "react";
-import { OrderDetail } from "@/types"; // ✅ Thay đổi từ Order thành OrderDetail
+import { OrderDetail } from "@/types";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useOrders } from "@/hooks/useOrders";
-import type { OrderFilters } from "@/hooks/useOrders"; // ✅ Import OrderFilters type
+import type { OrderFilters } from "@/hooks/useOrders";
 import PaginatedTable, {
   Filters,
 } from "@/components/ui/pagination/PaginatedTable";
 import OrderManagement from "@/components/order/manager-order/OrderManagement";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useCustomerCount } from "@/hooks/useCustomerCount";
 import { CustomerListDialog } from "@/components/order/manager-order/CustomerListDialog";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
@@ -350,6 +351,12 @@ function ManagerOrderContent() {
         warningLevelValue = selectedWarningLevels.join(",");
       }
 
+      // Handle conversation type (group/personal)
+      let conversationTypeValue = "";
+      if (Array.isArray(paginatedFilters.conversationType) && paginatedFilters.conversationType.length > 0) {
+        conversationTypeValue = paginatedFilters.conversationType.join(",");
+      }
+
       // ✅ SỬA: Build complete new filters object với statuses
       const newFilters: Partial<OrderFilters> = {
         search: searchValue,
@@ -361,6 +368,7 @@ function ManagerOrderContent() {
         products: productsValue,
   quantity: quantityValue,
         warningLevel: warningLevelValue,
+  conversationType: conversationTypeValue,
         page: shouldResetPage ? 1 : filters.page,
       };
 
@@ -619,8 +627,8 @@ function ManagerOrderContent() {
       );
     }
   if (typeof filters.quantity === "number") params.append("quantity", String(filters.quantity));
-  // Admin can include hidden items when exporting all
-  if (isAdmin && includeHiddenExport) params.append("includeHidden", "1");
+  // Admin or PM can include hidden items when exporting all
+  if ((isAdmin || isPMUser) && includeHiddenExport) params.append("includeHidden", "1");
     
     // Nếu user là PM, chỉ export đơn hàng của chính họ (giống như user thường)
     if (isPMUser) {
@@ -633,6 +641,7 @@ function ManagerOrderContent() {
     }
     if (filters.products?.trim()) params.append("products", filters.products.trim());
     if (filters.warningLevel?.trim()) params.append("warningLevel", filters.warningLevel.trim());
+  if (filters.conversationType?.trim()) params.append("conversationType", filters.conversationType.trim());
     if (filters.sortField) params.append("sortField", filters.sortField);
     if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
 
@@ -872,6 +881,7 @@ function ManagerOrderContent() {
           : { from: undefined, to: undefined },
       singleDate: filters.date ? new Date(filters.date) : undefined,
       quantity: filters.quantity || 1, // Thêm quantity filter
+  conversationType: filters.conversationType ? filters.conversationType.split(',').filter(Boolean) : [],
       employees: isPMUser
         ? user?.id ? [String(user.id)] : [] // PM user chỉ hiển thị đơn hàng của chính họ (giống như user thường)
         : filters.employees
@@ -889,6 +899,7 @@ function ManagerOrderContent() {
     filters.dateRange?.start,
     filters.dateRange?.end,
     filters.date,
+  filters.conversationType,
     filters.quantity,
     filters.employees,
     JSON.stringify(warningLevelOptions), // Include warningLevelOptions to handle mapping changes
@@ -980,6 +991,7 @@ function ManagerOrderContent() {
             enableDepartmentFilter={!isPMUser}
             enableCategoriesFilter={true} // Sử dụng cho products
             enableWarningLevelFilter={true} // Thêm warning level filter
+            enableConversationTypeFilter={true}
             enablePageSize={true}
             enableGoToPage={true}
             availableStatuses={statusOptions}
@@ -1010,91 +1022,96 @@ function ManagerOrderContent() {
               canExportInDepartment &&
               canExportInDepartment(user?.departments?.[0]?.slug || "")
             }
-            getExportData={() => ({
-              headers: [
-                "STT",
-                "Mã Đơn",
-                "Gia Hạn",
-                "Thời Gian Tạo Đơn Hàng",
-                "Tên Nhân Viên",
-                "Tên Khách Hàng",
-                "Tên Mặt Hàng",
-                "Số Lượng",
-                "Đơn Giá",
-                "Trạng Thái",
-                "Ghi Chú",
-              ],
-              data: orders.map((orderDetail, idx) => [
-                idx + 1,
-                orderDetail.id ?? "--",
-                calculateDynamicExtended(orderDetail.created_at, orderDetail.extended),
-                orderDetail.created_at
-                  ? (() => {
-                      const d =
-                        typeof orderDetail.created_at === "string"
-                          ? new Date(orderDetail.created_at)
-                          : orderDetail.created_at instanceof Date
-                          ? orderDetail.created_at
-                          : null;
-                      return d
-                        ? d
-                            .toLocaleString("vi-VN", {
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                              hour12: false,
-                            })
-                            .replace(",", "")
-                        : "--";
-                    })()
-                  : "--",
-                orderDetail.order?.sale_by?.fullName ||
-                  orderDetail.order?.sale_by?.username ||
-                  "--",
-                orderDetail.customer_name || "--",
-                orderDetail.raw_item || "--",
-                orderDetail.quantity ?? "--",
-                orderDetail.unit_price
-                  ? Number(orderDetail.unit_price).toLocaleString("vi-VN") + "₫"
-                  : "--",
-                // Map trạng thái
-                (() => {
-                  switch (orderDetail.status) {
-                    case "pending":
-                      return "Chờ xử lý";
-                    case "quoted":
-                      return "Chưa chốt";
-                    case "completed":
-                      return "Đã chốt";
-                    case "demand":
-                      return "Nhu cầu";
-                    case "confirmed":
-                      return "Đã phản hồi";
-                    default:
-                      return "--";
-                  }
-                })(),
-                orderDetail.notes || "--",
-              ]),
-            })}
+            getExportData={() => {
+              const filtersDescription = (
+                <div className="flex items-center justify-start gap-4">
+                  {(isAdmin || isPMUser) && (
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        aria-label="Bao gồm đơn ẩn"
+                        checked={includeHiddenExport}
+                        onCheckedChange={(v: any) => setIncludeHiddenExport(Boolean(v))}
+                      />
+                      <div className="text-sm">Bao gồm đơn ẩn</div>
+                    </div>
+                  )}
+                </div>
+              );
+
+              return {
+                headers: [
+                  "STT",
+                  "Mã Đơn",
+                  "Gia Hạn",
+                  "Thời Gian Tạo Đơn Hàng",
+                  "Tên Nhân Viên",
+                  "Tên Khách Hàng",
+                  "Tên Mặt Hàng",
+                  "Số Lượng",
+                  "Đơn Giá",
+                  "Trạng Thái",
+                  "Ghi Chú",
+                ],
+                data: orders.map((orderDetail, idx) => [
+                  idx + 1,
+                  orderDetail.id ?? "--",
+                  calculateDynamicExtended(orderDetail.created_at, orderDetail.extended),
+                  orderDetail.created_at
+                    ? (() => {
+                        const d =
+                          typeof orderDetail.created_at === "string"
+                            ? new Date(orderDetail.created_at)
+                            : orderDetail.created_at instanceof Date
+                            ? orderDetail.created_at
+                            : null;
+                        return d
+                          ? d
+                              .toLocaleString("vi-VN", {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                                hour12: false,
+                              })
+                              .replace(",", "")
+                          : "--";
+                      })()
+                    : "--",
+                  orderDetail.order?.sale_by?.fullName ||
+                    orderDetail.order?.sale_by?.username ||
+                    "--",
+                  orderDetail.customer_name || "--",
+                  orderDetail.raw_item || "--",
+                  orderDetail.quantity ?? "--",
+                  orderDetail.unit_price
+                    ? Number(orderDetail.unit_price).toLocaleString("vi-VN") + "₫"
+                    : "--",
+                  (() => {
+                    switch (orderDetail.status) {
+                      case "pending":
+                        return "Chờ xử lý";
+                      case "quoted":
+                        return "Chưa chốt";
+                      case "completed":
+                        return "Đã chốt";
+                      case "demand":
+                        return "Nhu cầu";
+                      case "confirmed":
+                        return "Đã phản hồi";
+                      default:
+                        return "--";
+                    }
+                  })(),
+                  orderDetail.notes || "--",
+                ]),
+                filtersDescription,
+              };
+            }}
             getExportAllData={getExportAllData}
             initialFilters={memoizedInitialFilters}
-            toggles={
-              isAdmin
-                ? [
-                    {
-                      id: "includeHiddenExport",
-                      label: "Xuất kèm đơn bị ẩn",
-                      tooltip: "Chỉ dành cho Admin",
-                      checked: includeHiddenExport,
-                      onChange: setIncludeHiddenExport,
-                    },
-                  ]
-                : []
-            }
+            
           >
             <OrderManagement
               orders={orders}
