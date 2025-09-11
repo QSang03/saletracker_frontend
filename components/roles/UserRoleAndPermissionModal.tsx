@@ -31,6 +31,7 @@ export interface UserRoleAndPermissionModalProps {
     permissionIds: number[];
     rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
     viewSubRoleName?: string; // Thêm thông tin để backend tạo role "view con"
+  pmPrivateRoleName?: string; // Thêm thông tin để backend tạo role pm riêng
   }) => Promise<void>;
   onSaveSuccess?: () => void; // Callback khi lưu thành công
 }
@@ -148,14 +149,16 @@ export default function UserRoleAndPermissionModal({
   }, [rolesGrouped.main, rolesGrouped.sub, selectedMainRoles, selectedSubRoles]);
 
   // Kiểm tra có PM phụ (pm-phongban) nào được chọn không
+  // pm department sub roles (pm-<dep> or pm_<dep>) – exclude personal pm_<username>
   const hasPMSubRoles = useMemo(() => {
     const idToName = new Map<number, string>();
     rolesGrouped.sub.forEach((r) => idToName.set(r.id, (r.name || "").toLowerCase()));
     return selectedSubRoles.some((id) => {
       const name = idToName.get(id) || "";
-      return name.startsWith("pm-") || name.startsWith("pm_");
+      if (name === `pm_${user.username.toLowerCase()}`) return false; // ignore private role
+      return (name.startsWith("pm-") || name.startsWith("pm_")) && !name.startsWith(`pm_${user.username.toLowerCase()}`);
     });
-  }, [rolesGrouped.sub, selectedSubRoles]);
+  }, [rolesGrouped.sub, selectedSubRoles, user.username]);
 
   // Kiểm tra có phòng ban nào được chọn không
   const hasSelectedDepartments = useMemo(() => {
@@ -167,45 +170,70 @@ export default function UserRoleAndPermissionModal({
     return permissions.filter((p) => (p.name || "").toLowerCase().startsWith("pm_"));
   }, [permissions]);
 
+  // Role pm_<username> (quyền riêng) nếu đã tồn tại
+  const pmPrivateRole = useMemo(() => {
+    return rolesGrouped.sub.find(r => (r.name || '').toLowerCase() === `pm_${user.username.toLowerCase()}`);
+  }, [rolesGrouped.sub, user.username]);
+
   // KHÔNG fetch API nữa, chỉ dùng rolePermissions prop
   const [rolePermissionsState, setRolePermissionsState] = useState<{ roleId: number; permissionId: number; isActive: boolean }[]>(rolePermissions);
 
   // Kiểm tra có quyền PM nào đang được chọn không
+  const activePrivatePermissionIds = useMemo(() => {
+    // Nếu role pm_<username> chưa tồn tại, dùng các entry placeholder roleId=0
+    const targetRoleId = pmPrivateRole?.id;
+    return rolePermissionsState
+      .filter(rp => {
+        if (!rp.isActive) return false;
+        if (targetRoleId) return rp.roleId === targetRoleId;
+        // chưa có role => chấp nhận roleId=0 làm placeholder
+        return rp.roleId === 0;
+      })
+      .filter(rp => pmPermissions.some(p => p.id === rp.permissionId))
+      .map(rp => rp.permissionId);
+  }, [rolePermissionsState, pmPrivateRole, pmPermissions]);
+
   const hasSelectedPMPermissions = useMemo(() => {
-    const pmRole = rolesGrouped.main.find((r) => r.name === "pm");
+    if (activePrivatePermissionIds.length > 0) return true;
+    const pmRole = rolesGrouped.main.find(r => r.name === 'pm');
     if (!pmRole) return false;
-    
-    return rolePermissionsState.some((rp) => {
-      if (rp.roleId === pmRole.id && rp.isActive) {
-        const isPMPermission = pmPermissions.some((p) => p.id === rp.permissionId);
-        return isPMPermission;
-      }
-      return false;
-    });
-  }, [rolePermissionsState, pmPermissions, rolesGrouped.main]);
+    return rolePermissionsState.some(rp => rp.roleId === pmRole.id && rp.isActive && pmPermissions.some(p => p.id === rp.permissionId));
+  }, [activePrivatePermissionIds, rolePermissionsState, rolesGrouped.main, pmPermissions]);
 
   // Trạng thái đang dùng quyền riêng PM (đã bật ít nhất 1 quyền, có pm main và chưa có pm-sub)
   const pmPrivateActive = useMemo(() => {
-    return isPMSelected && hasSelectedPMPermissions && !hasPMSubRoles;
-  }, [isPMSelected, hasSelectedPMPermissions, hasPMSubRoles]);
+    return isPMSelected && !hasPMSubRoles && (activePrivatePermissionIds.length > 0 || hasSelectedPMPermissions);
+  }, [isPMSelected, hasPMSubRoles, activePrivatePermissionIds, hasSelectedPMPermissions]);
 
   // Tập id các pm-sub roles để tiện lọc
   const pmSubRoleIdSet = useMemo(() => {
+    const privateName = `pm_${user.username.toLowerCase()}`;
     return new Set(
       rolesGrouped.sub
         .filter((r) => {
           const name = (r.name || "").toLowerCase();
+          // include dept pm- / pm_ but exclude personal private pm_<username>
+          if (name === privateName) return false;
           return name.startsWith("pm-") || name.startsWith("pm_");
         })
         .map((r) => r.id)
     );
-  }, [rolesGrouped.sub]);
+  }, [rolesGrouped.sub, user.username]);
 
   // Danh sách sub role hiển thị: nếu đang active quyền riêng PM thì loại bỏ pm-phongban khỏi options
   const displayedSubRoleOptions = useMemo(() => {
-    if (!pmPrivateActive) return subRoleOptions;
-    return subRoleOptions.filter((opt) => !pmSubRoleIdSet.has(Number(opt.value)));
-  }, [pmPrivateActive, subRoleOptions, pmSubRoleIdSet]);
+    // Always hide personal pm_<username> from selector
+    const personal = `pm_${user.username.toLowerCase()}`;
+    const filtered = subRoleOptions.filter(opt => {
+      const role = rolesGrouped.sub.find(r => r.id === Number(opt.value));
+      const name = (role?.name || '').toLowerCase();
+      if (name === personal) return false;
+      return true;
+    });
+    if (!pmPrivateActive) return filtered;
+    // when private mode active, also hide department pm-* roles
+    return filtered.filter(opt => !pmSubRoleIdSet.has(Number(opt.value)));
+  }, [pmPrivateActive, subRoleOptions, pmSubRoleIdSet, rolesGrouped.sub, user.username]);
 
   // Hiển thị quyền riêng PM khi có role pm (main) và KHÔNG có pm-phongban được chọn
   // Hiển thị block quyền riêng PM khi có pm main và KHÔNG có pm-sub (kể cả khi chưa bật quyền nào để user chọn).
@@ -251,14 +279,15 @@ export default function UserRoleAndPermissionModal({
 
   const selectedPMRoleIds = useMemo(() => {
     const idToName = new Map<number, string>();
-    rolesGrouped.main.forEach((r) => idToName.set(r.id, r.name));
-    rolesGrouped.sub.forEach((r) => idToName.set(r.id, r.name));
+    rolesGrouped.main.forEach((r) => idToName.set(r.id, (r.name || '').toLowerCase()));
+    rolesGrouped.sub.forEach((r) => idToName.set(r.id, (r.name || '').toLowerCase()));
     const allSelected = [...selectedMainRoles, ...selectedSubRoles];
     return allSelected.filter((id) => {
-      const name = (idToName.get(id) || "").toLowerCase();
-      return name === "pm" || name.startsWith("pm-") || name.startsWith("pm_");
+      const name = idToName.get(id) || '';
+      if (name === `pm_${user.username.toLowerCase()}`) return false; // private role not shown in list
+      return name === 'pm' || name.startsWith('pm-') || name.startsWith('pm_');
     });
-  }, [rolesGrouped.main, rolesGrouped.sub, selectedMainRoles, selectedSubRoles]);
+  }, [rolesGrouped.main, rolesGrouped.sub, selectedMainRoles, selectedSubRoles, user.username]);
   const getPermissionIdsForRole = (
     roleName: string,
     depSlugs: string[] = []
@@ -790,69 +819,44 @@ export default function UserRoleAndPermissionModal({
       
       await onSave(saveData);
     } else {
-      // Logic lưu cho các role khác
+      // Logic lưu cho các role khác (bao gồm quyền riêng PM)
+      const pmPrivateRoleName = `pm_${user.username}`;
+      const pmPrivateRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName);
       const pmMain = rolesGrouped.main.find(r => r.name === 'pm');
-      // Tạo / tìm role phụ riêng cho PM (nếu có quyền PM riêng đang bật)
-      const pmPrivateRoleName = `pm_${user.username}`; // giống pattern view_<username>
-      let pmPrivateSubRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName);
 
-      // Detect pm private permissions currently active on pm main role (shared role)
-      let pmPrivateActivePermissions: { permissionId: number }[] = [];
-      if (pmMain) {
-        pmPrivateActivePermissions = rolePermissionsState
-          .filter(rp => rp.roleId === pmMain.id && rp.isActive && pmPermissions.some(p => p.id === rp.permissionId))
-          .map(rp => ({ permissionId: rp.permissionId }));
-      }
+      // Build rolePermissions gửi lên: tất cả role permissions hiện có (roleId>0) giữ lại
+      const keep = rolePermissionsState.filter(rp => rp.roleId > 0);
 
-      let selectedRoleIdsNow = [...selectedMainRoles, ...selectedSubRoles];
-
-      // If user has pm private active permissions, remap them to per-user sub role
-      let transformedRolePermissions = [...rolePermissionsState];
-      if (pmPrivateActivePermissions.length > 0 && pmMain) {
-        // Bước 1: Đảm bảo đã có role pm_<username>
-        let pmPrivateSubRoleId = pmPrivateSubRole?.id;
-        if (!pmPrivateSubRoleId) {
-          try {
-            await onSave({
-              departmentIds: selectedDepartments,
-              roleIds: [...selectedMainRoles],
-              permissionIds: [],
-              rolePermissions: [],
-              pmPrivateRoleName: pmPrivateRoleName,
-            } as any);
-          } catch (e) {
-            console.warn('Create pm private role failed (first call):', e);
+      // Thêm placeholder 0 cho quyền riêng nếu chưa có role pm_<username>
+      const privateSelections = rolePermissionsState.filter(rp => rp.roleId === (pmPrivateRole?.id ?? 0) || (rp.roleId === 0));
+      const activePrivate = privateSelections.filter(rp => rp.isActive);
+      const privatePermissionIds = Array.from(new Set(activePrivate.map(rp => rp.permissionId)));
+      if (!pmPrivateRole && privatePermissionIds.length > 0) {
+        // dùng roleId=0 giữ chỗ
+        privatePermissionIds.forEach(pid => {
+          if (!keep.some(k => k.roleId === 0 && k.permissionId === pid)) {
+            keep.push({ roleId: 0, permissionId: pid, isActive: true });
           }
-        }
-        // Giả sử parent không refetch ngay, tạm lấy lại từ rolesGrouped (cần parent gọi reload sau save thành công).
-        pmPrivateSubRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName) || pmPrivateSubRole;
-        pmPrivateSubRoleId = pmPrivateSubRole?.id;
-        if (!pmPrivateSubRoleId) {
-          // fallback: bỏ qua attach để tránh gửi roleId=0 sai
-          console.warn('Chưa có id role pm private -> bỏ qua gán permissions vòng này');
-        } else {
-          transformedRolePermissions = transformedRolePermissions.filter(rp => !(rp.roleId === pmMain.id && pmPermissions.some(p => p.id === rp.permissionId)));
-          pmPrivateActivePermissions.forEach(pp => {
-            transformedRolePermissions.push({ roleId: pmPrivateSubRoleId!, permissionId: pp.permissionId, isActive: true });
-          });
-          if (!selectedRoleIdsNow.includes(pmPrivateSubRoleId)) selectedRoleIdsNow.push(pmPrivateSubRoleId);
-        }
+        });
+      } else if (pmPrivateRole) {
+        // đảm bảo entry roleId đúng id role private
+        privatePermissionIds.forEach(pid => {
+          if (!keep.some(k => k.roleId === pmPrivateRole.id && k.permissionId === pid)) {
+            keep.push({ roleId: pmPrivateRole.id, permissionId: pid, isActive: true });
+          }
+        });
       }
 
-      // Filter permissions by selected roles only
-  // Chỉ gửi rolePermissions có roleId hợp lệ > 0
-  const uniqueRolePermissions = transformedRolePermissions.filter(rp => typeof rp.roleId === 'number' && rp.roleId > 0 && selectedRoleIdsNow.includes(rp.roleId));
-      const permissionIds = Array.from(new Set(uniqueRolePermissions.filter(rp => rp.isActive).map(rp => rp.permissionId)));
-
-      // Nếu chưa có pmPrivateSubRole mà vẫn có pmPrivateActivePermissions => backend cần tạo role, không gửi roleId=0
-  const finalRoleIds = selectedRoleIdsNow.filter(rid => typeof rid === 'number' && rid > 0);
+      // roleIds gửi lên không bao gồm roleId=0
+      const roleIds = Array.from(new Set([...selectedMainRoles, ...selectedSubRoles, pmPrivateRole?.id].filter(Boolean))) as number[];
+      const permissionIds = Array.from(new Set(keep.filter(rp => rp.isActive && rp.roleId !== 0).map(rp => rp.permissionId).concat(privatePermissionIds)));
       const payload: any = {
         departmentIds: selectedDepartments,
-        roleIds: finalRoleIds,
+        roleIds,
         permissionIds,
-        rolePermissions: uniqueRolePermissions,
+        rolePermissions: keep,
       };
-  if (pmPrivateActivePermissions.length > 0) payload.pmPrivateRoleName = pmPrivateRoleName;
+      if (privatePermissionIds.length > 0) payload.pmPrivateRoleName = pmPrivateRoleName;
       await onSave(payload);
     }
     
@@ -1079,21 +1083,13 @@ export default function UserRoleAndPermissionModal({
                         <div className="font-semibold text-lg">PM - Quyền riêng</div>
                         <label className="flex items-center gap-2 text-sm">
                           <Checkbox
-                            checked={pmPermissions.every((perm) => selectedPMRoleIds.some((rid) => isPermissionActive(perm.id, rid)))}
+                            checked={pmPermissions.every(p => activePrivatePermissionIds.includes(p.id)) && pmPermissions.length>0}
                             onCheckedChange={(checked) => {
-                              setRolePermissionsState((prev) => {
-                                const updated = [...prev];
-                                pmPermissions.forEach((permission) => {
-                                  selectedPMRoleIds.forEach((roleId) => {
-                                    const idx = updated.findIndex(
-                                      (rp) => rp.roleId === roleId && rp.permissionId === permission.id
-                                    );
-                                    if (idx !== -1) {
-                                      updated[idx] = { ...updated[idx], isActive: !!checked };
-                                    } else {
-                                      updated.push({ roleId, permissionId: permission.id, isActive: !!checked });
-                                    }
-                                  });
+                              const targetRoleId = pmPrivateRole?.id ?? 0; // 0 => backend map sau khi tạo
+                              setRolePermissionsState(prev => {
+                                const updated = prev.filter(rp => !(rp.roleId === targetRoleId && pmPermissions.some(p => p.id === rp.permissionId)));
+                                pmPermissions.forEach(p => {
+                                  updated.push({ roleId: targetRoleId, permissionId: p.id, isActive: !!checked });
                                 });
                                 return updated;
                               });
@@ -1103,25 +1099,22 @@ export default function UserRoleAndPermissionModal({
                         </label>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
-                        {pmPermissions.map((permission) => {
-                          const isActive = selectedPMRoleIds.some((roleId) => isPermissionActive(permission.id, roleId));
+                        {pmPermissions.map(permission => {
+                          const targetRoleId = pmPrivateRole?.id ?? 0;
+                          const isActive = activePrivatePermissionIds.includes(permission.id);
                           return (
                             <label key={permission.id} className="flex items-center gap-2">
                               <Checkbox
                                 checked={isActive}
                                 onCheckedChange={(checked) => {
-                                  setRolePermissionsState((prev) => {
+                                  setRolePermissionsState(prev => {
                                     const updated = [...prev];
-                                    selectedPMRoleIds.forEach((roleId) => {
-                                      const idx = updated.findIndex(
-                                        (rp) => rp.roleId === roleId && rp.permissionId === permission.id
-                                      );
-                                      if (idx !== -1) {
-                                        updated[idx] = { ...updated[idx], isActive: !!checked };
-                                      } else {
-                                        updated.push({ roleId, permissionId: permission.id, isActive: !!checked });
-                                      }
-                                    });
+                                    const idx = updated.findIndex(rp => rp.roleId === targetRoleId && rp.permissionId === permission.id);
+                                    if (idx !== -1) {
+                                      updated[idx] = { ...updated[idx], isActive: !!checked };
+                                    } else {
+                                      updated.push({ roleId: targetRoleId, permissionId: permission.id, isActive: !!checked });
+                                    }
                                     return updated;
                                   });
                                 }}

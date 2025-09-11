@@ -127,9 +127,8 @@ export default function RoleTable({
           permissions={permissions}
           rolePermissions={allRolePermissions.filter(rp => selectedUser.roles.some(role => role.id === rp.roleId))}
           onClose={() => setShowModal(false)}
-          onSave={(data) =>
-            onUpdateUserRolesPermissions(selectedUser.id, data)
-          }
+          onSave={(data) => onUpdateUserRolesPermissions(selectedUser.id, data)}
+          onSaveSuccess={onReload}
         />
       )}
     </>

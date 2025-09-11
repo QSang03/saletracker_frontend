@@ -15,7 +15,14 @@ export interface RoleManagementProps {
   allRolePermissions: RolePermission[];
   onUpdateUserRolesPermissions: (
     userId: number,
-    data: { departmentIds: number[]; roleIds: number[]; permissionIds: number[] }
+    data: {
+      departmentIds: number[];
+      roleIds: number[];
+      permissionIds: number[];
+      rolePermissions?: { roleId: number; permissionId: number; isActive: boolean }[];
+      viewSubRoleName?: string;
+      pmPrivateRoleName?: string;
+    }
   ) => Promise<void>;
 }
 
