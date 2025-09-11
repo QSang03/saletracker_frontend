@@ -315,37 +315,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Kiểm tra PM chỉ có quyền riêng (permissions) mà không có phòng ban cụ thể
   const isPMWithPermissionsOnly = isPM && hasPMPermissions() && !hasPMSpecificRoles();
 
-  // Helper function để tạo brandCategories combinations từ PM permissions
-  const createBrandCategoriesFromPermissions = (): string => {
+  // Helper: lấy danh sách permissions thô (không tạo combination) theo chuẩn pm_cat_/pm_brand_
+  const extractPmCatBrandPermissions = (): { categories: string[]; brands: string[] } => {
     const pmPermissions = getPMPermissions();
-    const categoryPermissions: string[] = [];
-    const brandPermissions: string[] = [];
-    
-          pmPermissions.forEach(permission => {
-            if (permission && typeof permission === 'string') {
-              if (permission.toLowerCase().startsWith('cat_')) {
-                categoryPermissions.push(permission);
-              } else if (permission.toLowerCase().startsWith('brand_')) {
-                brandPermissions.push(permission);
-              } else {
-                // Nếu không xác định được, coi như category
-                categoryPermissions.push(permission);
-              }
-            }
-          });
-    
-    if (categoryPermissions.length > 0 && brandPermissions.length > 0) {
-      const combinations: string[] = [];
-      categoryPermissions.forEach(cat => {
-        brandPermissions.forEach(brand => {
-          combinations.push(`${cat}+${brand}`);
-        });
-      });
-      return combinations.join(',');
-    } else {
-      const allPermissions = [...categoryPermissions, ...brandPermissions];
-      return allPermissions.join(',');
-    }
+    const categories: string[] = [];
+    const brands: string[] = [];
+    pmPermissions.forEach(p => {
+      if (!p || typeof p !== 'string') return;
+      const lower = p.toLowerCase();
+      if (lower.startsWith('pm_cat_')) categories.push(p);
+      else if (lower.startsWith('pm_brand_')) brands.push(p);
+    });
+    return { categories, brands };
   };
 
   // Compute available employees based on selected departments (or PM-accessible departments for non-admin)
@@ -450,14 +431,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // Thêm brandCategories cho PM chỉ có quyền riêng
       if (isPMWithPermissionsOnly) {
         if (effBrandCategoriesCsv) {
-          // Gửi brandCategories (có thể là combinations hoặc permissions gốc)
           params.set('brandCategories', effBrandCategoriesCsv);
         } else {
-          // Nếu không có brandCategories được chọn, tự động tạo từ permissions
-          const brandCategoriesCsv = createBrandCategoriesFromPermissions();
-          if (brandCategoriesCsv) {
-            params.set('brandCategories', brandCategoriesCsv);
-          }
+          const { categories: autoCats, brands: autoBrands } = extractPmCatBrandPermissions();
+          const autoList = [...autoCats, ...autoBrands];
+            if (autoList.length > 0) params.set('brandCategories', autoList.join(','));
         }
       }
       
@@ -595,47 +573,23 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         let brandCategories: any[] = [];
         
         if (isPMWithPermissionsOnly) {
-          const pmPermissions = getPMPermissions();
-          
-          // Phân biệt category và brand permissions
-          const categoryPermissions: string[] = [];
-          const brandPermissions: string[] = [];
-          
-          pmPermissions.forEach(permission => {
-            if (permission && typeof permission === 'string') {
-              if (permission.toLowerCase().startsWith('cat_')) {
-                categoryPermissions.push(permission);
-              } else if (permission.toLowerCase().startsWith('brand_')) {
-                brandPermissions.push(permission);
-              } else {
-                // Nếu không xác định được, coi như category
-                categoryPermissions.push(permission);
-              }
-            }
-          });
-          
-          // Tạo combinations: nếu có cả category và brand, tạo tất cả combinations
-          // Nếu chỉ có category hoặc chỉ có brand, sử dụng trực tiếp
-          if (categoryPermissions.length > 0 && brandPermissions.length > 0) {
-            // Tạo tất cả combinations
-            const combinations: string[] = [];
-            categoryPermissions.forEach(cat => {
-              brandPermissions.forEach(brand => {
-                combinations.push(`${cat}+${brand}`);
+          const { categories: catPerms, brands: brandPerms } = extractPmCatBrandPermissions();
+          const combo: { value: string; label: string }[] = [];
+          if (catPerms.length > 0 && brandPerms.length > 0) {
+            catPerms.forEach(c => {
+              brandPerms.forEach(b => {
+                combo.push({
+                  value: `${c}+${b}`,
+                  label: `${c.replace('pm_cat_','Cat_')}+${b.replace('pm_brand_','Brand_')}`
+                });
               });
             });
-            brandCategories = combinations.map(combination => ({
-              value: combination,
-              label: combination.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            }));
-          } else {
-            // Sử dụng trực tiếp permissions
-            const allPermissions = [...categoryPermissions, ...brandPermissions];
-            brandCategories = allPermissions.map(permission => ({
-              value: permission,
-              label: permission.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-            }));
           }
+          const singles = [...catPerms, ...brandPerms].map(p => ({
+            value: p,
+            label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
+          }));
+          brandCategories = combo.length > 0 ? combo : singles;
         }
         
         setFilterOptions({ 
@@ -1162,6 +1116,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       "Thời Gian Tạo Đơn Hàng",
       "Tên Nhân Viên",
       "Tên Khách Hàng",
+      "Mã Sản Phẩm",
       "Tên Mặt Hàng",
       "Số Lượng",
       "Đơn Giá",
@@ -1205,6 +1160,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   getEmployeeDisplay(o),
       // Tên Khách Hàng
       o.customer_name || "--",
+      // Mã Sản Phẩm
+      o.product?.productCode || o.productCode || "--",
       // Tên Mặt Hàng
       o.raw_item || o.items?.map((it: any) => it.name).join(", ") || "--",
       // Số Lượng
@@ -1310,13 +1267,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     // Thêm brandCategories cho PM chỉ có quyền riêng trong export
     if (isPMWithPermissionsOnly) {
       if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
-        params.set("brandCategories", brandCategoriesSelected.join(","));
+        params.set('brandCategories', brandCategoriesSelected.join(','));
       } else {
-        // Tự động tạo combinations từ permissions
-        const brandCategoriesCsv = createBrandCategoriesFromPermissions();
-        if (brandCategoriesCsv) {
-          params.set("brandCategories", brandCategoriesCsv);
-        }
+        const { categories: autoCatsExp, brands: autoBrandsExp } = extractPmCatBrandPermissions();
+        const autoListExp = [...autoCatsExp, ...autoBrandsExp];
+        if (autoListExp.length > 0) params.set('brandCategories', autoListExp.join(','));
       }
     }
 
@@ -1371,6 +1326,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Tên Nhân Viên - use shared resolver to find best candidate
   getEmployeeDisplay(o),
       o.customer_name || "--",
+      // Mã Sản Phẩm
+      o.product?.productCode || o.productCode || "--",
       o.raw_item || (o.items ? o.items.map((it: any) => it.name).join(", ") : "--") || "--",
       o.quantity ?? "--",
       o.unit_price ? Number(o.unit_price).toLocaleString("vi-VN") + "₫" : (o.total_amount != null ? Number(o.total_amount).toLocaleString("vi-VN") + "₫" : "--"),

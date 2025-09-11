@@ -697,6 +697,7 @@ function ManagerOrderContent() {
         orderDetail.order?.sale_by?.username ||
         "--",
       orderDetail.customer_name || "--",
+      orderDetail.product?.productCode || "--",
       orderDetail.raw_item || "--",
       orderDetail.quantity ?? "--",
       orderDetail.unit_price
@@ -1040,6 +1041,7 @@ function ManagerOrderContent() {
                   "Thời Gian Tạo Đơn Hàng",
                   "Tên Nhân Viên",
                   "Tên Khách Hàng",
+                  "Mã Sản Phẩm",
                   "Tên Mặt Hàng",
                   "Số Lượng",
                   "Đơn Giá",
@@ -1077,6 +1079,7 @@ function ManagerOrderContent() {
                     orderDetail.order?.sale_by?.username ||
                     "--",
                   orderDetail.customer_name || "--",
+                  orderDetail.product?.productCode || "--",
                   orderDetail.raw_item || "--",
                   orderDetail.quantity ?? "--",
                   orderDetail.unit_price
@@ -1126,6 +1129,7 @@ function ManagerOrderContent() {
               currentSortField={filters.sortField}
               currentSortDirection={filters.sortDirection}
               loading={isLoading}
+              showProductCode={true}
             />
           </PaginatedTable>
         </CardContent>
