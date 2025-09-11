@@ -12,8 +12,10 @@ import {
 import { User } from "@/types";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Volume2, VolumeX, MessageSquare, MessageSquareOff } from "lucide-react";
+import { Volume2, VolumeX, MessageSquare, MessageSquareOff, Eye } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import ZaloLinkStatusTimeline from "@/components/user/ZaloLinkStatusTimeline";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 interface ZaloTableProps {
@@ -26,6 +28,7 @@ interface ZaloTableProps {
   expectedRowCount?: number;
   listeningStates?: Record<number, boolean>;
   autoMessageStates?: Record<number, boolean>;
+  onSelectUser?: (user: User) => void;
 }
 
 export default React.memo(function ZaloTable({
@@ -37,7 +40,8 @@ export default React.memo(function ZaloTable({
   onRequestListeningConfirm,
   onRequestAutoMessageConfirm,
   listeningStates: listeningStatesProp = {},
-  autoMessageStates = {}
+  autoMessageStates = {},
+  onSelectUser,
 }: ZaloTableProps) {
   // State để trigger animation mỗi lần bật
   const [listeningAnim, setListeningAnim] = useState<Record<number, boolean>>({});
@@ -181,7 +185,7 @@ export default React.memo(function ZaloTable({
     "Trạng Thái Liên Kết",
     "Tên Zalo",
     "Giới Tính",
-    "Thao Tác",
+  "Thao Tác",
   ];
 
   const centerIndexes = [0, 1, 3, 4];
@@ -212,6 +216,15 @@ export default React.memo(function ZaloTable({
     }
   };
 
+  // Modal state
+  const [logUser, setLogUser] = useState<User | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const openLogModal = (user: User) => {
+    setLogUser(user);
+    setOpen(true);
+  };
+
   return (
     <div className="border rounded-xl overflow-x-auto shadow-inner">
       <Table className="min-w-[900px]">
@@ -239,9 +252,10 @@ export default React.memo(function ZaloTable({
             return (
               <TableRow
                 key={user.id}
-                className={`transition-all border-b border-gray-400 ${
+                className={`transition-all border-b border-gray-400 cursor-pointer hover:bg-blue-50 dark:hover:bg-muted ${
                   isEven ? "bg-gray-200" : "bg-white dark:bg-muted/20"
                 }`}
+                onClick={() => onSelectUser && onSelectUser(user)}
               >
                 <TableCell className={cellCenterClass}>
                   {startIndex + index + 1}
@@ -274,6 +288,21 @@ export default React.memo(function ZaloTable({
                 </TableCell>
                 <TableCell className={cellLeftClass}>
                   <div className="flex items-center justify-center gap-3">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openLogModal(user); }}
+                        className="h-8 w-8 flex items-center justify-center rounded border bg-background hover:bg-muted"
+                        aria-label="Xem lịch sử liên kết"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Lịch sử liên kết</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                     <Toggle
@@ -338,6 +367,18 @@ export default React.memo(function ZaloTable({
           })}
         </TableBody>
       </Table>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Lịch sử liên kết Zalo {logUser?.fullName ? `- ${logUser.fullName}` : ''}</DialogTitle>
+          </DialogHeader>
+          {logUser && (
+            <div className="mt-2">
+              <ZaloLinkStatusTimeline userId={logUser.id} autoRefreshMs={10000} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });

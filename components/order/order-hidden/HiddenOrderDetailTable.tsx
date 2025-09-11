@@ -96,8 +96,23 @@ export default function HiddenOrderManagement({
   });
 
   // ✅ Transform filters for PaginatedTable
-  const paginatedFilters: Filters = useMemo(
-    () => ({
+  const paginatedFilters: Filters = useMemo(() => {
+    // Transform employee IDs back to composite format for PaginatedTable
+    const employeeValues = filters.employees
+      ? filters.employees.split(",").filter(Boolean).map((empId: string) => {
+          // Find the department and user to reconstruct the composite value
+          const foundUser = filterOptions.departments?.find((d: any) => 
+            d.users?.some((user: any) => (user.value || user.id) == empId)
+          );
+          if (foundUser) {
+            const foundUserObj = foundUser.users.find((user: any) => (user.value || user.id) == empId);
+            return `${foundUser.id || foundUser.value || 'dept'}_${foundUserObj.value || foundUserObj.id}`;
+          }
+          return empId; // Fallback to original value
+        })
+      : [];
+
+    return {
       search: filters.search || "",
       departments: filters.departments
         ? filters.departments.split(",").filter(Boolean)
@@ -106,22 +121,63 @@ export default function HiddenOrderManagement({
       statuses: filters.status ? filters.status.split(",").filter(Boolean) : [],
       categories: [],
       brands: [],
+  brandCategories: [], // ✅ bổ sung cho type Filters
       warningLevels: [],
       dateRange: filters.hiddenDateRange || { from: undefined, to: undefined },
-      employees: filters.employees
-        ? filters.employees.split(",").filter(Boolean)
-        : [],
+      employees: employeeValues,
       zaloLinkStatuses: [],
-    }),
-    [filters]
-  );
+    };
+  }, [filters, filterOptions.departments]);
 
-  // ✅ Handle filter changes from PaginatedTable
+  // ✅ Handle filter changes from PaginatedTable với logic động
   const handleFilterChange = (newFilters: Filters) => {
+    // Extract actual employee IDs from the composite values (dept_id format)
+    const employeeIds = newFilters.employees.map(empValue => {
+      if (typeof empValue === 'string' && empValue.includes('_')) {
+        return empValue.split('_')[1]; // Get the user ID part after the underscore
+      }
+      return empValue;
+    });
+
+    // ✅ LOGIC MỚI: Khi chọn nhân viên → cập nhật phòng ban
+    let finalDepartments = newFilters.departments;
+    if (employeeIds.length > 0 && newFilters.departments.length === 0) {
+      // Nếu chọn nhân viên nhưng chưa chọn phòng ban, tự động chọn phòng ban của nhân viên đó
+      const selectedEmployeeDepartments = new Set<string>();
+      employeeIds.forEach(empId => {
+        const foundDept = filterOptions.departments?.find((d: any) => 
+          d.users?.some((user: any) => (user.value || user.id) == empId)
+        );
+        if (foundDept) {
+          selectedEmployeeDepartments.add(String(foundDept.id || foundDept.value));
+        }
+      });
+      finalDepartments = Array.from(selectedEmployeeDepartments);
+    }
+
+    // ✅ LOGIC MỚI: Khi chọn phòng ban → cập nhật nhân viên (nếu cần)
+    let finalEmployees = employeeIds;
+    if (newFilters.departments.length > 0 && employeeIds.length === 0) {
+      // Nếu chọn phòng ban nhưng chưa chọn nhân viên, giữ nguyên (không tự động chọn nhân viên)
+      finalEmployees = [];
+    } else if (newFilters.departments.length > 0 && employeeIds.length > 0) {
+      // Nếu đã chọn cả phòng ban và nhân viên, lọc nhân viên theo phòng ban đã chọn
+      const validEmployeeIds = new Set<string>();
+      employeeIds.forEach(empId => {
+        const foundDept = filterOptions.departments?.find((d: any) => 
+          d.users?.some((user: any) => (user.value || user.id) == empId)
+        );
+        if (foundDept && newFilters.departments.includes(String(foundDept.id || foundDept.value))) {
+          validEmployeeIds.add(String(empId));
+        }
+      });
+      finalEmployees = Array.from(validEmployeeIds);
+    }
+    
     updateFilters({
-      departments: newFilters.departments.join(","),
+      departments: finalDepartments.join(","),
       status: newFilters.statuses.join(","),
-      employees: newFilters.employees.join(","),
+      employees: finalEmployees.join(","),
       hiddenDateRange: newFilters.dateRange,
       page: 1,
       search: newFilters.search || "",
@@ -505,7 +561,34 @@ export default function HiddenOrderManagement({
         onResetFilter={handlePaginatedTableReset}
         enableZaloLinkStatusFilter={false}
         enablePageSize={true}
-        availableDepartments={filterOptions.departments || []}
+        availableDepartments={useMemo(() => {
+          // ✅ LOGIC MỚI: Lọc phòng ban theo nhân viên đã chọn
+          if (filters.employees && filters.employees.trim()) {
+            const selectedEmpIds = filters.employees.split(',').filter(Boolean);
+            const selectedDeptIds = new Set<string>();
+            
+            selectedEmpIds.forEach((empId: string) => {
+              const foundDept = filterOptions.departments?.find((d: any) => 
+                d.users?.some((user: any) => (user.value || user.id) == empId)
+              );
+              if (foundDept) {
+                selectedDeptIds.add(String(foundDept.id || foundDept.value));
+              }
+            });
+            
+            return filterOptions.departments
+              ?.filter((d: any) => selectedDeptIds.has(String(d.id || d.value)))
+              ?.map((d: any) => ({
+                label: d.label,
+                value: String(d.id || d.value)
+              })) || [];
+          }
+          // Nếu không chọn nhân viên nào, hiển thị tất cả phòng ban
+          return filterOptions.departments?.map((d: any) => ({
+            label: d.label,
+            value: String(d.id || d.value)
+          })) || [];
+        }, [filterOptions.departments, filters.employees])}
         availableStatuses={[
           { value: "pending", label: "Chờ xử lý" },
           { value: "completed", label: "Hoàn thành" },
@@ -513,9 +596,27 @@ export default function HiddenOrderManagement({
           { value: "quoted", label: "Báo giá" },
           { value: "confirmed", label: "Xác nhận" },
         ]}
-        availableEmployees={
-          filterOptions.departments?.flatMap((d: any) => d.users || []) || []
-        }
+        availableEmployees={useMemo(() => {
+          // ✅ LOGIC MỚI: Lọc nhân viên theo phòng ban đã chọn
+          if (filters.departments && filters.departments.trim()) {
+            const selectedDeptIds = filters.departments.split(',').filter(Boolean);
+            return filterOptions.departments
+              ?.filter((d: any) => selectedDeptIds.includes(String(d.id || d.value)))
+              ?.flatMap((d: any) => 
+                d.users?.map((user: any) => ({
+                  value: `${d.id || d.value || 'dept'}_${user.value || user.id}`,
+                  label: user.label || user.fullName || user.username
+                })) || []
+              ) || [];
+          }
+          // Nếu không chọn phòng ban nào, hiển thị tất cả nhân viên
+          return filterOptions.departments?.flatMap((d: any) => 
+            d.users?.map((user: any) => ({
+              value: `${d.id || d.value || 'dept'}_${user.value || user.id}`,
+              label: user.label || user.fullName || user.username
+            })) || []
+          ) || [];
+        }, [filterOptions.departments, filters.departments])}
         dateRangeLabel="Ngày ẩn"
         page={filters.page}
         pageSize={filters.pageSize}

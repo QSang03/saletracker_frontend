@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 
 export interface BlacklistItem {
@@ -79,14 +79,17 @@ export const useBlacklist = () => {
 
   const fetchDepartmentOptions = useCallback(async () => {
     try {
+      // Khi có users được chọn, chỉ lấy các phòng ban tương ứng với users
+      const params =
+        filters.users.length > 0 ? `?users=${filters.users.join(",")}` : "";
       const response = await api.get(
-        "/order-blacklist/filter-options/departments"
+        `/order-blacklist/filter-options/departments${params}`
       );
       setDepartmentOptions(response.data);
     } catch (err) {
       console.error("Error fetching department options:", err);
     }
-  }, []);
+  }, [filters.users]);
 
   const fetchUserOptions = useCallback(async () => {
     try {
@@ -103,13 +106,84 @@ export const useBlacklist = () => {
     }
   }, [filters.departments]);
 
-  const setDepartments = useCallback((departments: number[]) => {
-    setFilters((prev) => ({ ...prev, departments, users: [], page: 1 })); // Reset users khi đổi departments
-  }, []);
+  // ✅ THÊM: Function để fetch departments dựa trên users
+  // Fetch department options specifically for selected users (returns the options for chaining logic)
+  const fetchDepartmentOptionsForUsers = useCallback(
+    async (userIds: number[]) => {
+      if (!userIds.length) return [] as Array<{ value: number; label: string }>;
+      try {
+        const params = `?users=${userIds.join(",")}`;
+        const response = await api.get(
+          `/order-blacklist/filter-options/departments${params}`
+        );
+        const data = response.data as Array<{ value: number; label: string }>;
+        setDepartmentOptions(data);
+        return data;
+      } catch (err) {
+        console.error(
+          "Error fetching department options for users:",
+          err
+        );
+        return [] as Array<{ value: number; label: string }>;
+      }
+    },
+    []
+  );
 
-  const setUsers = useCallback((users: number[]) => {
-    setFilters((prev) => ({ ...prev, users, page: 1 }));
-  }, []);
+  const prevDepartmentsRef = useRef<number[] | null>(null);
+
+  const setDepartments = useCallback((departments: number[]) => {
+    prevDepartmentsRef.current = filters.departments;
+    // Giữ lại users hiện tại, sẽ lọc lại sau khi userOptions mới tải về
+    setFilters((prev) => ({ ...prev, departments, page: 1 }));
+  }, [filters.departments]);
+
+  const setUsers = useCallback(
+    (users: number[]) => {
+      setFilters((prev) => ({ ...prev, users, page: 1 }));
+
+      // ✅ LOGIC: Khi chọn nhân viên → cập nhật lại danh sách phòng ban phù hợp
+      if (users.length > 0) {
+        fetchDepartmentOptionsForUsers(users).then((depOptions) => {
+          if (!depOptions.length) return; // nothing to sync
+          const depIds = depOptions.map((d) => d.value);
+          setFilters((prev) => {
+            // Nếu chưa chọn phòng ban nào → tự động chọn tất cả phòng ban thuộc các nhân viên đã chọn
+            if (prev.departments.length === 0) {
+              return { ...prev, departments: depIds };
+            }
+            // Nếu đã chọn nhưng có phòng ban không còn hợp lệ → lọc lại
+            const filtered = prev.departments.filter((id) => depIds.includes(id));
+            if (filtered.length !== prev.departments.length) {
+              return { ...prev, departments: filtered };
+            }
+            return prev; // không thay đổi
+          });
+        });
+      } else {
+  // Nếu bỏ chọn hết nhân viên → clear luôn departments và load lại toàn bộ options
+  setFilters((prev) => ({ ...prev, users: [], departments: [], page: 1 }));
+  fetchDepartmentOptions();
+      }
+    },
+    [fetchDepartmentOptionsForUsers, fetchDepartmentOptions]
+  );
+
+  // Khi departments thay đổi và userOptions đã cập nhật → lọc lại danh sách users đang chọn nếu không còn hợp lệ
+  useEffect(() => {
+    const prevDepartments = prevDepartmentsRef.current;
+    if (!prevDepartments) return; // skip first mount
+    // Nếu không có department nào -> giữ nguyên (toàn bộ users khả dụng sẽ được load)
+    if (filters.departments.length === 0) return;
+    if (filters.users.length === 0) return;
+    if (userOptions.length === 0) return; // chưa tải xong options
+
+    const validUserIds = new Set(userOptions.map((u) => u.value));
+    const filtered = filters.users.filter((uid) => validUserIds.has(uid));
+    if (filtered.length !== filters.users.length) {
+      setFilters((prev) => ({ ...prev, users: filtered }));
+    }
+  }, [filters.departments, userOptions]);
 
   // Update blacklist item (edit reason)
   const updateBlacklist = useCallback(
@@ -202,7 +276,7 @@ export const useBlacklist = () => {
     fetchBlacklists();
   }, [fetchBlacklists]);
 
-  // Fetch options when component mounts
+  // Fetch department options when component mounts and when users change
   useEffect(() => {
     fetchDepartmentOptions();
   }, [fetchDepartmentOptions]);

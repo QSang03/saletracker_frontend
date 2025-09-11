@@ -312,7 +312,8 @@ export default function UserManager() {
     }
   }, [error]);
 
-  const availableRoles = roles.map((role) => role.name);
+  const isAdmin = (currentUser?.roles || []).some(r => (r.name || '').toLowerCase() === 'admin');
+  const availableRoles = (roles.map((role) => role.name)).filter(r => isAdmin ? true : (r || '').toLowerCase() !== 'view');
   const availableDepartments = Array.from(
     new Set((Array.isArray(departments) ? departments : []).map((d) => d.name))
   );

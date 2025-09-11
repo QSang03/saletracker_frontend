@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import ZaloLinkStatusTimeline from "@/components/user/ZaloLinkStatusTimeline";
 import { LoadingSpinner } from "@/components/ui/custom/loading-spinner";
 import { getAccessToken } from "@/lib/auth";
 import { User } from "@/types";
@@ -33,6 +34,8 @@ export default function ZaloManager() {
     checked?: boolean;
     onConfirm?: (() => void) | null;
   }>({ type: null });
+
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   // State để quản lý trạng thái toggle của từng user
   const [listeningStates, setListeningStates] = useState<Record<number, boolean>>({});
@@ -364,6 +367,7 @@ export default function ZaloManager() {
               expectedRowCount={userLimit}
               listeningStates={listeningStates}
               autoMessageStates={autoMessageStates}
+              onSelectUser={(u) => setSelectedUser(u)}
             />
           </PaginatedTable>
         </CardContent>

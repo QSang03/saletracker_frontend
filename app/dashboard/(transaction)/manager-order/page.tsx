@@ -254,10 +254,18 @@ function ManagerOrderContent() {
     return filtered;
   }, [filters.departments, filterOptions.departments, allEmployeeOptions, isPMUser]);
 
-  const departmentOptions = isPMUser ? [] : filterOptions.departments.map((dept) => ({
-    label: dept.label,
-    value: dept.value.toString(),
-  }));
+  // Dynamic department options: when employees are selected, only include departments that contain those employees (like blacklist behavior)
+  const departmentOptions = useMemo(() => {
+    if (isPMUser) return [];
+    const all = filterOptions.departments.map((d) => ({ label: d.label, value: d.value.toString(), users: d.users }));
+    if (!filters.employees || filters.employees.trim() === '') {
+      return all.map(({ label, value }) => ({ label, value }));
+    }
+    const selectedEmployeeIds = filters.employees.split(',').filter((e) => e);
+    if (selectedEmployeeIds.length === 0) return all.map(({ label, value }) => ({ label, value }));
+    const subset = all.filter((dept) => dept.users.some((u) => selectedEmployeeIds.includes(String(u.value))));
+    return subset.map(({ label, value }) => ({ label, value }));
+  }, [isPMUser, filterOptions.departments, filters.employees]);
 
   const productOptions = filterOptions.products.map((product) => ({
     label: product.label,
@@ -337,18 +345,10 @@ function ManagerOrderContent() {
         quantityValue = undefined;
       }
 
-      // Handle warning levels
+      // Handle warning levels (now stored as value codes directly)
       let warningLevelValue = "";
       if (paginatedFilters.warningLevels.length > 0) {
-        const selectedWarningLevels = paginatedFilters.warningLevels.map(
-          (warningLabel) => {
-            const foundOption = warningLevelOptions.find(
-              (opt) => opt.label === warningLabel
-            );
-            return foundOption ? foundOption.value : warningLabel;
-          }
-        );
-        warningLevelValue = selectedWarningLevels.join(",");
+        warningLevelValue = paginatedFilters.warningLevels.join(",");
       }
 
       // Handle conversation type (group/personal)
@@ -760,10 +760,10 @@ function ManagerOrderContent() {
     }
   }, [error]);
 
-  // ✅ Clear employees when departments change
+  // ✅ Clear employees when departments change - CHỈ khi thực sự cần thiết
   useEffect(() => {
-    if (filters.departments && filters.employees) {
-      // Kiểm tra xem có employees nào không thuộc departments đã chọn không
+    // Chỉ xử lý khi có cả departments và employees, và filterOptions đã load xong
+    if (filters.departments && filters.employees && filterOptions.departments.length > 0) {
       const selectedDepartmentIds = filters.departments
         .split(",")
         .filter((d) => d);
@@ -787,9 +787,14 @@ function ManagerOrderContent() {
           validEmployeeIds.has(empId)
         );
 
-        if (validSelectedEmployees.length !== selectedEmployeeIds.length) {
+        // CHỈ cập nhật khi có employees không hợp lệ VÀ số lượng khác biệt đáng kể
+        if (validSelectedEmployees.length !== selectedEmployeeIds.length && 
+            validSelectedEmployees.length > 0) {
           // Có employees không hợp lệ, cần cập nhật
           setEmployees(validSelectedEmployees.join(","));
+        } else if (validSelectedEmployees.length === 0 && selectedEmployeeIds.length > 0) {
+          // Nếu không có employees hợp lệ nào, chỉ xóa khi departments thực sự thay đổi
+          // Không tự động xóa để tránh mất bộ lọc khi F5
         }
       }
     }
@@ -844,19 +849,10 @@ function ManagerOrderContent() {
 
   // Memoize initialFilters để tránh tạo object mới liên tục
   const memoizedInitialFilters = useMemo(() => {
-    const mappedWarningLevels = (() => {
-      if (!filters.warningLevel) return [];
-      const levels = filters.warningLevel
-        .split(",")
-        .filter((w) => w)
-        .map((value) => {
-          const foundOption = warningLevelOptions.find(
-            (opt) => opt.value === value
-          );
-          return foundOption ? foundOption.label : value;
-        });
-      return levels;
-    })();
+    // Store raw warning level values (match option.value); MultiSelectCombobox will map to labels
+    const parsedWarningLevels = filters.warningLevel
+      ? filters.warningLevel.split(",").filter((w) => w)
+      : [];
 
     const result = {
       search: filters.search || "",
@@ -871,7 +867,7 @@ function ManagerOrderContent() {
         ? filters.products.split(",").filter((p) => p)
         : [], // Products
       brands: [], // Không sử dụng brands nữa
-      warningLevels: mappedWarningLevels, // Mức độ cảnh báo
+  warningLevels: parsedWarningLevels, // Mức độ cảnh báo (values)
       dateRange:
         filters.dateRange && filters.dateRange.start && filters.dateRange.end
           ? {
@@ -902,7 +898,7 @@ function ManagerOrderContent() {
   filters.conversationType,
     filters.quantity,
     filters.employees,
-    JSON.stringify(warningLevelOptions), // Include warningLevelOptions to handle mapping changes
+  filters.warningLevel,
     isPMUser,
     user?.id,
   ]);
@@ -989,7 +985,6 @@ function ManagerOrderContent() {
             enableDateRangeFilter={true}
             enableEmployeeFilter={!isPMUser}
             enableDepartmentFilter={!isPMUser}
-            enableCategoriesFilter={true} // Sử dụng cho products
             enableWarningLevelFilter={true} // Thêm warning level filter
             enableConversationTypeFilter={true}
             enablePageSize={true}
@@ -997,7 +992,6 @@ function ManagerOrderContent() {
             availableStatuses={statusOptions}
             availableEmployees={isPMUser ? [] : filteredEmployeeOptions}
             availableDepartments={isPMUser ? [] : departmentOptions}
-            availableCategories={productOptions} // Products mapped to categories
             availableWarningLevels={warningLevelOptions} // Thay thế availableBrands
             enableQuantityFilter={true} // Bật bộ lọc số lượng
             quantityLabel="Số lượng"

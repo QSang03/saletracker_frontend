@@ -157,9 +157,14 @@ export interface Brand {
 
 export interface Product {
   id: number;
+  productCode?: string;
   productName: string;
+  // Backend returns a single ManyToOne relation named `category`
+  category?: Category;
+  // Some payloads may still provide an array; keep backward compatibility
   categories?: Category[];
   brand?: Brand;
+  description?: string | null;
 }
 
 // Order Entity

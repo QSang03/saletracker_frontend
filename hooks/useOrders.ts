@@ -798,29 +798,9 @@ export const useOrders = (): UseOrdersReturn => {
     [filters, updateFiltersAndUrl]
   );
 
-  const setEmployees = useCallback(
-    (employees: string, resetPage = true) => {
-      const newFilters = {
-        ...filters,
-        employees,
-        page: resetPage ? 1 : filters.page,
-      };
-      updateFiltersAndUrl(newFilters);
-    },
-    [filters, updateFiltersAndUrl]
-  );
-
-  const setDepartments = useCallback(
-    (departments: string, resetPage = true) => {
-      const newFilters = {
-        ...filters,
-        departments,
-        page: resetPage ? 1 : filters.page,
-      };
-      updateFiltersAndUrl(newFilters);
-    },
-    [filters, updateFiltersAndUrl]
-  );
+  // Placeholder declarations; real implementations moved below getFilterOptions to avoid temporal dead zone
+  let setEmployees: (employees: string, resetPage?: boolean) => void;
+  let setDepartments: (departments: string, resetPage?: boolean) => void;
 
   const setProducts = useCallback(
     (products: string, resetPage = true) => {
@@ -2038,6 +2018,119 @@ export const useOrders = (): UseOrdersReturn => {
       );
     }
   }, []);
+
+  // ================== Bidirectional Department/Employee Sync (like blacklist) ==================
+  // Helper parse functions
+  const parseIdString = (val?: string): number[] => {
+    if (!val) return [];
+    return val
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => !isNaN(n));
+  };
+  const joinIds = (ids: number[]) => ids.filter((v, i, a) => a.indexOf(v) === i).join(',');
+
+  setEmployees = (employees: string, resetPage: boolean = true) => {
+    (async () => {
+      const employeeIds = parseIdString(employees);
+      if (employeeIds.length === 0) {
+        updateFiltersAndUrl({
+          ...filters,
+          employees: '',
+          departments: '',
+          page: resetPage ? 1 : filters.page,
+        });
+        return;
+      }
+      let filterOptions: Awaited<ReturnType<typeof getFilterOptions>> | null = null;
+      try {
+        filterOptions = await getFilterOptions();
+      } catch {
+        updateFiltersAndUrl({
+          ...filters,
+          employees: joinIds(employeeIds),
+          page: resetPage ? 1 : filters.page,
+        });
+        return;
+      }
+      const deptUserMap = new Map<number, number[]>();
+      (filterOptions.departments || []).forEach((d: any) => {
+        const userIds = (d.users || []).map((u: any) => Number(u.value));
+        deptUserMap.set(Number(d.value), userIds);
+      });
+      const derivedDepartments = Array.from(deptUserMap.entries())
+        .filter(([_, uids]) => employeeIds.some((id) => uids.includes(id)))
+        .map(([deptId]) => deptId);
+      const currentDeptIds = parseIdString(filters.departments);
+      let finalDeptIds: number[];
+      if (currentDeptIds.length === 0) {
+        finalDeptIds = derivedDepartments;
+      } else {
+        finalDeptIds = currentDeptIds.filter((d) => derivedDepartments.includes(d));
+        if (finalDeptIds.length === 0) finalDeptIds = derivedDepartments;
+      }
+      updateFiltersAndUrl({
+        ...filters,
+        employees: joinIds(employeeIds),
+        departments: joinIds(finalDeptIds),
+        page: resetPage ? 1 : filters.page,
+      });
+    })();
+  };
+
+  setDepartments = (departments: string, resetPage: boolean = true) => {
+    (async () => {
+      const deptIds = parseIdString(departments);
+      const employeeIds = parseIdString(filters.employees);
+      if (deptIds.length === 0) {
+        updateFiltersAndUrl({
+          ...filters,
+          departments: '',
+          page: resetPage ? 1 : filters.page,
+        });
+        return;
+      }
+      if (employeeIds.length === 0) {
+        updateFiltersAndUrl({
+          ...filters,
+          departments: joinIds(deptIds),
+          page: resetPage ? 1 : filters.page,
+        });
+        return;
+      }
+      let filterOptions: Awaited<ReturnType<typeof getFilterOptions>> | null = null;
+      try {
+        filterOptions = await getFilterOptions();
+      } catch {
+        updateFiltersAndUrl({
+          ...filters,
+          departments: joinIds(deptIds),
+          page: resetPage ? 1 : filters.page,
+        });
+        return;
+      }
+      const userDeptMap = new Map<number, Set<number>>();
+      (filterOptions.departments || []).forEach((d: any) => {
+        const did = Number(d.value);
+        (d.users || []).forEach((u: any) => {
+          const uid = Number(u.value);
+          if (!userDeptMap.has(uid)) userDeptMap.set(uid, new Set());
+          userDeptMap.get(uid)!.add(did);
+        });
+      });
+      const prunedEmployeeIds = employeeIds.filter((uid) => {
+        const deptsForUser = userDeptMap.get(uid);
+        if (!deptsForUser) return false;
+        return deptIds.some((d) => deptsForUser.has(d));
+      });
+      updateFiltersAndUrl({
+        ...filters,
+        departments: joinIds(deptIds),
+        employees: joinIds(prunedEmployeeIds),
+        page: resetPage ? 1 : filters.page,
+      });
+    })();
+  };
 
   return {
     // State

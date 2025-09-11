@@ -42,7 +42,7 @@ export const navItems = [
     title: "Product Manager",
     icon: "Terminal",
     items: [
-      { title: "Quản lý giao dịch cho PM", url: "/dashboard/manager-pm-transactions", roles: ["admin", "PM", "view"] },
+      { title: "Quản lý giao dịch", url: "/dashboard/manager-pm-transactions", roles: ["admin", "PM", "view"] },
       { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin", "pm", "view"] },
     ],
   },
@@ -63,6 +63,7 @@ export const navItems = [
     icon: "UserCircle",
     items: [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
+      { title: "Cấu hình khách hàng", url: "/dashboard/auto-greeting", roles: ["admin", "manager", "view", "PM"] },
       { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
     ],
   },

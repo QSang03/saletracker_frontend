@@ -37,6 +37,8 @@ interface PaginatedTableProps {
   enableEmployeeFilter?: boolean;
   enableZaloLinkStatusFilter?: boolean;
   enableCategoriesFilter?: boolean;
+  enableBrandsFilter?: boolean;
+  enableBrandCategoryFilter?: boolean; // Bộ lọc gộp brand và category
   availableEmployees?: Option[];
   enableDateRangeFilter?: boolean;
   enableSingleDateFilter?: boolean;
@@ -62,6 +64,10 @@ interface PaginatedTableProps {
     | { value: string; label: string }[]
     | readonly { readonly value: string; readonly label: string }[];
   availableBrands?: string[];
+  availableBrandCategories?: // Bộ lọc gộp brand và category
+    | string[]
+    | { value: string; label: string }[]
+    | readonly { readonly value: string; readonly label: string }[];
   // Thêm props cho warning levels
   enableWarningLevelFilter?: boolean;
   // Enable a conversation type filter (e.g., group/private) — optional
@@ -100,6 +106,7 @@ interface PaginatedTableProps {
     managers?: string;
     categories?: string;
     brands?: string;
+    brandCategories?: string;
     dateRange?: string;
   };
   buttonClassNames?: {
@@ -118,6 +125,9 @@ interface PaginatedTableProps {
   preventEmptyFilterCall?: boolean;
   onDepartmentChange?: (departments: (string | number)[]) => void;
   onEmployeeChange?: (employees: (string | number)[]) => void;
+  onBrandsChange?: (brands: (string | number)[]) => void;
+  onCategoriesChange?: (categories: (string | number)[]) => void;
+  onBrandCategoryChange?: (brandCategories: (string | number)[]) => void; // Handler cho bộ lọc gộp
   onWarningLevelChange?: (warningLevels: (string | number)[]) => void;
   onDateRangeChange?: (dateRange: DateRange | undefined) => void;
   // When true, render only the controls (filters + pagination) without a content area
@@ -145,6 +155,7 @@ export type Filters = {
   zaloLinkStatuses?: (string | number)[];
   categories: (string | number)[];
   brands: (string | number)[];
+  brandCategories: (string | number)[];
   warningLevels: (string | number)[]; // Thêm warning levels
   quantity?: number; // Thêm quantity filter
   minQuantity?: number; // Số lượng tối thiểu
@@ -166,6 +177,8 @@ export default function PaginatedTable({
   // Thêm các props mới
   enableZaloLinkStatusFilter,
   enableCategoriesFilter,
+  enableBrandsFilter,
+  enableBrandCategoryFilter,
   enableGoToPage = false,
   enableConversationTypeFilter,
   availableZaloLinkStatuses = [
@@ -186,6 +199,7 @@ export default function PaginatedTable({
   ],
   availableCategories = [],
   availableBrands = [],
+  availableBrandCategories = [],
   // Thêm props cho warning levels
   enableWarningLevelFilter,
   availableWarningLevels = [],
@@ -213,6 +227,9 @@ export default function PaginatedTable({
   preventEmptyFilterCall = true,
   onDepartmentChange,
   onEmployeeChange,
+  onBrandsChange,
+  onCategoriesChange,
+  onBrandCategoryChange,
   onWarningLevelChange,
   onDateRangeChange,
   isRestoring = false,
@@ -329,10 +346,53 @@ export default function PaginatedTable({
     });
   }, [availableCategories]);
 
-  const brandOptions = useMemo(
-    () => availableBrands.map((b) => ({ label: b, value: b })),
-    [availableBrands]
-  );
+  const brandOptions = useMemo(() => {
+    if (!availableBrands || availableBrands.length === 0) {
+      return [];
+    }
+
+    return availableBrands.map((b) => {
+      if (typeof b === "string") {
+        return { label: b, value: b };
+      } else if (
+        typeof b === "object" &&
+        b !== null &&
+        "value" in b &&
+        "label" in b
+      ) {
+        // ✅ SỬA: Type assertion để tránh lỗi TypeScript
+        const brandObj = b as { value: string; label: string };
+        return { label: brandObj.label, value: brandObj.value };
+      } else {
+        // Fallback case
+        return { label: String(b), value: String(b) };
+      }
+    });
+  }, [availableBrands]);
+
+  const brandCategoryOptions = useMemo(() => {
+    if (!availableBrandCategories || availableBrandCategories.length === 0) {
+      return [];
+    }
+
+    return availableBrandCategories.map((bc) => {
+      if (typeof bc === "string") {
+        return { label: bc, value: bc };
+      } else if (
+        typeof bc === "object" &&
+        bc !== null &&
+        "value" in bc &&
+        "label" in bc
+      ) {
+        // ✅ SỬA: Type assertion để tránh lỗi TypeScript
+        const brandCategoryObj = bc as { value: string; label: string };
+        return { label: brandCategoryObj.label, value: brandCategoryObj.value };
+      } else {
+        // Fallback case
+        return { label: String(bc), value: String(bc) };
+      }
+    });
+  }, [availableBrandCategories]);
 
   // Thêm warningLevelOptions
   const warningLevelOptions = useMemo(() => {
@@ -382,6 +442,7 @@ export default function PaginatedTable({
       zaloLinkStatuses: initialFilters?.zaloLinkStatuses || [],
       categories: initialFilters?.categories || [],
       brands: initialFilters?.brands || [],
+      brandCategories: initialFilters?.brandCategories || [],
   warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
   quantity: (initialFilters && "quantity" in initialFilters)
     ? (initialFilters.quantity as number | undefined)
@@ -437,6 +498,7 @@ export default function PaginatedTable({
       (filters.zaloLinkStatuses?.length || 0) === 0 &&
       filters.categories.length === 0 &&
       filters.brands.length === 0 &&
+  filters.brandCategories.length === 0 &&
       filters.warningLevels.length === 0 && // Thêm warning levels
   (!filters.quantity || filters.quantity === defaultQuantity) && // Thêm quantity check
   (filters.conversationType?.length || 0) === 0 &&
@@ -459,6 +521,7 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.zaloLinkStatuses),
       JSON.stringify(initialFilters?.categories),
       JSON.stringify(initialFilters?.brands),
+  JSON.stringify(initialFilters?.brandCategories),
       JSON.stringify(initialFilters?.warningLevels), // Thêm warning levels
   initialFilters?.quantity, // Thêm quantity
   JSON.stringify(initialFilters?.conversationType),
@@ -539,6 +602,10 @@ export default function PaginatedTable({
               memoizedInitialFilters.brands !== undefined
                 ? memoizedInitialFilters.brands
                 : prev.brands,
+            brandCategories:
+              memoizedInitialFilters.brandCategories !== undefined
+                ? memoizedInitialFilters.brandCategories
+                : prev.brandCategories,
             warningLevels:
               memoizedInitialFilters.warningLevels !== undefined
                 ? memoizedInitialFilters.warningLevels
@@ -586,6 +653,7 @@ export default function PaginatedTable({
             "zaloLinkStatuses",
             "categories",
             "brands",
+            "brandCategories",
             "warningLevels",
             "quantity",
             "dateRange",
@@ -658,6 +726,7 @@ export default function PaginatedTable({
       zaloLinkStatuses: [],
       categories: [],
       brands: [],
+      brandCategories: [],
   warningLevels: [], // Thêm warning levels
   quantity: defaultQuantity || 1, // Reset về mặc định
   conversationType: [],
@@ -680,6 +749,21 @@ export default function PaginatedTable({
       onEmployeeChange([]);
     }
 
+    // ✅ THÊM: Reset brands selection trong parent component
+    if (onBrandsChange) {
+      onBrandsChange([]);
+    }
+
+    // ✅ THÊM: Reset categories selection trong parent component
+    if (onCategoriesChange) {
+      onCategoriesChange([]);
+    }
+
+    // ✅ THÊM: Reset brand categories selection trong parent component
+    if (onBrandCategoryChange) {
+      onBrandCategoryChange([]);
+    }
+
     // ✅ THÊM: Reset warning level selection trong parent component
     if (onWarningLevelChange) {
       onWarningLevelChange([]);
@@ -698,7 +782,7 @@ export default function PaginatedTable({
     if (typeof onResetFilter === "function") {
       onResetFilter();
     }
-  }, [onPageChange, onResetFilter, onFilterChange, onDepartmentChange, onEmployeeChange, onWarningLevelChange]);
+  }, [onPageChange, onResetFilter, onFilterChange, onDepartmentChange, onEmployeeChange, onBrandsChange, onCategoriesChange, onBrandCategoryChange, onWarningLevelChange]);
 
   // ✅ FIXED: Debounce filter với sync state management
   const debouncedSetFilters = useCallback(
@@ -952,6 +1036,30 @@ export default function PaginatedTable({
     [updateFilter, onDepartmentChange, availableDepartments, availableManagers, filters.managers]
   );
 
+  const handleBrandsChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("brands", vals);
+      
+      // Trigger brands change callback
+      if (onBrandsChange) {
+        onBrandsChange(vals);
+      }
+    },
+    [updateFilter, onBrandsChange]
+  );
+
+  const handleCategoriesChange = useCallback(
+    (vals: (string | number)[]) => {
+      updateFilter("categories", vals);
+      
+      // Trigger categories change callback
+      if (onCategoriesChange) {
+        onCategoriesChange(vals);
+      }
+    },
+    [updateFilter, onCategoriesChange]
+  );
+
   const handleRolesChange = useCallback(
     (vals: (string | number)[]) => {
       updateFilter("roles", vals);
@@ -981,18 +1089,16 @@ export default function PaginatedTable({
     [updateFilter]
   );
 
-  const handleCategoriesChange = useCallback(
+  const handleBrandCategoryChange = useCallback(
     (vals: (string | number)[]) => {
-      updateFilter("categories", vals);
+      updateFilter("brandCategories", vals);
+      
+      // Trigger brand category change callback
+      if (onBrandCategoryChange) {
+        onBrandCategoryChange(vals);
+      }
     },
-    [updateFilter]
-  );
-
-  const handleBrandsChange = useCallback(
-    (vals: (string | number)[]) => {
-      updateFilter("brands", vals);
-    },
-    [updateFilter]
+    [updateFilter, onBrandCategoryChange]
   );
 
   const handleWarningLevelsChange = useCallback(
@@ -1085,6 +1191,7 @@ export default function PaginatedTable({
         zaloLinkStatuses: [],
         categories: [],
         brands: [],
+        brandCategories: [],
         warningLevels: [],
         quantity: defaultQuantity || 1,
         conversationType: [],
@@ -1210,7 +1317,17 @@ export default function PaginatedTable({
                 { label: "Nhóm", value: "group" },
                 { label: "Cá nhân", value: "personal" },
               ]}
-              onChange={(vals) => updateFilter("conversationType", vals as any)}
+              onChange={(vals) => {
+                updateFilter("conversationType", vals as any);
+                // Khi bỏ chọn hết tag -> gọi ngay parent onFilterChange để refetch tức thì (bypass debounce)
+                try {
+                  if ((vals as any)?.length === 0 && onFilterChange) {
+                    const immediate = { ...filters, conversationType: [], page: 1 } as Filters;
+                    onFilterChange(immediate);
+                    if (onPageChange) onPageChange(1);
+                  }
+                } catch {}
+              }}
             />
           )}
           {enableDepartmentFilter && (
@@ -1267,7 +1384,7 @@ export default function PaginatedTable({
               onChange={handleCategoriesChange}
             />
           )}
-          {availableBrands.length > 0 && (
+          {enableBrandsFilter && availableBrands.length > 0 && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.brands ?? ""}`}
               placeholder="Brand"
@@ -1283,6 +1400,15 @@ export default function PaginatedTable({
               value={filters.warningLevels}
               options={warningLevelOptions}
               onChange={handleWarningLevelsChange}
+            />
+          )}
+          {enableBrandCategoryFilter && availableBrandCategories.length > 0 && (
+            <MultiSelectCombobox
+              className={`min-w-0 w-full ${filterClassNames.brandCategories ?? ""}`}
+              placeholder="Danh mục / Thương hiệu"
+              value={filters.brandCategories}
+              options={brandCategoryOptions}
+              onChange={handleBrandCategoryChange}
             />
           )}
           {enableQuantityFilter && (

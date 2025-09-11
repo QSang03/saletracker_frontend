@@ -44,7 +44,7 @@ function OrderBlacklistContent() {
     refetch,
   } = useBlacklist();
 
-  // Handle filter changes from PaginatedTable
+  // Handle filter changes from PaginatedTable với logic động
   const handleFilterChange = useCallback(
     (paginatedFilters: Filters) => {
       const searchValue = paginatedFilters.search || "";
@@ -55,9 +55,28 @@ function OrderBlacklistContent() {
         .map(Number)
         .filter((id) => !isNaN(id)); // employees -> users
 
+      // ✅ LOGIC MỚI: Khi chọn nhân viên → cập nhật phòng ban
+      let finalDepartments = departments;
+      if (users.length > 0 && departments.length === 0) {
+        // Nếu chọn nhân viên nhưng chưa chọn phòng ban, tự động chọn phòng ban của nhân viên đó
+        // Logic này sẽ được xử lý trong hook useBlacklist
+        finalDepartments = [];
+      }
+
+      // ✅ LOGIC MỚI: Khi chọn phòng ban → cập nhật nhân viên (nếu cần)
+      let finalUsers = users;
+      if (departments.length > 0 && users.length === 0) {
+        // Nếu chọn phòng ban nhưng chưa chọn nhân viên, giữ nguyên (không tự động chọn nhân viên)
+        finalUsers = [];
+      } else if (departments.length > 0 && users.length > 0) {
+        // Nếu đã chọn cả phòng ban và nhân viên, lọc nhân viên theo phòng ban đã chọn
+        // Logic này sẽ được xử lý trong hook useBlacklist
+        finalUsers = users;
+      }
+
       setSearch(searchValue);
-      setDepartments(departments);
-      setUsers(users);
+      setDepartments(finalDepartments);
+      setUsers(finalUsers);
     },
     [setSearch, setDepartments, setUsers]
   );
@@ -257,6 +276,28 @@ function OrderBlacklistContent() {
     [filters.search]
   );
 
+  // ✅ LOGIC MỚI: Lọc phòng ban theo nhân viên đã chọn
+  const memoizedAvailableDepartments = useMemo(() => {
+    if (filters.users.length > 0) {
+      // Nếu có nhân viên được chọn, chỉ hiển thị phòng ban của nhân viên đó
+      // Logic này sẽ được xử lý trong hook useBlacklist thông qua API
+      return departmentOptions;
+    }
+    // Nếu không chọn nhân viên nào, hiển thị tất cả phòng ban
+    return departmentOptions;
+  }, [departmentOptions, filters.users]);
+
+  // ✅ LOGIC MỚI: Lọc nhân viên theo phòng ban đã chọn
+  const memoizedAvailableEmployees = useMemo(() => {
+    if (filters.departments.length > 0) {
+      // Nếu có phòng ban được chọn, chỉ hiển thị nhân viên thuộc phòng ban đó
+      // Logic này sẽ được xử lý trong hook useBlacklist thông qua API
+      return userOptions;
+    }
+    // Nếu không chọn phòng ban nào, hiển thị tất cả nhân viên
+    return userOptions;
+  }, [userOptions, filters.departments]);
+
   if (!user) {
     return (
       <div className="container mx-auto p-6">
@@ -294,8 +335,8 @@ function OrderBlacklistContent() {
             enablePageSize={true}
             enableDepartmentFilter={true}
             enableEmployeeFilter={true}
-            availableDepartments={departmentOptions}
-            availableEmployees={userOptions}
+            availableDepartments={memoizedAvailableDepartments}
+            availableEmployees={memoizedAvailableEmployees}
             page={filters.page}
             total={total}
             pageSize={filters.pageSize}

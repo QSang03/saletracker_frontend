@@ -372,35 +372,32 @@ export default function CampaignModal({
 
   // Handle campaign type change with reset logic
   // Use functional state update so changes work correctly in edit mode
-  const handleCampaignTypeChange = useCallback((newType: CampaignType | "") => {
-    setSelectedType((previousType) => {
-      // If unchanged, allow deselect by setting to empty
-      if (previousType === newType) return newType;
-
-      // Clear schedule-related fields when changing type to avoid stale config
-      setSelectedDays([]);
-      setStartTime("");
-      setEndTime("");
-      setTimeOfDay("");
-
-      // Reset day selection mode based on new type
-      if (newType === CampaignType.THREE_DAY_KM) {
-        setDaySelectionMode("adjacent");
-      } else if (
-        newType === CampaignType.WEEKLY_SP ||
-        newType === CampaignType.WEEKLY_BBG
-      ) {
-        setDaySelectionMode("single");
-      } else {
-        setDaySelectionMode("single");
-      }
-
-      // NOTE: do NOT auto-navigate here. Navigation on initial load is handled
-      // by the effect that opens the modal so user can change type freely.
-
-      return newType;
-    });
-  }, []);
+  const handleCampaignTypeChange = useCallback(
+    (newType: CampaignType | "", opts?: { preserveSchedule?: boolean }) => {
+      const preserve = opts?.preserveSchedule;
+      setSelectedType((previousType) => {
+        if (previousType === newType) return newType;
+        if (!preserve) {
+          setSelectedDays([]);
+          setStartTime("");
+          setEndTime("");
+          setTimeOfDay("");
+        }
+        if (newType === CampaignType.THREE_DAY_KM) {
+          setDaySelectionMode("adjacent");
+        } else if (
+          newType === CampaignType.WEEKLY_SP ||
+          newType === CampaignType.WEEKLY_BBG
+        ) {
+          setDaySelectionMode("single");
+        } else {
+          setDaySelectionMode("single");
+        }
+        return newType;
+      });
+    },
+    []
+  );
 
   const loadUsersWithEmail = useCallback(async () => {
     try {
@@ -417,7 +414,16 @@ export default function CampaignModal({
 
   const loadCampaignData = useCallback((campaign: CampaignWithDetails) => {
     setCampaignName(campaign.name);
-    handleCampaignTypeChange(campaign.campaign_type);
+    // Giữ nguyên dữ liệu schedule hiện có trước khi ta set lại chi tiết
+    handleCampaignTypeChange(campaign.campaign_type, { preserveSchedule: true });
+
+    // Helper: chuẩn hóa chuỗi giờ (cắt bỏ :ss hoặc mili giây)
+    const normalizeTime = (t?: string | null) => {
+      if (!t) return "";
+      // Ví dụ: 09:00:00 hoặc 09:00:00.000 -> lấy 09:00
+      const match = /^(\d{1,2}:\d{2})/.exec(t.trim());
+      return match ? match[1] : t.trim();
+    };
 
     // Load message content
     if (campaign.messages?.text) {
@@ -449,17 +455,22 @@ export default function CampaignModal({
 
     // Load schedule config
     if (campaign.schedule_config) {
-      const config = campaign.schedule_config;
+      const config = campaign.schedule_config as any;
 
       if (config.type === "hourly") {
-        setStartTime(config.start_time || "");
-        setEndTime(config.end_time || "");
+        setStartTime(normalizeTime(config.start_time));
+        setEndTime(normalizeTime(config.end_time));
       } else if (config.type === "3_day") {
         setSelectedDays(config.days_of_week || []);
-        setTimeOfDay(config.time_of_day || "");
+        setTimeOfDay(normalizeTime(config.time_of_day));
       } else if (config.type === "weekly") {
-        setSelectedDays(config.day_of_week || 0);
-        setTimeOfDay(config.time_of_day || "");
+        // Hỗ trợ cả day_of_week (số) và days_of_week (mảng) từ backend
+        if (Array.isArray(config.days_of_week) && config.days_of_week.length > 0) {
+          setSelectedDays(config.days_of_week);
+        } else {
+          setSelectedDays(config.day_of_week || 0);
+        }
+        setTimeOfDay(normalizeTime(config.time_of_day));
       }
     } else {
       console.warn("No schedule_config found"); // Debug log
@@ -846,6 +857,34 @@ export default function CampaignModal({
     }
   }, [open, loadUsersWithEmail]);
 
+  // ✅ BỔ SUNG CLEANUP MẠNH HƠN KHI MODAL ĐÓNG (PHÒNG TRƯỜNG HỢP OVERLAY RADIX KẸT LẠI)
+  useEffect(() => {
+    if (!open) {
+      const restore = () => {
+        try {
+          document.body.style.pointerEvents = '';
+          const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
+          overlays.forEach(el => {
+            (el as HTMLElement).style.pointerEvents = 'none';
+          });
+          // Nếu còn content dialog bị kẹt (trường hợp rare) thì cũng tắt pointer-events
+          const contents = document.querySelectorAll('[data-radix-dialog-content]');
+            contents.forEach(el => {
+              const style = (el as HTMLElement).style;
+              if (getComputedStyle(el).position === 'fixed') {
+                style.pointerEvents = 'none';
+              }
+            });
+        } catch (_) {}
+      };
+      // Thực hiện nhiều lần để chắc chắn sau khi Radix unmount
+      const t1 = setTimeout(restore, 40);
+      const t2 = setTimeout(restore, 120);
+      const t3 = setTimeout(restore, 400);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    }
+  }, [open]);
+
   // Normalize phone helper (VN): keep digits, convert leading 84 to 0
   const normalizePhone = useCallback((p: string) => {
     return (p || "").replace(/\D/g, "").replace(/^84(?=\d{8,})/, "0");
@@ -1190,6 +1229,21 @@ export default function CampaignModal({
       ) {
         // Không đóng modal khi có alert lỗi/cảnh báo
         return;
+      }
+      // Khi đóng modal: xử lý giống modal xem khách hàng để tránh bị khóa click do overlay còn pointer-events
+      if (!open) {
+        setTimeout(() => {
+          try {
+            const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
+            overlays.forEach((el) => {
+              (el as HTMLElement).style.pointerEvents = 'none';
+            });
+            // Khôi phục pointer-events của body (phòng trường hợp bị set bởi logic khác)
+            (document.body as HTMLBodyElement).style.pointerEvents = '';
+          } catch (e) {
+            // silent
+          }
+        }, 50); // nhỏ để Radix unmount hoàn tất
       }
       onOpenChange(open);
     },

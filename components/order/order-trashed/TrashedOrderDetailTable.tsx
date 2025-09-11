@@ -99,12 +99,48 @@ export default function TrashedOrderDetailTable() {
 
   const handleFilterChange = useCallback(
     (f: Filters) => {
-      const employeesValue =
-        f.employees.length > 0 ? f.employees.join(",") : "";
-      const departmentsValue =
-        f.departments.length > 0 ? f.departments.join(",") : "";
-      const productsValue =
-        f.categories.length > 0 ? f.categories.join(",") : ""; // reuse categories as products
+      // ✅ LOGIC MỚI: Khi chọn nhân viên → cập nhật phòng ban
+      let finalDepartments = f.departments;
+      if (f.employees.length > 0 && f.departments.length === 0) {
+        // Nếu chọn nhân viên nhưng chưa chọn phòng ban, tự động chọn phòng ban của nhân viên đó
+        const selectedEmployeeDepartments = new Set<string>();
+        f.employees.forEach(empId => {
+          const foundDept = filterOptions.departments?.find((d: any) => 
+            d.users?.some((user: any) => (user.value || user.id) == empId)
+          );
+          if (foundDept) {
+            const deptKey = (foundDept as any).id ?? foundDept.value;
+            selectedEmployeeDepartments.add(String(deptKey));
+          }
+        });
+        finalDepartments = Array.from(selectedEmployeeDepartments);
+      }
+
+      // ✅ LOGIC MỚI: Khi chọn phòng ban → cập nhật nhân viên (nếu cần)
+      let finalEmployees = f.employees;
+      if (f.departments.length > 0 && f.employees.length === 0) {
+        // Nếu chọn phòng ban nhưng chưa chọn nhân viên, giữ nguyên (không tự động chọn nhân viên)
+        finalEmployees = [];
+      } else if (f.departments.length > 0 && f.employees.length > 0) {
+        // Nếu đã chọn cả phòng ban và nhân viên, lọc nhân viên theo phòng ban đã chọn
+        const validEmployeeIds = new Set<string>();
+        f.employees.forEach(empId => {
+          const foundDept = filterOptions.departments?.find((d: any) => 
+            d.users?.some((user: any) => (user.value || user.id) == empId)
+          );
+          if (foundDept) {
+            const deptKey = String((foundDept as any).id ?? foundDept.value);
+            if (f.departments.includes(deptKey)) {
+              validEmployeeIds.add(String(empId));
+            }
+          }
+        });
+        finalEmployees = Array.from(validEmployeeIds);
+      }
+
+      const employeesValue = finalEmployees.length > 0 ? finalEmployees.join(",") : "";
+      const departmentsValue = finalDepartments.length > 0 ? finalDepartments.join(",") : "";
+      const productsValue = f.categories.length > 0 ? f.categories.join(",") : ""; // reuse categories as products
 
       setFilters({
         search: f.search || "",
@@ -114,7 +150,7 @@ export default function TrashedOrderDetailTable() {
         page: 1,
       });
     },
-    [setFilters]
+    [setFilters, filterOptions.departments]
   );
 
   const handlePageChange = useCallback((p: number) => setPage(p), [setPage]);
@@ -258,8 +294,47 @@ export default function TrashedOrderDetailTable() {
             enableWarningLevelFilter={false}
             enablePageSize
             availableStatuses={[]}
-            availableEmployees={allEmployeeOptions}
-            availableDepartments={departmentOptions}
+            availableEmployees={useMemo(() => {
+              // ✅ LOGIC MỚI: Lọc nhân viên theo phòng ban đã chọn
+              if (filters.departments && filters.departments.trim()) {
+                const selectedDeptIds = filters.departments.split(',').filter(Boolean);
+                return filterOptions.departments
+                  ?.filter((d: any) => selectedDeptIds.includes(String((d as any).id ?? d.value)))
+                  ?.flatMap((d: any) => 
+                    d.users?.map((user: any) => ({
+                      value: String(user.value || user.id),
+                      label: user.label || user.fullName || user.username
+                    })) || []
+                  ) || [];
+              }
+              // Nếu không chọn phòng ban nào, hiển thị tất cả nhân viên
+              return allEmployeeOptions;
+            }, [allEmployeeOptions, filterOptions.departments, filters.departments])}
+            availableDepartments={useMemo(() => {
+              // ✅ LOGIC MỚI: Lọc phòng ban theo nhân viên đã chọn
+              if (filters.employees && filters.employees.trim()) {
+                const selectedEmpIds = filters.employees.split(',').filter(Boolean);
+                const selectedDeptIds = new Set<string>();
+                
+                selectedEmpIds.forEach(empId => {
+                  const foundDept = filterOptions.departments?.find((d: any) => 
+                    d.users?.some((user: any) => (user.value || user.id) == empId)
+                  );
+                  if (foundDept) {
+                    selectedDeptIds.add(String((foundDept as any).id ?? foundDept.value));
+                  }
+                });
+                
+                return filterOptions.departments
+                  ?.filter((d: any) => selectedDeptIds.has(String((d as any).id ?? d.value)))
+                  ?.map((d: any) => ({
+                    label: d.label,
+                    value: String((d as any).id ?? d.value)
+                  })) || [];
+              }
+              // Nếu không chọn nhân viên nào, hiển thị tất cả phòng ban
+              return departmentOptions;
+            }, [departmentOptions, filterOptions.departments, filters.employees])}
             availableCategories={productOptions}
             availableWarningLevels={[]}
             singleDateLabel=""

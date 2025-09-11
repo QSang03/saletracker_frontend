@@ -299,6 +299,7 @@ export default function CampaignPage() {
         categories:
           pagination.filters.campaign_types?.map((c: any) => c as string | number) || [],
         brands: [],
+  brandCategories: [], // ✅ bổ sung để khớp type Filters
         employees:
           pagination.filters.employees?.map((e: any) => e as string | number) || [],
         dateRange: { from: undefined, to: undefined },

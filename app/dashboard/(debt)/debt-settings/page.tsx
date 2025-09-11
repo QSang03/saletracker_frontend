@@ -45,6 +45,7 @@ export default function DebtSettingsPage() {
     statuses: [],
     categories: [],
     brands: [],
+  brandCategories: [],
     dateRange: { from: undefined, to: undefined },
     singleDate: undefined, // Không mặc định ngày hiện tại
     employees: [],
@@ -178,6 +179,7 @@ export default function DebtSettingsPage() {
       statuses: [],
       categories: [],
       brands: [],
+  brandCategories: [],
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined, // Không mặc định ngày hiện tại
       employees: [],

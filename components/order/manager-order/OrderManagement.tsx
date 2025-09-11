@@ -85,16 +85,30 @@ interface OrderManagementProps {
   onHide?: (orderDetail: OrderDetail, reason: string) => void;
   onSearch?: (searchTerm: string) => void;
   onSort?: (
-    field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
+    field:
+      | "quantity"
+      | "unit_price"
+      | "created_at"
+      | "conversation_start"
+      | "conversation_end"
+      | null,
     direction: "asc" | "desc" | null
   ) => void;
-  currentSortField?: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null;
+  currentSortField?:
+    | "quantity"
+    | "unit_price"
+    | "created_at"
+    | "conversation_start"
+    | "conversation_end"
+    | null;
   currentSortDirection?: "asc" | "desc" | null;
   loading?: boolean;
   showActions?: boolean;
   actionMode?: string;
   // When false, the eye (view messages) action won't require the 'analysis' role
   viewRequireAnalysis?: boolean;
+  // Show product code column for PM transaction management
+  showProductCode?: boolean;
 }
 
 // Function tính toán extended động
@@ -190,10 +204,14 @@ const TruncatedText: React.FC<{
     return <span className={className}>{text || "N/A"}</span>;
   }
 
+  // Kiểm tra xem className có chứa cursor-pointer không
+  const hasPointerCursor = className.includes("cursor-pointer");
+  const cursorClass = hasPointerCursor ? "cursor-pointer" : "cursor-help";
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className={`cursor-help ${className}`}>
+        <span className={`${cursorClass} ${className}`}>
           {text.substring(0, maxLength)}...
         </span>
       </TooltipTrigger>
@@ -224,15 +242,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   currentSortDirection,
   loading = false,
   viewRequireAnalysis = true,
+  showProductCode = false,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const { currentUser } = useCurrentUser();
-  const { 
-    hideEditButtons, 
-    hideDeleteButtons, 
-    hideActionButtons, 
+  const {
+    hideEditButtons,
+    hideDeleteButtons,
+    hideActionButtons,
     hideBulkActions,
-    getViewOnlyMessage 
+    getViewOnlyMessage,
   } = useViewRole();
   const isOwner = React.useCallback(
     (od: OrderDetail) => {
@@ -277,8 +296,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isHideModalOpen, setIsHideModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   // Notes history modal
-  const [notesHistoryDetail, setNotesHistoryDetail] = useState<OrderDetail | null>(null);
+  const [notesHistoryDetail, setNotesHistoryDetail] =
+    useState<OrderDetail | null>(null);
   const [isNotesHistoryOpen, setIsNotesHistoryOpen] = useState(false);
+
+  // Product detail modal
+  const [productDetail, setProductDetail] = useState<any>(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [productLoading, setProductLoading] = useState(false);
 
   // Customer name edit states
   const [editingCustomerName, setEditingCustomerName] =
@@ -319,8 +344,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isModalInitialized, setIsModalInitialized] = useState(false); // ✅ THÊM state này
 
   // ✅ NEW: Trigger message highlighting states
-  const [triggerMessageId, setTriggerMessageId] = useState<string | number | null>(null);
-  const [highlightedMessageRef, setHighlightedMessageRef] = useState<HTMLDivElement | null>(null);
+  const [triggerMessageId, setTriggerMessageId] = useState<
+    string | number | null
+  >(null);
+  const [highlightedMessageRef, setHighlightedMessageRef] =
+    useState<HTMLDivElement | null>(null);
 
   // ✅ NEW: Auto-scroll to highlighted message when modal opens
   useEffect(() => {
@@ -328,12 +356,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       // Delay to ensure the modal is fully rendered
       const timer = setTimeout(() => {
         highlightedMessageRef.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-          inline: 'nearest'
+          behavior: "smooth",
+          block: "center",
+          inline: "nearest",
         });
       }, 300);
-      
+
       return () => clearTimeout(timer);
     }
   }, [isViewModalOpen, triggerMessageId, highlightedMessageRef]);
@@ -602,6 +630,39 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     }
   };
 
+  const handleProductCodeClick = async (product: any) => {
+    if (!product?.id) return;
+
+    setProductLoading(true);
+    setIsProductModalOpen(true);
+
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/products/${product.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const productData = await response.json();
+        setProductDetail(productData);
+      } else {
+        console.error("Failed to fetch product details");
+        setProductDetail(null);
+      }
+    } catch (error) {
+      console.error("Error fetching product details:", error);
+      setProductDetail(null);
+    } finally {
+      setProductLoading(false);
+    }
+  };
+
   const handleEditClick = (orderDetail: OrderDetail) => {
     setFocusSafely(orderDetail.id);
     setEditingDetail(orderDetail);
@@ -623,25 +684,44 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleViewClick = (orderDetail: OrderDetail) => {
     setFocusSafely(orderDetail.id);
     setViewingDetail(orderDetail);
-    
+
     // ✅ NEW: Extract trigger_message_id from metadata for highlighting
     let triggerId: string | number | null = null;
     try {
       const metadata = orderDetail.metadata;
-      if (metadata && typeof metadata === 'object' && 'trigger_message_id' in metadata) {
+      if (
+        metadata &&
+        typeof metadata === "object" &&
+        "trigger_message_id" in metadata
+      ) {
         triggerId = metadata.trigger_message_id;
       }
     } catch (error) {
-      console.warn('Error extracting trigger_message_id:', error);
+      console.warn("Error extracting trigger_message_id:", error);
     }
     setTriggerMessageId(triggerId);
-    
+
     withSkipClear(() => setIsViewModalOpen(true));
   };
 
   const handleEditSave = (data: Partial<OrderDetail>) => {
     if (editingDetail && onEdit) {
-      onEdit(editingDetail, data);
+      // Bỏ cập nhật trường ghi chú nếu rỗng ("", null, chỉ khoảng trắng)
+      const sanitized: any = { ...data };
+      const noteFields = ["note", "notes"];
+      for (const f of noteFields) {
+        if (f in sanitized) {
+          const v = sanitized[f];
+          if (v === undefined || v === null) {
+            delete sanitized[f];
+            continue;
+          }
+          if (typeof v === "string" && v.trim() === "") {
+            delete sanitized[f];
+          }
+        }
+      }
+      onEdit(editingDetail, sanitized);
       withSkipClear(() => setIsEditModalOpen(false));
       setEditingDetail(null);
     }
@@ -687,7 +767,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   // Function để handle sort - 3 trạng thái: desc -> asc -> null
-  const handleSort = (field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end") => {
+  const handleSort = (
+    field:
+      | "quantity"
+      | "unit_price"
+      | "created_at"
+      | "conversation_start"
+      | "conversation_end"
+  ) => {
     if (!onSort) return;
 
     if (currentSortField !== field) {
@@ -761,7 +848,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const displayOrders = safeOrders;
 
   // Function để render sort icon
-  const renderSortIcon = (field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end") => {
+  const renderSortIcon = (
+    field:
+      | "quantity"
+      | "unit_price"
+      | "created_at"
+      | "conversation_start"
+      | "conversation_end"
+  ) => {
     if (currentSortField !== field) {
       return null; // Không hiển thị icon nếu không phải cột đang sort
     }
@@ -910,6 +1004,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                 <TableHead className="font-bold text-gray-700 w-[120px] text-left">
                   Khách hàng
                 </TableHead>
+                {showProductCode && (
+                  <TableHead className="font-bold text-gray-700 text-center">
+                    Mã SP
+                  </TableHead>
+                )}
                 <TableHead className="font-bold text-gray-700 w-[400px] text-center">
                   Mặt hàng
                 </TableHead>
@@ -960,6 +1059,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-20 rounded mx-auto" />
+                  </TableCell>
+                  {showProductCode && (
+                    <TableCell className="text-center">
+                      <Skeleton className="h-4 w-20 rounded mx-auto" />
+                    </TableCell>
+                  )}
+                  <TableCell className="text-center">
+                    <Skeleton className="h-4 w-full rounded mx-auto" />
                   </TableCell>
                   <TableCell className="text-center">
                     <Skeleton className="h-4 w-full rounded mx-auto" />
@@ -1130,6 +1237,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   <TableHead className="font-bold text-slate-700 text-sm min-w-[220px] max-w-[720px] text-center">
                     🏪 Khách hàng
                   </TableHead>
+                  {showProductCode && (
+                    <TableHead className="font-bold text-slate-700 text-sm text-center">
+                      🏷️ Mã SP
+                    </TableHead>
+                  )}
                   <TableHead className="font-bold text-slate-700 text-sm min-w-[220px] max-w-[720px] text-center">
                     🛍️ Mặt hàng
                   </TableHead>
@@ -1299,7 +1411,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 const { start } = getConversationStartEnd(
                                   orderDetail.metadata
                                 );
-                                if (!start) return <span className="text-gray-400">--</span>;
+                                if (!start)
+                                  return (
+                                    <span className="text-gray-400">--</span>
+                                  );
                                 return (
                                   <div className="flex flex-col">
                                     <span className="font-medium text-blue-600">
@@ -1322,7 +1437,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 const { end } = getConversationStartEnd(
                                   orderDetail.metadata
                                 );
-                                if (!end) return <span className="text-gray-400">--</span>;
+                                if (!end)
+                                  return (
+                                    <span className="text-gray-400">--</span>
+                                  );
                                 return (
                                   <div className="flex flex-col">
                                     <span className="font-medium text-emerald-600">
@@ -1365,7 +1483,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 >
                                   <div
                                     className={`text-left leading-tight break-words ${
-                                      isCustLong ? "text-xs customer-two-line" : "text-sm"
+                                      isCustLong
+                                        ? "text-xs customer-two-line"
+                                        : "text-sm"
                                     }`}
                                   >
                                     {custName}
@@ -1389,6 +1509,35 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                 </Button>
                               </div>
                             </TableCell>
+                            {showProductCode && (
+                              <TableCell className="text-center text-slate-600">
+                                {orderDetail.product?.productCode ? (
+                                  <div className="flex items-center justify-center">
+                                    <div
+                                      onClick={() =>
+                                        handleProductCodeClick(
+                                          orderDetail.product
+                                        )
+                                      }
+                                      className="cursor-pointer"
+                                    >
+                                      <TruncatedText
+                                        text={orderDetail.product.productCode}
+                                        maxLength={20}
+                                        className="font-mono text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span
+                                    className="text-gray-400"
+                                    title="Không có thông tin sản phẩm"
+                                  >
+                                    --
+                                  </span>
+                                )}
+                              </TableCell>
+                            )}
                             <TableCell className="text-center text-slate-600 min-w-[220px] max-w-[720px] hover:text-slate-800 transition-colors">
                               <TruncatedText
                                 text={orderDetail.raw_item || "N/A"}
@@ -1512,7 +1661,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center space-x-1">
-                                <POrderDynamic action="read" requireAnalysis={viewRequireAnalysis}>
+                                <POrderDynamic
+                                  action="read"
+                                  requireAnalysis={viewRequireAnalysis}
+                                >
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button
@@ -1856,7 +2008,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             )}
                           </div>
                           <div className="flex items-center gap-3">
-                          {/* Notes history modal is rendered globally at the bottom to avoid duplication */}
+                            {/* Notes history modal is rendered globally at the bottom to avoid duplication */}
 
                             <p className="text-sm text-cyan-100 font-medium flex items-center gap-2">
                               <Hash className="w-4 h-4" />
@@ -2073,7 +2225,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             const quotedMessageId = m.quoted_message_id ?? null;
                             const quotedSenderName =
                               m.quoted_sender_name?.toString?.() ?? null;
-                            const quotedText = m.quote_text?.toString?.() ?? null;
+                            const quotedText =
+                              m.quote_text?.toString?.() ?? null;
 
                             // media/content detection
                             let contentType: Message["contentType"] = "text";
@@ -2308,7 +2461,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               if (msg.quotedText) {
                                 return msg;
                               }
-                              
+
                               if (msg.quotedMessageId != null) {
                                 const entry = messageLookup.get(
                                   String(msg.quotedMessageId)
@@ -2428,16 +2581,25 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                         return messages.map(
                           (message: Message, index: number) => {
                             // ✅ NEW: Check if this message should be highlighted
-                            const isHighlighted = triggerMessageId && message.messageId && 
-                              String(message.messageId) === String(triggerMessageId);
-                            
+                            const isHighlighted =
+                              triggerMessageId &&
+                              message.messageId &&
+                              String(message.messageId) ===
+                                String(triggerMessageId);
+
                             if (message.type === "customer") {
                               return (
                                 <div
                                   key={`customer-${message.messageId ?? index}`}
-                                  ref={isHighlighted ? setHighlightedMessageRef : undefined}
+                                  ref={
+                                    isHighlighted
+                                      ? setHighlightedMessageRef
+                                      : undefined
+                                  }
                                   className={`flex items-start space-x-4 animate-fadeInLeft group ${
-                                    isHighlighted ? 'message-highlight ring-4 ring-yellow-400 ring-opacity-75 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-2' : ''
+                                    isHighlighted
+                                      ? "message-highlight ring-4 ring-yellow-400 ring-opacity-75 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-2"
+                                      : ""
                                   }`}
                                   style={{ animationDelay: `${index * 0.1}s` }}
                                 >
@@ -2456,7 +2618,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     {/* ✅ NEW: Highlight indicator */}
                                     {isHighlighted && (
                                       <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center shadow-lg animate-bounce">
-                                        <span className="text-xs text-white font-bold">!</span>
+                                        <span className="text-xs text-white font-bold">
+                                          !
+                                        </span>
                                       </div>
                                     )}
                                   </div>
@@ -2711,9 +2875,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               return (
                                 <div
                                   key={`sale-${message.messageId ?? index}`}
-                                  ref={isHighlighted ? setHighlightedMessageRef : undefined}
+                                  ref={
+                                    isHighlighted
+                                      ? setHighlightedMessageRef
+                                      : undefined
+                                  }
                                   className={`flex items-start space-x-4 justify-end animate-fadeInRight group ${
-                                    isHighlighted ? 'message-highlight ring-4 ring-yellow-400 ring-opacity-75 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-2' : ''
+                                    isHighlighted
+                                      ? "message-highlight ring-4 ring-yellow-400 ring-opacity-75 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg p-2"
+                                      : ""
                                   }`}
                                   style={{ animationDelay: `${index * 0.1}s` }}
                                 >
@@ -2984,7 +3154,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     {/* ✅ NEW: Highlight indicator */}
                                     {isHighlighted && (
                                       <div className="absolute -top-2 -left-2 w-6 h-6 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center shadow-lg animate-bounce">
-                                        <span className="text-xs text-white font-bold">!</span>
+                                        <span className="text-xs text-white font-bold">
+                                          !
+                                        </span>
                                       </div>
                                     )}
                                   </div>
@@ -3128,6 +3300,268 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         onConfirm={handleAddToBlacklistConfirm}
         loading={loading}
       />
+
+      {/* Product Detail Modal */}
+      <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
+        <DialogContent className="!max-w-[80vw] max-h-[90vh] h-[90vh] overflow-hidden bg-white border-0 shadow-2xl rounded-2xl">
+          {/* Chat Header giống Messenger */}
+          <DialogHeader className="bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-t-2xl relative">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                  <svg
+                    className="w-6 h-6 text-white"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M19 7h-3V6c0-1.1-.9-2-2-2H10c-1.1 0-2 .9-2 2v1H5c-1.1 0-2 .9-2 2v9c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM10 6h4v1h-4V6z" />
+                  </svg>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
+              </div>
+
+              <div className="flex-1">
+                <DialogTitle className="text-white font-semibold text-lg">
+                  Thông tin chi tiết sản phẩm
+                </DialogTitle>
+                <div className="flex items-center gap-2 text-white/80 text-sm">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span>Online now</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsProductModalOpen(false)}
+                className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-colors text-xl"
+              >
+                ×
+              </button>
+            </div>
+          </DialogHeader>
+
+          {/* Nội dung sản phẩm đẹp bên trong */}
+          <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+            {productLoading ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                <div className="relative">
+                  <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200"></div>
+                  <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent absolute top-0 left-0"></div>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-medium text-gray-700">
+                    Đang tải thông tin sản phẩm...
+                  </p>
+                  <div className="flex justify-center mt-2">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
+                      <div
+                        className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : productDetail ? (
+              <div className="space-y-8 h-full relative">
+                {/* Background decoration */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-50/30 to-purple-50/30 rounded-lg pointer-events-none"></div>
+
+                {/* Enhanced Basic Info */}
+                <div className="space-y-6 relative z-10">
+                  <div className="bg-gradient-to-br from-white to-blue-50/50 p-8 rounded-2xl shadow-lg border border-blue-100/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
+                    {/* Section Header */}
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-md">
+                        <svg
+                          className="w-6 h-6 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-bold text-blue-800">
+                        Thông tin sản phẩm
+                      </h3>
+                      <div className="flex-1 h-px bg-gradient-to-r from-blue-300 to-transparent ml-4"></div>
+                    </div>
+
+                    {/* Enhanced Info Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Product Code */}
+                      <div className="group">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"></div>
+                          <span className="font-semibold text-gray-700">
+                            Mã sản phẩm
+                          </span>
+                        </div>
+                        <div className="bg-gradient-to-r from-gray-50 to-blue-50 px-4 py-3 rounded-lg border border-gray-200 font-mono text-sm shadow-sm group-hover:shadow-md transition-shadow">
+                          {productDetail.productCode || "--"}
+                        </div>
+                      </div>
+
+                      {/* Product Name */}
+                      <div className="group">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full"></div>
+                          <span className="font-semibold text-gray-700">
+                            Tên sản phẩm
+                          </span>
+                        </div>
+                        <div className="bg-gradient-to-r from-gray-50 to-purple-50 px-4 py-3 rounded-lg border border-gray-200 shadow-sm group-hover:shadow-md transition-shadow">
+                          {productDetail.productName || "--"}
+                        </div>
+                      </div>
+
+                      {/* Category */}
+                      <div className="group">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-full"></div>
+                          <span className="font-semibold text-gray-700">
+                            Danh mục
+                          </span>
+                        </div>
+                        <div className="bg-gradient-to-r from-gray-50 to-green-50 px-4 py-3 rounded-lg border border-gray-200 shadow-sm group-hover:shadow-md transition-shadow">
+                          {productDetail.category?.catName || "--"}
+                        </div>
+                      </div>
+
+                      {/* Brand */}
+                      <div className="group">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-3 h-3 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full"></div>
+                          <span className="font-semibold text-gray-700">
+                            Thương hiệu
+                          </span>
+                        </div>
+                        <div className="bg-gradient-to-r from-gray-50 to-orange-50 px-4 py-3 rounded-lg border border-gray-200 shadow-sm group-hover:shadow-md transition-shadow">
+                          {productDetail.brand?.name || "--"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Description - Full Width với Resize */}
+                    <div className="mt-6 group">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-3 h-3 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full"></div>
+                        <span className="font-semibold text-gray-700">
+                          Mô tả sản phẩm
+                        </span>
+                      </div>
+                      <div className="bg-gradient-to-br from-white to-indigo-50/50 rounded-xl border border-indigo-100 shadow-sm group-hover:shadow-lg transition-all duration-300 relative">
+                        <div
+                          className="text-gray-600 text-sm leading-relaxed scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-gray-100 px-6 py-4 min-h-[120px] max-h-[400px] overflow-y-auto resize-y border-none outline-none"
+                          style={{
+                            resize: "vertical",
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html:
+                              productDetail.description ||
+                              '<em class="text-gray-400">Chưa có mô tả</em>',
+                          }}
+                        />
+                        {/* Resize handle custom */}
+                        <div className="absolute bottom-0 right-0 w-4 h-4 bg-gradient-to-br from-indigo-400 to-indigo-500 opacity-30 hover:opacity-60 transition-opacity cursor-se-resize">
+                          <svg
+                            className="w-3 h-3 text-white m-0.5"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M22 22H2v-2h18V2h2v20zM14 14H4v-2h8V4h2v10z" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="flex flex-col items-center space-y-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center">
+                    <svg
+                      className="w-8 h-8 text-red-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-lg font-medium text-gray-700">
+                      Không thể tải thông tin sản phẩm
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Vui lòng thử lại sau
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer giống chat input */}
+          <div className="border-t bg-white p-4 rounded-b-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 text-gray-500 text-sm flex items-center gap-2">
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Thông tin đã được hiển thị đầy đủ
+              </div>
+              <button
+                onClick={() => setIsProductModalOpen(false)}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-2 rounded-full shadow-lg transition-all duration-300 flex items-center gap-2 whitespace-nowrap"
+              >
+                <span className="flex items-center gap-2">
+                  <svg
+                    className="w-4 h-4 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                  Đóng
+                </span>
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 };

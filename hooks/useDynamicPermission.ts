@@ -88,6 +88,35 @@ export const useDynamicPermission = () => {
       .map((role) => (role || '').replace(/^pm-/i, ''));
   };
 
+  /**
+   * Lấy danh sách permissions PM từ user permissions
+   * Ví dụ: pm_hang-du-an-chinh-nhan -> ["hang-du-an-chinh-nhan"]
+   * Dùng để lọc dữ liệu theo categories/brands được phân quyền
+   */
+  const getPMPermissions = () => {
+    return userPermissions
+      .filter((permission) => permission && permission.name && typeof permission.name === 'string')
+      .filter((permission) => permission.name.toLowerCase().startsWith('pm_'))
+      .map((permission) => permission.name.replace(/^pm_/i, ''))
+      .filter((name) => name && name.trim().length > 0);
+  };
+
+  /**
+   * Kiểm tra PM có role phụ (pm-{department}) hay chỉ có permissions
+   */
+  const hasPMSpecificRoles = () => {
+    return userRoles.some((role) => (role || '').toLowerCase().startsWith('pm-'));
+  };
+
+  /**
+   * Kiểm tra PM có permissions pm_{permission} hay không
+   */
+  const hasPMPermissions = () => {
+    return userPermissions.some((permission) => 
+      (permission.name || '').toLowerCase().startsWith('pm_')
+    );
+  };
+
   // Hàm kiểm tra permission động
   const checkDynamicPermission = (check: DynamicPermissionCheck): boolean => {
     if (!user) return false;
@@ -243,6 +272,9 @@ export const useDynamicPermission = () => {
     isManager,
     isPM,
     getPMDepartments,
+    getPMPermissions,
+    hasPMSpecificRoles,
+    hasPMPermissions,
     checkDynamicPermission,
     checkAnyPermission,
     checkAllPermissions,

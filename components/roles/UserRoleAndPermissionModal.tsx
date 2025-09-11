@@ -63,31 +63,33 @@ export default function UserRoleAndPermissionModal({
       depName: departments.find((dep) => r.name.endsWith(`-${dep.slug}`))?.name,
     }));
   }, [rolesGrouped.sub, departments]);
-  // Only show sub-role options that correspond to the selected main roles.
-  // E.g. if main includes 'manager' show only 'manager-<dep>' subs; if 'pm' show only 'pm-<dep>' subs, etc.
-  const subRoleOptions: Option[] = useMemo(() => {
-    // derive selected main role names from selectedMainRoles to avoid ordering issues
-    const mainPrefixes = rolesGrouped.main
-      .filter((r) => selectedMainRoles.includes(r.id))
-      .map((r) => r.name.toLowerCase());
-    // If no main role selected, don't offer any sub roles
-    if (mainPrefixes.length === 0) return [];
-    return allSubRoles
-      .filter((r) => {
-        // support both hyphen and underscore separators (e.g., pm-sales or pm_sales)
-        const prefix = (r.name || "").split(/[-_]/)[0];
-        return mainPrefixes.includes(prefix);
-      })
-      .map((r) => ({
-        label: r.depName ? `${r.display_name} (${r.depName})` : r.display_name,
-        value: r.id,
-      }));
-  }, [allSubRoles, rolesGrouped.main, selectedMainRoles]);
   const [selectedSubRoles, setSelectedSubRoles] = useState<number[]>(
     user.roles
       ?.filter((r) => rolesGrouped.sub.some((s) => s.id === r.id))
       .map((r) => r.id) || []
   );
+  // Track pm-<dep> sub roles that user explicitly removed so auto-add logic won't force them back
+  const [removedPmSubRoleIds, setRemovedPmSubRoleIds] = useState<Set<number>>(new Set());
+  // Only show sub-role options that correspond to the selected main roles.
+  // Enhancement: Always include currently selected sub roles even if their main prefix no longer selected so they can be removed.
+  const subRoleOptions: Option[] = useMemo(() => {
+    const mainPrefixes = rolesGrouped.main
+      .filter((r) => selectedMainRoles.includes(r.id))
+      .map((r) => (r.name || '').toLowerCase());
+    const selectedSubRoleIds = new Set(selectedSubRoles);
+    return allSubRoles
+      .filter((r) => {
+        const prefix = (r.name || '').split(/[-_]/)[0];
+        if (mainPrefixes.length === 0) {
+          return selectedSubRoleIds.has(r.id);
+        }
+        return mainPrefixes.includes(prefix) || selectedSubRoleIds.has(r.id);
+      })
+      .map((r) => ({
+        label: r.depName ? `${r.display_name} (${r.depName})` : r.display_name,
+        value: r.id,
+      }));
+  }, [allSubRoles, rolesGrouped.main, selectedMainRoles, selectedSubRoles]);
   const [selectedPermissions, setSelectedPermissions] = useState<number[]>(
     user.roles?.flatMap(
       (r) =>
@@ -124,6 +126,139 @@ export default function UserRoleAndPermissionModal({
         .map((dep) => dep.slug),
     [departments, selectedDepartments]
   );
+  // PM-specific helpers
+  const isPMSelected = useMemo(() => {
+    // build a map id -> roleName for main+sub
+    const idToName = new Map<number, string>();
+    rolesGrouped.main.forEach((r) => idToName.set(r.id, (r.name || "").toLowerCase()));
+    rolesGrouped.sub.forEach((r) => idToName.set(r.id, (r.name || "").toLowerCase()));
+    const allSelected = [...selectedMainRoles, ...selectedSubRoles];
+    return allSelected.some((id) => {
+      const name = idToName.get(id) || "";
+      // match pm, pm-*, pm_*, *-pm, *_pm, or roles containing pm segment
+      return (
+        name === "pm" ||
+        name.startsWith("pm-") ||
+        name.startsWith("pm_") ||
+        name.endsWith("-pm") ||
+        name.endsWith("_pm") ||
+        name.split(/[-_]/).includes("pm")
+      );
+    });
+  }, [rolesGrouped.main, rolesGrouped.sub, selectedMainRoles, selectedSubRoles]);
+
+  // Kiểm tra có PM phụ (pm-phongban) nào được chọn không
+  const hasPMSubRoles = useMemo(() => {
+    const idToName = new Map<number, string>();
+    rolesGrouped.sub.forEach((r) => idToName.set(r.id, (r.name || "").toLowerCase()));
+    return selectedSubRoles.some((id) => {
+      const name = idToName.get(id) || "";
+      return name.startsWith("pm-") || name.startsWith("pm_");
+    });
+  }, [rolesGrouped.sub, selectedSubRoles]);
+
+  // Kiểm tra có phòng ban nào được chọn không
+  const hasSelectedDepartments = useMemo(() => {
+    return selectedDepartments.length > 0;
+  }, [selectedDepartments]);
+
+  const pmPermissions = useMemo(() => {
+    // Chỉ lấy quyền bắt đầu bằng "pm_" (theo yêu cầu)
+    return permissions.filter((p) => (p.name || "").toLowerCase().startsWith("pm_"));
+  }, [permissions]);
+
+  // KHÔNG fetch API nữa, chỉ dùng rolePermissions prop
+  const [rolePermissionsState, setRolePermissionsState] = useState<{ roleId: number; permissionId: number; isActive: boolean }[]>(rolePermissions);
+
+  // Kiểm tra có quyền PM nào đang được chọn không
+  const hasSelectedPMPermissions = useMemo(() => {
+    const pmRole = rolesGrouped.main.find((r) => r.name === "pm");
+    if (!pmRole) return false;
+    
+    return rolePermissionsState.some((rp) => {
+      if (rp.roleId === pmRole.id && rp.isActive) {
+        const isPMPermission = pmPermissions.some((p) => p.id === rp.permissionId);
+        return isPMPermission;
+      }
+      return false;
+    });
+  }, [rolePermissionsState, pmPermissions, rolesGrouped.main]);
+
+  // Trạng thái đang dùng quyền riêng PM (đã bật ít nhất 1 quyền, có pm main và chưa có pm-sub)
+  const pmPrivateActive = useMemo(() => {
+    return isPMSelected && hasSelectedPMPermissions && !hasPMSubRoles;
+  }, [isPMSelected, hasSelectedPMPermissions, hasPMSubRoles]);
+
+  // Tập id các pm-sub roles để tiện lọc
+  const pmSubRoleIdSet = useMemo(() => {
+    return new Set(
+      rolesGrouped.sub
+        .filter((r) => {
+          const name = (r.name || "").toLowerCase();
+          return name.startsWith("pm-") || name.startsWith("pm_");
+        })
+        .map((r) => r.id)
+    );
+  }, [rolesGrouped.sub]);
+
+  // Danh sách sub role hiển thị: nếu đang active quyền riêng PM thì loại bỏ pm-phongban khỏi options
+  const displayedSubRoleOptions = useMemo(() => {
+    if (!pmPrivateActive) return subRoleOptions;
+    return subRoleOptions.filter((opt) => !pmSubRoleIdSet.has(Number(opt.value)));
+  }, [pmPrivateActive, subRoleOptions, pmSubRoleIdSet]);
+
+  // Hiển thị quyền riêng PM khi có role pm (main) và KHÔNG có pm-phongban được chọn
+  // Hiển thị block quyền riêng PM khi có pm main và KHÔNG có pm-sub (kể cả khi chưa bật quyền nào để user chọn).
+  const shouldShowPMPermissions = useMemo(() => {
+    // Luôn hiển thị block PM riêng nếu có pm main và chưa chọn pm-sub (để người dùng bật/tắt quyền)
+    return isPMSelected && !hasPMSubRoles;
+  }, [isPMSelected, hasPMSubRoles]);
+
+  // Departments luôn hiển thị (kể cả chế độ PM riêng) theo yêu cầu mới
+  const shouldShowDepartments = useMemo(() => true, []);
+  // Sub roles: ẩn khi đang active quyền PM riêng (có ít nhất 1 quyền) và chưa có pm-sub role
+  const shouldShowSubRoles = useMemo(() => {
+    if (hasPMSubRoles) return true; // đang dùng pm-sub
+    if (shouldShowPMPermissions && hasSelectedPMPermissions) return false; // chế độ PM riêng active
+    return true; // cho phép chuyển đổi
+  }, [hasPMSubRoles, shouldShowPMPermissions, hasSelectedPMPermissions]);
+
+  // Đồng bộ trạng thái khi chuyển qua lại giữa quyền riêng PM và pm-phongban
+  useEffect(() => {
+    const pmMain = rolesGrouped.main.find((r) => r.name === 'pm');
+    // Khi bật ít nhất 1 quyền PM riêng: dọn sạch pm-sub & phòng ban
+  if (shouldShowPMPermissions && hasSelectedPMPermissions) {
+      if (selectedSubRoles.length > 0) {
+        const filtered = selectedSubRoles.filter((id) => {
+          const role = rolesGrouped.sub.find((r) => r.id === id);
+          const name = (role?.name || '').toLowerCase();
+          return !(name.startsWith('pm-') || name.startsWith('pm_'));
+        });
+        if (filtered.length !== selectedSubRoles.length) setSelectedSubRoles(filtered);
+      }
+    }
+    // Khi chuyển sang pm-sub: tắt quyền PM riêng
+    if (hasPMSubRoles && pmMain) {
+      setRolePermissionsState((prev) => prev.map((rp) => {
+        if (rp.roleId === pmMain.id) {
+          const isPMPermission = pmPermissions.some((p) => p.id === rp.permissionId);
+          if (isPMPermission && rp.isActive) return { ...rp, isActive: false };
+        }
+        return rp;
+      }));
+    }
+  }, [shouldShowPMPermissions, hasSelectedPMPermissions, hasPMSubRoles, selectedSubRoles, selectedDepartments, pmPermissions, rolesGrouped.main, rolesGrouped.sub]);
+
+  const selectedPMRoleIds = useMemo(() => {
+    const idToName = new Map<number, string>();
+    rolesGrouped.main.forEach((r) => idToName.set(r.id, r.name));
+    rolesGrouped.sub.forEach((r) => idToName.set(r.id, r.name));
+    const allSelected = [...selectedMainRoles, ...selectedSubRoles];
+    return allSelected.filter((id) => {
+      const name = (idToName.get(id) || "").toLowerCase();
+      return name === "pm" || name.startsWith("pm-") || name.startsWith("pm_");
+    });
+  }, [rolesGrouped.main, rolesGrouped.sub, selectedMainRoles, selectedSubRoles]);
   const getPermissionIdsForRole = (
     roleName: string,
     depSlugs: string[] = []
@@ -168,7 +303,7 @@ export default function UserRoleAndPermissionModal({
     let autoSubRoles = selectedSubRoles.filter((id) =>
       allSubRoles.some((r) => r.id === id)
     );
-    for (const dep of departments) {
+  for (const dep of departments) {
       if (selectedDepartments.includes(dep.id)) {
         // manager-<dep>
         if (selectedMainRoleNames.includes("manager")) {
@@ -191,7 +326,7 @@ export default function UserRoleAndPermissionModal({
         // pm-<dep>
         if (selectedMainRoleNames.includes("pm")) {
           const pmRole = allSubRoles.find((r) => r.name === `pm-${dep.slug}`);
-          if (pmRole && !autoSubRoles.includes(pmRole.id)) {
+          if (pmRole && !autoSubRoles.includes(pmRole.id) && !removedPmSubRoleIds.has(pmRole.id) && !hasSelectedPMPermissions) {
             autoSubRoles.push(pmRole.id);
           }
         }
@@ -212,7 +347,7 @@ export default function UserRoleAndPermissionModal({
         (id) => !allSubRoles.find((r) => r.id === id)?.name.startsWith("pm-")
       );
     }
-    setSelectedSubRoles(Array.from(new Set(autoSubRoles)));
+  setSelectedSubRoles(Array.from(new Set(autoSubRoles)));
     if (selectedMainRoleNames.includes("manager") && depSlugs.length > 0) {
       const ids = permissions
         .filter((p) => depSlugs.includes(p.name))
@@ -251,9 +386,9 @@ export default function UserRoleAndPermissionModal({
     depSlugs.join(","),
     permissions,
     departments,
+    Array.from(removedPmSubRoleIds).join(","),
+    hasSelectedPMPermissions,
   ]);
-  // KHÔNG fetch API nữa, chỉ dùng rolePermissions prop
-  const [rolePermissionsState, setRolePermissionsState] = useState<{ roleId: number; permissionId: number; isActive: boolean }[]>(rolePermissions);
   useEffect(() => {
     setRolePermissionsState(rolePermissions);
     const activePermissions = rolePermissions.filter((rp) => rp.isActive).map((rp) => rp.permissionId);
@@ -298,6 +433,13 @@ export default function UserRoleAndPermissionModal({
       setViewRolePermissions([]);
     }
   }, [user.id, rolesGrouped.main, rolesGrouped.sub, rolePermissions]);
+
+  // Theo dõi thay đổi quyền PM để tự động hiện/ẩn phần chọn phòng ban
+  useEffect(() => {
+    // Logic tự động hiện/ẩn dựa trên hasSelectedPMPermissions
+    // Khi có quyền PM được chọn: ẩn phần chọn phòng ban
+    // Khi không có quyền PM nào: hiện phần chọn phòng ban
+  }, [hasSelectedPMPermissions]);
 
   // Helper: kiểm tra quyền này có đang active với vai trò đang chọn không
   const isPermissionActive = (permissionId: number, roleId: number) => {
@@ -400,6 +542,25 @@ export default function UserRoleAndPermissionModal({
     if (adminRole && selectedMainRoles.includes(adminRole.id)) {
       setSelectedMainRoles(selectedMainRoles.filter((id) => id !== adminRole.id));
     }
+    
+    // Nếu chọn phòng ban và có PM được chọn, xóa bỏ quyền PM riêng
+    if (vals.length > 0 && isPMSelected) {
+      setRolePermissionsState((prev) => {
+        return prev.map((rp) => {
+          // Tìm roleId PM gốc
+          const pmRole = rolesGrouped.main.find((r) => r.name === "pm");
+          if (pmRole && rp.roleId === pmRole.id) {
+            // Kiểm tra xem permission này có phải là PM permission không
+            const isPMPermission = pmPermissions.some((p) => p.id === rp.permissionId);
+            if (isPMPermission) {
+              return { ...rp, isActive: false };
+            }
+          }
+          return rp;
+        });
+      });
+    }
+    
     // Nếu đang chọn manager thì active full quyền theo phòng ban
     const managerRole = rolesGrouped.main.find((r) => r.name === "manager");
     if (managerRole && selectedMainRoles.includes(managerRole.id)) {
@@ -429,6 +590,7 @@ export default function UserRoleAndPermissionModal({
     const adminRole = rolesGrouped.main.find((r) => r.name === "admin");
     const managerRole = rolesGrouped.main.find((r) => r.name === "manager");
     const viewRole = rolesGrouped.main.find((r) => r.name === "view");
+    const pmRole = rolesGrouped.main.find((r) => r.name === "pm");
     
     // Xử lý role "view"
     if (viewRole && vals.includes(viewRole.id)) {
@@ -453,6 +615,24 @@ export default function UserRoleAndPermissionModal({
       setIsViewRoleSelected(false);
       setViewRoleDepartments([]);
       setViewRolePermissions([]);
+    }
+    
+    // PM: không còn xóa phòng ban đã chọn; chỉ bỏ sub roles nếu không có phòng ban & không có pm-sub để hiển thị quyền riêng gọn gàng
+    if (pmRole && vals.includes(pmRole.id)) {
+      const hasPMSubRoles = selectedSubRoles.some((id) => {
+        const role = rolesGrouped.sub.find((r) => r.id === id);
+        const name = (role?.name || "").toLowerCase();
+        return name.startsWith("pm-") || name.startsWith("pm_");
+      });
+      if (!hasPMSubRoles) {
+        // giữ nguyên phòng ban; chỉ đảm bảo không còn pm-sub roles dư
+        const filtered = selectedSubRoles.filter((id) => {
+          const role = rolesGrouped.sub.find((r) => r.id === id);
+          const name = (role?.name || "").toLowerCase();
+          return !(name.startsWith("pm-") || name.startsWith("pm_"));
+        });
+        if (filtered.length !== selectedSubRoles.length) setSelectedSubRoles(filtered);
+      }
     }
     
     if (adminRole && vals.includes(adminRole.id)) {
@@ -499,8 +679,65 @@ export default function UserRoleAndPermissionModal({
     }
   };
   const handleSubRoleChange = (vals: (string | number)[]) => {
-    setSelectedSubRoles(vals.map(Number));
+    const newIds = vals.map(Number);
+    // Detect removed/added pm- sub roles for manual override tracking
+    const prevPmIds = selectedSubRoles.filter((id) => {
+      const role = rolesGrouped.sub.find((r) => r.id === id);
+      const name = (role?.name || "").toLowerCase();
+      return name.startsWith("pm-") || name.startsWith("pm_");
+    });
+    const newPmIds = newIds.filter((id) => {
+      const role = rolesGrouped.sub.find((r) => r.id === id);
+      const name = (role?.name || "").toLowerCase();
+      return name.startsWith("pm-") || name.startsWith("pm_");
+    });
+    const newPmSet = new Set(newPmIds);
+    const removed = prevPmIds.filter((id) => !newPmSet.has(id));
+    if (removed.length > 0) {
+      setRemovedPmSubRoleIds((prev) => new Set([...Array.from(prev), ...removed]));
+    }
+    // If user manually re-adds a previously removed pm sub role, drop it from removed tracking
+    if (newPmIds.length > 0) {
+      setRemovedPmSubRoleIds((prev) => {
+        const updated = new Set(prev);
+        newPmIds.forEach((id) => {
+          if (updated.has(id)) updated.delete(id);
+        });
+        return updated;
+      });
+    }
+    setSelectedSubRoles(newIds);
+    
+    // Nếu chọn PM phụ (pm-phongban) và có PM được chọn, xóa bỏ quyền PM riêng
+    const hasNewPMSubRoles = vals.some((id) => {
+      const role = rolesGrouped.sub.find((r) => r.id === id);
+      const name = (role?.name || "").toLowerCase();
+      return name.startsWith("pm-") || name.startsWith("pm_");
+    });
+    
+    if (hasNewPMSubRoles && isPMSelected) {
+      setRolePermissionsState((prev) => {
+        return prev.map((rp) => {
+          // Tìm roleId PM gốc
+          const pmRole = rolesGrouped.main.find((r) => r.name === "pm");
+          if (pmRole && rp.roleId === pmRole.id) {
+            // Kiểm tra xem permission này có phải là PM permission không
+            const isPMPermission = pmPermissions.some((p) => p.id === rp.permissionId);
+            if (isPMPermission) {
+              return { ...rp, isActive: false };
+            }
+          }
+          return rp;
+        });
+      });
+    }
   };
+  // Reset manual removal tracking if PM main role deselected
+  useEffect(() => {
+    if (!selectedMainRoleNames.includes("pm")) {
+      setRemovedPmSubRoleIds(new Set());
+    }
+  }, [selectedMainRoleNames.join(",")]);
   const handleSave = async () => {
     setShowConfirm(true);
   };
@@ -553,20 +790,70 @@ export default function UserRoleAndPermissionModal({
       
       await onSave(saveData);
     } else {
-      // Logic lưu cho các role khác (giữ nguyên như cũ)
-      const subRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
-      const uniqueRolePermissions = rolePermissionsState.filter(
-        (rp) => subRoleIds.includes(rp.roleId)
-      );
-      const permissionIds = Array.from(
-        new Set(uniqueRolePermissions.filter(rp => rp.isActive).map(rp => rp.permissionId))
-      );
-      await onSave({
+      // Logic lưu cho các role khác
+      const pmMain = rolesGrouped.main.find(r => r.name === 'pm');
+      // Tạo / tìm role phụ riêng cho PM (nếu có quyền PM riêng đang bật)
+      const pmPrivateRoleName = `pm_${user.username}`; // giống pattern view_<username>
+      let pmPrivateSubRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName);
+
+      // Detect pm private permissions currently active on pm main role (shared role)
+      let pmPrivateActivePermissions: { permissionId: number }[] = [];
+      if (pmMain) {
+        pmPrivateActivePermissions = rolePermissionsState
+          .filter(rp => rp.roleId === pmMain.id && rp.isActive && pmPermissions.some(p => p.id === rp.permissionId))
+          .map(rp => ({ permissionId: rp.permissionId }));
+      }
+
+      let selectedRoleIdsNow = [...selectedMainRoles, ...selectedSubRoles];
+
+      // If user has pm private active permissions, remap them to per-user sub role
+      let transformedRolePermissions = [...rolePermissionsState];
+      if (pmPrivateActivePermissions.length > 0 && pmMain) {
+        // Bước 1: Đảm bảo đã có role pm_<username>
+        let pmPrivateSubRoleId = pmPrivateSubRole?.id;
+        if (!pmPrivateSubRoleId) {
+          try {
+            await onSave({
+              departmentIds: selectedDepartments,
+              roleIds: [...selectedMainRoles],
+              permissionIds: [],
+              rolePermissions: [],
+              pmPrivateRoleName: pmPrivateRoleName,
+            } as any);
+          } catch (e) {
+            console.warn('Create pm private role failed (first call):', e);
+          }
+        }
+        // Giả sử parent không refetch ngay, tạm lấy lại từ rolesGrouped (cần parent gọi reload sau save thành công).
+        pmPrivateSubRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName) || pmPrivateSubRole;
+        pmPrivateSubRoleId = pmPrivateSubRole?.id;
+        if (!pmPrivateSubRoleId) {
+          // fallback: bỏ qua attach để tránh gửi roleId=0 sai
+          console.warn('Chưa có id role pm private -> bỏ qua gán permissions vòng này');
+        } else {
+          transformedRolePermissions = transformedRolePermissions.filter(rp => !(rp.roleId === pmMain.id && pmPermissions.some(p => p.id === rp.permissionId)));
+          pmPrivateActivePermissions.forEach(pp => {
+            transformedRolePermissions.push({ roleId: pmPrivateSubRoleId!, permissionId: pp.permissionId, isActive: true });
+          });
+          if (!selectedRoleIdsNow.includes(pmPrivateSubRoleId)) selectedRoleIdsNow.push(pmPrivateSubRoleId);
+        }
+      }
+
+      // Filter permissions by selected roles only
+  // Chỉ gửi rolePermissions có roleId hợp lệ > 0
+  const uniqueRolePermissions = transformedRolePermissions.filter(rp => typeof rp.roleId === 'number' && rp.roleId > 0 && selectedRoleIdsNow.includes(rp.roleId));
+      const permissionIds = Array.from(new Set(uniqueRolePermissions.filter(rp => rp.isActive).map(rp => rp.permissionId)));
+
+      // Nếu chưa có pmPrivateSubRole mà vẫn có pmPrivateActivePermissions => backend cần tạo role, không gửi roleId=0
+  const finalRoleIds = selectedRoleIdsNow.filter(rid => typeof rid === 'number' && rid > 0);
+      const payload: any = {
         departmentIds: selectedDepartments,
-        roleIds: [...selectedMainRoles, ...selectedSubRoles],
+        roleIds: finalRoleIds,
         permissionIds,
         rolePermissions: uniqueRolePermissions,
-      });
+      };
+  if (pmPrivateActivePermissions.length > 0) payload.pmPrivateRoleName = pmPrivateRoleName;
+      await onSave(payload);
     }
     
     setSaving(false);
@@ -744,17 +1031,20 @@ export default function UserRoleAndPermissionModal({
           ) : (
             // Giao diện cho các role khác (giữ nguyên như cũ)
             <>
-              <div className="mb-4">
-                <GradientTitle className="text-lg mb-2 block">
-                  CHỌN PHÒNG BAN
-                </GradientTitle>
-                <MultiSelectCombobox
-                  options={departmentOptions}
-                  value={selectedDepartments}
-                  onChange={handleDepartmentChange}
-                  placeholder="Chọn phòng ban..."
-                />
-              </div>
+              {/* Chỉ hiển thị phần chọn phòng ban khi không phải quyền riêng PM */}
+              {shouldShowDepartments && (
+                <div className="mb-4">
+                  <GradientTitle className="text-lg mb-2 block">
+                    CHỌN PHÒNG BAN
+                  </GradientTitle>
+                  <MultiSelectCombobox
+                    options={departmentOptions}
+                    value={selectedDepartments}
+                    onChange={handleDepartmentChange}
+                    placeholder="Chọn phòng ban..."
+                  />
+                </div>
+              )}
               <div className="mb-4">
                 <GradientTitle className="text-lg mb-2 block">
                   VAI TRÒ CHÍNH
@@ -765,21 +1055,84 @@ export default function UserRoleAndPermissionModal({
                   onChange={handleMainRoleChange}
                   placeholder="Chọn vai trò chính..."
                 />
-                <GradientTitle className="text-base mb-2 mt-4 block">
-                  VAI TRÒ PHỤ
-                </GradientTitle>
-                <MultiSelectCombobox
-                  options={subRoleOptions}
-                  value={selectedSubRoles}
-                  onChange={handleSubRoleChange}
-                  placeholder="Chọn vai trò phụ..."
-                />
+                {/* Chỉ hiển thị vai trò phụ khi không phải quyền riêng PM */}
+                <>
+                  <GradientTitle className="text-base mb-2 mt-4 block">
+                    VAI TRÒ PHỤ
+                  </GradientTitle>
+                  <MultiSelectCombobox
+                    options={displayedSubRoleOptions}
+                    value={selectedSubRoles}
+                    onChange={handleSubRoleChange}
+                    placeholder={pmPrivateActive ? "Đang dùng quyền riêng PM (ẩn pm-phòngban)" : "Chọn vai trò phụ..."}
+                  />
+                </>
               </div>
               <div className="mb-4">
                 <GradientTitle className="text-lg mb-2 block">
                   QUYỀN HẠN
                 </GradientTitle>
                 <div>
+                  {shouldShowPMPermissions && pmPermissions.length > 0 && (
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-semibold text-lg">PM - Quyền riêng</div>
+                        <label className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={pmPermissions.every((perm) => selectedPMRoleIds.some((rid) => isPermissionActive(perm.id, rid)))}
+                            onCheckedChange={(checked) => {
+                              setRolePermissionsState((prev) => {
+                                const updated = [...prev];
+                                pmPermissions.forEach((permission) => {
+                                  selectedPMRoleIds.forEach((roleId) => {
+                                    const idx = updated.findIndex(
+                                      (rp) => rp.roleId === roleId && rp.permissionId === permission.id
+                                    );
+                                    if (idx !== -1) {
+                                      updated[idx] = { ...updated[idx], isActive: !!checked };
+                                    } else {
+                                      updated.push({ roleId, permissionId: permission.id, isActive: !!checked });
+                                    }
+                                  });
+                                });
+                                return updated;
+                              });
+                            }}
+                          />
+                          Chọn tất cả quyền PM
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
+                        {pmPermissions.map((permission) => {
+                          const isActive = selectedPMRoleIds.some((roleId) => isPermissionActive(permission.id, roleId));
+                          return (
+                            <label key={permission.id} className="flex items-center gap-2">
+                              <Checkbox
+                                checked={isActive}
+                                onCheckedChange={(checked) => {
+                                  setRolePermissionsState((prev) => {
+                                    const updated = [...prev];
+                                    selectedPMRoleIds.forEach((roleId) => {
+                                      const idx = updated.findIndex(
+                                        (rp) => rp.roleId === roleId && rp.permissionId === permission.id
+                                      );
+                                      if (idx !== -1) {
+                                        updated[idx] = { ...updated[idx], isActive: !!checked };
+                                      } else {
+                                        updated.push({ roleId, permissionId: permission.id, isActive: !!checked });
+                                      }
+                                    });
+                                    return updated;
+                                  });
+                                }}
+                              />
+                              {permission.name} ({permission.action})
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {departments.map((dep) => {
                     const depPermissions = permissions.filter((p) => p.name === dep.slug);
                     if (depPermissions.length === 0) return null;

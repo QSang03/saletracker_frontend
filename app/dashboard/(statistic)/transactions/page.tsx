@@ -70,6 +70,7 @@ import {
   startOfDay,
 } from "@/lib/order-helper";
 import { useOrderStats } from "@/hooks/useOrderStats";
+import { useHolidays } from "@/hooks/useHolidays";
 
 type Period = "day" | "week" | "quarter";
 
@@ -384,6 +385,8 @@ function generateMockData(range: DateRange): OrderDetail[] {
 export default function ElegantTransactionsPage() {
   // ✅ SỬA: Destructure cả getDetailedStats và getExpiredTodayStats ở top level
   const { getDetailedStats, getExpiredTodayStats } = useOrderStats();
+  // Dynamic holidays
+  const { holidaysSet } = useHolidays();
   
   const [period, setPeriod] = useState<Period>("day");
   const [range, setRange] = useState<DateRange>(() => getPresetRange("day"));
@@ -530,11 +533,26 @@ export default function ElegantTransactionsPage() {
 
   // Enhanced summary calculations - ✅ XÓA phần tính toán đơn hết hạn
   const summary = useMemo(() => {
-    const today = startOfDay(new Date());
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const twoDaysAgo = new Date(today);
-    twoDaysAgo.setDate(today.getDate() - 2);
+    // Helper: holiday + Sunday exclusion
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const isHoliday = (d: Date) => holidaysSet.has(fmt(d));
+    const isWeekendOrHoliday = (d: Date) => d.getDay() === 0 || isHoliday(d); // chỉ bỏ Chủ nhật + ngày lễ
+    // Lấy 3 ngày làm việc gần nhất (ngày hiện tại nếu hợp lệ)
+    function getLastWorkingDays(n: number): Date[] {
+      const res: Date[] = [];
+      const cursor = startOfDay(new Date());
+      while (res.length < n) {
+        if (!isWeekendOrHoliday(cursor)) {
+          res.push(new Date(cursor));
+        }
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      return res; // [0]=gần nhất (hôm nay hoặc gần nhất), [1]=trước đó...
+    }
+    const workingDays = getLastWorkingDays(3);
+    const day0 = workingDays[0];
+    const day1 = workingDays[1];
+    const day2 = workingDays[2];
 
     let countDemand = 0,
       countCompleted = 0,
@@ -552,9 +570,9 @@ export default function ElegantTransactionsPage() {
         : new Date(it.created_at as any);
       const createdDay = startOfDay(created).getTime();
 
-      if (createdDay === today.getTime()) gdToday++;
-      if (createdDay === startOfDay(yesterday).getTime()) gd1++;
-      if (createdDay === startOfDay(twoDaysAgo).getTime()) gd2++;
+  if (createdDay === day0.getTime()) gdToday++;
+  if (createdDay === day1.getTime()) gd1++;
+  if (createdDay === day2.getTime()) gd2++;
 
       // ✅ XÓA phần tính toán đơn hết hạn
 
@@ -588,11 +606,22 @@ export default function ElegantTransactionsPage() {
 
   // ✅ SỬA: buildSummary cũng loại bỏ tính toán đơn hết hạn
   const buildSummary = (data: OrderDetail[]) => {
-    const today = startOfDay(new Date());
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const twoDaysAgo = new Date(today);
-    twoDaysAgo.setDate(today.getDate() - 2);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const isHoliday = (d: Date) => holidaysSet.has(fmt(d));
+    const isWeekendOrHoliday = (d: Date) => d.getDay() === 0 || isHoliday(d);
+    function getLastWorkingDays(n: number): Date[] {
+      const res: Date[] = [];
+      const cursor = startOfDay(new Date());
+      while (res.length < n) {
+        if (!isWeekendOrHoliday(cursor)) res.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      return res;
+    }
+    const workingDays = getLastWorkingDays(3);
+    const day0 = workingDays[0];
+    const day1 = workingDays[1];
+    const day2 = workingDays[2];
 
     let countDemand = 0,
       countCompleted = 0,
@@ -610,9 +639,9 @@ export default function ElegantTransactionsPage() {
         : new Date(it.created_at as any);
       const createdDay = startOfDay(created).getTime();
 
-      if (createdDay === today.getTime()) gdToday++;
-      if (createdDay === startOfDay(yesterday).getTime()) gd1++;
-      if (createdDay === startOfDay(twoDaysAgo).getTime()) gd2++;
+  if (createdDay === day0.getTime()) gdToday++;
+  if (createdDay === day1.getTime()) gd1++;
+  if (createdDay === day2.getTime()) gd2++;
 
       // ✅ XÓA hoàn toàn phần tính toán đơn hết hạn
 

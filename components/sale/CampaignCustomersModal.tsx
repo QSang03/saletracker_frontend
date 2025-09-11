@@ -791,12 +791,29 @@ export default function CampaignCustomersModal({
 
       <AnimatePresence>
         {isOpen && (
-          <Dialog open={isOpen} onOpenChange={onClose}>
+          <Dialog
+            open={isOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                // Small delay to ensure ShadCN portal unmount completes, then restore page interactivity
+                setTimeout(() => {
+                  const overlays = document.querySelectorAll('[data-radix-dialog-overlay]');
+                  overlays.forEach((el) => {
+                    (el as HTMLElement).style.pointerEvents = 'none';
+                  });
+                  document.body.style.pointerEvents = '';
+                }, 50);
+                onClose();
+              }
+            }}
+          >
             <DialogContent
               className="!max-w-[90vw] w-full !h-[90vh] p-0 flex flex-col"
               style={{
                 maxHeight: "90vh",
                 overflow: "hidden",
+                // Ensure dialog itself captures events while open
+                pointerEvents: 'auto',
               }}
             >
               <motion.div

@@ -27,10 +27,31 @@ export default function RolesPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const handlePageSizeChange = useCallback((newPageSize: number) => {
     setPageSize(newPageSize);
     setPage(1); // Reset to first page when page size changes
+  }, []);
+
+  // Fetch current user profile once to know if admin
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data: User = await res.json();
+            setCurrentUser(data);
+        }
+      } catch (e) {
+        // silent
+      }
+    };
+    fetchProfile();
   }, []);
 
   // Modal state cho thêm vai trò chính
@@ -106,16 +127,24 @@ export default function RolesPage() {
   // Extract data from the response
   const { users, rolesGrouped, departments, permissions, allRolePermissions } = rolesData;
 
+  // Ẩn user có role 'view' đối với non-admin; admin thấy tất cả
+  const usersWithoutView = useMemo(() => {
+    if (!Array.isArray(users)) return [];
+    // Nếu chưa tải profile => tạm thời không lọc để admin không bị thiếu dữ liệu lúc đầu
+    if (!currentUser) return users;
+    const isAdmin = (currentUser.roles || []).some(r => (r.name || '').toLowerCase() === 'admin');
+    if (isAdmin) return users;
+  return users.filter(u => !u.roles?.some((r: any) => (r.name || '').toLowerCase() === 'view'));
+  }, [users, currentUser]);
+
   // Filter & phân trang ở frontend
   const filteredUsers = useMemo(() => {
-    return Array.isArray(users)
-      ? users.filter((u) =>
-          u.fullName?.toLowerCase().includes(search.toLowerCase()) ||
-          u.username?.toLowerCase().includes(search.toLowerCase()) ||
-          u.email?.toLowerCase().includes(search.toLowerCase())
-        )
-      : [];
-  }, [users, search]);
+    return usersWithoutView.filter((u) =>
+      (u.fullName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (u.username || '').toLowerCase().includes(search.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(search.toLowerCase())
+    );
+  }, [usersWithoutView, search]);
 
   const pagedUsers = useMemo(() => {
     const start = (page - 1) * pageSize;

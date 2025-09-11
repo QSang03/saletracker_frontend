@@ -9,12 +9,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
-import type { Product, Brand } from "@/types";
+import type { Product, Brand, Category } from "@/types";
 import { getAccessToken } from "@/lib/auth";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function getAuthHeaders(): HeadersInit {
   const token = getAccessToken();
@@ -25,19 +24,15 @@ function getAuthHeaders(): HeadersInit {
 }
 
 export default function ProductTable() {
-  const { canExportInDepartment } = useDynamicPermission();
+  const { canExportInDepartment, userPermissions, isPM, isAdmin, isViewRole } = useDynamicPermission();
   const [products, setProducts] = useState<Product[]>([]);
+  const [totalProducts, setTotalProducts] = useState<number>(0);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [productFilter, setProductFilter] = useState({ search: "", brandIds: [] as (string|number)[], categoryIds: [] as (string|number)[], parentOnly: false });
-  const [brandFilter, setBrandFilter] = useState({ search: "" });
-  const [deleteBrandId, setDeleteBrandId] = useState<number | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [brandHasProducts, setBrandHasProducts] = useState(false);
   // Pagination state
   const [productPage, setProductPage] = useState(1);
   const [productPageSize, setProductPageSize] = useState(10);
-  const [brandPage, setBrandPage] = useState(1);
-  const [brandPageSize, setBrandPageSize] = useState(10);
 
   // Thêm refs cho component lifecycle
   const isComponentMounted = useRef(true);
@@ -56,16 +51,37 @@ export default function ProductTable() {
   // Cải thiện fetch functions
   const fetchProducts = async (silent = false) => {
     try {
-      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products`, { headers: getAuthHeaders() });
+      const params = new URLSearchParams();
+      if (productFilter.search) params.set('search', productFilter.search);
+      if (productFilter.brandIds && productFilter.brandIds.length > 0) {
+        // brandIds contains names for this table
+        params.set('brands', productFilter.brandIds.map(String).join(','));
+      }
+      if (productFilter.categoryIds && productFilter.categoryIds.length > 0) {
+        params.set('categoryIds', productFilter.categoryIds.map(String).join(','));
+      }
+      params.set('page', String(productPage));
+      params.set('pageSize', String(productPageSize));
+      const qs = params.toString();
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/products${qs ? `?${qs}` : ''}`;
+      const r = await fetch(url, { headers: getAuthHeaders() });
       const json = await r.json();
       
       if (!isComponentMounted.current) return;
       
-      setProducts((json && Array.isArray(json.data)) ? json.data : []);
+  // New backend returns { data, total }
+  if (Array.isArray(json)) {
+        setProducts(json);
+        setTotalProducts(json.length);
+      } else {
+        setProducts(json?.data ?? []);
+        setTotalProducts(json?.total ?? (json?.data?.length ?? 0));
+      }
     } catch (err) {
       console.error("Lỗi fetch products:", err);
       if (!isComponentMounted.current) return;
-      setProducts([]);
+  setProducts([]);
+  setTotalProducts(0);
     }
   };
 
@@ -85,11 +101,33 @@ export default function ProductTable() {
     }
   };
 
+  const fetchCategories = async (silent = false) => {
+    try {
+      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, { headers: getAuthHeaders() });
+      const json = await r.json();
+
+      if (!isComponentMounted.current) return;
+
+      setCategories(Array.isArray(json) ? json : (json.data ?? []));
+    } catch (err) {
+      console.error("Lỗi fetch categories:", err);
+      if (!isComponentMounted.current) return;
+      setCategories([]);
+    }
+  };
+
   // Initial data fetch
   useEffect(() => {
     fetchProducts();
     fetchBrands();
+  fetchCategories();
   }, []);
+
+  // Re-fetch products when client filters that are pushed to server change
+  useEffect(() => {
+    fetchProducts(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productFilter.search, JSON.stringify(productFilter.brandIds), JSON.stringify(productFilter.categoryIds), productPage, productPageSize]);
 
   // Auto-refresh every 2 minutes
   useEffect(() => {
@@ -101,6 +139,7 @@ export default function ProductTable() {
         if (isComponentMounted.current) {
           fetchProducts(true); // silent refresh
           fetchBrands(true); // silent refresh
+          fetchCategories(true); // silent refresh
         }
       }, 120000); // 2 minutes
     };
@@ -116,37 +155,109 @@ export default function ProductTable() {
   // Lấy danh sách category_id duy nhất từ products (dựa trên categories array)
   const categoryIds = useMemo(() => {
     const ids = products
-      .flatMap((p) => (Array.isArray(p.categories) ? p.categories.map((c) => c.id) : []))
+      .flatMap((p) => {
+        if (Array.isArray(p.categories)) return p.categories.map((c) => c.id);
+        if (p.category) return [p.category.id];
+        return [];
+      })
       .filter((id) => id !== null && id !== undefined);
     return Array.from(new Set(ids)).map(String);
   }, [products]);
-  // Lấy danh sách brand id duy nhất từ products (dựa trên brand object)
-  const brandIds = useMemo(() => {
-    const ids = products
-      .map((p) => p.brand?.id)
-      .filter((id) => id !== null && id !== undefined);
-    return Array.from(new Set(ids)).map(String);
-  }, [products]);
+  // (Giữ chỗ nếu cần trong tương lai)
 
   // Filtered products
   const filteredProducts = useMemo(() => {
+    // If user is PM and not admin/view, restrict by pm_{slug} permissions
+    let pmAllowedSlugs: string[] = [];
+    if (isPM && !isAdmin && !isViewRole) {
+      pmAllowedSlugs = userPermissions
+        .map((p) => (p.name || ""))
+        .filter((n) => /^pm[_-]/i.test(n))
+        .map((n) => n.replace(/^pm[_-]/i, ""))
+        .map((s) =>
+          s
+            .toLowerCase()
+            .normalize("NFKD")
+            .replace(/\p{Diacritic}/gu, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        );
+    }
+
+    const matchesPmScope = (p: Product) => {
+      if (pmAllowedSlugs.length === 0) return true;
+      // check categories
+      const catSlugs = (
+        Array.isArray(p.categories)
+          ? p.categories
+          : p.category
+            ? [p.category]
+            : []
+      )
+        .map((c) => (c.catName || ""))
+        .map((s) =>
+          s
+            .toLowerCase()
+            .normalize("NFKD")
+            .replace(/\p{Diacritic}/gu, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        );
+      if (catSlugs.some((cs) => pmAllowedSlugs.includes(cs))) return true;
+      // check brand
+      const brandSlug = p.brand?.name
+        ? p.brand.name
+            .toLowerCase()
+            .normalize("NFKD")
+            .replace(/\p{Diacritic}/gu, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        : null;
+      if (brandSlug && pmAllowedSlugs.includes(brandSlug)) return true;
+      return false;
+    };
+
+    const normalize = (v: any) =>
+      (v ?? "")
+        .toString()
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const needle = normalize(productFilter.search);
+
     return products.filter((p) => {
-      const matchName = p.productName.toLowerCase().includes(productFilter.search.toLowerCase());
-      const productBrandId = p.brand?.id ? String(p.brand.id) : undefined;
+      const catNames = Array.isArray(p.categories)
+        ? p.categories.map((c) => c.catName)
+        : p.category
+          ? [p.category.catName]
+          : [];
+      const haystack = normalize([
+        p.productName,
+        p.productCode,
+        p.brand?.name,
+        ...catNames,
+        p.description,
+      ].filter(Boolean).join(" | "));
+      const matchName = !needle || haystack.includes(needle);
+      const productBrandName = p.brand?.name ? p.brand.name.toLowerCase() : undefined;
       const matchBrand = productFilter.brandIds && productFilter.brandIds.length > 0
-        ? (productBrandId ? productFilter.brandIds.includes(productBrandId) : false)
+        ? (productBrandName
+            ? productFilter.brandIds.map((b) => String(b).toLowerCase()).includes(productBrandName)
+            : false)
         : true;
-      const productCategoryIds = Array.isArray(p.categories) ? p.categories.map((c) => String(c.id)) : [];
+      const productCategoryIds = Array.isArray(p.categories)
+        ? p.categories.map((c) => String(c.id))
+        : p.category
+          ? [String(p.category.id)]
+          : [];
       const matchCategory = productFilter.categoryIds && productFilter.categoryIds.length > 0 ? productCategoryIds.some((id) => productFilter.categoryIds.includes(id)) : true;
       const matchParent = productFilter.parentOnly ? (!p.categories || p.categories.length === 0) : true;
-      return matchName && matchBrand && matchCategory && matchParent;
+      return matchName && matchBrand && matchCategory && matchParent && matchesPmScope(p);
     });
-  }, [products, productFilter]);
-
-  // Filtered brands (giữ nguyên)
-  const filteredBrands = useMemo(() => {
-    return brands.filter((b) => b.name.toLowerCase().includes(brandFilter.search.toLowerCase()));
-  }, [brands, brandFilter]);
+  }, [products, productFilter, isPM, isAdmin, isViewRole, userPermissions]);
 
   // Pagination for products
   const pagedProducts = useMemo(() => {
@@ -154,27 +265,10 @@ export default function ProductTable() {
     return filteredProducts.slice(start, start + productPageSize);
   }, [filteredProducts, productPage, productPageSize]);
 
-  // Pagination for brands
-  const pagedBrands = useMemo(() => {
-    const start = (brandPage - 1) * brandPageSize;
-    return filteredBrands.slice(start, start + brandPageSize);
-  }, [filteredBrands, brandPage, brandPageSize]);
-
-  const handleDeleteBrand = (id: number) => {
-    const hasProducts = products.some((p) => p.brand?.id === id);
-    setBrandHasProducts(hasProducts);
-    setDeleteBrandId(id);
-    setShowConfirm(true);
-  };
-
-  const confirmDeleteBrand = async () => {
-    if (deleteBrandId && !brandHasProducts) {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands/${deleteBrandId}`, { method: "DELETE", headers: getAuthHeaders() });
-      setBrands(brands.filter((b) => b.id !== deleteBrandId));
-    }
-    setShowConfirm(false);
-    setDeleteBrandId(null);
-  };
+  // Use server-side paging results directly to render rows
+  const displayedProducts = useMemo(() => {
+    return totalProducts > 0 ? products : pagedProducts;
+  }, [products, pagedProducts, totalProducts]);
 
   // Chặn setState lặp khi filter không đổi
   const lastProductFilter = React.useRef(productFilter);
@@ -192,30 +286,58 @@ export default function ProductTable() {
     }
   }, []);
 
-  const lastBrandFilter = React.useRef(brandFilter);
-  const handleBrandFilterChange = React.useCallback((filters: any) => {
-    const newFilter = { search: filters.search };
-    if (JSON.stringify(lastBrandFilter.current) !== JSON.stringify(newFilter)) {
-      setBrandFilter(newFilter);
-      lastBrandFilter.current = newFilter;
-    }
-  }, []);
+  // (Loại bỏ brand table UI — không cần handler riêng)
   
 
 
+  // Helpers: decode HTML -> plain text and truncate with tooltip
+  const toPlainText = (html?: string | null): string => {
+    if (!html) return "";
+    try {
+      if (typeof window !== "undefined") {
+        const el = document.createElement("div");
+        el.innerHTML = html;
+        return (el.textContent || el.innerText || "").replace(/\s+/g, " ").trim();
+      }
+    } catch {}
+    // Fallback: strip tags and collapse spaces
+    return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  };
+
+  const TruncatedText: React.FC<{ text: string; maxChars?: number; className?: string }> = ({ text, maxChars = 60, className }) => {
+    const plain = toPlainText(text);
+    const isLong = plain.length > maxChars;
+    const shown = isLong ? plain.slice(0, maxChars) + "…" : plain;
+    if (!isLong) return <span className={className}>{shown}</span>;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/* Remove native title attribute to avoid double tooltips (browser + custom) */}
+          <span className={"block whitespace-nowrap overflow-hidden text-ellipsis max-w-full " + (className || "")}>{shown}</span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div className="max-w-[480px] whitespace-pre-wrap break-words">{plain}</div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
   return (
-    <div className="flex flex-row gap-8 w-full">
+  <div className="flex flex-row gap-8 w-full">
       {/* Products Table */}
       <div className="flex-1 min-w-[400px] border rounded-xl bg-background p-6 flex flex-col">
         <h2 className="font-bold text-lg mb-4">Sản phẩm</h2>
         <PaginatedTable
           enableSearch
+          enableCategoriesFilter
+          enableBrandsFilter
           page={productPage}
           pageSize={productPageSize}
-          total={filteredProducts.length}
+          total={totalProducts || filteredProducts.length}
           onPageChange={setProductPage}
+          onPageSizeChange={setProductPageSize}
           emptyText="Không có sản phẩm nào phù hợp."
-          availableCategories={[]}
+          availableCategories={categories.map((c) => ({ value: String(c.id), label: c.catName }))}
           availableBrands={brands.map((b) => b.name)}
           onFilterChange={handleProductFilterChange}
           canExport={canExportInDepartment('san-pham')}
@@ -224,98 +346,44 @@ export default function ProductTable() {
           <Table className="min-w-[400px]">
             <TableHeader className="sticky top-0 z-10 shadow-sm">
               <TableRow>
-                <TableHead className="px-3 py-2 text-left w-12">#</TableHead>
+                <TableHead className="px-3 py-2 text-left w-20">ID</TableHead>
+                <TableHead className="px-3 py-2 text-left w-56">Mã sản phẩm</TableHead>
                 <TableHead className="px-3 py-2 text-left">Tên sản phẩm</TableHead>
-                <TableHead className="px-3 py-2 text-left">Danh mục</TableHead>
+                <TableHead className="px-3 py-2 text-left w-40">Thương hiệu</TableHead>
+                <TableHead className="px-3 py-2 text-left w-64">Danh mục</TableHead>
+                <TableHead className="px-3 py-2 text-left">Mô tả</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pagedProducts.length === 0 ? (
+              {displayedProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-4 text-gray-400">Không có sản phẩm nào phù hợp.</TableCell>
+                  <TableCell colSpan={6} className="text-center py-4 text-gray-400">Không có sản phẩm nào phù hợp.</TableCell>
                 </TableRow>
               ) : (
-                pagedProducts.map((p, idx) => (
+                displayedProducts.map((p, idx) => (
                   <TableRow
                     key={p.id}
                     className={idx % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}
                   >
-                    <TableCell className="px-3 py-2 text-center">{(productPage - 1) * productPageSize + idx + 1}</TableCell>
-                    <TableCell className="px-3 py-2">{p.productName}</TableCell>
+                    <TableCell className="px-3 py-2">{p.id}</TableCell>
+                    <TableCell className="px-3 py-2"><TruncatedText text={p.productCode || '-'} maxChars={48} /></TableCell>
+                    <TableCell className="px-3 py-2"><TruncatedText text={p.productName} maxChars={60} /></TableCell>
+                    <TableCell className="px-3 py-2">{p.brand?.name || '-'}</TableCell>
                     <TableCell className="px-3 py-2">
-                      {Array.isArray(p.categories) && p.categories.length > 0
-                        ? p.categories.map((c) => c.catName).join(', ')
-                        : '-'}
+                      <TruncatedText
+                        text={Array.isArray(p.categories) && p.categories.length > 0
+                          ? p.categories.map((c) => c.catName).join(', ')
+                          : (p.category?.catName || '-')}
+                        maxChars={48}
+                      />
                     </TableCell>
+                    <TableCell className="px-3 py-2"><TruncatedText text={p.description || '-'} maxChars={80} /></TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
         </PaginatedTable>
-      </div>
-      {/* Brands Table */}
-      <div className="flex-1 min-w-[400px] border rounded-xl bg-background p-6 flex flex-col">
-        <h2 className="font-bold text-lg mb-4">Brands</h2>
-        <PaginatedTable
-          enableSearch
-          page={brandPage}
-          pageSize={brandPageSize}
-          total={filteredBrands.length}
-          onPageChange={setBrandPage}
-          emptyText="Không có brand nào phù hợp."
-          onFilterChange={handleBrandFilterChange}
-          canExport={canExportInDepartment('san-pham')}
-          buttonClassNames={{ export: "ml-2", reset: "ml-2" }}
-        >
-          <Table className="min-w-[400px]">
-            <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-              <TableRow>
-                <TableHead className="px-3 py-2 text-left w-12">#</TableHead>
-                <TableHead className="px-3 py-2 text-left">Tên brand</TableHead>
-                <TableHead className="px-3 py-2 text-left">Mô tả</TableHead>
-                <TableHead className="w-36 text-center px-3 py-2">Thao tác</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pagedBrands.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4 text-gray-400">Không có brand nào phù hợp.</TableCell>
-                </TableRow>
-              ) : (
-                pagedBrands.map((b, idx) => (
-                  <TableRow
-                    key={b.id}
-                    className={idx % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}
-                  >
-                    <TableCell className="px-3 py-2 text-center">{(brandPage - 1) * brandPageSize + idx + 1}</TableCell>
-                    <TableCell className="px-3 py-2">{b.name}</TableCell>
-                    <TableCell className="px-3 py-2">{b.descriptions || '-'}</TableCell>
-                    <TableCell className="text-center px-3 py-2 flex gap-2 justify-center">
-                      <Button variant="edit" size="sm">Sửa</Button>
-                      <Button
-                        variant="delete"
-                        size="sm"
-                        className="ml-2"
-                        onClick={() => handleDeleteBrand(b.id)}
-                      >
-                        Xóa
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-              
-            </TableBody>
-          </Table>
-        </PaginatedTable>
-        <ConfirmDialog
-          isOpen={showConfirm}
-          title="Xác nhận xoá brand"
-          message={brandHasProducts ? "Không thể xoá brand này vì còn sản phẩm liên quan." : "Bạn có chắc muốn xoá brand này?"}
-          onConfirm={confirmDeleteBrand}
-          onCancel={() => setShowConfirm(false)}
-        />
       </div>
     </div>
   );
