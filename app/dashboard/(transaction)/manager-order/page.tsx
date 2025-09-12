@@ -84,7 +84,7 @@ function ManagerOrderContent() {
     products: Array<{ value: number; label: string }>;
   }>({ departments: [], products: [] });
 
-  const { canExportInDepartment, user, isPM, isAnalysisRole, isAdmin } = useDynamicPermission();
+  const { canExportInDepartment, user, isPM, isManager, isAnalysisRole, isAdmin } = useDynamicPermission();
   const {
     orders,
     total,
@@ -172,11 +172,13 @@ function ManagerOrderContent() {
     { value: "4", label: "Bình thường" },
   ];
 
-  // Xác định xem user có phải là PM (có thể có hoặc không có role analysis)
-  const isPMUser = isPM;
+  // ✅ SỬA: Xác định xem user có phải là PM đơn thuần (không có manager)
+  // User có cả PM và Manager thì xem như Manager, không phải PM
+  const isPMUser = isPM && !isManager;
   
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
   // PM users chỉ thấy số lượng khách hàng của chính họ
+  // User có cả PM và Manager thì xem như Manager (không bị giới hạn)
   const customerCountFilters = useMemo(() => ({
     fromDate: filters.dateRange?.start,
     toDate: filters.dateRange?.end,
@@ -337,9 +339,10 @@ function ManagerOrderContent() {
       // Handle employees
       let employeesValue = "";
       if (isPMUser) {
-        // Nếu user là PM, chỉ hiển thị đơn hàng của chính họ (giống như user thường)
+        // Nếu user là PM đơn thuần, chỉ hiển thị đơn hàng của chính họ (giống như user thường)
         employeesValue = user?.id ? String(user.id) : "";
       } else {
+        // User có cả PM và Manager thì xem như Manager (có thể chọn employees)
         employeesValue =
           paginatedFilters.employees.length > 0
             ? paginatedFilters.employees.join(",")
@@ -349,9 +352,10 @@ function ManagerOrderContent() {
       // Handle departments
       let departmentsValue = "";
       if (isPMUser) {
-        // Nếu user là PM, không set department để backend filter theo user hiện tại
+        // Nếu user là PM đơn thuần, không set department để backend filter theo user hiện tại
         departmentsValue = "";
       } else {
+        // User có cả PM và Manager thì xem như Manager (có thể chọn departments)
         departmentsValue =
           paginatedFilters.departments.length > 0
             ? paginatedFilters.departments.join(",")
@@ -687,11 +691,12 @@ function ManagerOrderContent() {
   // Admin or PM can include hidden items when exporting all
   if ((isAdmin || isPMUser) && includeHiddenExport) params.append("includeHidden", "1");
     
-    // Nếu user là PM, chỉ export đơn hàng của chính họ (giống như user thường)
+    // Nếu user là PM đơn thuần, chỉ export đơn hàng của chính họ (giống như user thường)
     if (isPMUser) {
       if (user?.id) params.append("employees", String(user.id));
       // Không set departments để backend filter theo user hiện tại
     } else {
+      // User có cả PM và Manager thì xem như Manager (có thể export tất cả)
       if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
       if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
       if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
@@ -922,7 +927,7 @@ function ManagerOrderContent() {
     const result = {
       search: filters.search || "",
       departments: isPMUser 
-        ? [] // PM user không cần filter theo department
+        ? [] // PM đơn thuần không cần filter theo department
         : filters.departments
         ? filters.departments.split(",").filter((d) => d)
         : [],
@@ -944,7 +949,7 @@ function ManagerOrderContent() {
       quantity: filters.quantity || 1, // Thêm quantity filter
   conversationType: filters.conversationType ? filters.conversationType.split(',').filter(Boolean) : [],
       employees: isPMUser
-        ? user?.id ? [String(user.id)] : [] // PM user chỉ hiển thị đơn hàng của chính họ (giống như user thường)
+        ? user?.id ? [String(user.id)] : [] // PM đơn thuần chỉ hiển thị đơn hàng của chính họ
         : filters.employees
         ? filters.employees.split(",").filter((e) => e)
         : [],
@@ -972,6 +977,36 @@ function ManagerOrderContent() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  // ✅ Kiểm tra quyền truy cập cho PM
+  if (!canAccessOrderManagement) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center text-red-600">
+              🚫 Không có quyền truy cập
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <div className="text-gray-600">
+              Bạn không có quyền truy cập vào trang quản lý đơn hàng.
+            </div>
+            <div className="text-sm text-gray-500">
+              {isPM && !isAnalysisRole ? (
+                <div>
+                  <p>PM cần có role <strong>analysis</strong> để truy cập trang này.</p>
+                  <p>Hoặc cần có role <strong>manager</strong> để xem như quản lý.</p>
+                </div>
+              ) : (
+                <p>Vui lòng liên hệ quản trị viên để được cấp quyền.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -1260,7 +1295,7 @@ function ManagerOrderContent() {
 
           // Ensure sale is represented in employees (CSV of ids) so the select shows it as selected
           if (isPMUser) {
-            // PM user luôn chỉ hiển thị đơn hàng của chính họ (giống như user thường)
+            // PM đơn thuần luôn chỉ hiển thị đơn hàng của chính họ (giống như user thường)
             mergedBase.employees = user?.id ? String(user.id) : undefined;
             mergedBase.employee = undefined;
           } else if (payload.saleId !== undefined) {

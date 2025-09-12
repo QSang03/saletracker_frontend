@@ -10,13 +10,35 @@ export const useOrderPermissions = () => {
     getAccessibleDepartments,
     isAdmin,
     isViewRole,
+    isPM,
+    isManager,
     checkDynamicPermission
   } = useDynamicPermission();
 
-  // Kiểm tra có role analysis không
+  // ✅ SỬA: Logic mới cho PM và Manager
+  // PM chỉ được phép xem khi có role analysis
+  // User có cả PM và Manager thì xem được như role Manager
   const hasAnalysisRole = useMemo(() => {
-    return isAdmin || isViewRole || userRoles.includes('analysis');
-  }, [isAdmin, isViewRole, userRoles]);
+    // Admin luôn có quyền
+    if (isAdmin) return true;
+    
+    // View role luôn có quyền
+    if (isViewRole) return true;
+    
+    // User có role analysis luôn có quyền
+    if (userRoles.includes('analysis')) return true;
+    
+    // User có cả PM và Manager thì xem được như role Manager
+    if (isPM && isManager) return true;
+    
+    // PM đơn thuần (không có analysis) thì KHÔNG được phép xem
+    if (isPM && !userRoles.includes('analysis')) return false;
+    
+    // Manager đơn thuần thì có quyền
+    if (isManager) return true;
+    
+    return false;
+  }, [isAdmin, isViewRole, isPM, isManager, userRoles]);
 
   // Lấy tất cả permissions từ các phòng ban của user
   const aggregatedPermissions = useMemo(() => {
@@ -53,6 +75,42 @@ export const useOrderPermissions = () => {
       };
     }
 
+    // ✅ SỬA: User có cả PM và Manager thì có quyền như Manager
+    if (isPM && isManager) {
+      return {
+        canRead: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+        canImport: true,
+        canExport: true
+      };
+    }
+
+    // User có role analysis có tất cả quyền
+    if (userRoles.includes('analysis')) {
+      return {
+        canRead: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+        canImport: true,
+        canExport: true
+      };
+    }
+
+    // Manager đơn thuần có tất cả quyền
+    if (isManager) {
+      return {
+        canRead: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+        canImport: true,
+        canExport: true
+      };
+    }
+
     // Lấy tất cả permissions từ các phòng ban
     const allActions = new Set<string>();
     userPermissions.forEach(permission => {
@@ -67,7 +125,7 @@ export const useOrderPermissions = () => {
       canImport: allActions.has('import'),
       canExport: allActions.has('export')
     };
-  }, [hasAnalysisRole, isAdmin, userPermissions]);
+  }, [hasAnalysisRole, isAdmin, isViewRole, isPM, isManager, userRoles, userPermissions]);
 
   // Kiểm tra permission cụ thể cho order
   const canAccessOrderAction = (action: string): boolean => {
@@ -79,6 +137,22 @@ export const useOrderPermissions = () => {
       return action === 'read' || action === 'export';
     }
     
+    // ✅ SỬA: User có cả PM và Manager thì có quyền như Manager
+    if (isPM && isManager) {
+      // Manager có tất cả quyền
+      return true;
+    }
+    
+    // User có role analysis luôn có quyền
+    if (userRoles.includes('analysis')) {
+      return true;
+    }
+    
+    // Manager đơn thuần có tất cả quyền
+    if (isManager) {
+      return true;
+    }
+    
     // Kiểm tra user có action này trong bất kỳ phòng ban nào không
     return userPermissions.some(permission => permission.action === action);
   };
@@ -87,6 +161,21 @@ export const useOrderPermissions = () => {
   const getDepartmentsWithAction = (action: string): string[] => {
     if (!hasAnalysisRole) return [];
     if (isAdmin) return getAccessibleDepartments();
+    
+    // ✅ SỬA: User có cả PM và Manager thì có quyền truy cập tất cả phòng ban
+    if (isPM && isManager) {
+      return getAccessibleDepartments();
+    }
+    
+    // User có role analysis có quyền truy cập tất cả phòng ban
+    if (userRoles.includes('analysis')) {
+      return getAccessibleDepartments();
+    }
+    
+    // Manager đơn thuần có quyền truy cập tất cả phòng ban
+    if (isManager) {
+      return getAccessibleDepartments();
+    }
     
     return userPermissions
       .filter(permission => permission.action === action)
