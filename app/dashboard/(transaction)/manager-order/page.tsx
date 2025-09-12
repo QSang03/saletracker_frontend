@@ -79,7 +79,7 @@ function ManagerOrderContent() {
     products: Array<{ value: number; label: string }>;
   }>({ departments: [], products: [] });
 
-  const { canExportInDepartment, user, isPM, isAnalysisRole, isAdmin } = useDynamicPermission();
+  const { canExportInDepartment, user, isPM, isAnalysisRole, isAdmin, getPMDepartments, getAccessibleDepartments } = useDynamicPermission();
   const {
     orders,
     total,
@@ -119,7 +119,7 @@ function ManagerOrderContent() {
     setIsInCustomerSearchMode,
     canGoBack,
     isRestoring,
-  } = useOrders();
+  } = useOrders({ management: true });
 
   const {
     canAccessOrderManagement,
@@ -146,12 +146,7 @@ function ManagerOrderContent() {
   // Xác định xem user có phải là PM (có thể có hoặc không có role analysis)
   const isPMUser = isPM;
 
-  // Force own-only mode for PM users in order management (only once)
-  useEffect(() => {
-    if (isPMUser && filters.ownOnly !== '1') {
-      setFilters({ ownOnly: '1' });
-    }
-  }, [isPMUser, filters.ownOnly, setFilters]);
+  // Backend enforces PM own-only via /orders/management; no FE ownOnly
   
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
   // PM users chỉ thấy số lượng khách hàng của chính họ
@@ -270,7 +265,58 @@ function ManagerOrderContent() {
 
   // Dynamic department options: when employees are selected, only include departments that contain those employees (like blacklist behavior)
   const departmentOptions = useMemo(() => {
-    if (isPMUser) return [];
+    if (isPMUser) {
+      // PM user: show their accessible departments
+      if (isAdmin) {
+        const accessibleDepartments = getAccessibleDepartments();
+        console.log('Admin PM Departments Debug:', {
+          accessibleDepartments,
+          accessibleDepartmentsLength: accessibleDepartments?.length
+        });
+        
+        const mappedDepartments = accessibleDepartments.map((dept: any) => ({ 
+          label: dept.name || dept.label, 
+          value: dept.id?.toString() || dept.value?.toString() 
+        }));
+        
+        console.log('Mapped Admin PM Departments:', mappedDepartments);
+        return mappedDepartments;
+      } else {
+        // Regular PM: get department slugs and map to department objects
+        const pmDepartmentSlugs = getPMDepartments();
+        console.log('PM Department Slugs Debug:', {
+          pmDepartmentSlugs,
+          pmDepartmentSlugsLength: pmDepartmentSlugs?.length,
+          userRoles: user?.roles?.map(r => r.name || r),
+          userDepartments: user?.departments
+        });
+        
+        // Map department slugs to department objects from filterOptions
+        const mappedDepartments = pmDepartmentSlugs.map((slug: string) => {
+          // Find department in filterOptions by slug
+          const dept = filterOptions.departments.find((d: any) => 
+            d.slug === slug || d.label?.toLowerCase().replace(/\s+/g, '-') === slug
+          );
+          
+          if (dept) {
+            return {
+              label: dept.label,
+              value: dept.value?.toString()
+            };
+          }
+          
+          // Fallback: create department object from slug
+          return {
+            label: slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            value: slug
+          };
+        });
+        
+        console.log('Mapped PM Departments:', mappedDepartments);
+        return mappedDepartments;
+      }
+    }
+    
     const all = filterOptions.departments.map((d) => ({ label: d.label, value: d.value.toString(), users: d.users }));
     if (!filters.employees || filters.employees.trim() === '') {
       return all.map(({ label, value }) => ({ label, value }));
@@ -279,7 +325,7 @@ function ManagerOrderContent() {
     if (selectedEmployeeIds.length === 0) return all.map(({ label, value }) => ({ label, value }));
     const subset = all.filter((dept) => dept.users.some((u) => selectedEmployeeIds.includes(String(u.value))));
     return subset.map(({ label, value }) => ({ label, value }));
-  }, [isPMUser, filterOptions.departments, filters.employees]);
+  }, [isPMUser, filterOptions.departments, filters.employees, isAdmin, getPMDepartments, getAccessibleDepartments]);
 
   const productOptions = filterOptions.products.map((product) => ({
     label: product.label,
@@ -333,8 +379,26 @@ function ManagerOrderContent() {
       // Handle departments
       let departmentsValue = "";
       if (isPMUser) {
-        // Nếu user là PM, không set department để backend filter theo user hiện tại
-        departmentsValue = "";
+        // PM user: use their accessible departments
+        if (paginatedFilters.departments.length > 0) {
+          departmentsValue = paginatedFilters.departments.join(",");
+        } else {
+          // Auto-select PM departments if none selected
+          if (isAdmin) {
+            const accessibleDepartments = getAccessibleDepartments();
+            const pmDeptIds = accessibleDepartments.map((dept: any) => dept.id?.toString() || dept.value?.toString()).filter(Boolean);
+            departmentsValue = pmDeptIds.join(",");
+          } else {
+            const pmDepartmentSlugs = getPMDepartments();
+            const pmDeptIds = pmDepartmentSlugs.map((slug: string) => {
+              const dept = filterOptions.departments.find((d: any) => 
+                d.slug === slug || d.label?.toLowerCase().replace(/\s+/g, '-') === slug
+              );
+              return dept ? dept.value?.toString() : slug;
+            }).filter(Boolean);
+            departmentsValue = pmDeptIds.join(",");
+          }
+        }
       } else {
         departmentsValue =
           paginatedFilters.departments.length > 0
@@ -650,9 +714,38 @@ function ManagerOrderContent() {
       // Admin or PM can include hidden items
       if ((isAdmin || isPMUser) && includeHiddenExport) params.append("includeHidden", "1");
       
-      // PM user chỉ export đơn hàng của chính họ
+      // PM user: can export with department filter or employee filter
       if (isPMUser) {
-        if (user?.id && !isNaN(Number(user.id))) params.append("employees", String(user.id));
+        if (filters.employees?.trim()) {
+          // Validate employees CSV contains only numbers
+          const empIds = filters.employees.split(',').map(id => id.trim()).filter(id => !isNaN(Number(id)));
+          if (empIds.length > 0) params.append("employees", empIds.join(','));
+        } else if (user?.id && !isNaN(Number(user.id))) {
+          // Fallback to user's own orders if no employees selected
+          params.append("employees", String(user.id));
+        }
+        
+        if (filters.departments?.trim()) {
+          // Validate departments CSV contains only numbers
+          const deptIds = filters.departments.split(',').map(id => id.trim()).filter(id => !isNaN(Number(id)));
+          if (deptIds.length > 0) params.append("departments", deptIds.join(','));
+        } else {
+          // Auto-select PM departments if none selected
+          if (isAdmin) {
+            const accessibleDepartments = getAccessibleDepartments();
+            const pmDeptIds = accessibleDepartments.map((dept: any) => dept.id?.toString() || dept.value?.toString()).filter(id => !isNaN(Number(id)));
+            if (pmDeptIds.length > 0) params.append("departments", pmDeptIds.join(','));
+          } else {
+            const pmDepartmentSlugs = getPMDepartments();
+            const pmDeptIds = pmDepartmentSlugs.map((slug: string) => {
+              const dept = filterOptions.departments.find((d: any) => 
+                d.slug === slug || d.label?.toLowerCase().replace(/\s+/g, '-') === slug
+              );
+              return dept ? dept.value?.toString() : slug;
+            }).filter(id => !isNaN(Number(id)));
+            if (pmDeptIds.length > 0) params.append("departments", pmDeptIds.join(','));
+          }
+        }
       } else {
         if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
         if (filters.employees?.trim()) {
@@ -690,9 +783,10 @@ function ManagerOrderContent() {
       //   params.append("sortDirection", filters.sortDirection);
       // }
 
-      const token = getAccessToken();
-  if (isPMUser) params.append('ownOnly', '1');
-  const exportUrl = `${process.env.NEXT_PUBLIC_API_URL}/orders/export?${params.toString()}`;
+    const token = getAccessToken();
+  const exportUrl = isPMUser
+    ? `${process.env.NEXT_PUBLIC_API_URL}/orders/management/export?${params.toString()}`
+    : `${process.env.NEXT_PUBLIC_API_URL}/orders/export?${params.toString()}`;
       console.log('Export URL:', exportUrl);
       console.log('Export params:', Object.fromEntries(params.entries()));
       
@@ -779,17 +873,16 @@ function ManagerOrderContent() {
     if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
 
     const token = getAccessToken();
-    if (isPMUser) params.append('ownOnly', '1');
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      }
-    );
+    const listUrl = isPMUser
+      ? `${process.env.NEXT_PUBLIC_API_URL}/orders/management?${params.toString()}`
+      : `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`;
+    const res = await fetch(listUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
 
     if (!res.ok) throw new Error(`Failed to fetch all orders for export: ${res.status}`);
     const result = await res.json();
@@ -1030,7 +1123,41 @@ function ManagerOrderContent() {
     const result = {
       search: filters.search || "",
       departments: isPMUser 
-        ? [] // PM user không cần filter theo department
+        ? (() => {
+            // PM user: auto-select their accessible departments if not already set
+            if (filters.departments) {
+              return filters.departments.split(",").filter((d) => d);
+            }
+            
+            if (isAdmin) {
+              const accessibleDepartments = getAccessibleDepartments();
+              const deptIds = accessibleDepartments.map((dept: any) => dept.id?.toString() || dept.value?.toString()).filter(Boolean);
+              console.log('Initial Admin PM Departments for filters:', {
+                accessibleDepartments,
+                deptIds,
+                filtersDepartments: filters.departments
+              });
+              return deptIds;
+            } else {
+              // Regular PM: get department slugs and map to department IDs
+              const pmDepartmentSlugs = getPMDepartments();
+              const deptIds = pmDepartmentSlugs.map((slug: string) => {
+                // Find department in filterOptions by slug
+                const dept = filterOptions.departments.find((d: any) => 
+                  d.slug === slug || d.label?.toLowerCase().replace(/\s+/g, '-') === slug
+                );
+                return dept ? dept.value?.toString() : slug;
+              }).filter(Boolean);
+              
+              console.log('Initial PM Departments for filters:', {
+                pmDepartmentSlugs,
+                deptIds,
+                filterOptionsDepartments: filterOptions.departments,
+                filtersDepartments: filters.departments
+              });
+              return deptIds;
+            }
+          })()
         : filters.departments
         ? filters.departments.split(",").filter((d) => d)
         : [],
@@ -1195,14 +1322,14 @@ function ManagerOrderContent() {
             enableSingleDateFilter={true}
             enableDateRangeFilter={true}
             enableEmployeeFilter={!isPMUser}
-            enableDepartmentFilter={!isPMUser}
+            enableDepartmentFilter={true}
             enableWarningLevelFilter={true} // Thêm warning level filter
             enableConversationTypeFilter={true}
             enablePageSize={true}
             enableGoToPage={true}
             availableStatuses={statusOptions}
             availableEmployees={isPMUser ? [] : filteredEmployeeOptions}
-            availableDepartments={isPMUser ? [] : departmentOptions}
+            availableDepartments={departmentOptions}
             availableWarningLevels={warningLevelOptions} // Thay thế availableBrands
             enableQuantityFilter={true} // Bật bộ lọc số lượng
             quantityLabel="Số lượng"

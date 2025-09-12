@@ -226,7 +226,7 @@ const clearFiltersFromStorage = (): void => {
   }
 };
 
-export const useOrders = (): UseOrdersReturn => {
+export const useOrders = (options?: { management?: boolean }): UseOrdersReturn => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -694,12 +694,10 @@ export const useOrders = (): UseOrdersReturn => {
         const authHeader = getAuthHeaders();
         // Append ownOnly=1 when JWT roles include PM. We can't decode roles here reliably without context,
         // so rely on backend scoping for safety. For explicit PM manager-order pages, ownOnly is added separately.
+        const basePath = options?.management ? '/orders/management' : '/orders';
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
-          {
-            method: "GET",
-            headers: authHeader,
-          }
+          `${process.env.NEXT_PUBLIC_API_URL}${basePath}?${params.toString()}`,
+          { method: "GET", headers: authHeader }
         );
 
         if (!res.ok) throw new Error(`Failed to fetch orders: ${res.status}`);
@@ -718,7 +716,7 @@ export const useOrders = (): UseOrdersReturn => {
         }
       });
     },
-    [getAuthHeaders, handleApiCall]
+    [getAuthHeaders, handleApiCall, options?.management]
   );
 
   // State setters
