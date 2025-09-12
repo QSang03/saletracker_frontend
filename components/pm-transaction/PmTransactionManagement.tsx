@@ -341,8 +341,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       : [];
 
     const normalize = (v: any) => (v == null ? "" : String(v).toLowerCase());
+    
+    // Tạo pmSet từ slug của PM (không phải từ pmDepartments vì nó có thể là departments object)
+    const pmSlugs = isAdmin || isViewRole ? [] : getPMDepartments();
     const pmSet = new Set(
-      (Array.isArray(pmDepartments) ? pmDepartments : []).map((x: any) =>
+      (Array.isArray(pmSlugs) ? pmSlugs : []).map((x: any) =>
         normalize(x)
       )
     );
@@ -359,15 +362,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         : isAdmin
         ? depts
         : depts.filter((d: any) => {
-            const val = normalize(d?.value);
             const slug = normalize(d?.slug);
-            const label = normalize(d?.label);
-            // match against pm-allowed list by value/slug/label contains
-            if (pmSet.has(val) || pmSet.has(slug)) return true;
-            for (const pm of pmSet) {
-              if (pm && label.includes(pm)) return true;
-            }
-            return false;
+            // match against pm-allowed list by slug
+            return pmSet.has(slug);
           });
 
     // Flatten and dedupe users
@@ -379,6 +376,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         if (!map.has(key)) map.set(key, { label: u?.label ?? key, value: key });
       });
     });
+    
     return Array.from(map.values());
   }, [filterOptions.departments, departmentsSelected, isAdmin, pmDepartments, isAnalysisUser]);
 
@@ -445,7 +443,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const token = getAccessToken();
-      const url = `${baseUrl}/orders?${params.toString()}`;
+      const url = `${baseUrl}/orders/pm-transactions?${params.toString()}`;
       // Debug: log request URL and token presence
       // eslint-disable-next-line no-console
       console.debug(
@@ -552,7 +550,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       try {
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
         const token = getAccessToken();
-        const foUrl = `${baseUrl}/orders/filter-options`;
+        const foUrl = `${baseUrl}/orders/pm-transactions/filter-options`;
         // eslint-disable-next-line no-console
         console.debug(
           "[PM] fetch filter-options URL:",
@@ -1282,7 +1280,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
     const token = getAccessToken();
-    const res = await fetch(`${baseUrl}/orders?${params.toString()}`, {
+    const res = await fetch(`${baseUrl}/orders/pm-transactions?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return [];
@@ -1584,10 +1582,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                   }))
                 : ((): any => {
                     const depts = (filterOptions.departments || []).map(
-                      (d: any) => ({ value: d.value, label: d.label })
+                      (d: any) => ({ value: d.value, label: d.label, slug: d.slug })
                     );
                     const matched = depts.filter(
                       (d: any) =>
+                        pmDepartments.includes(d.slug) ||
                         pmDepartments.includes(String(d.value)) ||
                         pmDepartments.includes(
                           (d.label || "").toString().toLowerCase()
