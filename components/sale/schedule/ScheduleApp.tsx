@@ -1898,7 +1898,7 @@ export default function CompleteScheduleApp() {
     } else if (shouldFetch) {
         (async () => {
           try {
-            const data = await ScheduleService.findAll();
+            const data = await ScheduleService.findAll({ limit: 10000 });
             setSchedules(data.data);
           } catch (e) {
             console.error('Fetch schedules after meta.schedulesCreated failed', e);

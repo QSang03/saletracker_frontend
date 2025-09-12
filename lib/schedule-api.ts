@@ -29,7 +29,12 @@ export class ScheduleService {
     if (query) {
       Object.entries(query).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          params.append(key, value.toString());
+          // ✅ SỬA: Đảm bảo gửi đúng kiểu dữ liệu
+          if (typeof value === 'number') {
+            params.append(key, value.toString());
+          } else {
+            params.append(key, value.toString());
+          }
         }
       });
     }
