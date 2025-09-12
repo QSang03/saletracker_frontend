@@ -898,7 +898,7 @@ export default function CompleteScheduleApp() {
 
   const getSchedulesForDay = useCallback(
     (date: number, month: number, year: number) => {
-      return filteredSchedules.filter((schedule) => {
+      return schedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.DAILY_DATES) return false;
 
         const config = schedule.schedule_config as DailyDatesConfig;
@@ -910,7 +910,7 @@ export default function CompleteScheduleApp() {
         );
       });
     },
-    [filteredSchedules]
+    [schedules]
   );
 
   const isDayHasExistingSchedule = useCallback(
@@ -1911,7 +1911,7 @@ export default function CompleteScheduleApp() {
   const getSchedulesForSlot = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
       const dayOfWeek = uiToDow(dayIndex);
-      return filteredSchedules.filter((schedule) => {
+      return schedules.filter((schedule) => {
         if (schedule.schedule_type !== ScheduleType.HOURLY_SLOTS) return false;
 
         const config = schedule.schedule_config as HourlySlotsConfig;
@@ -1928,7 +1928,7 @@ export default function CompleteScheduleApp() {
         });
       });
     },
-    [filteredSchedules]
+    [schedules]
   );
 
   const isSlotHasExistingSchedule = useCallback(

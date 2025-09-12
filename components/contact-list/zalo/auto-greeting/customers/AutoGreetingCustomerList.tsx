@@ -1,8 +1,17 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import CustomerHistoryModal from "../CustomerHistoryModal";
 
 export default function AutoGreetingCustomerList() {
+  const [openCustomerId, setOpenCustomerId] = useState<number | null>(null);
+
+  const customers = [
+    { id: 1, name: "👨‍💼 Nguyễn Văn A", status: "📅 8 ngày trước", badge: "Cần gửi" },
+    { id: 2, name: "👩‍💼 Trần Thị B", status: "📅 12 ngày trước", badge: "Khẩn cấp" },
+    { id: 3, name: "👨‍💻 Lê Văn C", status: "📅 2 ngày trước", badge: "Ổn định" },
+  ];
+
   return (
     <Card className="modern-card border-0 shadow-none p-0">
       <CardContent className="p-0">
@@ -29,28 +38,32 @@ export default function AutoGreetingCustomerList() {
         </div>
 
         <div className="customer-list-modern">
-          <div className="customer-item-modern">
-            <div className="customer-info-modern">
-              <div className="customer-name-modern">👨‍💼 Nguyễn Văn A</div>
-              <div className="customer-status-modern">📅 8 ngày trước</div>
+          {customers.map((c) => (
+            <div key={c.id} className="customer-item-modern">
+              <div className="customer-info-modern">
+                <div className="customer-name-modern">{c.name}</div>
+                <div className="customer-status-modern">{c.status}</div>
+              </div>
+              <div className="customer-actions-modern flex items-center gap-2">
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setOpenCustomerId(c.id)}
+                >
+                  Lịch sử
+                </button>
+                <div className={`status-badge-modern ${c.badge === 'Khẩn cấp' ? 'status-danger-modern' : c.badge === 'Cần gửi' ? 'status-warning-modern' : 'status-ok-modern'}`}>
+                  {c.badge}
+                </div>
+              </div>
             </div>
-            <div className="status-badge-modern status-warning-modern">Cần gửi</div>
-          </div>
-          <div className="customer-item-modern">
-            <div className="customer-info-modern">
-              <div className="customer-name-modern">👩‍💼 Trần Thị B</div>
-              <div className="customer-status-modern">📅 12 ngày trước</div>
-            </div>
-            <div className="status-badge-modern status-danger-modern">Khẩn cấp</div>
-          </div>
-          <div className="customer-item-modern">
-            <div className="customer-info-modern">
-              <div className="customer-name-modern">👨‍💻 Lê Văn C</div>
-              <div className="customer-status-modern">📅 2 ngày trước</div>
-            </div>
-            <div className="status-badge-modern status-ok-modern">Ổn định</div>
-          </div>
+          ))}
         </div>
+
+        <CustomerHistoryModal
+          customerId={openCustomerId}
+          open={!!openCustomerId}
+          onClose={() => setOpenCustomerId(null)}
+        />
       </CardContent>
     </Card>
   );
