@@ -23,6 +23,12 @@ function OrderBlacklistContent() {
     message: string;
   } | null>(null);
 
+  // ✅ Thêm state để lưu vị trí scroll và page
+  const [preservedState, setPreservedState] = useState<{
+    scrollPosition: number;
+    currentPage: number;
+  } | null>(null);
+
   const { user } = useDynamicPermission();
 
   const {
@@ -43,6 +49,30 @@ function OrderBlacklistContent() {
     deleteBlacklist,
     refetch,
   } = useBlacklist();
+
+  // ✅ Helper functions để lưu và khôi phục vị trí
+  const saveCurrentPosition = useCallback(() => {
+    const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+    setPreservedState({
+      scrollPosition,
+      currentPage: filters.page,
+    });
+  }, [filters.page]);
+
+  const restorePosition = useCallback(() => {
+    if (preservedState) {
+      // Khôi phục page trước
+      if (preservedState.currentPage !== filters.page) {
+        setPage(preservedState.currentPage);
+      }
+      
+      // Khôi phục scroll position sau khi data đã load
+      setTimeout(() => {
+        window.scrollTo(0, preservedState.scrollPosition);
+        setPreservedState(null);
+      }, 100);
+    }
+  }, [preservedState, filters.page, setPage]);
 
   // Handle filter changes from PaginatedTable với logic động
   const handleFilterChange = useCallback(
@@ -108,11 +138,15 @@ function OrderBlacklistContent() {
   const handleEdit = useCallback(
     async (id: number, reason: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await updateBlacklist(id, { reason });
         setAlert({
           type: "success",
           message: "Cập nhật lý do chặn thành công!",
         });
+        refetch();
       } catch (err: any) {
         console.error("Error updating blacklist:", err);
         setAlert({
@@ -121,18 +155,22 @@ function OrderBlacklistContent() {
         });
       }
     },
-    [updateBlacklist]
+    [updateBlacklist, refetch, saveCurrentPosition]
   );
 
   // Handle delete blacklist
   const handleDelete = useCallback(
     async (id: number) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await deleteBlacklist(id);
         setAlert({
           type: "success",
           message: "Xóa khỏi blacklist thành công!",
         });
+        refetch();
       } catch (err: any) {
         console.error("Error deleting blacklist:", err);
         setAlert({
@@ -141,7 +179,7 @@ function OrderBlacklistContent() {
         });
       }
     },
-    [deleteBlacklist]
+    [deleteBlacklist, refetch, saveCurrentPosition]
   );
 
   // Auto hide alert after 5 seconds
@@ -163,6 +201,13 @@ function OrderBlacklistContent() {
       });
     }
   }, [error]);
+
+  // ✅ Khôi phục vị trí sau khi data được refetch
+  useEffect(() => {
+    if (!isLoading && preservedState) {
+      restorePosition();
+    }
+  }, [isLoading, preservedState, restorePosition]);
 
   // ✅ Export data function
   const getExportData = () => {

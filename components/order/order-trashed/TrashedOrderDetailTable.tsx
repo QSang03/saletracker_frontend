@@ -33,6 +33,12 @@ export default function TrashedOrderDetailTable() {
     message: string;
   } | null>(null);
 
+  // ✅ Thêm state để lưu vị trí scroll và page
+  const [preservedState, setPreservedState] = useState<{
+    scrollPosition: number;
+    currentPage: number;
+  } | null>(null);
+
   const {
     data,
     total,
@@ -45,6 +51,30 @@ export default function TrashedOrderDetailTable() {
     reload,
     bulkRestoreOrderDetails,
   } = useTrashedOrders();
+
+  // ✅ Helper functions để lưu và khôi phục vị trí
+  const saveCurrentPosition = useCallback(() => {
+    const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+    setPreservedState({
+      scrollPosition,
+      currentPage: filters.page,
+    });
+  }, [filters.page]);
+
+  const restorePosition = useCallback(() => {
+    if (preservedState) {
+      // Khôi phục page trước
+      if (preservedState.currentPage !== filters.page) {
+        setPage(preservedState.currentPage);
+      }
+      
+      // Khôi phục scroll position sau khi data đã load
+      setTimeout(() => {
+        window.scrollTo(0, preservedState.scrollPosition);
+        setPreservedState(null);
+      }, 100);
+    }
+  }, [preservedState, filters.page, setPage]);
 
   // Load filter options once
   const [filterOptions, setFilterOptions] = useState<{
@@ -66,6 +96,13 @@ export default function TrashedOrderDetailTable() {
       }
     })();
   }, [getFilterOptions]);
+
+  // ✅ Khôi phục vị trí sau khi data được refetch
+  useEffect(() => {
+    if (!isLoading && preservedState) {
+      restorePosition();
+    }
+  }, [isLoading, preservedState, restorePosition]);
 
   const allEmployeeOptions = useMemo(() => {
     return filterOptions.departments.reduce((acc, dept) => {
@@ -181,6 +218,9 @@ export default function TrashedOrderDetailTable() {
       message: `Bạn có chắc chắn muốn khôi phục ${selectedRows.length} đơn hàng đã chọn?`,
       onConfirm: async () => {
         try {
+          // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+          saveCurrentPosition();
+          
           const ids = selectedRows.map((x) => Number(x.id));
           await bulkRestoreOrderDetails(ids);
           setAlert({
@@ -196,7 +236,7 @@ export default function TrashedOrderDetailTable() {
         }
       },
     });
-  }, [selectedRows, canBulkRestore, bulkRestoreOrderDetails, reload]);
+  }, [selectedRows, canBulkRestore, bulkRestoreOrderDetails, reload, saveCurrentPosition]);
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -767,6 +807,9 @@ export default function TrashedOrderDetailTable() {
                                   message: `Bạn có chắc chắn muốn khôi phục đơn hàng #${od.id}?`,
                                   onConfirm: async () => {
                                     try {
+                                      // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+                                      saveCurrentPosition();
+                                      
                                       await bulkRestoreOrderDetails([Number(od.id)]);
                                       setAlert({
                                         type: "success",

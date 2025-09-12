@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useHiddenOrders } from "@/hooks/useHiddenOrders";
@@ -17,6 +17,12 @@ export default function HiddenOrderPage() {
   const hiddenOrdersHook = useHiddenOrders();
   const [alert, setAlert] = useState<AlertState>({ type: "info", message: "", show: false });
 
+  // ✅ Thêm state để lưu vị trí scroll và page
+  const [preservedState, setPreservedState] = useState<{
+    scrollPosition: number;
+    currentPage: number;
+  } | null>(null);
+
   const showAlert = (type: AlertType, message: string) => {
     setAlert({ type, message, show: true });
   };
@@ -24,6 +30,30 @@ export default function HiddenOrderPage() {
   const hideAlert = () => {
     setAlert(prev => ({ ...prev, show: false }));
   };
+
+  // ✅ Helper functions để lưu và khôi phục vị trí
+  const saveCurrentPosition = useCallback(() => {
+    const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+    setPreservedState({
+      scrollPosition,
+      currentPage: hiddenOrdersHook.filters.page,
+    });
+  }, [hiddenOrdersHook.filters.page]);
+
+  const restorePosition = useCallback(() => {
+    if (preservedState) {
+      // Khôi phục page trước
+      if (preservedState.currentPage !== hiddenOrdersHook.filters.page) {
+        hiddenOrdersHook.updateFilters({ page: preservedState.currentPage });
+      }
+      
+      // Khôi phục scroll position sau khi data đã load
+      setTimeout(() => {
+        window.scrollTo(0, preservedState.scrollPosition);
+        setPreservedState(null);
+      }, 100);
+    }
+  }, [preservedState, hiddenOrdersHook.filters.page, hiddenOrdersHook.updateFilters]);
 
   const handleReload = async () => {
     try {
@@ -35,6 +65,51 @@ export default function HiddenOrderPage() {
     }
   };
 
+  // ✅ Wrapper functions để lưu vị trí trước khi thực hiện thao tác
+  const handleBulkUnhide = useCallback(async () => {
+    saveCurrentPosition();
+    const result = await hiddenOrdersHook.bulkUnhide();
+    if (result.success) {
+      showAlert("success", result.message);
+    } else {
+      showAlert("error", result.message);
+    }
+    return result;
+  }, [hiddenOrdersHook.bulkUnhide, saveCurrentPosition]);
+
+  const handleSingleUnhide = useCallback(async (id: number) => {
+    saveCurrentPosition();
+    const result = await hiddenOrdersHook.singleUnhide(id);
+    if (result.success) {
+      showAlert("success", result.message);
+    } else {
+      showAlert("error", result.message);
+    }
+    return result;
+  }, [hiddenOrdersHook.singleUnhide, saveCurrentPosition]);
+
+  const handleBulkSoftDelete = useCallback(async () => {
+    saveCurrentPosition();
+    const result = await hiddenOrdersHook.bulkSoftDelete();
+    if (result.success) {
+      showAlert("success", result.message);
+    } else {
+      showAlert("error", result.message);
+    }
+    return result;
+  }, [hiddenOrdersHook.bulkSoftDelete, saveCurrentPosition]);
+
+  const handleSingleSoftDelete = useCallback(async (id: number) => {
+    saveCurrentPosition();
+    const result = await hiddenOrdersHook.singleSoftDelete(id);
+    if (result.success) {
+      showAlert("success", result.message);
+    } else {
+      showAlert("error", result.message);
+    }
+    return result;
+  }, [hiddenOrdersHook.singleSoftDelete, saveCurrentPosition]);
+
   // ✅ THÊM: Handle reset filter with localStorage clear
   const handleResetFilter = async () => {
     try {
@@ -44,6 +119,13 @@ export default function HiddenOrderPage() {
       showAlert("error", "Lỗi khi xóa bộ lọc");
     }
   };
+
+  // ✅ Khôi phục vị trí sau khi data được refetch
+  useEffect(() => {
+    if (!hiddenOrdersHook.loading && preservedState) {
+      restorePosition();
+    }
+  }, [hiddenOrdersHook.loading, preservedState, restorePosition]);
 
   return (
     <>
@@ -90,6 +172,10 @@ export default function HiddenOrderPage() {
               isRestoring={hiddenOrdersHook.isRestoring}
               resetKey={hiddenOrdersHook.resetKey}
               onAlert={showAlert}
+              bulkUnhide={handleBulkUnhide}
+              singleUnhide={handleSingleUnhide}
+              bulkSoftDelete={handleBulkSoftDelete}
+              singleSoftDelete={handleSingleSoftDelete}
             />
           </Suspense>
         </CardContent>

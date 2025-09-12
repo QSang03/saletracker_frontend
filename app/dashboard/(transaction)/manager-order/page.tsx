@@ -69,6 +69,12 @@ function ManagerOrderContent() {
     message: string;
   } | null>(null);
 
+  // ✅ Thêm state để lưu vị trí scroll và page
+  const [preservedState, setPreservedState] = useState<{
+    scrollPosition: number;
+    currentPage: number;
+  } | null>(null);
+
   const [filterOptions, setFilterOptions] = useState<{
     departments: Array<{
       value: number;
@@ -119,6 +125,30 @@ function ManagerOrderContent() {
     canGoBack,
     isRestoring,
   } = useOrders();
+
+  // ✅ Helper functions để lưu và khôi phục vị trí
+  const saveCurrentPosition = useCallback(() => {
+    const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+    setPreservedState({
+      scrollPosition,
+      currentPage: filters.page,
+    });
+  }, [filters.page]);
+
+  const restorePosition = useCallback(() => {
+    if (preservedState) {
+      // Khôi phục page trước
+      if (preservedState.currentPage !== filters.page) {
+        setPage(preservedState.currentPage);
+      }
+      
+      // Khôi phục scroll position sau khi data đã load
+      setTimeout(() => {
+        window.scrollTo(0, preservedState.scrollPosition);
+        setPreservedState(null);
+      }, 100);
+    }
+  }, [preservedState, filters.page, setPage]);
 
   const {
     canAccessOrderManagement,
@@ -409,6 +439,9 @@ function ManagerOrderContent() {
   const handleEdit = useCallback(
     async (orderDetail: OrderDetail, data: any) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await updateOrderDetail(Number(orderDetail.id), {
           status: data.status,
           unit_price: data.unit_price,
@@ -427,7 +460,7 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi cập nhật order detail!" });
       }
     },
-    [updateOrderDetail, refetch]
+    [updateOrderDetail, refetch, saveCurrentPosition]
   );
 
   // ✅ Cập nhật handleDelete - chỉ nhận OrderDetail và reason
@@ -436,6 +469,9 @@ function ManagerOrderContent() {
       // if (!confirm("Bạn có chắc chắn muốn xóa order detail này?")) return;
 
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await deleteOrderDetail(Number(orderDetail.id), reason);
         setAlert({ type: "success", message: "Xóa order detail thành công!" });
         refetch();
@@ -444,13 +480,16 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi xóa order detail!" });
       }
     },
-  [deleteOrderDetail, refetch]
+  [deleteOrderDetail, refetch, saveCurrentPosition]
   ); // ✅ Thay đổi dependency
 
   // ✅ Handle bulk delete
   const handleBulkDelete = useCallback(
     async (orderDetails: OrderDetail[], reason?: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkDeleteOrderDetails(ids, reason);
         setAlert({
@@ -463,13 +502,16 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi xóa nhiều đơn hàng!" });
       }
     },
-    [bulkDeleteOrderDetails, refetch]
+    [bulkDeleteOrderDetails, refetch, saveCurrentPosition]
   );
 
   // ✅ Handle bulk extend
   const handleBulkExtend = useCallback(
     async (orderDetails: OrderDetail[]) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         // Lọc ra những đơn hàng chi tiết hợp lệ để gia hạn
         const validOrders = orderDetails.filter(
           (order) => order.status !== "completed" && order.status !== "demand"
@@ -506,13 +548,16 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi gia hạn nhiều đơn hàng chi tiết!" });
       }
     },
-    [bulkExtendOrderDetails, refetch]
+    [bulkExtendOrderDetails, refetch, saveCurrentPosition]
   );
 
   // ✅ Handle bulk notes
   const handleBulkNotes = useCallback(
     async (orderDetails: OrderDetail[], notes: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkAddNotesOrderDetails(ids, notes);
         setAlert({
@@ -528,13 +573,16 @@ function ManagerOrderContent() {
         });
       }
     },
-    [bulkAddNotesOrderDetails, refetch]
+    [bulkAddNotesOrderDetails, refetch, saveCurrentPosition]
   );
 
   // ✅ Handle edit customer name
   const handleEditCustomerName = useCallback(
     async (orderDetail: OrderDetail, newCustomerName: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await updateOrderDetailCustomerName(
           Number(orderDetail.id),
           newCustomerName,
@@ -553,13 +601,16 @@ function ManagerOrderContent() {
         });
       }
     },
-    [updateOrderDetailCustomerName, refetch]
+    [updateOrderDetailCustomerName, refetch, saveCurrentPosition]
   );
 
   // ✅ Handle add to blacklist
   const handleAddToBlacklist = useCallback(
     async (orderDetail: OrderDetail, reason?: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await addToBlacklist(Number(orderDetail.id), reason);
         setAlert({
           type: "success",
@@ -571,13 +622,16 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi thêm vào blacklist!" });
       }
     },
-    [addToBlacklist, refetch]
+    [addToBlacklist, refetch, saveCurrentPosition]
   );
 
   // ✅ Handle hide (single)
   const handleHide = useCallback(
     async (orderDetail: OrderDetail, reason: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         await bulkHideOrderDetails([Number(orderDetail.id)], reason);
         setAlert({ type: "success", message: "Đã ẩn đơn hàng thành công!" });
         refetch();
@@ -586,13 +640,16 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi ẩn đơn hàng!" });
       }
     },
-    [bulkHideOrderDetails, refetch]
+    [bulkHideOrderDetails, refetch, saveCurrentPosition]
   );
 
   // ✅ Handle bulk hide
   const handleBulkHide = useCallback(
     async (orderDetails: OrderDetail[], reason: string) => {
       try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkHideOrderDetails(ids, reason);
         setAlert({
@@ -605,7 +662,7 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi ẩn nhiều đơn hàng!" });
       }
     },
-    [bulkHideOrderDetails, refetch]
+    [bulkHideOrderDetails, refetch, saveCurrentPosition]
   );
 
   const handleReload = useCallback(() => {
@@ -760,6 +817,13 @@ function ManagerOrderContent() {
       setAlert({ type: "error", message: error });
     }
   }, [error]);
+
+  // ✅ Khôi phục vị trí sau khi data được refetch
+  useEffect(() => {
+    if (!isLoading && preservedState) {
+      restorePosition();
+    }
+  }, [isLoading, preservedState, restorePosition]);
 
   // ✅ Clear employees when departments change - CHỈ khi thực sự cần thiết
   useEffect(() => {
