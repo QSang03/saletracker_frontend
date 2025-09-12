@@ -337,7 +337,7 @@ export default function HiddenOrderManagement({
       "STT",
       "ID",
       "Khách Hàng",
-  "Nhân Viên",
+      "Nhân Viên",
       "Sản Phẩm",
       "Số Lượng",
       "Đơn Giá",
@@ -757,17 +757,7 @@ export default function HiddenOrderManagement({
                     <span>Khách hàng</span>
                   </div>
                 </TableHead>
-                <TableHead className="min-w-[160px] font-bold text-sm text-blue-800 tracking-wide sticky top-0 bg-blue-100 py-4 px-6">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block animate-bounce text-xs"
-                      style={{ animationDelay: "0.15s" }}
-                    >
-                      🧑‍💼
-                    </span>
-                    <span>Nhân viên</span>
-                  </div>
-                </TableHead>
+                
                 <TableHead className="min-w-[320px] font-bold text-sm text-blue-800 tracking-wide sticky top-0 bg-blue-100 py-4 px-6">
                   <div className="flex items-center gap-2">
                     <span

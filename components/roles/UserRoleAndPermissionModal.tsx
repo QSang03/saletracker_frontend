@@ -108,6 +108,9 @@ export default function UserRoleAndPermissionModal({
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
+  // Search state for PM private permissions
+  const [pmSearchQuery, setPmSearchQuery] = useState("");
+  const pmPermissionRefs = useRef(new Map<number, HTMLLabelElement>());
   const prevDepartments = useRef<number[]>(selectedDepartments);
   const departmentOptions: Option[] = departments.map((dep) => ({
     label: dep.name,
@@ -902,6 +905,65 @@ export default function UserRoleAndPermissionModal({
       {children}
     </motion.span>
   );
+
+  // Auto-scroll to single search match and focus its checkbox
+  useEffect(() => {
+    const q = pmSearchQuery.trim().toLowerCase();
+    if (q.length === 0) return;
+    const matches: number[] = [];
+    pmPermissions.forEach((p) => {
+      if ((`${p.name} ${p.action}`).toLowerCase().includes(q)) matches.push(p.id);
+    });
+    if (matches.length === 1) {
+      const id = matches[0];
+      const el = pmPermissionRefs.current.get(id);
+      if (el) {
+        // Prefer an explicit dialog scroll container, fallback to scanning ancestors
+        function findScrollableParent(node: HTMLElement | null): HTMLElement | null {
+          if (!node) return document.scrollingElement as HTMLElement | null;
+          const marked = node.closest('[data-dialog-scroll]') as HTMLElement | null;
+          if (marked) return marked;
+          let parent = node.parentElement || null;
+          while (parent) {
+            const style = getComputedStyle(parent);
+            const overflowY = style.overflowY;
+            if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && parent.scrollHeight > parent.clientHeight) {
+              return parent;
+            }
+            parent = parent.parentElement;
+          }
+          return document.scrollingElement as HTMLElement | null;
+        }
+
+        const container = findScrollableParent(el) || document.scrollingElement;
+        if (container) {
+          // compute element position relative to container and center it
+          const containerRect = container.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          const offset = elRect.top - containerRect.top + container.scrollTop - container.clientHeight / 2 + el.clientHeight / 2;
+          container.scrollTo({ top: offset, behavior: 'smooth' });
+          // also fallback to element.scrollIntoView in case layout/portal timing prevents container scroll
+          try {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch (e) {}
+          // delayed fallback in case first attempt happens before modal layout
+          setTimeout(() => {
+            try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+          }, 220);
+        } else {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // temporary outline to make it obvious, then focus the checkbox inside the label
+        try {
+          el.style.outline = '3px solid rgba(250, 204, 21, 0.6)';
+          setTimeout(() => { el.style.outline = ''; }, 1400);
+        } catch (e) {}
+        const input = el.querySelector('input') as HTMLInputElement | null;
+        if (input) input.focus();
+      }
+    }
+  }, [pmSearchQuery, pmPermissions]);
   // Lấy đúng vai trò chính/phụ thực tế của user để xác định quyền
   const userMainRoleIds = user.roles.filter(r => rolesGrouped.main.some(m => m.id === r.id)).map(r => r.id);
   const userSubRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
@@ -915,6 +977,7 @@ export default function UserRoleAndPermissionModal({
       >
         <DialogContent
           className="w-screen max-w-3xl p-6 rounded-xl shadow-xl"
+          data-dialog-scroll
           style={{
             maxWidth: "80vw",
             height: "80vh",
@@ -1098,32 +1161,71 @@ export default function UserRoleAndPermissionModal({
                           Chọn tất cả quyền PM
                         </label>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
-                        {pmPermissions.map(permission => {
-                          const targetRoleId = pmPrivateRole?.id ?? 0;
-                          const isActive = activePrivatePermissionIds.includes(permission.id);
-                          return (
-                            <label key={permission.id} className="flex items-center gap-2">
-                              <Checkbox
-                                checked={isActive}
-                                onCheckedChange={(checked) => {
-                                  setRolePermissionsState(prev => {
-                                    const updated = [...prev];
-                                    const idx = updated.findIndex(rp => rp.roleId === targetRoleId && rp.permissionId === permission.id);
-                                    if (idx !== -1) {
-                                      updated[idx] = { ...updated[idx], isActive: !!checked };
-                                    } else {
-                                      updated.push({ roleId: targetRoleId, permissionId: permission.id, isActive: !!checked });
-                                    }
-                                    return updated;
-                                  });
-                                }}
-                              />
-                              {permission.name} ({permission.action})
-                            </label>
-                          );
-                        })}
-                      </div>
+                        <div className="mb-2">
+                          <input
+                            type="text"
+                            value={pmSearchQuery}
+                            onChange={(e) => setPmSearchQuery(e.target.value)}
+                            placeholder="Tìm quyền PM..."
+                            className="w-full px-3 py-2 border rounded-md text-sm"
+                          />
+                        </div>
+                        {
+                          // Group PM permissions into categories / brands / others
+                          (() => {
+                            const q = pmSearchQuery.trim().toLowerCase();
+                            const pmCat = pmPermissions.filter(p => (p.name || '').startsWith('pm_cat_'));
+                            const pmBrand = pmPermissions.filter(p => (p.name || '').startsWith('pm_brand_'));
+                            const pmOther = pmPermissions.filter(p => !(p.name || '').startsWith('pm_cat_') && !(p.name || '').startsWith('pm_brand_'));
+                            const renderGrid = (list: typeof pmPermissions, keyPrefix: string) => (
+                              <div className="mb-3" key={keyPrefix}>
+                                <div className="font-semibold mb-2">{keyPrefix === 'cat' ? 'Danh mục' : keyPrefix === 'brand' ? 'Thương hiệu' : 'Khác'}</div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
+                                  {list.map((permission) => {
+                                    const targetRoleId = pmPrivateRole?.id ?? 0;
+                                    const isActive = activePrivatePermissionIds.includes(permission.id);
+                                    const matches = q.length > 0 && (`${permission.name} ${permission.action}`).toLowerCase().includes(q);
+                                    return (
+                                      <label
+                                        key={permission.id}
+                                        ref={(el) => {
+                                          if (el) pmPermissionRefs.current.set(permission.id, el);
+                                          else pmPermissionRefs.current.delete(permission.id);
+                                        }}
+                                        className={`flex items-center gap-2 ${matches ? 'bg-yellow-100 rounded px-2 py-1' : ''}`}
+                                      >
+                                        <Checkbox
+                                          checked={isActive}
+                                          onCheckedChange={(checked) => {
+                                            setRolePermissionsState((prev) => {
+                                              const updated = [...prev];
+                                              const idx = updated.findIndex((rp) => rp.roleId === targetRoleId && rp.permissionId === permission.id);
+                                              if (idx !== -1) {
+                                                updated[idx] = { ...updated[idx], isActive: !!checked };
+                                              } else {
+                                                updated.push({ roleId: targetRoleId, permissionId: permission.id, isActive: !!checked });
+                                              }
+                                              return updated;
+                                            });
+                                          }}
+                                        />
+                                        {permission.name} ({permission.action})
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+
+                            return (
+                              <div>
+                                {pmCat.length > 0 && renderGrid(pmCat, 'cat')}
+                                {pmBrand.length > 0 && renderGrid(pmBrand, 'brand')}
+                                {pmOther.length > 0 && renderGrid(pmOther, 'other')}
+                              </div>
+                            );
+                          })()
+                        }
                     </div>
                   )}
                   {departments.map((dep) => {
