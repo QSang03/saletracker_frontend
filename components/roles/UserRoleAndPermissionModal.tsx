@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import { getAccessToken } from "@/lib/auth";
+import type { Category, Brand } from "@/types";
 import {
   Dialog,
   DialogContent,
@@ -111,6 +113,8 @@ export default function UserRoleAndPermissionModal({
   // Search state for PM private permissions
   const [pmSearchQuery, setPmSearchQuery] = useState("");
   const pmPermissionRefs = useRef(new Map<number, HTMLLabelElement>());
+  const [pmCategories, setPmCategories] = useState<Category[]>([]);
+  const [pmBrands, setPmBrands] = useState<Brand[]>([]);
   const prevDepartments = useRef<number[]>(selectedDepartments);
   const departmentOptions: Option[] = departments.map((dep) => ({
     label: dep.name,
@@ -964,6 +968,41 @@ export default function UserRoleAndPermissionModal({
       }
     }
   }, [pmSearchQuery, pmPermissions]);
+
+  // Fetch brands & categories to render friendly labels for pm_cat_/pm_brand_
+  useEffect(() => {
+    let mounted = true;
+    async function fetchLists() {
+      const token = getAccessToken();
+      const headers: HeadersInit = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      try {
+        const [rc, rb] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, { headers }),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers }),
+        ]);
+        const jc = await rc.json();
+        const jb = await rb.json();
+        if (!mounted) return;
+        setPmCategories(Array.isArray(jc) ? jc : (jc.data ?? []));
+        setPmBrands(Array.isArray(jb) ? jb : (jb.data ?? []));
+      } catch (e) {
+        if (!mounted) return;
+        setPmCategories([]);
+        setPmBrands([]);
+      }
+    }
+    fetchLists();
+    return () => { mounted = false; };
+  }, []);
+
+  const normalizeSlug = (s?: string) =>
+    (s || "")
+      .toString()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   // Lấy đúng vai trò chính/phụ thực tế của user để xác định quyền
   const userMainRoleIds = user.roles.filter(r => rolesGrouped.main.some(m => m.id === r.id)).map(r => r.id);
   const userSubRoleIds = user.roles.filter(r => rolesGrouped.sub.some(s => s.id === r.id)).map(r => r.id);
@@ -1185,6 +1224,22 @@ export default function UserRoleAndPermissionModal({
                                     const targetRoleId = pmPrivateRole?.id ?? 0;
                                     const isActive = activePrivatePermissionIds.includes(permission.id);
                                     const matches = q.length > 0 && (`${permission.name} ${permission.action}`).toLowerCase().includes(q);
+                                    // compute friendly label for pm_cat_ / pm_brand_
+                                    let displayLabel = permission.name || '';
+                                    try {
+                                      if (keyPrefix === 'cat' && (permission.name || '').startsWith('pm_cat_')) {
+                                        const suffix = (permission.name || '').slice('pm_cat_'.length);
+                                        const found = pmCategories.find(c => ((c as any).slug === suffix) || normalizeSlug((c as any).slug) === normalizeSlug(suffix) || normalizeSlug(c.catName) === normalizeSlug(suffix) || String(c.id) === suffix);
+                                        displayLabel = found ? found.catName : suffix.replace(/[-_]+/g, ' ');
+                                      } else if (keyPrefix === 'brand' && (permission.name || '').startsWith('pm_brand_')) {
+                                        const suffix = (permission.name || '').slice('pm_brand_'.length);
+                                        const found = pmBrands.find(b => ((b as any).slug === suffix) || normalizeSlug((b as any).slug) === normalizeSlug(suffix) || normalizeSlug(b.name) === normalizeSlug(suffix) || String(b.id) === suffix);
+                                        displayLabel = found ? found.name : suffix.replace(/[-_]+/g, ' ');
+                                      }
+                                    } catch (e) {
+                                      displayLabel = permission.name || '';
+                                    }
+
                                     return (
                                       <label
                                         key={permission.id}
@@ -1209,7 +1264,7 @@ export default function UserRoleAndPermissionModal({
                                             });
                                           }}
                                         />
-                                        {permission.name} ({permission.action})
+                                        {displayLabel} ({permission.action})
                                       </label>
                                     );
                                   })}
