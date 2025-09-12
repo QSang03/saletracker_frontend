@@ -202,3 +202,6 @@ export const useWebSocketContext = () => {
     );
   return ctx;
 };
+
+// Backwards-compatible alias: some files import `useWebSocket`
+export const useWebSocket = useWebSocketContext;

@@ -32,6 +32,7 @@ interface OrderFilters {
   conversationType?: string; // CSV: 'group', 'personal'
   sortField?: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null;
   sortDirection?: "asc" | "desc" | null;
+  ownOnly?: string; // '1' to force own-only scoping (manager-order for PM)
 }
 
 export type { OrderFilters };
@@ -261,7 +262,7 @@ export const useOrders = (): UseOrdersReturn => {
     const departments = searchParams.get("departments") || "";
     const products = searchParams.get("products") || "";
     const warningLevel = searchParams.get("warningLevel") || "";
-  const conversationType = searchParams.get("conversationType") || "";
+    const conversationType = searchParams.get("conversationType") || "";
     const quantity = parseInt(searchParams.get("quantity") || "1"); // Mặc định là 1
     const sortField = searchParams.get("sortField") as
       | "quantity"
@@ -274,6 +275,7 @@ export const useOrders = (): UseOrdersReturn => {
       | "asc"
       | "desc"
       | null;
+    const ownOnly = searchParams.get('ownOnly') || '';
 
     let dateRange: { start: string; end: string } | undefined;
     const dateRangeParam = searchParams.get("dateRange");
@@ -299,8 +301,9 @@ export const useOrders = (): UseOrdersReturn => {
         departments,
         products,
         warningLevel,
-  conversationType,
+        conversationType,
         quantity,
+        ownOnly,
     // Nếu URL truyền sortField thì dùng, nếu không thì mặc định sort theo conversation_start desc
   sortField: sortField || 'conversation_start',
     sortDirection: sortDirection || 'desc',
@@ -321,11 +324,12 @@ export const useOrders = (): UseOrdersReturn => {
       departments: savedFilters.departments || "",
       products: savedFilters.products || "",
       warningLevel: savedFilters.warningLevel || "",
-  conversationType: (savedFilters as any).conversationType || "",
+      conversationType: (savedFilters as any).conversationType || "",
       quantity: savedFilters.quantity || 1, // Mặc định là 1
   // Mặc định luôn sắp xếp theo conversation_start desc nếu không có saved value
   sortField: savedFilters.sortField || 'conversation_start',
   sortDirection: savedFilters.sortDirection || 'desc',
+      ownOnly: '',
     };
   });
 
@@ -527,6 +531,9 @@ export const useOrders = (): UseOrdersReturn => {
         if (typeof newFilters.quantity === "number") {
           searchParams.set("quantity", String(newFilters.quantity));
         }
+        if (newFilters.ownOnly === '1') {
+          searchParams.set('ownOnly', '1');
+        }
         if (newFilters.sortField) {
           searchParams.set("sortField", newFilters.sortField);
         }
@@ -670,6 +677,9 @@ export const useOrders = (): UseOrdersReturn => {
         if (typeof currentFilters.quantity === "number") {
           params.append("quantity", String(currentFilters.quantity));
         }
+        if (currentFilters.ownOnly === '1') {
+          params.append('ownOnly', '1');
+        }
         if (currentFilters.sortField) {
           params.append("sortField", currentFilters.sortField);
         }
@@ -677,11 +687,18 @@ export const useOrders = (): UseOrdersReturn => {
           params.append("sortDirection", currentFilters.sortDirection);
         }
 
+        // If the current user has PM role, enforce own-only mode on order management
+        try {
+          const userInfoRes = await fetch(`/api/users/${''}`, { method: 'HEAD' });
+        } catch {}
+        const authHeader = getAuthHeaders();
+        // Append ownOnly=1 when JWT roles include PM. We can't decode roles here reliably without context,
+        // so rely on backend scoping for safety. For explicit PM manager-order pages, ownOnly is added separately.
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
           {
             method: "GET",
-            headers: getAuthHeaders(),
+            headers: authHeader,
           }
         );
 

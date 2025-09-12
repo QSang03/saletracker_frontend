@@ -27,6 +27,7 @@ import {
   type AlertType,
 } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken } from "@/lib/auth";
+import { useWebSocket } from "@/contexts/WebSocketContext";
 
 // Helper function để tính toán gia hạn động
 const calculateDynamicExtended = (
@@ -144,6 +145,13 @@ function ManagerOrderContent() {
 
   // Xác định xem user có phải là PM (có thể có hoặc không có role analysis)
   const isPMUser = isPM;
+
+  // Force own-only mode for PM users in order management (only once)
+  useEffect(() => {
+    if (isPMUser && filters.ownOnly !== '1') {
+      setFilters({ ownOnly: '1' });
+    }
+  }, [isPMUser, filters.ownOnly, setFilters]);
   
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
   // PM users chỉ thấy số lượng khách hàng của chính họ
@@ -199,6 +207,12 @@ function ManagerOrderContent() {
   const customerCountLabel = isCountingSales ? 'nhân viên' : 'khách hàng';
   // Toggle: admin may include hidden items when exporting
   const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    message: string;
+    percentage: number;
+  } | null>(null);
+
+  const { subscribe, unsubscribe } = useWebSocket();
 
   // Lấy danh sách nhân viên từ filter options
   const allEmployeeOptions = filterOptions.departments.reduce((acc, dept) => {
@@ -612,6 +626,125 @@ function ManagerOrderContent() {
     refetch();
   }, [refetch]);
 
+  // ✅ Handle export Excel
+  const handleExportExcel = useCallback(async () => {
+    try {
+      setExportProgress({ message: "Đang chuẩn bị xuất dữ liệu...", percentage: 0 });
+      
+      const params = new URLSearchParams();
+      
+      // Temporarily use minimal parameters to debug validation issue
+      // Apply current filters with validation
+      if (filters.search?.trim()) params.append("search", filters.search.trim());
+      if (filters.status?.trim()) params.append("status", filters.status.trim());
+      if (filters.date?.trim()) params.append("date", filters.date.trim());
+      if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
+        params.append("dateRange", JSON.stringify({ start: filters.dateRange.start, end: filters.dateRange.end }));
+      }
+      
+      // Quantity parameter - temporarily disabled to debug validation issue
+      // if (typeof filters.quantity === "number" && !isNaN(filters.quantity) && filters.quantity > 0) {
+      //   params.append("quantity", String(filters.quantity));
+      // }
+      
+      // Admin or PM can include hidden items
+      if ((isAdmin || isPMUser) && includeHiddenExport) params.append("includeHidden", "1");
+      
+      // PM user chỉ export đơn hàng của chính họ
+      if (isPMUser) {
+        if (user?.id && !isNaN(Number(user.id))) params.append("employees", String(user.id));
+      } else {
+        if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
+        if (filters.employees?.trim()) {
+          // Validate employees CSV contains only numbers
+          const empIds = filters.employees.split(',').map(id => id.trim()).filter(id => !isNaN(Number(id)));
+          if (empIds.length > 0) params.append("employees", empIds.join(','));
+        }
+        if (filters.departments?.trim()) {
+          // Validate departments CSV contains only numbers
+          const deptIds = filters.departments.split(',').map(id => id.trim()).filter(id => !isNaN(Number(id)));
+          if (deptIds.length > 0) params.append("departments", deptIds.join(','));
+        }
+      }
+      
+      // Temporarily disable these parameters to debug
+      // if (filters.products?.trim()) {
+      //   // Validate products CSV contains only numbers
+      //   const productIds = filters.products.split(',').map(id => id.trim()).filter(id => !isNaN(Number(id)));
+      //   if (productIds.length > 0) params.append("products", productIds.join(','));
+      // }
+      // if (filters.warningLevel?.trim()) {
+      //   // Validate warning level CSV contains only valid values
+      //   const warningLevels = filters.warningLevel.split(',').map(level => level.trim()).filter(level => ['1', '2', '3', '4'].includes(level));
+      //   if (warningLevels.length > 0) params.append("warningLevel", warningLevels.join(','));
+      // }
+      // if (filters.conversationType?.trim()) {
+      //   // Validate conversation type CSV contains only valid values
+      //   const convTypes = filters.conversationType.split(',').map(type => type.trim()).filter(type => ['group', 'personal'].includes(type));
+      //   if (convTypes.length > 0) params.append("conversationType", convTypes.join(','));
+      // }
+      // if (filters.sortField && ['quantity', 'unit_price', 'created_at', 'conversation_start', 'conversation_end'].includes(filters.sortField)) {
+      //   params.append("sortField", filters.sortField);
+      // }
+      // if (filters.sortDirection && ['asc', 'desc'].includes(filters.sortDirection)) {
+      //   params.append("sortDirection", filters.sortDirection);
+      // }
+
+      const token = getAccessToken();
+  if (isPMUser) params.append('ownOnly', '1');
+  const exportUrl = `${process.env.NEXT_PUBLIC_API_URL}/orders/export?${params.toString()}`;
+      console.log('Export URL:', exportUrl);
+      console.log('Export params:', Object.fromEntries(params.entries()));
+      
+      const response = await fetch(exportUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "don-hang.xlsx";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+
+      setExportProgress(null);
+      setAlert({
+        type: "success",
+        message: "Xuất dữ liệu Excel thành công!",
+      });
+    } catch (error) {
+      console.error("Error exporting Excel:", error);
+      setExportProgress(null);
+      setAlert({
+        type: "error",
+        message: `Lỗi khi xuất Excel: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`,
+      });
+    }
+  }, [filters, isPMUser, user?.id, isAdmin, includeHiddenExport]);
+
   // Provide an async exporter that fetches ALL rows from backend (respects current filters)
   const getExportAllData = useCallback(async () => {
     const params = new URLSearchParams();
@@ -646,6 +779,7 @@ function ManagerOrderContent() {
     if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
 
     const token = getAccessToken();
+    if (isPMUser) params.append('ownOnly', '1');
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/orders?${params.toString()}`,
       {
@@ -830,6 +964,44 @@ function ManagerOrderContent() {
     }
   }, [alert]);
 
+  // WebSocket listeners for export progress
+  useEffect(() => {
+    const handleExportStart = (data: any) => {
+      setExportProgress({ message: data.message, percentage: 0 });
+    };
+
+    const handleExportProgress = (data: any) => {
+      setExportProgress({ message: data.message, percentage: data.percentage || 0 });
+    };
+
+    const handleExportComplete = (data: any) => {
+      setExportProgress({ message: data.message, percentage: 100 });
+      setTimeout(() => setExportProgress(null), 2000);
+    };
+
+    const handleExportError = (data: any) => {
+      setExportProgress(null);
+      setAlert({
+        type: "error",
+        message: `Lỗi xuất Excel: ${data.message}`,
+      });
+    };
+
+    // Subscribe to WebSocket events
+    subscribe('export:excel:start', handleExportStart);
+    subscribe('export:excel:progress', handleExportProgress);
+    subscribe('export:excel:complete', handleExportComplete);
+    subscribe('export:excel:error', handleExportError);
+
+    return () => {
+      // Unsubscribe from WebSocket events
+      unsubscribe('export:excel:start', handleExportStart);
+      unsubscribe('export:excel:progress', handleExportProgress);
+      unsubscribe('export:excel:complete', handleExportComplete);
+      unsubscribe('export:excel:error', handleExportError);
+    };
+  }, [subscribe, unsubscribe]);
+
   // ✅ Handle browser back/forward navigation for customer search
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -976,8 +1148,46 @@ function ManagerOrderContent() {
             >
               🔄 Làm mới
             </Button>
+            <Button
+              variant="default"
+              onClick={handleExportExcel}
+              className="text-sm bg-green-600 hover:bg-green-700 text-white"
+              disabled={!canExportOrder || exportProgress !== null}
+            >
+              {exportProgress ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Đang xuất...
+                </>
+              ) : (
+                <>📊 Xuất Excel</>
+              )}
+            </Button>
           </div>
         </CardHeader>
+        
+        {/* Export Progress Bar */}
+        {exportProgress && (
+          <div className="px-6 pb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-blue-700">
+                  {exportProgress.message}
+                </span>
+                <span className="text-sm text-blue-600">
+                  {exportProgress.percentage}%
+                </span>
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${exportProgress.percentage}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <CardContent className="p-6 space-y-4">
           <PaginatedTable
             enableSearch={true}
