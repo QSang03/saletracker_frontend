@@ -687,13 +687,8 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
           params.append("sortDirection", currentFilters.sortDirection);
         }
 
-        // If the current user has PM role, enforce own-only mode on order management
-        try {
-          const userInfoRes = await fetch(`/api/users/${''}`, { method: 'HEAD' });
-        } catch {}
         const authHeader = getAuthHeaders();
-        // Append ownOnly=1 when JWT roles include PM. We can't decode roles here reliably without context,
-        // so rely on backend scoping for safety. For explicit PM manager-order pages, ownOnly is added separately.
+        // Manager order: sử dụng endpoint bình thường, backend sẽ tự xử lý permissions
         const basePath = options?.management ? '/orders/management' : '/orders';
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}${basePath}?${params.toString()}`,
