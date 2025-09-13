@@ -192,12 +192,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     let departmentsCsv = "";
     let employeesCsv = "";
     
-    // Luôn lưu departments và employees vào localStorage để restore
+    // ✅ SỬA: Chỉ lưu departments khi user đã chọn, không auto-fill từ pmDepartments
     departmentsCsv =
       Array.isArray(departmentsSelected) && departmentsSelected.length > 0
         ? departmentsSelected.join(",")
-        : isPM && !isViewRole && Array.isArray(pmDepartments) && pmDepartments.length > 0
-        ? pmDepartments.join(",")
         : "";
     
     employeesCsv =
@@ -305,15 +303,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const pmDepartments =
     isAdmin || isViewRole ? getAccessibleDepartments() : getPMDepartments();
   
+  // ✅ TÁCH RIÊNG: PM có role phụ (pm-phongban)
+  const isPMWithDepartmentRole = isPM && hasPMSpecificRoles();
+  
+  // ✅ TÁCH RIÊNG: PM có quyền riêng (pm_permissions)
+  const isPMWithPermissionRole = isPM && hasPMPermissions() && !hasPMSpecificRoles();
+
   // Kiểm tra PM có quyền truy cập
   const hasSpecificPMRole =
     isAdmin || 
     isViewRole || 
-    (pmDepartments && pmDepartments.length > 0) || 
-    (isPM && hasPMPermissions());
-
-  // Kiểm tra PM chỉ có quyền riêng (permissions) mà không có phòng ban cụ thể
-  const isPMWithPermissionsOnly = isPM && hasPMPermissions() && !hasPMSpecificRoles();
+    isPMWithDepartmentRole ||
+    isPMWithPermissionRole;
 
   // Helper: lấy danh sách permissions thô (không tạo combination) theo chuẩn pm_cat_/pm_brand_
   const extractPmCatBrandPermissions = (): { categories: string[]; brands: string[] } => {
@@ -336,13 +337,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       return [];
     }
     
+    // ✅ PM có quyền riêng (pm_permissions) không hiện employees
+    if (isPMWithPermissionRole) {
+      return [];
+    }
+    
     const depts = Array.isArray(filterOptions?.departments)
       ? filterOptions.departments
       : [];
 
     const normalize = (v: any) => (v == null ? "" : String(v).toLowerCase());
     
-    // Tạo pmSet từ slug của PM (không phải từ pmDepartments vì nó có thể là departments object)
+    // Tạo pmSet từ slug của PM (chỉ cho PM có role phụ pm-phongban)
     const pmSlugs = isAdmin || isViewRole ? [] : getPMDepartments();
     const pmSet = new Set(
       (Array.isArray(pmSlugs) ? pmSlugs : []).map((x: any) =>
@@ -354,18 +360,26 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     const selectedValues = new Set(
       (departmentsSelected || []).map((v) => String(v))
     );
-    const filteredDepts =
-      departmentsSelected && departmentsSelected.length > 0
-        ? depts.filter(
-            (d: any) => String(d?.value) && selectedValues.has(String(d.value))
-          )
-        : isAdmin
-        ? depts
-        : depts.filter((d: any) => {
-            const slug = normalize(d?.slug);
-            // match against pm-allowed list by slug
-            return pmSet.has(slug);
-          });
+    
+    let filteredDepts;
+    if (departmentsSelected && departmentsSelected.length > 0) {
+      // User đã chọn departments cụ thể
+      filteredDepts = depts.filter(
+        (d: any) => String(d?.value) && selectedValues.has(String(d.value))
+      );
+    } else if (isAdmin || isViewRole) {
+      // Admin hoặc view role: hiện tất cả
+      filteredDepts = depts;
+    } else if (isPMWithDepartmentRole && pmSet.size > 0) {
+      // ✅ PM có role phụ (pm-phongban): hiện employees từ departments mà họ có quyền
+      filteredDepts = depts.filter((d: any) => {
+        const slug = normalize(d?.slug);
+        return pmSet.has(slug);
+      });
+    } else {
+      // Fallback: không hiện employees nào
+      filteredDepts = [];
+    }
 
     // Flatten and dedupe users
     const map = new Map<string, { label: string; value: string | number }>();
@@ -378,7 +392,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     });
     
     return Array.from(map.values());
-  }, [filterOptions.departments, departmentsSelected, isAdmin, pmDepartments, isAnalysisUser]);
+  }, [filterOptions.departments, departmentsSelected, isAdmin, pmDepartments, isAnalysisUser, isPMWithPermissionRole, isPMWithDepartmentRole]);
 
   // removed: moved pmDepartments/hasSpecificPMRole above to avoid temporal dead zone
 
@@ -412,13 +426,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       if (effDate) params.set('date', effDate);
       if (effDateRange) params.set('dateRange', JSON.stringify(effDateRange));
 
-      // Departments fallback logic for PM (only when no explicit departments in snapshot)
+      // ✅ SỬA: Chỉ truyền departments khi user đã chọn, không auto-fill
       if (effDepartmentsCsv) {
         params.set('departments', effDepartmentsCsv);
-      } else if (!eff && !isViewRole && isPM && Array.isArray(pmDepartments) && pmDepartments.length > 0) {
-        params.set('departments', pmDepartments.join(','));
-      } else if (eff && !eff.departments && !isViewRole && isPM && Array.isArray(pmDepartments) && pmDepartments.length > 0) {
-        params.set('departments', pmDepartments.join(','));
       }
       // Note: PM với chỉ permissions (pm_{permission}) sẽ được backend xử lý tự động
 
@@ -426,8 +436,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         params.set('employees', effEmployeesCsv);
       }
       
-      // Thêm brandCategories cho PM chỉ có quyền riêng
-      if (isPMWithPermissionsOnly) {
+      // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories
+      if (isPMWithPermissionRole) {
         if (effBrandCategoriesCsv) {
           params.set('brandCategories', effBrandCategoriesCsv);
         } else {
@@ -565,12 +575,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         const json = await res.json();
         const departments = json.departments || [];
         
-        // Nếu PM chỉ có quyền riêng, tạo brandCategories gộp từ permissions
+        // ✅ PM có quyền riêng (pm_permissions): tạo brandCategories gộp từ permissions
         let brands: any[] = [];
         let categories: any[] = [];
         let brandCategories: any[] = [];
         
-        if (isPMWithPermissionsOnly) {
+        if (isPMWithPermissionRole) {
           const { categories: catPerms, brands: brandPerms } = extractPmCatBrandPermissions();
           const combo: { value: string; label: string }[] = [];
           if (catPerms.length > 0 && brandPerms.length > 0) {
@@ -598,50 +608,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           brandCategories
         });
 
-        // If user is PM (non-admin) and hasn't selected departments explicitly,
-        // try to map their pm-<slug> roles to department values and apply as default selection
-        // Only auto-map pmDepartments for actual PM users (not for admin/view which see all)
-        if (
-          isPM &&
-          !isAdmin &&
-          !isViewRole &&
-          Array.isArray(pmDepartments) &&
-          pmDepartments.length > 0
-        ) {
-          // don't overwrite if user already selected departments
-          if (!departmentsSelected || departmentsSelected.length === 0) {
-            const mapped: (string | number)[] = [];
-
-            pmDepartments.forEach((pm: any) => {
-              // pm might be slug (string)
-              const slug = String(pm).toLowerCase();
-              const found = departments.find((d: any) => {
-                // try matching value, label or slug fields
-                if (d == null) return false;
-                const val =
-                  d.value != null ? String(d.value).toLowerCase() : "";
-                const label =
-                  d.label != null ? String(d.label).toLowerCase() : "";
-                const deptSlug =
-                  d.slug != null ? String(d.slug).toLowerCase() : "";
-                return (
-                  val === slug ||
-                  label === slug ||
-                  deptSlug === slug ||
-                  label.includes(slug)
-                );
-              });
-              if (found) mapped.push(found.value != null ? found.value : slug);
-              else mapped.push(pm);
-            });
-
-            if (mapped.length > 0) {
-              // eslint-disable-next-line no-console
-              // just set state; the consolidated effect will trigger fetchOrders
-              setDepartmentsSelected(mapped);
-            }
-          }
-        }
+        // ✅ SỬA: Không auto-map departments nữa, để user tự chọn
+        // PM users sẽ thấy departments của họ trong dropdown và có thể chọn
+        // Backend sẽ tự động filter theo permissions của PM
       } catch (err) {
         console.error("Error loading filter options", err);
       } finally {
@@ -656,7 +625,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       setFiltersLoaded(false);
       load();
     }
-  }, [isPM, isAdmin, isPMWithPermissionsOnly]);
+  }, [isPM, isAdmin, isPMWithPermissionRole]);
 
   // Initialize history state on mount for consistent back behavior
   useEffect(() => {
@@ -1230,16 +1199,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       params.set("date", dateFilter);
     }
 
-    // prefer explicit selection, otherwise for non-admin use pmDepartments
+    // ✅ SỬA: Chỉ truyền departments khi user đã chọn
     if (Array.isArray(departmentsSelected) && departmentsSelected.length > 0) {
       params.set("departments", departmentsSelected.join(","));
-    } else if (
-      isPM &&
-      !isViewRole &&
-      Array.isArray(pmDepartments) &&
-      pmDepartments.length > 0
-    ) {
-      params.set("departments", pmDepartments.join(","));
     }
     // Note: PM với chỉ permissions (pm_{permission}) sẽ được backend xử lý tự động
 
@@ -1262,8 +1224,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       params.set("conversationType", conversationTypesSelected.join(","));
     }
 
-    // Thêm brandCategories cho PM chỉ có quyền riêng trong export
-    if (isPMWithPermissionsOnly) {
+    // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories trong export
+    if (isPMWithPermissionRole) {
       if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
         params.set('brandCategories', brandCategoriesSelected.join(','));
       } else {
@@ -1409,9 +1371,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           <PaginatedTable
             enableSearch={true}
             enableStatusFilter={true}
-            enableEmployeeFilter={!isAnalysisUser && !isPMWithPermissionsOnly}
-            enableDepartmentFilter={!isAnalysisUser && !isPMWithPermissionsOnly}
-            enableBrandCategoryFilter={isPMWithPermissionsOnly}
+            enableEmployeeFilter={!isAnalysisUser && isPMWithDepartmentRole}
+            enableDepartmentFilter={!isAnalysisUser && isPMWithDepartmentRole}
+            enableBrandCategoryFilter={isPMWithPermissionRole}
             enableDateRangeFilter={true}
             enableSingleDateFilter={true}
             enableWarningLevelFilter={true}
@@ -1573,14 +1535,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             getExportAllData={getExportAllData}
             availableStatuses={statusOptions}
             availableDepartments={
-              isAnalysisUser
-                ? [] // Analysis user không cần filter theo phòng ban
+              isAnalysisUser || isPMWithPermissionRole
+                ? [] // Analysis user hoặc PM có quyền riêng không cần filter theo phòng ban
                 : isAdmin || isViewRole
                 ? (filterOptions.departments || []).map((d: any) => ({
                     value: d.value,
                     label: d.label,
                   }))
-                : ((): any => {
+                : isPMWithDepartmentRole
+                ? ((): any => {
                     const depts = (filterOptions.departments || []).map(
                       (d: any) => ({ value: d.value, label: d.label, slug: d.slug })
                     );
@@ -1598,6 +1561,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                       ? pmDepartments
                       : [];
                   })()
+                : []
             }
             availableWarningLevels={warningLevelOptions}
             availableEmployees={availableEmployees}
