@@ -33,7 +33,10 @@ export interface UserRoleAndPermissionModalProps {
     permissionIds: number[];
     rolePermissions: { roleId: number; permissionId: number; isActive: boolean }[];
     viewSubRoleName?: string; // Thêm thông tin để backend tạo role "view con"
-  pmPrivateRoleName?: string; // Thêm thông tin để backend tạo role pm riêng
+    pmPrivateRoleName?: string; // Thêm thông tin để backend tạo role pm riêng
+    pmCustomRoleNames?: string[]; // Danh sách tên các PM custom roles
+    pmCustomRolePermissions?: Array<{ roleName: string; permissions: number[] }>; // Quyền cho từng PM custom role
+    pmMode?: 'general' | 'custom'; // Chế độ PM
   }) => Promise<void>;
   onSaveSuccess?: () => void; // Callback khi lưu thành công
 }
@@ -106,6 +109,15 @@ export default function UserRoleAndPermissionModal({
   const [isViewRoleSelected, setIsViewRoleSelected] = useState(false);
   const [viewRoleDepartments, setViewRoleDepartments] = useState<number[]>([]);
   const [viewRolePermissions, setViewRolePermissions] = useState<number[]>([]);
+  
+  // State cho PM modes
+  const [pmMode, setPmMode] = useState<'general' | 'custom'>('general'); // 'general' = tổ hợp chung, 'custom' = tổ hợp riêng
+  const [pmCustomRoles, setPmCustomRoles] = useState<Array<{
+    id: string;
+    name: string;
+    permissions: number[];
+  }>>([]);
+  const [pmCustomRoleSearchQueries, setPmCustomRoleSearchQueries] = useState<Record<string, string>>({});
   
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -441,6 +453,30 @@ export default function UserRoleAndPermissionModal({
       user.roles?.filter((r) => rolesGrouped.sub.some((s) => s.id === r.id)).map((r) => r.id) || []
     );
     
+    // Load PM custom roles nếu có
+    const pmCustomRolesFromUser = user.roles?.filter(r => {
+      const name = (r.name || '').toLowerCase();
+      return name.startsWith(`pm_${user.username.toLowerCase()}_`) && name !== `pm_${user.username.toLowerCase()}`;
+    }) || [];
+    
+    if (pmCustomRolesFromUser.length > 0) {
+      setPmMode('custom');
+      const customRoles = pmCustomRolesFromUser.map(role => {
+        const rolePermissions = rolePermissionsState
+          .filter(rp => rp.roleId === role.id && rp.isActive)
+          .map(rp => rp.permissionId);
+        return {
+          id: role.id.toString(),
+          name: role.name || '',
+          permissions: rolePermissions
+        };
+      });
+      setPmCustomRoles(customRoles);
+    } else {
+      setPmMode('general');
+      setPmCustomRoles([]);
+    }
+    
     // Kiểm tra nếu user có role "view"
     const hasViewRole = user.roles?.some((r) => r.name === "view");
     if (hasViewRole) {
@@ -488,6 +524,26 @@ export default function UserRoleAndPermissionModal({
   const currentRoleIds = useMemo(() => {
     return [...selectedMainRoles, ...selectedSubRoles];
   }, [selectedMainRoles, selectedSubRoles]);
+
+  // Helper functions cho PM custom roles
+  const addPmCustomRole = () => {
+    const newId = `pm_${user.username}_${pmCustomRoles.length + 1}`;
+    setPmCustomRoles(prev => [...prev, {
+      id: newId,
+      name: newId,
+      permissions: []
+    }]);
+  };
+
+  const removePmCustomRole = (id: string) => {
+    setPmCustomRoles(prev => prev.filter(role => role.id !== id));
+  };
+
+  const updatePmCustomRolePermissions = (id: string, permissions: number[]) => {
+    setPmCustomRoles(prev => prev.map(role => 
+      role.id === id ? { ...role, permissions } : role
+    ));
+  };
 
   // Helper: nhóm permissions theo chức năng cho role "view" (chỉ read và export)
   const viewRolePermissionGroups = useMemo(() => {
@@ -827,43 +883,62 @@ export default function UserRoleAndPermissionModal({
       await onSave(saveData);
     } else {
       // Logic lưu cho các role khác (bao gồm quyền riêng PM)
-      const pmPrivateRoleName = `pm_${user.username}`;
-      const pmPrivateRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName);
       const pmMain = rolesGrouped.main.find(r => r.name === 'pm');
-
+      
       // Build rolePermissions gửi lên: tất cả role permissions hiện có (roleId>0) giữ lại
       const keep = rolePermissionsState.filter(rp => rp.roleId > 0);
-
-      // Thêm placeholder 0 cho quyền riêng nếu chưa có role pm_<username>
-      const privateSelections = rolePermissionsState.filter(rp => rp.roleId === (pmPrivateRole?.id ?? 0) || (rp.roleId === 0));
-      const activePrivate = privateSelections.filter(rp => rp.isActive);
-      const privatePermissionIds = Array.from(new Set(activePrivate.map(rp => rp.permissionId)));
-      if (!pmPrivateRole && privatePermissionIds.length > 0) {
-        // dùng roleId=0 giữ chỗ
-        privatePermissionIds.forEach(pid => {
-          if (!keep.some(k => k.roleId === 0 && k.permissionId === pid)) {
-            keep.push({ roleId: 0, permissionId: pid, isActive: true });
-          }
-        });
-      } else if (pmPrivateRole) {
-        // đảm bảo entry roleId đúng id role private
-        privatePermissionIds.forEach(pid => {
-          if (!keep.some(k => k.roleId === pmPrivateRole.id && k.permissionId === pid)) {
-            keep.push({ roleId: pmPrivateRole.id, permissionId: pid, isActive: true });
-          }
-        });
-      }
-
-      // roleIds gửi lên không bao gồm roleId=0
-      const roleIds = Array.from(new Set([...selectedMainRoles, ...selectedSubRoles, pmPrivateRole?.id].filter(Boolean))) as number[];
-      const permissionIds = Array.from(new Set(keep.filter(rp => rp.isActive && rp.roleId !== 0).map(rp => rp.permissionId).concat(privatePermissionIds)));
-      const payload: any = {
+      
+      let payload: any = {
         departmentIds: selectedDepartments,
-        roleIds,
-        permissionIds,
+        roleIds: [...selectedMainRoles, ...selectedSubRoles],
+        permissionIds: [],
         rolePermissions: keep,
       };
-      if (privatePermissionIds.length > 0) payload.pmPrivateRoleName = pmPrivateRoleName;
+
+      if (isPMSelected && pmMode === 'general') {
+        // Chế độ tổ hợp chung (như cũ)
+        const pmPrivateRoleName = `pm_${user.username}`;
+        const pmPrivateRole = rolesGrouped.sub.find(r => r.name === pmPrivateRoleName);
+
+        // Thêm placeholder 0 cho quyền riêng nếu chưa có role pm_<username>
+        const privateSelections = rolePermissionsState.filter(rp => rp.roleId === (pmPrivateRole?.id ?? 0) || (rp.roleId === 0));
+        const activePrivate = privateSelections.filter(rp => rp.isActive);
+        const privatePermissionIds = Array.from(new Set(activePrivate.map(rp => rp.permissionId)));
+        
+        if (!pmPrivateRole && privatePermissionIds.length > 0) {
+          // dùng roleId=0 giữ chỗ
+          privatePermissionIds.forEach(pid => {
+            if (!keep.some(k => k.roleId === 0 && k.permissionId === pid)) {
+              keep.push({ roleId: 0, permissionId: pid, isActive: true });
+            }
+          });
+        } else if (pmPrivateRole) {
+          // đảm bảo entry roleId đúng id role private
+          privatePermissionIds.forEach(pid => {
+            if (!keep.some(k => k.roleId === pmPrivateRole.id && k.permissionId === pid)) {
+              keep.push({ roleId: pmPrivateRole.id, permissionId: pid, isActive: true });
+            }
+          });
+        }
+
+        payload.roleIds = Array.from(new Set([...selectedMainRoles, ...selectedSubRoles, pmPrivateRole?.id].filter(Boolean))) as number[];
+        payload.permissionIds = Array.from(new Set(keep.filter(rp => rp.isActive && rp.roleId !== 0).map(rp => rp.permissionId).concat(privatePermissionIds)));
+        payload.rolePermissions = keep;
+        if (privatePermissionIds.length > 0) payload.pmPrivateRoleName = pmPrivateRoleName;
+        
+      } else if (isPMSelected && pmMode === 'custom') {
+        // Chế độ tổ hợp riêng
+        const pmCustomRoleNames = pmCustomRoles.map(role => role.name);
+        const pmCustomRolePermissions = pmCustomRoles.map(role => ({
+          roleName: role.name,
+          permissions: role.permissions
+        }));
+        
+        payload.pmCustomRoleNames = pmCustomRoleNames;
+        payload.pmCustomRolePermissions = pmCustomRolePermissions;
+        payload.pmMode = 'custom';
+      }
+
       await onSave(payload);
     }
     
@@ -1174,6 +1249,40 @@ export default function UserRoleAndPermissionModal({
                   />
                 </>
               </div>
+              
+              {/* PM Mode Selection */}
+              {isPMSelected && (
+                <div className="mb-4">
+                  <GradientTitle className="text-lg mb-2 block">
+                    CHẾ ĐỘ PM
+                  </GradientTitle>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="pmMode"
+                        value="general"
+                        checked={pmMode === 'general'}
+                        onChange={(e) => setPmMode(e.target.value as 'general' | 'custom')}
+                        className="w-4 h-4"
+                      />
+                      <span>PM Tổ hợp chung (như cũ)</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="pmMode"
+                        value="custom"
+                        checked={pmMode === 'custom'}
+                        onChange={(e) => setPmMode(e.target.value as 'general' | 'custom')}
+                        className="w-4 h-4"
+                      />
+                      <span>PM Tổ hợp riêng</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+              
               <div className="mb-4">
                 <GradientTitle className="text-lg mb-2 block">
                   QUYỀN HẠN
@@ -1181,25 +1290,29 @@ export default function UserRoleAndPermissionModal({
                 <div>
                   {shouldShowPMPermissions && pmPermissions.length > 0 && (
                     <div className="mb-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="font-semibold text-lg">PM - Quyền riêng</div>
-                        <label className="flex items-center gap-2 text-sm">
-                          <Checkbox
-                            checked={pmPermissions.every(p => activePrivatePermissionIds.includes(p.id)) && pmPermissions.length>0}
-                            onCheckedChange={(checked) => {
-                              const targetRoleId = pmPrivateRole?.id ?? 0; // 0 => backend map sau khi tạo
-                              setRolePermissionsState(prev => {
-                                const updated = prev.filter(rp => !(rp.roleId === targetRoleId && pmPermissions.some(p => p.id === rp.permissionId)));
-                                pmPermissions.forEach(p => {
-                                  updated.push({ roleId: targetRoleId, permissionId: p.id, isActive: !!checked });
-                                });
-                                return updated;
-                              });
-                            }}
-                          />
-                          Chọn tất cả quyền PM
-                        </label>
-                      </div>
+                      {pmMode === 'general' ? (
+                        // Chế độ tổ hợp chung (như cũ)
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-semibold text-lg">PM - Quyền riêng</div>
+                            <label className="flex items-center gap-2 text-sm">
+                              <Checkbox
+                                checked={pmPermissions.every(p => activePrivatePermissionIds.includes(p.id)) && pmPermissions.length>0}
+                                onCheckedChange={(checked) => {
+                                  const targetRoleId = pmPrivateRole?.id ?? 0; // 0 => backend map sau khi tạo
+                                  setRolePermissionsState(prev => {
+                                    const updated = prev.filter(rp => !(rp.roleId === targetRoleId && pmPermissions.some(p => p.id === rp.permissionId)));
+                                    pmPermissions.forEach(p => {
+                                      updated.push({ roleId: targetRoleId, permissionId: p.id, isActive: !!checked });
+                                    });
+                                    return updated;
+                                  });
+                                }}
+                              />
+                              Chọn tất cả quyền PM
+                            </label>
+                          </div>
+                          
                         <div className="mb-2">
                           <input
                             type="text"
@@ -1281,6 +1394,155 @@ export default function UserRoleAndPermissionModal({
                             );
                           })()
                         }
+                        </>
+                      ) : (
+                        // Chế độ tổ hợp riêng
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="font-semibold text-lg">PM - Tổ hợp riêng</div>
+                            <Button 
+                              onClick={addPmCustomRole}
+                              variant="outline"
+                              size="sm"
+                            >
+                              + Thêm Role PM
+                            </Button>
+                          </div>
+                          
+                          
+                          {pmCustomRoles.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                              Chưa có role PM nào. Nhấn "Thêm Role PM" để bắt đầu.
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {pmCustomRoles.map((role, index) => (
+                                <div key={role.id} className="border rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="font-semibold">
+                                      {role.name} (Role {index + 1})
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <label className="flex items-center gap-2 text-sm">
+                                        <Checkbox
+                                          checked={pmPermissions.every(p => role.permissions.includes(p.id)) && pmPermissions.length > 0}
+                                          onCheckedChange={(checked) => {
+                                            const allPermissionIds = pmPermissions.map(p => p.id);
+                                            updatePmCustomRolePermissions(role.id, checked ? allPermissionIds : []);
+                                          }}
+                                        />
+                                        Chọn tất cả
+                                      </label>
+                                      <Button
+                                        onClick={() => removePmCustomRole(role.id)}
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-red-600 hover:text-red-700"
+                                      >
+                                        Xóa
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="mb-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Tìm quyền PM..."
+                                      value={pmCustomRoleSearchQueries[role.id] || ''}
+                                      onChange={(e) => {
+                                        setPmCustomRoleSearchQueries(prev => ({
+                                          ...prev,
+                                          [role.id]: e.target.value
+                                        }));
+                                      }}
+                                      className="w-full px-3 py-2 border rounded-md text-sm"
+                                    />
+                                  </div>
+                                  
+                                  {(() => {
+                                    // Filter permissions based on search query
+                                    const searchQuery = pmCustomRoleSearchQueries[role.id] || '';
+                                    const filteredPermissions = searchQuery.trim() 
+                                      ? pmPermissions.filter(p => 
+                                          (`${p.name} ${p.action}`).toLowerCase().includes(searchQuery.toLowerCase())
+                                        )
+                                      : pmPermissions;
+                                    
+                                    // Group PM permissions into categories / brands / others
+                                    const pmCat = filteredPermissions.filter(p => (p.name || '').startsWith('pm_cat_'));
+                                    const pmBrand = filteredPermissions.filter(p => (p.name || '').startsWith('pm_brand_'));
+                                    const pmOther = filteredPermissions.filter(p => !(p.name || '').startsWith('pm_cat_') && !(p.name || '').startsWith('pm_brand_'));
+                                    
+                                    const renderGrid = (list: typeof pmPermissions, keyPrefix: string) => (
+                                      <div className="mb-3" key={keyPrefix}>
+                                        <div className="font-semibold mb-2">
+                                          {keyPrefix === 'cat' ? '📁 Danh mục' : keyPrefix === 'brand' ? '🏷️ Thương hiệu' : '⚙️ Khác'}
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
+                                          {list.map((permission) => {
+                                            const isActive = role.permissions.includes(permission.id);
+                                            let displayLabel = permission.name || '';
+                                            
+                                            // Compute friendly label for pm_cat_ / pm_brand_
+                                            try {
+                                              if (keyPrefix === 'cat' && (permission.name || '').startsWith('pm_cat_')) {
+                                                const suffix = (permission.name || '').slice('pm_cat_'.length);
+                                                const found = pmCategories.find(c => 
+                                                  ((c as any).slug === suffix) || 
+                                                  normalizeSlug((c as any).slug) === normalizeSlug(suffix) || 
+                                                  normalizeSlug(c.catName) === normalizeSlug(suffix) || 
+                                                  String(c.id) === suffix
+                                                );
+                                                displayLabel = found ? found.catName : suffix.replace(/[-_]+/g, ' ');
+                                              } else if (keyPrefix === 'brand' && (permission.name || '').startsWith('pm_brand_')) {
+                                                const suffix = (permission.name || '').slice('pm_brand_'.length);
+                                                const found = pmBrands.find(b => 
+                                                  ((b as any).slug === suffix) || 
+                                                  normalizeSlug((b as any).slug) === normalizeSlug(suffix) || 
+                                                  normalizeSlug(b.name) === normalizeSlug(suffix) || 
+                                                  String(b.id) === suffix
+                                                );
+                                                displayLabel = found ? found.name : suffix.replace(/[-_]+/g, ' ');
+                                              }
+                                            } catch (e) {
+                                              displayLabel = permission.name || '';
+                                            }
+                                            
+                                            const matches = searchQuery.length > 0 && (`${permission.name} ${permission.action}`).toLowerCase().includes(searchQuery.toLowerCase());
+                                            
+                                            return (
+                                              <label key={permission.id} className={`flex items-center gap-2 ${matches ? 'bg-yellow-100 rounded px-2 py-1' : ''}`}>
+                                                <Checkbox
+                                                  checked={isActive}
+                                                  onCheckedChange={(checked) => {
+                                                    const newPermissions = checked 
+                                                      ? [...role.permissions, permission.id]
+                                                      : role.permissions.filter(id => id !== permission.id);
+                                                    updatePmCustomRolePermissions(role.id, newPermissions);
+                                                  }}
+                                                />
+                                                {displayLabel} ({permission.action})
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+
+                                    return (
+                                      <div>
+                                        {pmCat.length > 0 && renderGrid(pmCat, 'cat')}
+                                        {pmBrand.length > 0 && renderGrid(pmBrand, 'brand')}
+                                        {pmOther.length > 0 && renderGrid(pmOther, 'other')}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   {departments.map((dep) => {
@@ -1344,3 +1606,5 @@ export default function UserRoleAndPermissionModal({
     </>
   );
 }
+
+

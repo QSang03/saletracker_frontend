@@ -36,6 +36,8 @@ interface ProductCodeEditorProps {
   currentProductCode: string;
   orderDetailId: number;
   onUpdate: (newProductCode: string) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
   disabled?: boolean;
 }
 
@@ -43,6 +45,8 @@ export default function ProductCodeEditor({
   currentProductCode,
   orderDetailId,
   onUpdate,
+  onOpen,
+  onClose,
   disabled = false,
 }: ProductCodeEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -298,8 +302,13 @@ export default function ProductCodeEditor({
 
       if (result.success) {
         onUpdate(customCode.trim());
+        
+        // ✅ Fetch lại danh sách sản phẩm để đảm bảo sản phẩm vừa chọn có trong list
+        await loadProducts();
+        
         setIsOpen(false);
         setSelectedProduct(null);
+        onClose?.();
       } else {
         alert(result.message || "Có lỗi xảy ra");
       }
@@ -314,7 +323,8 @@ export default function ProductCodeEditor({
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
     setCustomCode(product.productCode);
-    setSearchQuery("");
+    // ✅ Không clear searchQuery để giữ danh sách search result
+    // setSearchQuery("");
   };
 
   const handleCustomCodeChange = (value: string) => {
@@ -327,14 +337,22 @@ export default function ProductCodeEditor({
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setIsOpen(true);
+          onOpen?.();
+        }}
         disabled={disabled}
         className="h-8 w-8 p-0 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-200 transition-all duration-200 group"
       >
         <Edit2 className="h-4 w-4 text-gray-600 group-hover:text-blue-600 transition-colors" />
       </Button>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) {
+          onClose?.();
+        }
+      }}>
         <DialogContent className="!max-w-[60vw] bg-gradient-to-br from-white via-gray-50 to-blue-50/30 border-0 shadow-2xl">
           <DialogHeader className="space-y-3 pb-6 border-b border-gradient-to-r from-transparent via-gray-200 to-transparent">
             <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-blue-700 bg-clip-text text-transparent flex items-center gap-3">

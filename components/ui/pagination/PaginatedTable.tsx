@@ -446,7 +446,7 @@ export default function PaginatedTable({
   warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
   quantity: (initialFilters && "quantity" in initialFilters)
     ? (initialFilters.quantity as number | undefined)
-    : defaultQuantity, // Tôn trọng initial quantity nếu được set, ngược lại dùng mặc định
+    : undefined,
   conversationType: initialFilters?.conversationType || [], // Thêm conversation type
       dateRange: initialFilters?.dateRange || {
         from: undefined,
@@ -500,7 +500,7 @@ export default function PaginatedTable({
       filters.brands.length === 0 &&
   filters.brandCategories.length === 0 &&
       filters.warningLevels.length === 0 && // Thêm warning levels
-  (!filters.quantity || filters.quantity === defaultQuantity) && // Thêm quantity check
+  (filters.quantity === undefined) && // Thêm quantity check
   (filters.conversationType?.length || 0) === 0 &&
       filters.employees.length === 0 &&
       !filters.dateRange.from &&
@@ -728,7 +728,7 @@ export default function PaginatedTable({
       brands: [],
       brandCategories: [],
   warningLevels: [], // Thêm warning levels
-  quantity: defaultQuantity || 1, // Reset về mặc định
+  quantity: undefined,
   conversationType: [],
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
@@ -1181,7 +1181,7 @@ export default function PaginatedTable({
 
   // If parent signals a restoring/resetting state, force clear internal filters UI immediately
   useEffect(() => {
-    if (isRestoring) {
+  if (isRestoring) {
       const reset: Filters = {
         search: "",
         departments: [],
@@ -1193,7 +1193,7 @@ export default function PaginatedTable({
         brands: [],
         brandCategories: [],
         warningLevels: [],
-        quantity: defaultQuantity || 1,
+  quantity: undefined,
         conversationType: [],
         dateRange: { from: undefined, to: undefined },
         singleDate: undefined,
@@ -1426,19 +1426,19 @@ export default function PaginatedTable({
                   onChange={(e) => {
                     const raw = e.target.value;
                     if (raw === "") {
-                      // user cleared input -> reset to default quantity
-                      updateFilter("quantity", defaultQuantity as any);
+                      // user cleared input -> remove quantity filter
+                      updateFilter("quantity", undefined as any);
                       return;
                     }
                     const n = parseInt(raw, 10);
-                    updateFilter("quantity", Number.isNaN(n) ? defaultQuantity as any : n as any);
+                    updateFilter("quantity", Number.isNaN(n) ? undefined as any : n as any);
                   }}
                   onBlur={(e) => {
                     // Ensure parent receives filter immediately on blur (bypass debounce)
                     try {
                       const raw = e.currentTarget.value;
-                      const parsed = raw === "" ? defaultQuantity : parseInt(raw, 10);
-                      const n = Number.isNaN(parsed as any) ? defaultQuantity : (parsed as any);
+                      const parsed = raw === "" ? undefined : parseInt(raw, 10);
+                      const n = parsed === undefined || Number.isNaN(parsed as any) ? undefined : (parsed as any);
                       const newFilters = { ...filters, quantity: n } as Filters;
                       if (onFilterChange) {
                         const json = JSON.stringify(newFilters);

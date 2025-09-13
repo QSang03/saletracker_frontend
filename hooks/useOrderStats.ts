@@ -105,15 +105,19 @@ export interface StatsParams {
   departments?: string | number[];
   products?: string | number[];
   status?: string | string[]; // for status-related endpoints
+  timestamp?: number;    // for transaction details
 }
 
-function buildQuery(params?: StatsParams): string {
+function buildQuery(params?: StatsParams & { timestamp?: number; page?: number; limit?: number }): string {
   if (!params) return "";
   const sp = new URLSearchParams();
   if (params.period) sp.set("period", params.period);
   if (params.date) sp.set("date", params.date);
   if (params.dateFrom) sp.set("dateFrom", params.dateFrom);
   if (params.dateTo) sp.set("dateTo", params.dateTo);
+  if (params.timestamp !== undefined) sp.set("timestamp", params.timestamp.toString());
+  if (params.page !== undefined) sp.set("page", params.page.toString());
+  if (params.limit !== undefined) sp.set("limit", params.limit.toString());
 
   const toCsv = (v?: string | number[] | string[]) => {
     if (v === undefined) return undefined;
@@ -174,7 +178,7 @@ export function useOrderStats() {
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
-  const call = useCallback(async <T,>(path: string, params?: StatsParams) => {
+  const call = useCallback(async <T,>(path: string, params?: StatsParams & { timestamp?: number; page?: number; limit?: number }) => {
     const qs = buildQuery(params);
     const fullUrl = `${baseUrl}${path}${qs}`;
     
@@ -227,7 +231,6 @@ export function useOrderStats() {
     [call]
   );
 
-  // ✅ THÊM LOG RIÊNG CHO EXPIRED STATS
   const getExpiredTodayStats = useCallback(
     (params?: StatsParams) => {
       const result = call<ExpiredTodayStatsResponse>("/orders/stats/expired-today", params);
@@ -243,7 +246,21 @@ export function useOrderStats() {
     [call]
   );
 
-  // ✅ THÊM LOG CHO RETURN OBJECT
+  // ✅ NEW: Optimized transaction stats endpoint
+  const getTransactionStats = useCallback(
+    (params?: StatsParams) => {
+      return call<any>("/order-details/stats/transactions", params);
+    },
+    [call]
+  );
+
+  const getTransactionDetails = useCallback(
+    (params?: StatsParams & { timestamp: number; status?: string | string[]; page?: number; limit?: number }) => {
+      return call<any>("/order-details/stats/transactions/details", params);
+    },
+    [call]
+  );
+
   const returnObject = {
     loading,
     error,
@@ -253,6 +270,8 @@ export function useOrderStats() {
     getCustomerStats,
     getExpiredTodayStats,
     getDetailedStats,
+    getTransactionStats,
+    getTransactionDetails,
   };
 
   return returnObject;

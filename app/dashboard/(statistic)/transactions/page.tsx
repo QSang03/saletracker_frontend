@@ -6,6 +6,14 @@ import { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { getAccessToken, getUserFromToken } from "@/lib/auth";
+import { 
+  TransactionStatsApiResponse, 
+  TransactionSummaryStats,
+  TransactionChartPoint,
+  TransactionCustomerStat,
+  TransactionEmployeeStat 
+} from "@/types/transaction-stats";
 import {
   Dialog,
   DialogContent,
@@ -132,270 +140,27 @@ function getPresetRange(period: Period): DateRange {
   return { from: startOfDay(from), to: endOfDay(last) };
 }
 
-function getPreviousRange(period: Period, current: DateRange): DateRange {
-  const to = current.to ? new Date(current.to) : new Date();
-  const from = current.from ? new Date(current.from) : new Date();
-  if (period === "day") {
-    // Previous window of 7 non-Sunday days before current range
-    const prevEnd = new Date(startOfDay(from));
-    prevEnd.setDate(prevEnd.getDate() - 1);
-    return getLastNDaysExcludingSundays(7, prevEnd);
-  }
-  if (period === "week") {
-    // Previous window of 7 non-Sunday days before current range
-    const prevEnd = new Date(startOfDay(from));
-    prevEnd.setDate(prevEnd.getDate() - 1);
-    return getLastNDaysExcludingSundays(7, prevEnd);
-  }
-  // quarter
-  const now = from;
-  const q = Math.floor(now.getMonth() / 3);
-  const prevQ = q - 1;
-  const year = prevQ < 0 ? now.getFullYear() - 1 : now.getFullYear();
-  const quarterIndex = ((prevQ % 4) + 4) % 4;
-  const pf = new Date(year, quarterIndex * 3, 1);
-  const pt = new Date(year, quarterIndex * 3 + 3, 0);
-  return { from: startOfDay(pf), to: endOfDay(pt) };
-}
-
-function calcDynamicExtended(
-  createdAt?: string | Date,
-  originalExtended?: number
-) {
-  try {
-    if (!createdAt || originalExtended == null) return originalExtended ?? 0;
-    const created = new Date(createdAt);
-    created.setHours(0, 0, 0, 0);
-    const expired = new Date(created);
-    expired.setDate(expired.getDate() + (originalExtended || 0));
-    const today = startOfDay(new Date());
-    const diff = Math.floor(
-      (expired.getTime() - today.getTime()) / (1000 * 3600 * 24)
-    );
-    return diff;
-  } catch {
-    return originalExtended ?? 0;
-  }
-}
-
-function startOfWeekMonday(d: Date): Date {
-  const date = startOfDay(d);
-  const day = (date.getDay() + 6) % 7; // 0=Monday
-  date.setDate(date.getDate() - day);
-  return date;
-}
-
-function startOfQuarter(d: Date): Date {
-  const q = Math.floor(d.getMonth() / 3);
-  return startOfDay(new Date(d.getFullYear(), q * 3, 1));
-}
-
-function getPeriodStart(date: Date, period: Period): Date {
-  if (period === "day") return startOfDay(date);
-  if (period === "week") return startOfWeekMonday(date);
-  return startOfQuarter(date);
-}
-
-function groupKeyByPeriod(date: Date, period: Period): string {
-  const start = getPeriodStart(date, period);
-  if (period === "day") {
-    const d = start;
-    return `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}/${d.getFullYear()}`;
-  }
-  if (period === "week") {
-    const d = start;
-    // Label week as Mon-Sat
-    const sat = new Date(d);
-    sat.setDate(d.getDate() + 5);
-    const fmt = (x: Date) =>
-      `${x.getDate().toString().padStart(2, "0")}/${(x.getMonth() + 1)
-        .toString()
-        .padStart(2, "0")}`;
-    return `Tuần ${fmt(d)}-${fmt(sat)}`;
-  }
-  const q = Math.floor(start.getMonth() / 3) + 1;
-  return `Q${q} ${start.getFullYear()}`;
-}
-
-function getBucketRange(ts: number, period: Period): { from: Date; to: Date } {
-  const start = new Date(ts);
-  if (period === "day") {
-    return { from: startOfDay(start), to: endOfDay(start) };
-  }
-  if (period === "week") {
-    const from = startOfWeekMonday(start);
-    const to = new Date(from);
-    // End at Saturday
-    to.setDate(from.getDate() + 5);
-    return { from, to: endOfDay(to) };
-  }
-  // quarter
-  const from = startOfQuarter(start);
-  const to = new Date(from.getFullYear(), from.getMonth() + 3, 0);
-  return { from, to: endOfDay(to) };
-}
-
-// Map backend detailed rows to local OrderDetail-like shape
-type DetailedRow = {
-  id: number | string;
-  orderId: number | string;
-  productId: number | string | null;
-  productName: string | null;
-  status: string;
-  quantity: number;
-  unit_price: number | string;
-  revenue: number | string;
-  sale_by: { id: number; fullName: string };
-  customer: { id: string | null; name: string | null };
-  created_at: string;
-  dynamicExtended: number | null;
-};
-
-function mapRowsToOrderDetails(rows: DetailedRow[]): OrderDetail[] {
-  return rows.map((r) => ({
-    id: Number(r.id as any),
-    order_id: Number(r.orderId as any),
-    order: {
-      id: Number(r.orderId as any),
-      sale_by: {
-        id: r.sale_by?.id as any,
-        fullName: r.sale_by?.fullName,
-        username: r.sale_by?.fullName,
-        roles: [],
-        departments: [],
-        status: "active",
-        isBlock: false,
-      } as any,
-      created_at: r.created_at,
-    } as any,
-    product_id: (r.productId != null
-      ? Number(r.productId as any)
-      : null) as any,
-    product_name: r.productName || "",
-    quantity: r.quantity,
-    unit_price: Number(r.unit_price as any),
-    // Keep original extended for mock only; dynamic from API is stored in metadata
-    customer_name: r.customer?.name ?? undefined,
-    status: r.status,
-    total_price: Number(r.revenue as any),
-    created_at: r.created_at,
-    metadata: { dynamicExtended: r.dynamicExtended },
-  }));
-}
-
-function generateMockData(range: DateRange): OrderDetail[] {
-  const from = range.from ? startOfDay(range.from) : startOfDay(new Date());
-  const to = range.to ? endOfDay(range.to) : endOfDay(new Date());
-  const days = Math.max(
-    1,
-    Math.ceil((to.getTime() - from.getTime()) / (1000 * 3600 * 24)) + 1
-  );
-  const statuses = [
-    "pending",
-    "quoted",
-    "completed",
-    "demand",
-    "confirmed",
-  ] as const;
-
-  const employees: Array<Pick<User, "id" | "fullName">> = [
-    { id: 1, fullName: "Nguyễn Văn A" },
-    { id: 2, fullName: "Trần Thị B" },
-    { id: 3, fullName: "Lê Văn C" },
-    { id: 4, fullName: "Phạm Thị D" },
-    { id: 5, fullName: "Hoàng Văn E" },
-    { id: 6, fullName: "Võ Thị F" },
-    { id: 7, fullName: "Đỗ Văn G" },
-    { id: 8, fullName: "Bùi Thị H" },
-  ];
-
-  const companies = [
-    "Công ty TNHH ABC",
-    "Tập đoàn XYZ",
-    "Công ty Cổ phần DEF",
-    "Doanh nghiệp 123",
-    "Công ty TNHH Technology",
-    "Startup Innovation",
-    "Công ty Logistics",
-    "Tập đoàn Manufacturing",
-    "Công ty Digital Solutions",
-    "Enterprise Global",
-    "Công ty Smart Tech",
-    "Corporation Alpha",
-    "Công ty Beta Systems",
-    "Gamma Industries",
-    "Delta Services",
-    "Epsilon Trading",
-    "Zeta Corporation",
-    "Eta Solutions",
-    "Theta Group",
-    "Iota Dynamics",
-    "Kappa Enterprises",
-    "Lambda Corporation",
-    "Mu Technologies",
-    "Nu Industries",
-    "Xi Corporation",
-    "Omicron Group",
-  ];
-
-  const list: OrderDetail[] = [];
-  let id = 1;
-
-  for (let d = 0; d < days; d++) {
-    const date = new Date(from);
-    date.setDate(from.getDate() + d);
-    const count = 12 + Math.floor(Math.random() * 18);
-
-    for (let k = 0; k < count; k++) {
-      const status = statuses[Math.floor(Math.random() * statuses.length)];
-      const employee = employees[Math.floor(Math.random() * employees.length)];
-      const company = companies[Math.floor(Math.random() * companies.length)];
-
-      list.push({
-        id: id++,
-        order_id: id,
-        quantity: 1 + Math.floor(Math.random() * 5),
-        unit_price: 500000 + Math.floor(Math.random() * 19500000),
-        extended: Math.floor(Math.random() * 10) + 1,
-        customer_name: company,
-        status,
-        order: {
-          id: id,
-          sale_by: {
-            id: employee.id,
-            username: employee.fullName || `NV ${employee.id}`,
-            fullName: employee.fullName,
-            roles: [],
-            departments: [],
-            status: "active",
-            isBlock: false,
-          },
-          created_at: new Date(date),
-        },
-        created_at: new Date(date),
-      } as any);
-    }
-  }
-  return list;
-}
-
 // Main component
 export default function ElegantTransactionsPage() {
-  // ✅ SỬA: Destructure cả getDetailedStats và getExpiredTodayStats ở top level
-  const { getDetailedStats, getExpiredTodayStats } = useOrderStats();
+  // ✅ SỬA: Sử dụng getTransactionStats endpoint mới
+  const { getTransactionStats, getTransactionDetails } = useOrderStats();
   // Dynamic holidays
   const { holidaysSet } = useHolidays();
+  // Get user info for role-based UI
+  const user = useMemo(() => {
+    const token = getAccessToken();
+    return token ? getUserFromToken(token) : null;
+  }, []);
   
   const [period, setPeriod] = useState<Period>("day");
   const [range, setRange] = useState<DateRange>(() => getPresetRange("day"));
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<OrderDetail[]>([]);
-  const [prevItems, setPrevItems] = useState<OrderDetail[]>([]);
+  
+  // ✅ SỬA: State mới cho API response
+  const [statsData, setStatsData] = useState<TransactionStatsApiResponse | null>(null);
   const [activeTab, setActiveTab] = useState("transactions");
 
-  // Modal state
+  // Modal state - giữ nguyên
   const [open, setOpen] = useState(false);
   const [selectedBar, setSelectedBar] = useState<{
     name: string;
@@ -406,7 +171,7 @@ export default function ElegantTransactionsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
-  // Chart series visibility with intelligent defaults
+  // Chart series visibility with intelligent defaults - giữ nguyên
   const [visibleSeries, setVisibleSeries] = useState({
     demand: true,
     completed: true,
@@ -415,11 +180,10 @@ export default function ElegantTransactionsPage() {
     confirmed: false,
   });
 
-  // ✅ State cho expired stats
-  const [expiredStats, setExpiredStats] = useState<{
-    expiredToday: number;
-    overdue: number;
-  } | null>(null);
+  // ✅ SỬA: Lấy expiredStats từ API data thay vì state riêng
+  const expiredStats = useMemo(() => {
+    return statsData?.expiredStats || { expiredToday: 0, overdue: 0 };
+  }, [statsData]);
 
   // ✅ Thêm state cho pagination khách hàng
   const [customerPage, setCustomerPage] = useState(1);
@@ -429,13 +193,12 @@ export default function ElegantTransactionsPage() {
     setRange(getPresetRange(period));
   }, [period]);
 
-  // ✅ UseEffect cho detailed stats (giữ nguyên)
+  // ✅ SỬA: Single useEffect sử dụng getTransactionStats thay vì getDetailedStats
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
-        const prevRange = getPreviousRange(period, range);
 
         const buildParams = (r: DateRange) => {
           const dateFrom = r.from ? new Date(r.from) : undefined;
@@ -447,50 +210,27 @@ export default function ElegantTransactionsPage() {
             const day = String(d.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
           };
+          
+          // ✅ SỬA: Gửi đúng period từ state
           return {
-            // Use custom to respect explicit date range on backend
-            period: "custom" as any,
+            period: period as any,
             dateFrom: fmt(dateFrom),
             dateTo: fmt(dateTo),
           };
         };
 
-        const [curRes, prevRes] = await Promise.all([
-          getDetailedStats(buildParams(range)),
-          getDetailedStats(buildParams(prevRange)),
-        ]);
+        // ✅ SỬA: Chỉ 1 API call thay vì 2 calls
+        const result = await getTransactionStats(buildParams(range));
 
         if (cancelled) return;
-        const curItems = mapRowsToOrderDetails(curRes?.rows || []);
-        const prevMapped = mapRowsToOrderDetails(prevRes?.rows || []);
-        // Filter out Sundays from both sets
-        const isSunday = (d: Date) => d.getDay() === 0;
-        const filterSunday = (arr: OrderDetail[]) =>
-          arr.filter((it) => {
-            const created = it.order?.created_at
-              ? new Date(it.order.created_at as any)
-              : new Date(it.created_at as any);
-            return !isSunday(created);
-          });
-
-        setItems(filterSunday(curItems));
-        setPrevItems(filterSunday(prevMapped));
+        
+        // ✅ SỬA: Lưu data từ API mới
+        setStatsData(result);
+        
       } catch (error) {
-        console.warn("Stats API failed, falling back to mock:", error);
+        console.warn("Transaction Stats API failed:", error);
         if (!cancelled) {
-          // Apply same Sunday filter to mock
-          const curMock = generateMockData(range);
-          const prevMock = generateMockData(getPreviousRange(period, range));
-          const isSun = (d: Date) => d.getDay() === 0;
-          const filterSunday = (arr: OrderDetail[]) =>
-            arr.filter((it) => {
-              const created = it.order?.created_at
-                ? new Date(it.order.created_at as any)
-                : new Date(it.created_at as any);
-              return !isSun(created);
-            });
-          setItems(filterSunday(curMock));
-          setPrevItems(filterSunday(prevMock));
+          setStatsData(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -499,297 +239,66 @@ export default function ElegantTransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [range.from?.getTime(), range.to?.getTime(), period, getDetailedStats]);
+  }, [range.from?.getTime(), range.to?.getTime(), period, getTransactionStats]);
 
-  // ✅ SỬA: UseEffect cho expired stats - sử dụng function đã có ở top level
-  useEffect(() => {
-    let cancelled = false;
-    
-    console.log('🔍 ======= EXPIRED STATS USEEFFECT STARTING =======');
-    
-    (async () => {
-      try {
-        console.log('🔍 About to call getExpiredTodayStats...');
-        const result = await getExpiredTodayStats({}); // ✅ Dùng function đã có
-        
-        console.log('🔍 getExpiredTodayStats result:', result);
-        
-        if (!cancelled && result) {
-          setExpiredStats({
-            expiredToday: result.totals.expiredToday || 0,
-            overdue: result.totals.overdue || 0,
-          });
-        }
-      } catch (error) {
-        console.error("🚨 Expired stats API failed:", error);
-        if (!cancelled) {
-          setExpiredStats({ expiredToday: 0, overdue: 0 });
-        }
-      }
-    })();
-    
-    return () => { cancelled = true; };
-  }, [getExpiredTodayStats]); // ✅ Dependency đúng
 
-  // Enhanced summary calculations - ✅ XÓA phần tính toán đơn hết hạn
-  const summary = useMemo(() => {
-    // Helper: holiday + Sunday exclusion
-  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const isHoliday = (d: Date) => holidaysSet.has(fmt(d));
-    const isWeekendOrHoliday = (d: Date) => d.getDay() === 0 || isHoliday(d); // chỉ bỏ Chủ nhật + ngày lễ
-    // Lấy 3 ngày làm việc gần nhất (ngày hiện tại nếu hợp lệ)
-    function getLastWorkingDays(n: number): Date[] {
-      const res: Date[] = [];
-      const cursor = startOfDay(new Date());
-      while (res.length < n) {
-        if (!isWeekendOrHoliday(cursor)) {
-          res.push(new Date(cursor));
-        }
-        cursor.setDate(cursor.getDate() - 1);
-      }
-      return res; // [0]=gần nhất (hôm nay hoặc gần nhất), [1]=trước đó...
+
+  // ✅ SỬA: Sử dụng pre-calculated data từ API thay vì tính toán frontend
+  const summary = useMemo<TransactionSummaryStats>(() => {
+    if (!statsData) {
+      return {
+        chaoBan: 0, completed: 0, quoted: 0, demand: 0, pending: 0, confirmed: 0,
+        totalRevenue: 0, avgOrderValue: 0, conversionRate: 0,
+        gdToday: 0, gdYesterday: 0, gd2DaysAgo: 0,
+        prevChaoBan: 0, prevCompleted: 0, prevQuoted: 0, prevDemand: 0, prevPending: 0,
+        prevTotalRevenue: 0, prevAvgOrderValue: 0, prevConversionRate: 0,
+      };
     }
-    const workingDays = getLastWorkingDays(3);
-    const day0 = workingDays[0];
-    const day1 = workingDays[1];
-    const day2 = workingDays[2];
+    return statsData.summary;
+  }, [statsData]);
 
-    let countDemand = 0,
-      countCompleted = 0,
-      countQuoted = 0,
-      countPending = 0,
-      countConfirmed = 0,
-      gdToday = 0,
-      gd1 = 0,
-      gd2 = 0,
-      totalRevenue = 0;
-
-    for (const it of items) {
-      const created = it.order?.created_at
-        ? new Date(it.order.created_at as any)
-        : new Date(it.created_at as any);
-      const createdDay = startOfDay(created).getTime();
-
-  if (createdDay === day0.getTime()) gdToday++;
-  if (createdDay === day1.getTime()) gd1++;
-  if (createdDay === day2.getTime()) gd2++;
-
-      // ✅ XÓA phần tính toán đơn hết hạn
-
-      if (it.status === "completed") {
-        totalRevenue += Number(it.unit_price || 0) * Number(it.quantity || 1);
-      }
-
-      if (it.status === "demand") countDemand++;
-      else if (it.status === "completed") countCompleted++;
-      else if (it.status === "quoted") countQuoted++;
-      else if (it.status === "pending") countPending++;
-      // confirmed bỏ khỏi hiển thị biểu đồ/chỉ số chính
+  // ✅ SỬA: Tạo summaryPrev từ pre-calculated data thay vì tính toán
+  const summaryPrev = useMemo<TransactionSummaryStats>(() => {
+    if (!statsData) {
+      return {
+        chaoBan: 0, completed: 0, quoted: 0, demand: 0, pending: 0, confirmed: 0,
+        totalRevenue: 0, avgOrderValue: 0, conversionRate: 0,
+        gdToday: 0, gdYesterday: 0, gd2DaysAgo: 0,
+        prevChaoBan: 0, prevCompleted: 0, prevQuoted: 0, prevDemand: 0, prevPending: 0,
+        prevTotalRevenue: 0, prevAvgOrderValue: 0, prevConversionRate: 0,
+      };
     }
-
+    // Create previous summary from current summary's prev* fields
     return {
-      chaoBan: countCompleted + countQuoted,
-      completed: countCompleted,
-      quoted: countQuoted,
-      demand: countDemand,
-      pending: countPending,
-      gdToday,
-      gdYesterday: gd1,
-      gd2DaysAgo: gd2,
-      gdExpiredToday: 0, // ✅ Set cứng = 0 vì không dùng nữa
-      totalRevenue,
-      avgOrderValue: countCompleted > 0 ? totalRevenue / countCompleted : 0,
-      conversionRate:
-        (countCompleted / Math.max(1, countCompleted + countQuoted)) * 100,
+      chaoBan: statsData.summary.prevChaoBan,
+      completed: statsData.summary.prevCompleted,
+      quoted: statsData.summary.prevQuoted,
+      demand: statsData.summary.prevDemand,
+      pending: statsData.summary.prevPending,
+      confirmed: 0,
+      totalRevenue: statsData.summary.prevTotalRevenue,
+      avgOrderValue: statsData.summary.prevAvgOrderValue,
+      conversionRate: statsData.summary.prevConversionRate,
+      gdToday: 0, gdYesterday: 0, gd2DaysAgo: 0, // not applicable for prev
+      prevChaoBan: 0, prevCompleted: 0, prevQuoted: 0, prevDemand: 0, prevPending: 0,
+      prevTotalRevenue: 0, prevAvgOrderValue: 0, prevConversionRate: 0,
     };
-  }, [items]);
+  }, [statsData]);
 
-  // ✅ SỬA: buildSummary cũng loại bỏ tính toán đơn hết hạn
-  const buildSummary = (data: OrderDetail[]) => {
-  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const isHoliday = (d: Date) => holidaysSet.has(fmt(d));
-    const isWeekendOrHoliday = (d: Date) => d.getDay() === 0 || isHoliday(d);
-    function getLastWorkingDays(n: number): Date[] {
-      const res: Date[] = [];
-      const cursor = startOfDay(new Date());
-      while (res.length < n) {
-        if (!isWeekendOrHoliday(cursor)) res.push(new Date(cursor));
-        cursor.setDate(cursor.getDate() - 1);
-      }
-      return res;
-    }
-    const workingDays = getLastWorkingDays(3);
-    const day0 = workingDays[0];
-    const day1 = workingDays[1];
-    const day2 = workingDays[2];
+  // ✅ SỬA: Sử dụng pre-calculated chartData
+  const chartData: TransactionChartPoint[] = useMemo(() => {
+    return statsData?.chartData || [];
+  }, [statsData]);
 
-    let countDemand = 0,
-      countCompleted = 0,
-      countQuoted = 0,
-      countPending = 0,
-      countConfirmed = 0,
-      gdToday = 0,
-      gd1 = 0,
-      gd2 = 0,
-      totalRevenue = 0;
+  // ✅ SỬA: Sử dụng pre-calculated customerStats
+  const customerStats = useMemo<TransactionCustomerStat[]>(() => {
+    return statsData?.customerStats || [];
+  }, [statsData]);
 
-    for (const it of data) {
-      const created = it.order?.created_at
-        ? new Date(it.order.created_at as any)
-        : new Date(it.created_at as any);
-      const createdDay = startOfDay(created).getTime();
-
-  if (createdDay === day0.getTime()) gdToday++;
-  if (createdDay === day1.getTime()) gd1++;
-  if (createdDay === day2.getTime()) gd2++;
-
-      // ✅ XÓA hoàn toàn phần tính toán đơn hết hạn
-
-      if (it.status === "completed") {
-        totalRevenue += Number(it.unit_price || 0) * Number(it.quantity || 1);
-      }
-
-      if (it.status === "demand") countDemand++;
-      else if (it.status === "completed") countCompleted++;
-      else if (it.status === "quoted") countQuoted++;
-      else if (it.status === "pending") countPending++;
-    }
-
-    return {
-      chaoBan: countCompleted + countQuoted,
-      completed: countCompleted,
-      quoted: countQuoted,
-      demand: countDemand,
-      pending: countPending,
-      gdToday,
-      gdYesterday: gd1,
-      gd2DaysAgo: gd2,
-      gdExpiredToday: 0, // ✅ Set cứng = 0 vì không dùng nữa
-      totalRevenue,
-      avgOrderValue: countCompleted > 0 ? totalRevenue / countCompleted : 0,
-      conversionRate:
-        (countCompleted / Math.max(1, countCompleted + countQuoted)) * 100,
-    };
-  };
-
-  const summaryPrev = useMemo(() => buildSummary(prevItems), [prevItems]);
-
-  // Enhanced chart data - limit to 7 points
-  const chartData: ChartPoint[] = useMemo(() => {
-    const map = new Map<string, ChartPoint>();
-    for (const it of items) {
-      const created = it.order?.created_at
-        ? new Date(it.order.created_at as any)
-        : new Date(it.created_at as any);
-      const key = groupKeyByPeriod(created, period);
-      const ts = getPeriodStart(created, period).getTime();
-      if (!map.has(key)) {
-        map.set(key, {
-          name: key,
-          timestamp: ts,
-          demand: 0,
-          completed: 0,
-          quoted: 0,
-          pending: 0,
-        });
-      }
-      const pt = map.get(key)!;
-      if (it.status === "demand") pt.demand += 1;
-      else if (it.status === "completed") pt.completed += 1;
-      else if (it.status === "quoted") pt.quoted += 1;
-      else if (it.status === "pending") pt.pending += 1;
-    }
-    return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
-  }, [items, period]);
-
-  // Customer statistics (for WOW customers tab)
-  type CustomerStat = {
-    name: string;
-    total: number;
-    completed: number;
-    quoted: number;
-    pending: number;
-    demand: number;
-    confirmed: number;
-  };
-
-  const customerStats = useMemo<CustomerStat[]>(() => {
-    const map = new Map<string, CustomerStat>();
-    for (const it of items) {
-      const name = it.customer_name || "--";
-      if (!map.has(name))
-        map.set(name, {
-          name,
-          total: 0,
-          completed: 0,
-          quoted: 0,
-          pending: 0,
-          demand: 0,
-          confirmed: 0,
-        });
-      const s = map.get(name)!;
-      s.total += 1;
-      if (it.status === "completed") s.completed += 1;
-      else if (it.status === "quoted") s.quoted += 1;
-      else if (it.status === "pending") s.pending += 1;
-      else if (it.status === "demand") s.demand += 1;
-      else if (it.status === "confirmed") s.confirmed += 1;
-    }
-    return Array.from(map.values());
-  }, [items]);
-
-  // Employee statistics (for WOW employees tab)
-  type EmployeeStat = {
-    id: number;
-    name: string;
-    orders: number;
-    customers: number;
-    completed: number;
-    quoted: number;
-    conversion: number;
-  };
-
-  const employeeStatsRaw = useMemo<EmployeeStat[]>(() => {
-    const map = new Map<
-      number,
-      {
-        name: string;
-        orders: number;
-        customers: Set<string>;
-        completed: number;
-        quoted: number;
-      }
-    >();
-    for (const it of items) {
-      const id = (it.order?.sale_by as any)?.id || 0;
-      const name =
-        (it.order?.sale_by as any)?.fullName ||
-        (it.order?.sale_by as any)?.username ||
-        `NV ${id}`;
-      if (!map.has(id))
-        map.set(id, {
-          name,
-          orders: 0,
-          customers: new Set<string>(),
-          completed: 0,
-          quoted: 0,
-        });
-      const entry = map.get(id)!;
-      entry.orders += 1;
-      if (it.customer_name) entry.customers.add(it.customer_name);
-      if (it.status === "completed") entry.completed += 1;
-      else if (it.status === "quoted") entry.quoted += 1;
-    }
-    return Array.from(map.entries()).map(([id, v]) => ({
-      id,
-      name: v.name,
-      orders: v.orders,
-      customers: v.customers.size,
-      completed: v.completed,
-      quoted: v.quoted,
-      conversion: (v.completed / Math.max(1, v.completed + v.quoted)) * 100,
-    }));
-  }, [items]);
+  // ✅ SỬA: Sử dụng pre-calculated employeeStats
+  const employeeStatsRaw = useMemo<TransactionEmployeeStat[]>(() => {
+    return statsData?.employeeStats || [];
+  }, [statsData]);
 
   const [employeeSort, setEmployeeSort] = useState<
     "orders" | "customers" | "conversion"
@@ -811,6 +320,24 @@ export default function ElegantTransactionsPage() {
     return employeeStats.slice(start, start + employeePageSize);
   }, [employeeStats, employeePage]);
 
+  // Check if current user should see employee stats
+  const shouldShowEmployeeTab = useMemo(() => {
+    if (!user?.roles) return true; // Default show if no role info
+    
+    // Check if user has only 'user' role (pure user role without manager capabilities)
+    const hasManagerRole = user.roles.some((r: any) => 
+      r.name === 'manager' || r.name.includes('manager')
+    );
+    const hasAdminRole = user.roles.some((r: any) => 
+      r.name === 'admin' || r.name === 'analysis'
+    );
+    const hasOnlyUserRole = user.roles.some((r: any) => r.name === 'user') && 
+                            !hasManagerRole && !hasAdminRole;
+    
+    // Hide tab only if user has pure 'user' role (no manager/admin capabilities)
+    return !hasOnlyUserRole;
+  }, [user]);
+
   const handleToggleSeries = (key: keyof typeof chartConfig) => {
     setVisibleSeries((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -826,32 +353,130 @@ export default function ElegantTransactionsPage() {
     setOpen(true);
   };
 
-  const detailRows = useMemo(() => {
-    if (!selectedBar) return [] as OrderDetail[];
-    const { from, to } = getBucketRange(selectedBar.timestamp, period);
-    return items.filter((it) => {
-      const created = it.order?.created_at
-        ? new Date(it.order.created_at as any)
-        : new Date(it.created_at as any);
-      if (created < from || created > to) return false;
-      if (!selectedBar.type) return true;
-      if (selectedBar.type === "demand") return it.status === "demand";
-      if (selectedBar.type === "completed") return it.status === "completed";
-      if (selectedBar.type === "quoted") return it.status === "quoted";
-      if (selectedBar.type === "pending") return it.status === "pending";
-      return false;
-    });
-  }, [items, selectedBar, period]);
+  // ✅ SỬA: Tạm thời disable detailRows vì cần raw data để filter
+  // ✅ NEW: State cho detail data
+  const [detailData, setDetailData] = useState<any[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailPagination, setDetailPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    pageSize: 0
+  });
 
-  // Log detailRows for debugging
-  // useEffect(() => {
-  //   console.log("🔍 detailRows:", items);
-  // }, [items]);
+  // ✅ SỬA: Load detail data khi selectedBar thay đổi
+  useEffect(() => {
+    if (!selectedBar || !open) return;
+    
+    // ✅ Validate selectedBar data
+    if (!selectedBar.timestamp || isNaN(selectedBar.timestamp)) {
+      console.error('❌ Invalid selectedBar timestamp:', selectedBar);
+      setDetailData([]);
+      return;
+    }
+    
+    let cancelled = false;
+    (async () => {
+      try {
+        setDetailLoading(true);
+        
+        const buildParams = (r: DateRange) => {
+          const dateFrom = r.from ? new Date(r.from) : undefined;
+          const dateTo = r.to ? new Date(r.to) : undefined;
+          const fmt = (d?: Date) => {
+            if (!d) return undefined;
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            return `${y}-${m}-${day}`;
+          };
+          return {
+            period: period as any,
+            dateFrom: fmt(dateFrom),
+            dateTo: fmt(dateTo),
+            timestamp: selectedBar.timestamp,
+            status: selectedBar.type, // filter by clicked status
+          };
+        };
+
+        const result = await getTransactionDetails({
+          ...buildParams(range),
+          page: detailPagination.page,
+          limit: detailPagination.limit
+        });
+        
+        
+        if (!cancelled) {
+          setDetailData(result.items || []);
+          setDetailPagination(prev => ({
+            ...prev,
+            total: result.total || 0,
+            pageSize: result.pageSize || 0
+          }));
+        }
+      } catch (error) {
+        console.error("Detail data failed:", error);
+        if (!cancelled) {
+          setDetailData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      }
+    })();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBar, open, period, range.from?.getTime(), range.to?.getTime(), detailPagination.page, detailPagination.limit, getTransactionDetails]);
+
+  // Function to handle page changes
+  const handlePageChange = (newPage: number) => {
+    setDetailPagination(prev => ({
+      ...prev,
+      page: newPage
+    }));
+  };
+
+  // Reset pagination when modal opens with new selectedBar
+  useEffect(() => {
+    if (open && selectedBar) {
+      setDetailPagination(prev => ({
+        ...prev,
+        page: 1
+      }));
+    }
+  }, [selectedBar]); // Only reset when selectedBar changes, not when modal state changes
+
+  const detailRows = useMemo(() => {
+    // ✅ SỬA: Sử dụng detailData từ API
+    return detailData.map(item => ({
+      id: item.id,
+      order_id: item.order_id,
+      customer_name: item.customer_name,
+      status: item.status,
+      unit_price: item.unit_price,
+      quantity: item.quantity,
+      created_at: item.created_at,
+      order: {
+        id: item.order_id,
+        sale_by: {
+          fullName: item.employee_name,
+          username: item.employee_name,
+        },
+        created_at: item.order_created_at || item.created_at,
+      },
+      product: {
+        name: item.product_name,
+      }
+    }));
+  }, [detailData]);
 
   const pagedDetailRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return detailRows.slice(start, start + pageSize);
-  }, [detailRows, page]);
+    // ✅ Server-side pagination - just return the data from API directly
+    return detailRows;
+  }, [detailRows]);
 
   return (
     <TooltipProvider>
@@ -974,13 +599,15 @@ export default function ElegantTransactionsPage() {
                 <Users className="w-4 h-4 mr-2" />
                 Khách hàng
               </TabsTrigger>
-              <TabsTrigger
-                value="employees"
-                className="rounded-md px-10 py-6 cursor-pointer data-[state=active]:bg-orange-500 data-[state=active]:text-white"
-              >
-                <Award className="w-4 h-4 mr-2" />
-                Nhân viên
-              </TabsTrigger>
+              {shouldShowEmployeeTab && (
+                <TabsTrigger
+                  value="employees"
+                  className="rounded-md px-10 py-6 cursor-pointer data-[state=active]:bg-orange-500 data-[state=active]:text-white"
+                >
+                  <Award className="w-4 h-4 mr-2" />
+                  Nhân viên
+                </TabsTrigger>
+              )}
             </TabsList>
           </motion.div>
 
@@ -1592,7 +1219,7 @@ export default function ElegantTransactionsPage() {
                                 "--"}
                             </td>
                             <td className="p-3 text-sm">
-                              {od.product_name || "--"}
+                              {od.product?.name || "--"}
                             </td>
                             <td className="p-3">
                               <ElegantStatusBadge status={od.status || ""} />
@@ -1611,16 +1238,16 @@ export default function ElegantTransactionsPage() {
                   <div className="text-sm text-slate-600 dark:text-slate-400">
                     Hiển thị{" "}
                     <span className="font-semibold">
-                      {Math.min((page - 1) * pageSize + 1, detailRows.length)}
+                      {Math.min((detailPagination.page - 1) * detailPagination.limit + 1, detailPagination.total)}
                     </span>{" "}
                     -
                     <span className="font-semibold">
-                      {Math.min(page * pageSize, detailRows.length)}
+                      {Math.min(detailPagination.page * detailPagination.limit, detailPagination.total)}
                     </span>{" "}
                     trong tổng số
                     <span className="font-semibold">
                       {" "}
-                      {detailRows.length}
+                      {detailPagination.total}
                     </span>{" "}
                     giao dịch
                   </div>
@@ -1628,28 +1255,28 @@ export default function ElegantTransactionsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage(Math.max(1, page - 1))}
-                      disabled={page <= 1}
+                      onClick={() => handlePageChange(Math.max(1, detailPagination.page - 1))}
+                      disabled={detailPagination.page <= 1}
                       className="rounded-md"
                     >
                       ← Trước
                     </Button>
                     <span className="text-sm font-medium px-3 py-1 bg-white/80 dark:bg-slate-800/80 rounded-md">
-                      {page} /{" "}
-                      {Math.max(1, Math.ceil(detailRows.length / pageSize))}
+                      {detailPagination.page} /{" "}
+                      {Math.max(1, Math.ceil(detailPagination.total / detailPagination.limit))}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        setPage(
+                        handlePageChange(
                           Math.min(
-                            Math.ceil(detailRows.length / pageSize),
-                            page + 1
+                            Math.ceil(detailPagination.total / detailPagination.limit),
+                            detailPagination.page + 1
                           )
                         )
                       }
-                      disabled={page >= Math.ceil(detailRows.length / pageSize)}
+                      disabled={detailPagination.page >= Math.ceil(detailPagination.total / detailPagination.limit)}
                       className="rounded-md"
                     >
                       Sau →

@@ -352,6 +352,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [highlightedMessageRef, setHighlightedMessageRef] =
     useState<HTMLDivElement | null>(null);
 
+  // ✅ NEW: Product code editing state
+  const [editingProductCodeId, setEditingProductCodeId] = useState<number | string | null>(null);
+
   // ✅ NEW: Auto-scroll to highlighted message when modal opens
   useEffect(() => {
     if (isViewModalOpen && triggerMessageId && highlightedMessageRef) {
@@ -1297,12 +1300,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   displayOrders.map((orderDetail, index) => (
                     <TableRow
                       key={orderDetail.id || index}
-                      {...(focusedRowId === orderDetail.id
+                      {...(focusedRowId === orderDetail.id || editingProductCodeId === orderDetail.id
                         ? { "data-focused-row-id": String(orderDetail.id) }
                         : {})}
                       className={`${getRowClassName(orderDetail, index)} ${
                         focusedRowId === orderDetail.id
                           ? "focused-no-hover ring-2 ring-indigo-300 shadow-lg bg-amber-300"
+                          : editingProductCodeId === orderDetail.id
+                          ? "focused-no-hover ring-2 ring-blue-400 shadow-lg bg-blue-100"
                           : ""
                       }`}
                     >
@@ -1546,6 +1551,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                         onReload();
                                       }
                                     }}
+                                    onOpen={() => setEditingProductCodeId(orderDetail.id)}
+                                    onClose={() => setEditingProductCodeId(null)}
                                     disabled={actionMode === "view-only"}
                                   />
                                 </div>

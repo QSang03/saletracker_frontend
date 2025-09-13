@@ -97,7 +97,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     (string | number)[]
   >([]);
   const [warningLevelFilter, setWarningLevelFilter] = useState("");
-  const [minQuantity, setMinQuantity] = useState<number | undefined>(3);
+  const [minQuantity, setMinQuantity] = useState<number | undefined>(undefined);
   const [conversationTypesSelected, setConversationTypesSelected] = useState<
     string[]
   >([]);
@@ -278,7 +278,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           }
 
           setWarningLevelFilter(f.warningLevel || "");
-          setMinQuantity(typeof f.quantity === "number" ? f.quantity : 3);
+          setMinQuantity(typeof f.quantity === "number" ? f.quantity : undefined);
           setConversationTypesSelected(
             f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
           );
@@ -687,33 +687,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
   const performCustomerSearch = (customerName: string) => {
     if (!customerName || !customerName.trim()) return;
-  // Prefer stored filters as the previous snapshot to ensure 'back' restores user's last saved filters
-  const storedPrev = getPmFiltersFromStorage();
-  const previous = storedPrev || getCurrentPmFilters();
-  // keep a component-ref copy so clear handler can restore reliably
-  previousPmFiltersRef.current = previous;
-    // Build next filters from previous but explicitly clear date filters so
-    // customer search does not accidentally keep a date/dateRange filter.
-    const next: PmFilters = {
-      ...previous,
-      page: 1,
-      search: customerName.trim(),
-      // Keep single `date` token from previous filters, but ensure any custom range is cleared
-      dateRange: undefined,
-    };
-
-    setIsInCustomerSearchMode(true);
-    // Push history state so Back restores the previous filters
-    const state = {
-      pmFilters: next,
-      isCustomerSearch: true,
-      previousFilters: previous,
-      timestamp: Date.now(),
-    };
-    window.history.pushState(state, "", window.location.href);
-
-    // Apply next filters to UI
-  applyPmFilters(next, true);
+    
+    // ✅ Chỉ update search term, không reset các filter khác
+    setSearchTerm(customerName.trim());
+    setCurrentPage(1);
+    
+    // Lưu vào localStorage
+    const currentFilters = getCurrentPmFilters();
+    const updatedFilters = { ...currentFilters, search: customerName.trim(), page: 1 };
+    savePmFiltersToStorage(updatedFilters);
   };
 
   // When departments change, remove any selected employees that no longer belong to the available set
@@ -817,7 +799,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
 
       // Quantity
-      const quantityVal = typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity) ? (f as any).quantity as number : 3;
+  const quantityVal = typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity) ? (f as any).quantity as number : undefined;
 
       // Conversation type (clone array to ensure state reference change when tags removed)
       const convArr = (f as any).conversationType && (f as any).conversationType.length > 0
@@ -850,7 +832,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           setDateFilter(newSnapshot.date && newSnapshot.date.length > 0 ? newSnapshot.date : 'all');
           setDateRangeState(newSnapshot.dateRange ? { ...newSnapshot.dateRange } : null);
           setWarningLevelFilter(newSnapshot.warningLevel || '');
-          setMinQuantity(quantityVal);
+          setMinQuantity(typeof quantityVal === 'number' ? quantityVal : undefined);
           setConversationTypesSelected(convArr);
         });
       }, 0);
@@ -1026,7 +1008,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       employees: "",
       brandCategories: "",
       warningLevel: "",
-      quantity: 3, // PM luôn reset về 3
+      quantity: undefined,
       conversationType: "",
     };
 
@@ -1043,7 +1025,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         setDepartmentsSelected([]);
         setBrandCategoriesSelected([]);
         setWarningLevelFilter("");
-        setMinQuantity(3); // PM luôn reset về 3
+        setMinQuantity(undefined);
         setConversationTypesSelected([]);
       });
     }, 0);
