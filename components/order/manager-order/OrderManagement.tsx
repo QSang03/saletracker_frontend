@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import ProductCodeEditor from "../../ui/ProductCodeEditor";
 import {
   MoreVertical,
   Edit,
@@ -241,6 +242,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   currentSortField,
   currentSortDirection,
   loading = false,
+  actionMode = "edit",
   viewRequireAnalysis = true,
   showProductCode = false,
 }) => {
@@ -1511,15 +1513,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                             </TableCell>
                             {showProductCode && (
                               <TableCell className="text-center text-slate-600">
-                                {orderDetail.product?.productCode ? (
-                                  <div className="flex items-center justify-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {orderDetail.product?.productCode ? (
                                     <div
                                       onClick={() =>
                                         handleProductCodeClick(
                                           orderDetail.product
                                         )
                                       }
-                                      className="cursor-pointer"
+                                      className="cursor-pointer flex-1"
                                     >
                                       <TruncatedText
                                         text={orderDetail.product.productCode}
@@ -1527,15 +1529,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                         className="font-mono text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
                                       />
                                     </div>
-                                  </div>
-                                ) : (
-                                  <span
-                                    className="text-gray-400"
-                                    title="Không có thông tin sản phẩm"
-                                  >
-                                    --
-                                  </span>
-                                )}
+                                  ) : (
+                                    <span
+                                      className="text-gray-400 flex-1"
+                                      title="Không có thông tin sản phẩm"
+                                    >
+                                      --
+                                    </span>
+                                  )}
+                                  <ProductCodeEditor
+                                    currentProductCode={orderDetail.product?.productCode || ""}
+                                    orderDetailId={Number(orderDetail.id)}
+                                    onUpdate={(newCode: string) => {
+                                      // Cập nhật local state
+                                      if (onReload) {
+                                        onReload();
+                                      }
+                                    }}
+                                    disabled={actionMode === "view-only"}
+                                  />
+                                </div>
                               </TableCell>
                             )}
                             <TableCell className="text-center text-slate-600 min-w-[220px] max-w-[720px] hover:text-slate-800 transition-colors">

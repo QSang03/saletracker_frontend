@@ -39,6 +39,7 @@ import { vi } from "date-fns/locale";
 import PaginatedTable, {
   Filters as PaginatedFilters,
 } from "@/components/ui/pagination/PaginatedTable";
+import ProductCodeEditor from "../ui/ProductCodeEditor";
 import { getAccessToken } from "@/lib/auth";
 
 interface Order {
@@ -1657,7 +1658,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               onReload={fetchOrders}
               loading={loading}
               showActions={true}
-              actionMode="view-only"
+              actionMode="edit"
               viewRequireAnalysis={false}
               showProductCode={true}
               onSearch={(s) => {
