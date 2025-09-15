@@ -193,6 +193,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const getCurrentPmFilters = (): PmFilters => {
     let departmentsCsv = "";
     let employeesCsv = "";
+    let brandsCsv = "";
+    let categoriesCsv = "";
     
     // ✅ SỬA: Chỉ lưu departments khi user đã chọn, không auto-fill từ pmDepartments
     departmentsCsv =
@@ -203,6 +205,16 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     employeesCsv =
       Array.isArray(employeesSelected) && employeesSelected.length > 0
         ? employeesSelected.join(",")
+        : "";
+    
+    brandsCsv =
+      Array.isArray(brandsSelected) && brandsSelected.length > 0
+        ? brandsSelected.join(",")
+        : "";
+    
+    categoriesCsv =
+      Array.isArray(categoriesSelected) && categoriesSelected.length > 0
+        ? categoriesSelected.join(",")
         : "";
     
     return {
@@ -217,6 +229,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           : undefined,
       departments: departmentsCsv,
       employees: employeesCsv,
+      brands: brandsCsv,
+      categories: categoriesCsv,
       brandCategories: Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0
         ? brandCategoriesSelected.join(",")
         : "",
@@ -271,6 +285,20 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             setEmployeesSelected([]);
           }
 
+          if (f.brands) {
+            const vals = f.brands.split(",").filter(Boolean);
+            setBrandsSelected(vals);
+          } else {
+            setBrandsSelected([]);
+          }
+
+          if (f.categories) {
+            const vals = f.categories.split(",").filter(Boolean);
+            setCategoriesSelected(vals);
+          } else {
+            setCategoriesSelected([]);
+          }
+
           if (f.brandCategories) {
             const vals = f.brandCategories.split(",").filter(Boolean);
             setBrandCategoriesSelected(vals);
@@ -280,6 +308,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
           setWarningLevelFilter(f.warningLevel || "");
           setMinQuantity(typeof f.quantity === "number" ? f.quantity : undefined);
+          // ✅ SỬA: Apply conversation types từ CSV string
           setConversationTypesSelected(
             f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
           );
@@ -464,14 +493,26 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         params.set('employees', effEmployeesCsv);
       }
       
-      // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories
+      // ✅ PM có quyền riêng (pm_permissions): thêm brands và categories riêng biệt
       console.log('🔍 [Frontend PM] isPMWithPermissionRole:', isPMWithPermissionRole);
       console.log('🔍 [Frontend PM] isPMCustomMode():', isPMCustomMode());
+      console.log('🔍 [Frontend PM] Selected brands:', effBrandsCsv);
+      console.log('🔍 [Frontend PM] Selected categories:', effCategoriesCsv);
       
       if (isPMWithPermissionRole) {
+        // Truyền brands và categories riêng biệt
+        if (effBrandsCsv) {
+          params.set('brands', effBrandsCsv);
+        }
+        if (effCategoriesCsv) {
+          params.set('categories', effCategoriesCsv);
+        }
+        
+        // Vẫn giữ logic cũ cho brandCategories nếu cần
         if (effBrandCategoriesCsv) {
           params.set('brandCategories', effBrandCategoriesCsv);
-        } else {
+        } else if (!effBrandsCsv && !effCategoriesCsv) {
+          // ✅ CHỈ gửi rolePermissions khi KHÔNG có brands/categories được chọn
           // Kiểm tra chế độ PM
           if (isPMCustomMode()) {
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
@@ -555,6 +596,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       
       if (effWarning) params.set('warningLevel', effWarning);
       if (typeof effQty === 'number') params.set('quantity', String(effQty));
+      // ✅ SỬA: Conversation type filter - xử lý tương tự như manager order
       if (effConversationType) params.set('conversationType', effConversationType);
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -670,11 +712,13 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     pageSize,
     dateRangeState,
     employeesSelected,
+    brandsSelected,
+    categoriesSelected,
     warningLevelFilter,
     filtersLoaded,
     filtersRestored,
     minQuantity,
-    conversationTypesSelected,
+    conversationTypesSelected, // ✅ SỬA: Include conversation types in fetch effect
   ]);
 
   // removed duplicate sync effect — pageSize/dateRangeState/departments/employees/warningLevel are handled
@@ -712,37 +756,36 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         let brandCategories: any[] = [];
         
         if (isPMWithPermissionRole) {
-          // Kiểm tra chế độ PM để hiển thị filter options phù hợp
-          if (isPMCustomMode()) {
-            // Chế độ tổ hợp riêng: hiển thị tất cả permissions từ các role
-            const allPMPermissions = getAllPMCustomPermissions();
-            brandCategories = allPMPermissions.map(p => ({
-              value: p,
-              label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
-            }));
-          } else {
-            // Chế độ tổ hợp chung: tạo combination như cũ
-            const allPMPermissions = getAllPMCustomPermissions();
-            const categories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-            const brands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-            
-            const combo: { value: string; label: string }[] = [];
-            if (categories.length > 0 && brands.length > 0) {
-              categories.forEach(c => {
-                brands.forEach(b => {
-                  combo.push({
-                    value: `${c}+${b}`,
-                    label: `${c.replace('pm_cat_','Cat_')}+${b.replace('pm_brand_','Brand_')}`
-                  });
-                });
-              });
-            }
-            const singles = allPMPermissions.map(p => ({
-              value: p,
-              label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
-            }));
-            brandCategories = combo.length > 0 ? combo : singles;
-          }
+          // ✅ PM có quyền riêng: tạo 2 dropdown riêng biệt (Danh mục + Thương hiệu)
+          // Đơn giản: lấy tất cả unique brands và categories từ permissions
+          const allPMPermissions = getAllPMCustomPermissions();
+          console.log('🔍 [Frontend PM Filter] All PM permissions for filter:', allPMPermissions);
+          
+          // Tách brands và categories từ permissions
+          const pmBrands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+          const pmCategories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+          
+          console.log('🔍 [Frontend PM Filter] PM Brands:', pmBrands);
+          console.log('🔍 [Frontend PM Filter] PM Categories:', pmCategories);
+          
+          // Tạo filter options cho brands (loại bỏ trùng lặp)
+          const uniqueBrands = new Set(pmBrands);
+          brands = Array.from(uniqueBrands).map(brand => ({
+            value: brand.replace('pm_brand_', '').toLowerCase(),
+            label: brand.replace('pm_brand_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+          }));
+          
+          // Tạo filter options cho categories (loại bỏ trùng lặp)
+          const uniqueCategories = new Set(pmCategories);
+          categories = Array.from(uniqueCategories).map(category => ({
+            value: category.replace('pm_cat_', '').toLowerCase(),
+            label: category.replace('pm_cat_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+          }));
+          
+          // Không cần brandCategories combinations nữa, để trống
+          brandCategories = [];
+          
+          console.log('🔍 [Frontend PM Filter] Final filter options (SEPARATE DROPDOWNS):', { brands, categories, brandCategories });
         }
         
         setFilterOptions({ 
@@ -912,9 +955,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     dateRangeState,
     departmentsSelected,
     employeesSelected,
+    brandsSelected,
+    categoriesSelected,
     warningLevelFilter,
     minQuantity,
-    conversationTypesSelected,
+    conversationTypesSelected, // ✅ SỬA: Include conversation types in auto-save
     filtersLoaded,
     isRestoring,
   ]);
@@ -950,19 +995,24 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         } catch { /* ignore */ }
       }
 
-      // Warning levels now already store value codes directly
+      // Handle warning levels (now stored as value codes directly)
       let warningLevelCsv = '';
       if (f.warningLevels && f.warningLevels.length > 0) {
         warningLevelCsv = (f.warningLevels as (string|number)[]).map(String).join(',');
       }
 
       // Quantity
-  const quantityVal = typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity) ? (f as any).quantity as number : undefined;
+      const quantityVal = typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity) ? (f as any).quantity as number : undefined;
 
-      // Conversation type (clone array to ensure state reference change when tags removed)
-      const convArr = (f as any).conversationType && (f as any).conversationType.length > 0
-        ? [ ...(f as any).conversationType as string[] ]
-        : [];
+      // ✅ SỬA: Conversation type - xử lý tương tự như manager order
+      let conversationTypeCsv = '';
+      if (Array.isArray(f.conversationType) && f.conversationType.length > 0) {
+        conversationTypeCsv = f.conversationType.join(',');
+      }
+
+      // ✅ Brands và Categories (từ 2 dropdown riêng biệt)
+      const brandsArr = f.brands && f.brands.length > 0 ? [...(f.brands as (string|number)[])] : [];
+      const categoriesArr = f.categories && f.categories.length > 0 ? [...(f.categories as (string|number)[])] : [];
 
       // Construct new PmFilters snapshot
       const newSnapshot: PmFilters = {
@@ -974,9 +1024,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         dateRange: dateRangeVal,
         departments: departmentsArr.join(','),
         employees: employeesArr.join(','),
+        brands: brandsArr.join(','),
+        categories: categoriesArr.join(','),
         warningLevel: warningLevelCsv,
         quantity: quantityVal,
-        conversationType: convArr.join(','),
+        conversationType: conversationTypeCsv,
       };
 
       // Use setTimeout to avoid calling flushSync from lifecycle methods
@@ -987,11 +1039,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           setStatusFilter(newSnapshot.status && newSnapshot.status.length > 0 ? newSnapshot.status : 'all');
           setEmployeesSelected(employeesArr);
           setDepartmentsSelected(departmentsArr);
+          setBrandsSelected(brandsArr);
+          setCategoriesSelected(categoriesArr);
           setDateFilter(newSnapshot.date && newSnapshot.date.length > 0 ? newSnapshot.date : 'all');
           setDateRangeState(newSnapshot.dateRange ? { ...newSnapshot.dateRange } : null);
           setWarningLevelFilter(newSnapshot.warningLevel || '');
           setMinQuantity(typeof quantityVal === 'number' ? quantityVal : undefined);
-          setConversationTypesSelected(convArr);
+          // ✅ SỬA: Set conversation types từ CSV string
+          setConversationTypesSelected(conversationTypeCsv ? conversationTypeCsv.split(',').filter(Boolean) : []);
         });
       }, 0);
 
@@ -1166,7 +1221,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       brandCategories: "",
       warningLevel: "",
       quantity: undefined,
-      conversationType: "",
+      conversationType: "", // ✅ SỬA: Reset conversation type
     };
 
     // ✅ Use setTimeout to avoid calling flushSync from lifecycle methods
@@ -1180,6 +1235,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         setDateRangeState(null);
         setEmployeesSelected([]);
         setDepartmentsSelected([]);
+        setBrandsSelected([]);
+        setCategoriesSelected([]);
         setBrandCategoriesSelected([]);
         setWarningLevelFilter("");
         setMinQuantity(undefined);
@@ -1357,6 +1414,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     if (typeof minQuantity === "number") {
       params.set("quantity", String(minQuantity));
     }
+    // ✅ SỬA: Conversation type filter trong export
     if (
       Array.isArray(conversationTypesSelected) &&
       conversationTypesSelected.length > 0
@@ -1526,7 +1584,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             enableStatusFilter={true}
             enableEmployeeFilter={!isAnalysisUser && isPMWithDepartmentRole}
             enableDepartmentFilter={!isAnalysisUser && isPMWithDepartmentRole}
-            enableBrandCategoryFilter={isPMWithPermissionRole}
+            enableCategoriesFilter={isPMWithPermissionRole}
+            enableBrandsFilter={isPMWithPermissionRole}
             enableDateRangeFilter={true}
             enableSingleDateFilter={true}
             enableWarningLevelFilter={true}
@@ -1538,6 +1597,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             onPageChange={(p) => setCurrentPage(p)}
             onPageSizeChange={(s) => setPageSize(s)}
             onFilterChange={handleFilterChange}
+            availableCategories={filterOptions.categories}
+            availableBrands={filterOptions.brands}
             onDepartmentChange={(vals) => {
               // immediate handler when user changes departments in the toolbar
               // eslint-disable-next-line no-console
@@ -1551,6 +1612,30 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               // eslint-disable-next-line no-console
               setEmployeesSelected(vals as (string | number)[]);
               setCurrentPage(1);
+              
+              // do not call fetchOrders() here; consolidated effect will react to state changes
+            }}
+            onBrandsChange={(vals) => {
+              // immediate handler when user changes brands in the toolbar
+              setBrandsSelected(vals as (string | number)[]);
+              setCurrentPage(1);
+              
+              // Lưu vào localStorage
+              updatePmFiltersAndStorage({
+                brands: vals.length > 0 ? vals.join(',') : ''
+              });
+              
+              // do not call fetchOrders() here; consolidated effect will react to state changes
+            }}
+            onCategoriesChange={(vals) => {
+              // immediate handler when user changes categories in the toolbar
+              setCategoriesSelected(vals as (string | number)[]);
+              setCurrentPage(1);
+              
+              // Lưu vào localStorage
+              updatePmFiltersAndStorage({
+                categories: vals.length > 0 ? vals.join(',') : ''
+              });
               
               // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
@@ -1573,6 +1658,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               
               setWarningLevelFilter(warningLevels.join(","));
               setCurrentPage(1);
+              
+              // Lưu vào localStorage
+              updatePmFiltersAndStorage({
+                warningLevel: warningLevels.join(",")
+              });
               
               // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
@@ -1733,9 +1823,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                    statusFilter && statusFilter !== "all"
                      ? statusFilter.split(",")
                      : [],
-                 // Hiển thị warning levels đã chọn từ localStorage
+                 // Store raw warning level values (match option.value); MultiSelectCombobox will map to labels
                  warningLevels: warningLevelFilter
-                   ? warningLevelFilter.split(",")
+                   ? warningLevelFilter.split(",").filter((w) => w)
                    : [],
                  dateRange: dateRangeState
                    ? (() => {
@@ -1778,7 +1868,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                      : undefined,
                  // Hiển thị employees đã chọn từ localStorage
                  employees: employeesSelected,
+                 // Hiển thị brands đã chọn từ localStorage
+                 brands: brandsSelected,
+                 // Hiển thị categories đã chọn từ localStorage
+                 categories: categoriesSelected,
                  quantity: minQuantity,
+                 // ✅ SỬA: Conversation type từ array thành string array
                  conversationType: conversationTypesSelected,
                };
              }, [
@@ -1787,10 +1882,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                warningLevelFilter,
                departmentsSelected,
                employeesSelected,
+               brandsSelected,
+               categoriesSelected,
                minQuantity,
                dateRangeState,
                dateFilter,
-               conversationTypesSelected,
+               conversationTypesSelected, // ✅ SỬA: Include conversation types in initialFilters dependencies
              ])}
              enableQuantityFilter={true}
              enableConversationTypeFilter={true}

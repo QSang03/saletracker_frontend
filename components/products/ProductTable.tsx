@@ -226,13 +226,92 @@ export default function ProductTable() {
 
   const fetchBrands = async (silent = false) => {
     try {
-      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers: getAuthHeaders() });
-      const json = await r.json();
-
-      
-      if (!isComponentMounted.current) return;
-      
-      setBrands(Array.isArray(json) ? json : (json.data ?? []));
+      if (isPMWithPermissionRole) {
+        // ✅ PM có quyền riêng: lấy brands từ dữ liệu thực tế mà user có quyền
+        const params = new URLSearchParams();
+        params.set('page', '1');
+        params.set('pageSize', '1000');
+        
+        // Thêm PM permissions để chỉ lấy products mà user có quyền
+        if (isPMCustomMode()) {
+          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
+          const userRoles = user?.roles || [];
+          const pmCustomRoles = userRoles.filter((role: any) => 
+            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+          );
+          
+          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
+          
+          // Tạm thời: chia permissions theo logic cụ thể
+          const allUserPermissions = getPMPermissions();
+          const convertedPermissions = allUserPermissions.map(p => {
+            if (p.toLowerCase().startsWith('cat_')) {
+              return `pm_${p}`;
+            } else if (p.toLowerCase().startsWith('brand_')) {
+              return `pm_${p}`;
+            }
+            return p;
+          });
+          
+          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+          
+          pmCustomRoles.forEach((role: any, index: number) => {
+            const roleName = role.name;
+            let roleBrands: string[] = [];
+            let roleCategories: string[] = [];
+            
+            if (index === 0) {
+              roleBrands = brands;
+              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban'));
+            } else if (index === 1) {
+              roleBrands = brands.filter(brand => brand.includes('lenovo'));
+              roleCategories = categories.filter(cat => cat.includes('man-hinh'));
+            }
+            
+            rolePermissions[roleName] = { brands: roleBrands, categories: roleCategories };
+          });
+          
+          params.set('pmCustomMode', 'true');
+          params.set('rolePermissions', JSON.stringify(rolePermissions));
+        } else {
+          // Chế độ tổ hợp chung
+          const allPMPermissions = getAllPMCustomPermissions();
+          if (allPMPermissions.length > 0) {
+            params.set('pmPermissions', allPMPermissions.join(','));
+          }
+          params.set('pmCustomMode', 'false');
+        }
+        
+        const qs = params.toString();
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products?${qs}`, { headers: getAuthHeaders() });
+        const json = await r.json();
+        
+        if (!isComponentMounted.current) return;
+        
+        // ✅ Tạo brands từ permissions thay vì từ dữ liệu thực tế
+        // Vì dữ liệu thực tế có thể không đầy đủ
+        const allPMPermissions = getAllPMCustomPermissions();
+        const pmBrands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+        
+        console.log('🔍 [Frontend Product Filter] PM Brands from permissions:', pmBrands);
+        
+        const brandsList = pmBrands.map((brand, index) => ({
+          id: index + 1,
+          name: brand.replace('pm_brand_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          descriptions: ''
+        }));
+        
+        setBrands(brandsList);
+      } else {
+        // User thường: lấy tất cả brands
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers: getAuthHeaders() });
+        const json = await r.json();
+        
+        if (!isComponentMounted.current) return;
+        
+        setBrands(Array.isArray(json) ? json : (json.data ?? []));
+      }
     } catch (err) {
       console.error("Lỗi fetch brands:", err);
       if (!isComponentMounted.current) return;
@@ -242,12 +321,91 @@ export default function ProductTable() {
 
   const fetchCategories = async (silent = false) => {
     try {
-      const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, { headers: getAuthHeaders() });
-      const json = await r.json();
-
-      if (!isComponentMounted.current) return;
-
-      setCategories(Array.isArray(json) ? json : (json.data ?? []));
+      if (isPMWithPermissionRole) {
+        // ✅ PM có quyền riêng: lấy categories từ dữ liệu thực tế mà user có quyền
+        const params = new URLSearchParams();
+        params.set('page', '1');
+        params.set('pageSize', '1000');
+        
+        // Thêm PM permissions để chỉ lấy products mà user có quyền
+        if (isPMCustomMode()) {
+          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
+          const userRoles = user?.roles || [];
+          const pmCustomRoles = userRoles.filter((role: any) => 
+            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+          );
+          
+          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
+          
+          // Tạm thời: chia permissions theo logic cụ thể
+          const allUserPermissions = getPMPermissions();
+          const convertedPermissions = allUserPermissions.map(p => {
+            if (p.toLowerCase().startsWith('cat_')) {
+              return `pm_${p}`;
+            } else if (p.toLowerCase().startsWith('brand_')) {
+              return `pm_${p}`;
+            }
+            return p;
+          });
+          
+          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+          
+          pmCustomRoles.forEach((role: any, index: number) => {
+            const roleName = role.name;
+            let roleBrands: string[] = [];
+            let roleCategories: string[] = [];
+            
+            if (index === 0) {
+              roleBrands = brands;
+              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban'));
+            } else if (index === 1) {
+              roleBrands = brands.filter(brand => brand.includes('lenovo'));
+              roleCategories = categories.filter(cat => cat.includes('man-hinh'));
+            }
+            
+            rolePermissions[roleName] = { brands: roleBrands, categories: roleCategories };
+          });
+          
+          params.set('pmCustomMode', 'true');
+          params.set('rolePermissions', JSON.stringify(rolePermissions));
+        } else {
+          // Chế độ tổ hợp chung
+          const allPMPermissions = getAllPMCustomPermissions();
+          if (allPMPermissions.length > 0) {
+            params.set('pmPermissions', allPMPermissions.join(','));
+          }
+          params.set('pmCustomMode', 'false');
+        }
+        
+        const qs = params.toString();
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products?${qs}`, { headers: getAuthHeaders() });
+        const json = await r.json();
+        
+        if (!isComponentMounted.current) return;
+        
+        // ✅ Tạo categories từ permissions thay vì từ dữ liệu thực tế
+        // Vì dữ liệu thực tế có thể không đầy đủ
+        const allPMPermissions = getAllPMCustomPermissions();
+        const pmCategories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+        
+        console.log('🔍 [Frontend Product Filter] PM Categories from permissions:', pmCategories);
+        
+        const categoriesList = pmCategories.map((category, index) => ({
+          id: index + 1,
+          catName: category.replace('pm_cat_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        }));
+        
+        setCategories(categoriesList);
+      } else {
+        // User thường: lấy tất cả categories
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, { headers: getAuthHeaders() });
+        const json = await r.json();
+        
+        if (!isComponentMounted.current) return;
+        
+        setCategories(Array.isArray(json) ? json : (json.data ?? []));
+      }
     } catch (err) {
       console.error("Lỗi fetch categories:", err);
       if (!isComponentMounted.current) return;

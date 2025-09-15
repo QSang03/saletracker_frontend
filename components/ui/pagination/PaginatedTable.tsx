@@ -443,11 +443,11 @@ export default function PaginatedTable({
       categories: initialFilters?.categories || [],
       brands: initialFilters?.brands || [],
       brandCategories: initialFilters?.brandCategories || [],
-  warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
-  quantity: (initialFilters && "quantity" in initialFilters)
-    ? (initialFilters.quantity as number | undefined)
-    : undefined,
-  conversationType: initialFilters?.conversationType || [], // Thêm conversation type
+      warningLevels: initialFilters?.warningLevels || [], // Thêm warning levels
+      quantity: (initialFilters && "quantity" in initialFilters)
+        ? (initialFilters.quantity as number | undefined)
+        : undefined,
+      conversationType: initialFilters?.conversationType || [], // ✅ SỬA: Conversation type initialization
       dateRange: initialFilters?.dateRange || {
         from: undefined,
         to: undefined,
@@ -498,10 +498,10 @@ export default function PaginatedTable({
       (filters.zaloLinkStatuses?.length || 0) === 0 &&
       filters.categories.length === 0 &&
       filters.brands.length === 0 &&
-  filters.brandCategories.length === 0 &&
+      filters.brandCategories.length === 0 &&
       filters.warningLevels.length === 0 && // Thêm warning levels
-  (filters.quantity === undefined) && // Thêm quantity check
-  (filters.conversationType?.length || 0) === 0 &&
+      (filters.quantity === undefined) && // Thêm quantity check
+      (filters.conversationType?.length || 0) === 0 && // ✅ SỬA: Conversation type check
       filters.employees.length === 0 &&
       !filters.dateRange.from &&
       !filters.dateRange.to &&
@@ -521,10 +521,10 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.zaloLinkStatuses),
       JSON.stringify(initialFilters?.categories),
       JSON.stringify(initialFilters?.brands),
-  JSON.stringify(initialFilters?.brandCategories),
+      JSON.stringify(initialFilters?.brandCategories),
       JSON.stringify(initialFilters?.warningLevels), // Thêm warning levels
-  initialFilters?.quantity, // Thêm quantity
-  JSON.stringify(initialFilters?.conversationType),
+      initialFilters?.quantity, // Thêm quantity
+      JSON.stringify(initialFilters?.conversationType), // ✅ SỬA: Conversation type sync
       JSON.stringify(initialFilters?.dateRange),
       initialFilters?.singleDate,
       JSON.stringify(initialFilters?.employees),
@@ -614,10 +614,10 @@ export default function PaginatedTable({
               memoizedInitialFilters.quantity !== undefined
                 ? memoizedInitialFilters.quantity
                 : prev.quantity,
-                conversationType:
-                  memoizedInitialFilters.conversationType !== undefined
-                    ? memoizedInitialFilters.conversationType
-                    : prev.conversationType,
+            conversationType:
+              memoizedInitialFilters.conversationType !== undefined
+                ? memoizedInitialFilters.conversationType
+                : prev.conversationType,
             dateRange:
               memoizedInitialFilters.dateRange !== undefined
                 ? memoizedInitialFilters.dateRange
@@ -656,6 +656,7 @@ export default function PaginatedTable({
             "brandCategories",
             "warningLevels",
             "quantity",
+            "conversationType", // ✅ SỬA: Include conversation type in sync
             "dateRange",
             "singleDate",
             "employees",
@@ -727,9 +728,9 @@ export default function PaginatedTable({
       categories: [],
       brands: [],
       brandCategories: [],
-  warningLevels: [], // Thêm warning levels
-  quantity: undefined,
-  conversationType: [],
+      warningLevels: [], // Thêm warning levels
+      quantity: undefined,
+      conversationType: [], // ✅ SỬA: Reset conversation type
       dateRange: { from: undefined, to: undefined },
       singleDate: undefined,
       employees: [],
@@ -1181,7 +1182,7 @@ export default function PaginatedTable({
 
   // If parent signals a restoring/resetting state, force clear internal filters UI immediately
   useEffect(() => {
-  if (isRestoring) {
+    if (isRestoring) {
       const reset: Filters = {
         search: "",
         departments: [],
@@ -1193,8 +1194,8 @@ export default function PaginatedTable({
         brands: [],
         brandCategories: [],
         warningLevels: [],
-  quantity: undefined,
-        conversationType: [],
+        quantity: undefined,
+        conversationType: [], // ✅ SỬA: Reset conversation type
         dateRange: { from: undefined, to: undefined },
         singleDate: undefined,
         employees: [],
@@ -1319,7 +1320,7 @@ export default function PaginatedTable({
               ]}
               onChange={(vals) => {
                 updateFilter("conversationType", vals as any);
-                // Khi bỏ chọn hết tag -> gọi ngay parent onFilterChange để refetch tức thì (bypass debounce)
+                // ✅ SỬA: Khi bỏ chọn hết tag -> gọi ngay parent onFilterChange để refetch tức thì (bypass debounce)
                 try {
                   if ((vals as any)?.length === 0 && onFilterChange) {
                     const immediate = { ...filters, conversationType: [], page: 1 } as Filters;
@@ -1387,7 +1388,7 @@ export default function PaginatedTable({
           {enableBrandsFilter && availableBrands.length > 0 && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.brands ?? ""}`}
-              placeholder="Brand"
+              placeholder="Thương hiệu"
               value={filters.brands}
               options={brandOptions}
               onChange={handleBrandsChange}
@@ -1402,7 +1403,7 @@ export default function PaginatedTable({
               onChange={handleWarningLevelsChange}
             />
           )}
-          {enableBrandCategoryFilter && availableBrandCategories.length > 0 && (
+          {/* {enableBrandCategoryFilter && availableBrandCategories.length > 0 && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.brandCategories ?? ""}`}
               placeholder="Danh mục / Thương hiệu"
@@ -1410,7 +1411,7 @@ export default function PaginatedTable({
               options={brandCategoryOptions}
               onChange={handleBrandCategoryChange}
             />
-          )}
+          )} */}
           {enableQuantityFilter && (
             <Tooltip>
               <TooltipTrigger asChild>
