@@ -40,25 +40,39 @@ export function useCustomerList(
   // Guard against race conditions between rapid pagination/filters changes
   const abortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFetchingRef = useRef(false);
 
   const fetchPage = useCallback(async (nextPage?: number, nextFilters?: CustomerListFilters, nextPageSize?: number) => {
-    const token = getAccessToken();
-    if (!token) {
-      setError('Unauthorized');
-      return;
+    // ✅ Skip nếu đang fetch
+    if (isFetchingRef.current) return;
+    
+    // ✅ Debounce fetch để tránh multiple calls
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
     }
-    const pageToLoad = nextPage ?? page;
-    const filtersToUse = nextFilters ?? filtersRef.current;
-    const pageSizeToLoad = nextPageSize ?? pageSize;
-    // Increment request id and cancel previous request
-    const reqId = ++requestIdRef.current;
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-    setLoading(true);
-    setError(null);
+    
+    fetchTimeoutRef.current = setTimeout(async () => {
+      isFetchingRef.current = true;
+      
+      const token = getAccessToken();
+      if (!token) {
+        setError('Unauthorized');
+        isFetchingRef.current = false;
+        return;
+      }
+      const pageToLoad = nextPage ?? page;
+      const filtersToUse = nextFilters ?? filtersRef.current;
+      const pageSizeToLoad = nextPageSize ?? pageSize;
+      // Increment request id and cancel previous request
+      const reqId = ++requestIdRef.current;
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      abortRef.current = abortController;
+      setLoading(true);
+      setError(null);
     try {
       const url = new URL('/api/order-details/customers', window.location.origin);
       url.searchParams.set('page', String(pageToLoad));
@@ -102,17 +116,35 @@ export function useCustomerList(
         return;
       }
       setError(e?.message || 'Lỗi tải danh sách khách hàng');
-    } finally {
-      if (reqId === requestIdRef.current) {
-        setLoading(false);
+      } finally {
+        if (reqId === requestIdRef.current) {
+          setLoading(false);
+          isFetchingRef.current = false;
+        }
       }
-    }
+    }, 100); // ✅ Debounce 100ms
+    
+    // Cleanup timeout
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [page, pageSize]);
 
+  // ✅ Prevent duplicate calls
+  const isSettingFiltersRef = useRef(false);
+  
   const setFilters = useCallback((nf: CustomerListFilters) => {
+    // ✅ Skip nếu đang set filters
+    if (isSettingFiltersRef.current) return;
+    
+    isSettingFiltersRef.current = true;
     filtersRef.current = nf;
     setPage(1);
-    fetchPage(1, nf);
+    fetchPage(1, nf).finally(() => {
+      isSettingFiltersRef.current = false;
+    });
   }, [fetchPage]);
 
   useEffect(() => {
@@ -127,6 +159,9 @@ export function useCustomerList(
     return () => {
       if (abortRef.current) {
         abortRef.current.abort();
+      }
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
       }
     };
   }, []);

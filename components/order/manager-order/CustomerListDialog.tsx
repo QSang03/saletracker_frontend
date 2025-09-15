@@ -225,33 +225,26 @@ export function CustomerListDialog({
     prevIsSearchingRef.current = isSearching;
   }, [isSearching, fetchPage, setPage]);
 
-  // Fetch data when dialog opens
-  useEffect(() => {
-    if (open && !fetchedOnOpenRef.current) {
-      fetchedOnOpenRef.current = true;
-      fetchPage?.(page);
-    }
-    if (!open) {
-      // Reset guard when dialog closes so next open fetches again once
-      fetchedOnOpenRef.current = false;
-    }
-  }, [open, page, fetchPage]);
-
-  // Fetch data when filters change
-  useEffect(() => {
-    if (open && filters) {
-      // Update filters and fetch data
-      setFilters?.(filters);
-    }
-  }, [filters, open, setFilters]);
-
-  // Refresh count when dialog opens or filters change
+  // ✅ Tối ưu: Chỉ fetch 1 lần khi modal mở hoặc filters thay đổi
   useEffect(() => {
     if (open) {
-      // Force refresh the customer count
-      fetchPage?.(1, filters);
+      if (!fetchedOnOpenRef.current) {
+        // Lần đầu mở modal
+        fetchedOnOpenRef.current = true;
+        if (filters) {
+          setFilters?.(filters);
+        } else {
+          fetchPage?.(page);
+        }
+      } else if (filters) {
+        // Filters thay đổi khi modal đã mở
+        setFilters?.(filters);
+      }
+    } else {
+      // Reset guard khi đóng modal
+      fetchedOnOpenRef.current = false;
     }
-  }, [open, filters, fetchPage]);
+  }, [open, filters, fetchPage, setFilters, page]);
 
   // Reset animated total when total changes
   useEffect(() => {

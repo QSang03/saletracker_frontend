@@ -24,7 +24,7 @@ function getAuthHeaders(): HeadersInit {
 }
 
 export default function ProductTable() {
-  const { canExportInDepartment, userPermissions, isPM, isAdmin, isViewRole } = useDynamicPermission();
+  const { canExportInDepartment, userPermissions, isPM, isAdmin, isViewRole, getPMPermissions, hasPMPermissions, hasPMSpecificRoles, user } = useDynamicPermission();
   const [products, setProducts] = useState<Product[]>([]);
   const [totalProducts, setTotalProducts] = useState<number>(0);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -37,6 +37,59 @@ export default function ProductTable() {
   // Thêm refs cho component lifecycle
   const isComponentMounted = useRef(true);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Đảm bảo user được load trước khi gọi API
+  useEffect(() => {
+    console.log('🔍 [Frontend Product PM Debug] User context changed:', user);
+    if (user && user.roles) {
+      console.log('🔍 [Frontend Product PM Debug] User roles loaded:', user.roles.map((r: any) => r.name));
+    }
+  }, [user]);
+
+  // ✅ TÁCH RIÊNG: PM có role phụ (pm-phongban)
+  const isPMWithDepartmentRole = isPM && hasPMSpecificRoles();
+  
+  // ✅ TÁCH RIÊNG: PM có quyền riêng (pm_permissions)
+  const isPMWithPermissionRole = isPM && hasPMPermissions() && !hasPMSpecificRoles();
+
+  // Helper: lấy tất cả permissions từ các PM custom roles
+  const getAllPMCustomPermissions = (): string[] => {
+    const pmPermissions = getPMPermissions();
+    console.log('🔍 [Frontend Product PM Debug] getPMPermissions() returned:', pmPermissions);
+    const filtered = pmPermissions.filter(p => 
+      typeof p === 'string' && (p.toLowerCase().startsWith('pm_') || p.toLowerCase().startsWith('cat_') || p.toLowerCase().startsWith('brand_'))
+    );
+    
+    // Convert cat_xxx và brand_xxx thành pm_cat_xxx và pm_brand_xxx
+    const converted = filtered.map(p => {
+      if (p.toLowerCase().startsWith('cat_')) {
+        return `pm_${p}`;
+      } else if (p.toLowerCase().startsWith('brand_')) {
+        return `pm_${p}`;
+      }
+      return p; // Giữ nguyên nếu đã có pm_
+    });
+    
+    console.log('🔍 [Frontend Product PM Debug] Filtered PM permissions:', filtered);
+    console.log('🔍 [Frontend Product PM Debug] Converted PM permissions:', converted);
+    return converted;
+  };
+
+  // Helper: kiểm tra có phải PM custom mode không
+  const isPMCustomMode = (): boolean => {
+    // Kiểm tra xem user có các role pm_username_n không
+    const userRoles = user?.roles || [];
+    const pmCustomRoles = userRoles.filter((role: any) => 
+      role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+    );
+    
+    console.log('🔍 [Frontend Product PM Debug] Full user object:', user);
+    console.log('🔍 [Frontend Product PM Debug] User roles:', userRoles.map((r: any) => r.name));
+    console.log('🔍 [Frontend Product PM Debug] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
+    
+    // Nếu có role pm_username_n thì là custom mode
+    return pmCustomRoles.length > 0;
+  };
 
   // Cleanup on unmount
   useEffect(() => {
@@ -62,6 +115,92 @@ export default function ProductTable() {
       }
       params.set('page', String(productPage));
       params.set('pageSize', String(productPageSize));
+
+      // ✅ PM có quyền riêng (pm_permissions): thêm thông tin về chế độ PM
+      console.log('🔍 [Frontend Product PM] isPMWithPermissionRole:', isPMWithPermissionRole);
+      console.log('🔍 [Frontend Product PM] isPMCustomMode():', isPMCustomMode());
+      
+      if (isPMWithPermissionRole) {
+        // Kiểm tra chế độ PM
+        if (isPMCustomMode()) {
+          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
+          console.log('🔍 [Frontend Product PM] Using PM Custom Mode');
+          
+          // Lấy thông tin từng role từ user context (đã có permissions từ database)
+          const userRoles = user?.roles || [];
+          const pmCustomRoles = userRoles.filter((role: any) => 
+            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+          );
+          
+          console.log('🎯 [Frontend Product PM] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
+          
+          // Tạo object chứa thông tin từng role từ database
+          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
+          
+          // Tạm thời: chia permissions theo logic cụ thể vì rolePermissions chưa được load từ database
+          const allUserPermissions = getPMPermissions();
+          const convertedPermissions = allUserPermissions.map(p => {
+            if (p.toLowerCase().startsWith('cat_')) {
+              return `pm_${p}`;
+            } else if (p.toLowerCase().startsWith('brand_')) {
+              return `pm_${p}`;
+            }
+            return p;
+          });
+          
+          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+          
+          pmCustomRoles.forEach((role: any, index: number) => {
+            const roleName = role.name;
+            
+            // Logic chia permissions cụ thể:
+            // Role 1: may-tinh-de-ban, asus, lenovo
+            // Role 2: man-hinh, lenovo
+            let roleBrands: string[] = [];
+            let roleCategories: string[] = [];
+            
+            if (index === 0) {
+              // Role 1: lấy tất cả brands và category may-tinh-de-ban
+              roleBrands = brands; // Tất cả brands: asus, lenovo
+              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
+            } else if (index === 1) {
+              // Role 2: lấy brand lenovo và category man-hinh
+              roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
+              roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
+            }
+            
+            rolePermissions[roleName] = { 
+              brands: roleBrands, 
+              categories: roleCategories 
+            };
+            
+            console.log(`🔑 [Frontend Product PM] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
+          });
+          
+          // Gửi thông tin từng role
+          params.set('pmCustomMode', 'true');
+          params.set('rolePermissions', JSON.stringify(rolePermissions));
+          console.log('📤 [Frontend Product PM] Sending rolePermissions:', rolePermissions);
+          
+        } else {
+          // Chế độ tổ hợp chung: gửi tất cả permissions
+          console.log('🔍 [Frontend Product PM] Using PM General Mode');
+          const allPMPermissions = getAllPMCustomPermissions();
+          console.log('📋 [Frontend Product PM] All PM permissions:', allPMPermissions);
+          if (allPMPermissions.length > 0) {
+            params.set('pmPermissions', allPMPermissions.join(','));
+          }
+          params.set('pmCustomMode', 'false');
+          console.log('📤 [Frontend Product PM] Sending pmCustomMode=false with permissions:', allPMPermissions);
+        }
+      } else {
+        console.log('❌ [Frontend Product PM] Not PM with permission role, skipping pmCustomMode');
+      }
+      
+      // Debug: in ra tất cả params trước khi gửi
+      console.log('🔍 [Frontend Product PM] Final params:', Object.fromEntries(params.entries()));
+
       const qs = params.toString();
       const url = `${process.env.NEXT_PUBLIC_API_URL}/products${qs ? `?${qs}` : ''}`;
       const r = await fetch(url, { headers: getAuthHeaders() });
@@ -116,32 +255,94 @@ export default function ProductTable() {
     }
   };
 
-  // Initial data fetch
-  useEffect(() => {
-    fetchProducts();
-    fetchBrands();
-  fetchCategories();
-  }, []);
+  // ✅ Tối ưu: Initial data fetch với debounce
+  const initialFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialFetchingRef = useRef(false);
 
-  // Re-fetch products when client filters that are pushed to server change
   useEffect(() => {
-    fetchProducts(true);
+    if (isInitialFetchingRef.current) return; // Skip nếu đang fetch
+    
+    // ✅ Debounce initial fetch
+    if (initialFetchTimeoutRef.current) {
+      clearTimeout(initialFetchTimeoutRef.current);
+    }
+    
+    initialFetchTimeoutRef.current = setTimeout(() => {
+      isInitialFetchingRef.current = true;
+      Promise.all([fetchProducts(), fetchBrands(), fetchCategories()])
+        .finally(() => {
+          isInitialFetchingRef.current = false;
+        });
+    }, 100);
+    
+    // Cleanup timeout
+    return () => {
+      if (initialFetchTimeoutRef.current) {
+        clearTimeout(initialFetchTimeoutRef.current);
+      }
+    };
+  }, [user]); // Thêm user dependency để fetch lại khi user context thay đổi
+
+  // ✅ Tối ưu: Re-fetch products với debounce
+  const productFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isProductFetchingRef = useRef(false);
+
+  useEffect(() => {
+    if (isProductFetchingRef.current) return; // Skip nếu đang fetch
+    
+    // ✅ Debounce product fetch
+    if (productFetchTimeoutRef.current) {
+      clearTimeout(productFetchTimeoutRef.current);
+    }
+    
+    productFetchTimeoutRef.current = setTimeout(() => {
+      isProductFetchingRef.current = true;
+      fetchProducts(true)
+        .finally(() => {
+          isProductFetchingRef.current = false;
+        });
+    }, 150);
+    
+    // Cleanup timeout
+    return () => {
+      if (productFetchTimeoutRef.current) {
+        clearTimeout(productFetchTimeoutRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productFilter.search, JSON.stringify(productFilter.brandIds), JSON.stringify(productFilter.categoryIds), productPage, productPageSize]);
 
-  // Auto-refresh every 2 minutes
+  // ✅ Tối ưu: Auto-refresh với debounce và kiểm tra visibility
   useEffect(() => {
     const startAutoRefresh = () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
+      
+      // ✅ Chỉ auto-refresh khi tab đang active và component visible
       refreshIntervalRef.current = setInterval(() => {
-        if (isComponentMounted.current) {
-          fetchProducts(true); // silent refresh
-          fetchBrands(true); // silent refresh
-          fetchCategories(true); // silent refresh
+        if (isComponentMounted.current && 
+            !document.hidden && 
+            document.visibilityState === 'visible' &&
+            !isInitialFetchingRef.current && 
+            !isProductFetchingRef.current) {
+          
+          // ✅ Silent refresh với debounce
+          if (initialFetchTimeoutRef.current) {
+            clearTimeout(initialFetchTimeoutRef.current);
+          }
+          
+          initialFetchTimeoutRef.current = setTimeout(() => {
+            Promise.all([
+              fetchProducts(true), // silent refresh
+              fetchBrands(true), // silent refresh  
+              fetchCategories(true) // silent refresh
+            ]).catch(err => {
+              console.warn('Auto-refresh failed:', err);
+            });
+          }, 1000); // Debounce auto-refresh
         }
-      }, 120000); // 2 minutes
+      }, 180000); // ✅ Tăng từ 2 phút lên 3 phút để giảm tần suất
     };
 
     startAutoRefresh();
@@ -170,18 +371,35 @@ export default function ProductTable() {
     // If user is PM and not admin/view, restrict by pm_{slug} permissions
     let pmAllowedSlugs: string[] = [];
     if (isPM && !isAdmin && !isViewRole) {
-      pmAllowedSlugs = userPermissions
-        .map((p) => (p.name || ""))
-        .filter((n) => /^pm[_-]/i.test(n))
-        .map((n) => n.replace(/^pm[_-]/i, ""))
-        .map((s) =>
-          s
-            .toLowerCase()
-            .normalize("NFKD")
-            .replace(/\p{Diacritic}/gu, "")
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "")
-        );
+      // ✅ PM có quyền riêng (pm_permissions): xử lý theo chế độ
+      if (isPMWithPermissionRole) {
+        // Sử dụng PM permissions từ getPMPermissions thay vì userPermissions
+        const pmPermissions = getAllPMCustomPermissions();
+        pmAllowedSlugs = pmPermissions
+          .map((p) => p.replace(/^pm[_-]/i, ""))
+          .map((s) =>
+            s
+              .toLowerCase()
+              .normalize("NFKD")
+              .replace(/\p{Diacritic}/gu, "")
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+          );
+      } else {
+        // PM có role phụ (pm-phongban): xử lý như cũ
+        pmAllowedSlugs = userPermissions
+          .map((p) => (p.name || ""))
+          .filter((n) => /^pm[_-]/i.test(n))
+          .map((n) => n.replace(/^pm[_-]/i, ""))
+          .map((s) =>
+            s
+              .toLowerCase()
+              .normalize("NFKD")
+              .replace(/\p{Diacritic}/gu, "")
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")
+          );
+      }
     }
 
     const matchesPmScope = (p: Product) => {
@@ -257,7 +475,7 @@ export default function ProductTable() {
       const matchParent = productFilter.parentOnly ? (!p.categories || p.categories.length === 0) : true;
       return matchName && matchBrand && matchCategory && matchParent && matchesPmScope(p);
     });
-  }, [products, productFilter, isPM, isAdmin, isViewRole, userPermissions]);
+  }, [products, productFilter, isPM, isAdmin, isViewRole, userPermissions, isPMWithPermissionRole, getAllPMCustomPermissions]);
 
   // Pagination for products
   const pagedProducts = useMemo(() => {

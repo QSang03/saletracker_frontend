@@ -55,47 +55,73 @@ export default function ProductCodeEditor({
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [customCode, setCustomCode] = useState("");
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  // ✅ Removed duplicate searchTimeout state - using ref instead
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // ✅ Track if component has ever been opened to prevent unnecessary API calls
+  const hasEverBeenOpened = useRef(false);
+  const hasLoadedProducts = useRef(false);
 
-  // Load products khi mở dialog
+  // ✅ CHỈ load products khi dialog thực sự mở (user bấm nút chỉnh sửa)
   useEffect(() => {
     if (isOpen) {
+      hasEverBeenOpened.current = true;
       setCustomCode(currentProductCode);
-      loadProducts();
+      // ✅ Chỉ load products khi dialog mở và chưa load
+      if (!hasLoadedProducts.current) {
+        loadProducts();
+        hasLoadedProducts.current = true;
+      }
+    } else {
+      // ✅ Clear data khi đóng dialog để tiết kiệm memory
+      setProducts([]);
+      setSearchQuery("");
+      setSelectedProduct(null);
+      hasLoadedProducts.current = false; // Reset để có thể load lại lần sau
     }
   }, [isOpen, currentProductCode]);
 
-  // Search products với debounce
+  // ✅ Tối ưu: Search products với debounce cải tiến - CHỈ khi dialog mở
   useEffect(() => {
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
+    // ✅ CHỈ search khi dialog đang mở
+    if (!isOpen) return;
+    
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
 
-    if (searchQuery.trim()) {
-      const timeout = setTimeout(() => {
+    if (searchQuery.trim() && searchQuery.length >= 2) {
+      // ✅ Debounce search với timeout dài hơn để giảm API calls
+      searchTimeoutRef.current = setTimeout(() => {
         searchProducts(searchQuery);
-      }, 300);
-      setSearchTimeout(timeout);
-    } else {
+      }, 500); // Tăng từ 300ms lên 500ms
+    } else if (searchQuery.trim() === "") {
+      // Nếu search query rỗng, load products bình thường
       loadProducts();
     }
 
     return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [searchQuery]);
+  }, [searchQuery, isOpen]); // ✅ Thêm isOpen dependency
 
   const loadProducts = async () => {
+    // ✅ CHỈ load products khi dialog đang mở
+    if (!isOpen) return;
+    
+    // ✅ Prevent duplicate calls
+    if (isLoading || hasLoadedProducts.current) return;
+    
     try {
+      setIsLoading(true);
       const token = getAccessToken();
 
-      // Nếu có mã sản phẩm hiện tại, fetch thông tin chi tiết của nó trước
+      // ✅ Tối ưu: Chỉ gọi 1 API duy nhất để tránh duplicate
       if (currentProductCode && currentProductCode.trim()) {
+        // Nếu có mã sản phẩm hiện tại, fetch thông tin chi tiết của nó trước
         try {
           const currentProductResponse = await fetch(
             `${
@@ -145,7 +171,7 @@ export default function ProductCodeEditor({
               if (currentProduct) {
                 setSelectedProduct(currentProduct);
               }
-              return;
+              return; // ✅ Return để không chạy fallback
             }
           }
         } catch (error) {
@@ -153,7 +179,7 @@ export default function ProductCodeEditor({
         }
       }
 
-      // Fallback: fetch danh sách sản phẩm bình thường
+      // ✅ Fallback: chỉ chạy khi không có currentProductCode hoặc API call trên fail
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/orders/products?limit=20`,
         {
@@ -184,15 +210,31 @@ export default function ProductCodeEditor({
       }
     } catch (error) {
       console.error("Error loading products:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // ✅ Tối ưu: Thêm debounce cho search
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSearchingRef = useRef(false);
+
   const searchProducts = async (query: string) => {
+    // ✅ CHỈ search khi dialog đang mở
+    if (!isOpen) return;
+    
     try {
+      // ✅ Skip nếu đang search hoặc query quá ngắn
+      if (isSearchingRef.current || query.length < 2) {
+        return;
+      }
+
       const token = getAccessToken();
 
       // Nếu có mã sản phẩm hiện tại và chưa có trong kết quả tìm kiếm, fetch thông tin của nó
       if (currentProductCode && currentProductCode.trim()) {
+        isSearchingRef.current = true;
+        
         const response = await fetch(
           `${
             process.env.NEXT_PUBLIC_API_URL
@@ -275,6 +317,8 @@ export default function ProductCodeEditor({
       }
     } catch (error) {
       console.error("Error searching products:", error);
+    } finally {
+      isSearchingRef.current = false;
     }
   };
 
@@ -338,6 +382,7 @@ export default function ProductCodeEditor({
         variant="ghost"
         size="sm"
         onClick={() => {
+          // ✅ Mở dialog và trigger load data ngay lập tức
           setIsOpen(true);
           onOpen?.();
         }}

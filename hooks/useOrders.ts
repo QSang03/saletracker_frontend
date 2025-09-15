@@ -30,7 +30,13 @@ interface OrderFilters {
   warningLevel?: string;
   quantity?: number; // Thêm bộ lọc số lượng
   conversationType?: string; // CSV: 'group', 'personal'
-  sortField?: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null;
+  sortField?:
+    | "quantity"
+    | "unit_price"
+    | "created_at"
+    | "conversation_start"
+    | "conversation_end"
+    | null;
   sortDirection?: "asc" | "desc" | null;
   ownOnly?: string; // '1' to force own-only scoping (manager-order for PM)
 }
@@ -68,7 +74,12 @@ interface UseOrdersReturn {
   setWarningLevel: (warningLevel: string, resetPage?: boolean) => void;
   setQuantity: (quantity: number, resetPage?: boolean) => void; // Thêm setter cho quantity
   setSortField: (
-    sortField: "quantity" | "unit_price" | "created_at" | "conversation_start" | null,
+    sortField:
+      | "quantity"
+      | "unit_price"
+      | "created_at"
+      | "conversation_start"
+      | null,
     resetPage?: boolean
   ) => void;
   setSortDirection: (
@@ -125,7 +136,10 @@ interface UseOrdersReturn {
   error: string | null;
 
   // ✅ Customer search navigation functions
-  performCustomerSearch: (customerName: string, baseFilters?: Partial<OrderFilters>) => void;
+  performCustomerSearch: (
+    customerName: string,
+    baseFilters?: Partial<OrderFilters>
+  ) => void;
   restorePreviousState: () => Promise<void>;
   isInCustomerSearchMode: boolean;
   setIsInCustomerSearchMode: (value: boolean) => void;
@@ -191,10 +205,11 @@ const saveFiltersToStorage = (filters: OrderFilters): void => {
       departments: filters.departments || "",
       products: filters.products || "",
       warningLevel: filters.warningLevel || "",
-  conversationType: filters.conversationType || "",
+      conversationType: filters.conversationType || "",
       sortField: filters.sortField || null,
       sortDirection: filters.sortDirection || null,
-  quantity: typeof filters.quantity === "number" ? filters.quantity : undefined,
+      quantity:
+        typeof filters.quantity === "number" ? filters.quantity : undefined,
     };
     localStorage.setItem("orderFilters", JSON.stringify(filtersToSave));
   } catch (error) {
@@ -226,7 +241,9 @@ const clearFiltersFromStorage = (): void => {
   }
 };
 
-export const useOrders = (options?: { management?: boolean }): UseOrdersReturn => {
+export const useOrders = (options?: {
+  management?: boolean;
+}): UseOrdersReturn => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
@@ -275,7 +292,7 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       | "asc"
       | "desc"
       | null;
-    const ownOnly = searchParams.get('ownOnly') || '';
+    const ownOnly = searchParams.get("ownOnly") || "";
 
     let dateRange: { start: string; end: string } | undefined;
     const dateRangeParam = searchParams.get("dateRange");
@@ -287,7 +304,7 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       }
     }
 
-  // Nếu có params từ URL, return luôn
+    // Nếu có params từ URL, return luôn
     if (searchParams.toString()) {
       return {
         page,
@@ -304,9 +321,9 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
         conversationType,
         quantity,
         ownOnly,
-    // Nếu URL truyền sortField thì dùng, nếu không thì mặc định sort theo conversation_start desc
-  sortField: sortField || 'conversation_start',
-    sortDirection: sortDirection || 'desc',
+        // Nếu URL truyền sortField thì dùng, nếu không thì để null để backend tự quyết định
+        sortField: sortField || null,
+        sortDirection: sortDirection || null,
       };
     }
 
@@ -326,10 +343,10 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       warningLevel: savedFilters.warningLevel || "",
       conversationType: (savedFilters as any).conversationType || "",
       quantity: savedFilters.quantity || 1, // Mặc định là 1
-  // Mặc định luôn sắp xếp theo conversation_start desc nếu không có saved value
-  sortField: savedFilters.sortField || 'conversation_start',
-  sortDirection: savedFilters.sortDirection || 'desc',
-      ownOnly: '',
+      // Mặc định để null để backend tự quyết định sort
+      sortField: savedFilters.sortField || null,
+      sortDirection: savedFilters.sortDirection || null,
+      ownOnly: "",
     };
   });
 
@@ -526,13 +543,16 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
           searchParams.set("warningLevel", newFilters.warningLevel.trim());
         }
         if (newFilters.conversationType?.trim()) {
-          searchParams.set("conversationType", newFilters.conversationType.trim());
+          searchParams.set(
+            "conversationType",
+            newFilters.conversationType.trim()
+          );
         }
         if (typeof newFilters.quantity === "number") {
           searchParams.set("quantity", String(newFilters.quantity));
         }
-        if (newFilters.ownOnly === '1') {
-          searchParams.set('ownOnly', '1');
+        if (newFilters.ownOnly === "1") {
+          searchParams.set("ownOnly", "1");
         }
         if (newFilters.sortField) {
           searchParams.set("sortField", newFilters.sortField);
@@ -584,7 +604,13 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
 
   const setSortOptions = useCallback(
     (
-      sortField: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
+      sortField:
+        | "quantity"
+        | "unit_price"
+        | "created_at"
+        | "conversation_start"
+        | "conversation_end"
+        | null,
       sortDirection: "asc" | "desc" | null,
       resetPage = true
     ) => {
@@ -671,14 +697,20 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
         if (currentFilters.warningLevel && currentFilters.warningLevel.trim()) {
           params.append("warningLevel", currentFilters.warningLevel.trim());
         }
-        if (currentFilters.conversationType && currentFilters.conversationType.trim()) {
-          params.append("conversationType", currentFilters.conversationType.trim());
+        if (
+          currentFilters.conversationType &&
+          currentFilters.conversationType.trim()
+        ) {
+          params.append(
+            "conversationType",
+            currentFilters.conversationType.trim()
+          );
         }
         if (typeof currentFilters.quantity === "number") {
           params.append("quantity", String(currentFilters.quantity));
         }
-        if (currentFilters.ownOnly === '1') {
-          params.append('ownOnly', '1');
+        if (currentFilters.ownOnly === "1") {
+          params.append("ownOnly", "1");
         }
         if (currentFilters.sortField) {
           params.append("sortField", currentFilters.sortField);
@@ -689,7 +721,7 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
 
         const authHeader = getAuthHeaders();
         // Manager order: sử dụng endpoint bình thường, backend sẽ tự xử lý permissions
-        const basePath = options?.management ? '/orders/management' : '/orders';
+        const basePath = options?.management ? "/orders/management" : "/orders";
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}${basePath}?${params.toString()}`,
           { method: "GET", headers: authHeader }
@@ -850,7 +882,13 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
 
   const setSortField = useCallback(
     (
-      sortField: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
+      sortField:
+        | "quantity"
+        | "unit_price"
+        | "created_at"
+        | "conversation_start"
+        | "conversation_end"
+        | null,
       resetPage = true
     ) => {
       const newFilters = {
@@ -929,7 +967,7 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       departments: "",
       products: "",
       warningLevel: "",
-  conversationType: "",
+      conversationType: "",
       quantity: 1, // Reset về mặc định 1
       sortField: null,
       sortDirection: null,
@@ -1477,7 +1515,9 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
   const performCustomerSearch = useCallback(
     (customerName: string, baseFilters?: Partial<OrderFilters>) => {
       // Determine the snapshot of filters that we'll treat as the "previous" filters
-      const currentFilters = baseFilters ? { ...filters, ...baseFilters } : { ...filters };
+      const currentFilters = baseFilters
+        ? { ...filters, ...baseFilters }
+        : { ...filters };
       setPreviousFilters(currentFilters as OrderFilters);
 
       // ✅ Trước khi push customer search state, replace current state với previousFilters info
@@ -1509,7 +1549,8 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       // Ensure we pass a complete OrderFilters object to updateFiltersAndUrl
       const searchFiltersFull: OrderFilters = {
         page: searchFiltersPartial.page ?? 1,
-        pageSize: (searchFiltersPartial as any).pageSize ?? filters.pageSize ?? 10,
+        pageSize:
+          (searchFiltersPartial as any).pageSize ?? filters.pageSize ?? 10,
         search: searchFiltersPartial.search ?? "",
         status: searchFiltersPartial.status ?? "",
         date: searchFiltersPartial.date ?? "",
@@ -1519,7 +1560,10 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
         departments: searchFiltersPartial.departments ?? "",
         products: searchFiltersPartial.products ?? "",
         warningLevel: searchFiltersPartial.warningLevel ?? "",
-        quantity: typeof (searchFiltersPartial as any).quantity === 'number' ? (searchFiltersPartial as any).quantity : undefined,
+        quantity:
+          typeof (searchFiltersPartial as any).quantity === "number"
+            ? (searchFiltersPartial as any).quantity
+            : undefined,
         sortField: (searchFiltersPartial as any).sortField ?? null,
         sortDirection: (searchFiltersPartial as any).sortDirection ?? null,
       };
@@ -2034,11 +2078,12 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
   const parseIdString = (val?: string): number[] => {
     if (!val) return [];
     return val
-      .split(',')
+      .split(",")
       .map((s) => Number(s.trim()))
       .filter((n) => !isNaN(n));
   };
-  const joinIds = (ids: number[]) => ids.filter((v, i, a) => a.indexOf(v) === i).join(',');
+  const joinIds = (ids: number[]) =>
+    ids.filter((v, i, a) => a.indexOf(v) === i).join(",");
 
   setEmployees = (employees: string, resetPage: boolean = true) => {
     (async () => {
@@ -2046,13 +2091,14 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       if (employeeIds.length === 0) {
         updateFiltersAndUrl({
           ...filters,
-          employees: '',
-          departments: '',
+          employees: "",
+          departments: "",
           page: resetPage ? 1 : filters.page,
         });
         return;
       }
-      let filterOptions: Awaited<ReturnType<typeof getFilterOptions>> | null = null;
+      let filterOptions: Awaited<ReturnType<typeof getFilterOptions>> | null =
+        null;
       try {
         filterOptions = await getFilterOptions();
       } catch {
@@ -2076,7 +2122,9 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       if (currentDeptIds.length === 0) {
         finalDeptIds = derivedDepartments;
       } else {
-        finalDeptIds = currentDeptIds.filter((d) => derivedDepartments.includes(d));
+        finalDeptIds = currentDeptIds.filter((d) =>
+          derivedDepartments.includes(d)
+        );
         if (finalDeptIds.length === 0) finalDeptIds = derivedDepartments;
       }
       updateFiltersAndUrl({
@@ -2095,7 +2143,7 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
       if (deptIds.length === 0) {
         updateFiltersAndUrl({
           ...filters,
-          departments: '',
+          departments: "",
           page: resetPage ? 1 : filters.page,
         });
         return;
@@ -2108,7 +2156,8 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
         });
         return;
       }
-      let filterOptions: Awaited<ReturnType<typeof getFilterOptions>> | null = null;
+      let filterOptions: Awaited<ReturnType<typeof getFilterOptions>> | null =
+        null;
       try {
         filterOptions = await getFilterOptions();
       } catch {
@@ -2190,8 +2239,8 @@ export const useOrders = (options?: { management?: boolean }): UseOrdersReturn =
     bulkUpdateOrderDetails,
     bulkExtendOrderDetails,
     bulkAddNotesOrderDetails,
-  bulkHideOrderDetails,
-  bulkUnhideOrderDetails,
+    bulkHideOrderDetails,
+    bulkUnhideOrderDetails,
 
     // Blacklist operations
     addToBlacklist,

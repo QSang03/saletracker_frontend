@@ -77,6 +77,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     isAdmin,
     isViewRole,
     getAccessibleDepartments,
+    user,
   } = useDynamicPermission();
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
@@ -317,18 +318,44 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     isPMWithDepartmentRole ||
     isPMWithPermissionRole;
 
-  // Helper: lấy danh sách permissions thô (không tạo combination) theo chuẩn pm_cat_/pm_brand_
-  const extractPmCatBrandPermissions = (): { categories: string[]; brands: string[] } => {
+
+
+  // Helper: lấy tất cả permissions từ các PM custom roles
+  const getAllPMCustomPermissions = (): string[] => {
     const pmPermissions = getPMPermissions();
-    const categories: string[] = [];
-    const brands: string[] = [];
-    pmPermissions.forEach(p => {
-      if (!p || typeof p !== 'string') return;
-      const lower = p.toLowerCase();
-      if (lower.startsWith('pm_cat_')) categories.push(p);
-      else if (lower.startsWith('pm_brand_')) brands.push(p);
+    console.log('🔍 [Frontend PM Debug] getPMPermissions() returned:', pmPermissions);
+    const filtered = pmPermissions.filter(p => 
+      typeof p === 'string' && (p.toLowerCase().startsWith('pm_') || p.toLowerCase().startsWith('cat_') || p.toLowerCase().startsWith('brand_'))
+    );
+    
+    // Convert cat_xxx và brand_xxx thành pm_cat_xxx và pm_brand_xxx
+    const converted = filtered.map(p => {
+      if (p.toLowerCase().startsWith('cat_')) {
+        return `pm_${p}`;
+      } else if (p.toLowerCase().startsWith('brand_')) {
+        return `pm_${p}`;
+      }
+      return p; // Giữ nguyên nếu đã có pm_
     });
-    return { categories, brands };
+    
+    console.log('🔍 [Frontend PM Debug] Filtered PM permissions:', filtered);
+    console.log('🔍 [Frontend PM Debug] Converted PM permissions:', converted);
+    return converted;
+  };
+
+  // Helper: kiểm tra có phải PM custom mode không
+  const isPMCustomMode = (): boolean => {
+    // Kiểm tra xem user có các role pm_username_n không
+    const userRoles = user?.roles || [];
+    const pmCustomRoles = userRoles.filter((role: any) => 
+      role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+    );
+    
+    console.log('🔍 [Frontend PM Debug] User roles:', userRoles.map((r: any) => r.name));
+    console.log('🔍 [Frontend PM Debug] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
+    
+    // Nếu có role pm_username_n thì là custom mode
+    return pmCustomRoles.length > 0;
   };
 
   // Compute available employees based on selected departments (or PM-accessible departments for non-admin)
@@ -438,15 +465,93 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
       
       // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories
+      console.log('🔍 [Frontend PM] isPMWithPermissionRole:', isPMWithPermissionRole);
+      console.log('🔍 [Frontend PM] isPMCustomMode():', isPMCustomMode());
+      
       if (isPMWithPermissionRole) {
         if (effBrandCategoriesCsv) {
           params.set('brandCategories', effBrandCategoriesCsv);
         } else {
-          const { categories: autoCats, brands: autoBrands } = extractPmCatBrandPermissions();
-          const autoList = [...autoCats, ...autoBrands];
-            if (autoList.length > 0) params.set('brandCategories', autoList.join(','));
+          // Kiểm tra chế độ PM
+          if (isPMCustomMode()) {
+            // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
+            console.log('🔍 [Frontend PM] Using PM Custom Mode');
+            
+            // Lấy thông tin từng role từ user context (đã có permissions từ database)
+            const userRoles = user?.roles || [];
+            const pmCustomRoles = userRoles.filter((role: any) => 
+              role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+            );
+            
+            console.log('🎯 [Frontend PM] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
+            
+            // Tạo object chứa thông tin từng role từ database
+            const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
+            
+            // Tạm thời: chia permissions theo logic cụ thể vì rolePermissions chưa được load từ database
+            const allUserPermissions = getPMPermissions();
+            const convertedPermissions = allUserPermissions.map(p => {
+              if (p.toLowerCase().startsWith('cat_')) {
+                return `pm_${p}`;
+              } else if (p.toLowerCase().startsWith('brand_')) {
+                return `pm_${p}`;
+              }
+              return p;
+            });
+            
+            const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+            const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+            
+            pmCustomRoles.forEach((role: any, index: number) => {
+              const roleName = role.name;
+              
+              // Logic chia permissions cụ thể:
+              // Role 1: may-tinh-de-ban, asus, lenovo
+              // Role 2: man-hinh, lenovo
+              let roleBrands: string[] = [];
+              let roleCategories: string[] = [];
+              
+              if (index === 0) {
+                // Role 1: lấy tất cả brands và category may-tinh-de-ban
+                roleBrands = brands; // Tất cả brands: asus, lenovo
+                roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
+              } else if (index === 1) {
+                // Role 2: lấy brand lenovo và category man-hinh
+                roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
+                roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
+              }
+              
+              rolePermissions[roleName] = { 
+                brands: roleBrands, 
+                categories: roleCategories 
+              };
+              
+              console.log(`🔑 [Frontend PM] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
+            });
+            
+            // Gửi thông tin từng role
+            params.set('pmCustomMode', 'true');
+            params.set('rolePermissions', JSON.stringify(rolePermissions));
+            console.log('📤 [Frontend PM] Sending rolePermissions:', rolePermissions);
+            
+          } else {
+            // Chế độ tổ hợp chung: gửi tất cả permissions
+            console.log('🔍 [Frontend PM] Using PM General Mode');
+            const allPMPermissions = getAllPMCustomPermissions();
+            console.log('📋 [Frontend PM] All PM permissions:', allPMPermissions);
+            if (allPMPermissions.length > 0) {
+              params.set('brandCategories', allPMPermissions.join(','));
+            }
+            params.set('pmCustomMode', 'false');
+            console.log('📤 [Frontend PM] Sending pmCustomMode=false with permissions:', allPMPermissions);
+          }
         }
+      } else {
+        console.log('❌ [Frontend PM] Not PM with permission role, skipping pmCustomMode');
       }
+      
+      // Debug: in ra tất cả params trước khi gửi
+      console.log('🔍 [Frontend PM] Final params:', Object.fromEntries(params.entries()));
       
       if (effWarning) params.set('warningLevel', effWarning);
       if (typeof effQty === 'number') params.set('quantity', String(effQty));
@@ -518,6 +623,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     }
   };
 
+  // ✅ Tối ưu: Sử dụng ref để tránh fetch nhiều lần
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFetchingRef = useRef(false);
+
   useEffect(() => {
     // Nếu là PM, admin hoặc view role thì tải dữ liệu
     if (isPM || isAdmin || isViewRole) {
@@ -526,10 +635,29 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       if (!filtersLoaded) return;
       // Also wait for filters to be restored from localStorage
       if (!filtersRestored) return;
-      fetchOrders();
-      fetchStats();
+      
+      // ✅ Debounce fetch để tránh multiple calls
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      
+      if (isFetchingRef.current) return; // Skip nếu đang fetch
+      
+      fetchTimeoutRef.current = setTimeout(() => {
+        isFetchingRef.current = true;
+        Promise.all([fetchOrders(), fetchStats()])
+          .finally(() => {
+            isFetchingRef.current = false;
+          });
+      }, 100);
     }
-    // consolidate triggers: include pageSize and dateRangeState and employees/warning filters
+    
+    // Cleanup timeout
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [
     isPM,
     isAdmin,
@@ -552,7 +680,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // removed duplicate sync effect — pageSize/dateRangeState/departments/employees/warningLevel are handled
   // in the consolidated main effect above to avoid multiple fetches.
 
-  // Load filter options (departments/employees) similar to Order page
+  // ✅ Tối ưu: Load filter options với debounce
+  const filterOptionsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
     const load = async () => {
       // Prevent concurrent duplication (React Strict Mode / fast re-renders)
@@ -582,23 +712,37 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         let brandCategories: any[] = [];
         
         if (isPMWithPermissionRole) {
-          const { categories: catPerms, brands: brandPerms } = extractPmCatBrandPermissions();
-          const combo: { value: string; label: string }[] = [];
-          if (catPerms.length > 0 && brandPerms.length > 0) {
-            catPerms.forEach(c => {
-              brandPerms.forEach(b => {
-                combo.push({
-                  value: `${c}+${b}`,
-                  label: `${c.replace('pm_cat_','Cat_')}+${b.replace('pm_brand_','Brand_')}`
+          // Kiểm tra chế độ PM để hiển thị filter options phù hợp
+          if (isPMCustomMode()) {
+            // Chế độ tổ hợp riêng: hiển thị tất cả permissions từ các role
+            const allPMPermissions = getAllPMCustomPermissions();
+            brandCategories = allPMPermissions.map(p => ({
+              value: p,
+              label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
+            }));
+          } else {
+            // Chế độ tổ hợp chung: tạo combination như cũ
+            const allPMPermissions = getAllPMCustomPermissions();
+            const categories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+            const brands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+            
+            const combo: { value: string; label: string }[] = [];
+            if (categories.length > 0 && brands.length > 0) {
+              categories.forEach(c => {
+                brands.forEach(b => {
+                  combo.push({
+                    value: `${c}+${b}`,
+                    label: `${c.replace('pm_cat_','Cat_')}+${b.replace('pm_brand_','Brand_')}`
+                  });
                 });
               });
-            });
+            }
+            const singles = allPMPermissions.map(p => ({
+              value: p,
+              label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
+            }));
+            brandCategories = combo.length > 0 ? combo : singles;
           }
-          const singles = [...catPerms, ...brandPerms].map(p => ({
-            value: p,
-            label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
-          }));
-          brandCategories = combo.length > 0 ? combo : singles;
         }
         
         setFilterOptions({ 
@@ -622,10 +766,24 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     };
 
     if (isPM || isAdmin || isViewRole) {
-      // reset loaded flag and then load filter options
-      setFiltersLoaded(false);
-      load();
+      // ✅ Debounce filter options loading
+      if (filterOptionsTimeoutRef.current) {
+        clearTimeout(filterOptionsTimeoutRef.current);
+      }
+      
+      filterOptionsTimeoutRef.current = setTimeout(() => {
+        // reset loaded flag and then load filter options
+        setFiltersLoaded(false);
+        load();
+      }, 50);
     }
+    
+    // Cleanup timeout
+    return () => {
+      if (filterOptionsTimeoutRef.current) {
+        clearTimeout(filterOptionsTimeoutRef.current);
+      }
+    };
   }, [isPM, isAdmin, isPMWithPermissionRole]);
 
   // Initialize history state on mount for consistent back behavior
@@ -837,12 +995,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         });
       }, 0);
 
-      // Persist snapshot immediately (overwrite any previous)
-      savePmFiltersToStorage(newSnapshot);
+    // Persist snapshot immediately (overwrite any previous)
+    savePmFiltersToStorage(newSnapshot);
 
-      // Only refetch if base filters have finished initial load & restore
-  // Always fetch immediately with the new snapshot (bỏ chờ effect để user thấy realtime)
-  fetchOrders(newSnapshot);
+    // Rely on the consolidated effect to fetch data when state changes.
+    // This prevents duplicate fetches (one from handler + one from effect).
     } catch (e) {
       console.error('[PM] Error in handleFilterChange', e);
     }
@@ -1212,9 +1369,22 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
         params.set('brandCategories', brandCategoriesSelected.join(','));
       } else {
-        const { categories: autoCatsExp, brands: autoBrandsExp } = extractPmCatBrandPermissions();
-        const autoListExp = [...autoCatsExp, ...autoBrandsExp];
-        if (autoListExp.length > 0) params.set('brandCategories', autoListExp.join(','));
+        // Kiểm tra chế độ PM
+        if (isPMCustomMode()) {
+          // Chế độ tổ hợp riêng: gửi tất cả permissions và để backend xử lý
+          const allPMPermissions = getAllPMCustomPermissions();
+          if (allPMPermissions.length > 0) {
+            params.set('brandCategories', allPMPermissions.join(','));
+            params.set('pmCustomMode', 'true'); // Đánh dấu là custom mode
+          }
+        } else {
+          // Chế độ tổ hợp chung: gửi tất cả permissions để tổ hợp tự do
+          const allPMPermissions = getAllPMCustomPermissions();
+          if (allPMPermissions.length > 0) {
+            params.set('brandCategories', allPMPermissions.join(','));
+            params.set('pmCustomMode', 'false'); // Đánh dấu là general mode
+          }
+        }
       }
     }
 

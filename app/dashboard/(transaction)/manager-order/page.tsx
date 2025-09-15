@@ -179,35 +179,40 @@ function ManagerOrderContent() {
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
   // PM users chỉ thấy số lượng khách hàng của chính họ
   // User có cả PM và Manager thì xem như Manager (không bị giới hạn)
-  const customerCountFilters = useMemo(() => ({
-    fromDate: filters.dateRange?.start,
-    toDate: filters.dateRange?.end,
-    employeeId: isPMUser 
-      ? user?.id 
-      : filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
-    departmentId: isPMUser 
-      ? undefined // PM user không cần department
-      : filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
-    // Forward all filters from manager
-    search: filters.search,
-    status: filters.status,
-    date: filters.date,
-    dateRange: filters.dateRange,
-    employee: filters.employee,
-    employees: isPMUser 
-      ? (user?.id ? String(user.id) : undefined)
-      : filters.employees,
-    departments: isPMUser 
-      ? undefined // PM user không cần department
-      : filters.departments,
-    products: filters.products,
-    warningLevel: filters.warningLevel,
-    quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
-  // If we are in customer search mode (badge triggered by selecting a customer),
-  // show countMode 'sale' to count sales instead of unique customers while customer filter is active.
-  // If user is in customer-search mode or there is a customer search text, count sales instead of customers
-  countMode: (isInCustomerSearchMode || (filters.search && String(filters.search).trim() !== '')) ? 'sale' : 'customer',
-  }), [
+  const customerCountFilters = useMemo(() => {
+    // ✅ Tối ưu: Chỉ tạo object mới khi thực sự cần thiết
+    const isCountingSales = isInCustomerSearchMode || (filters.search && String(filters.search).trim() !== '');
+    
+    return {
+      fromDate: filters.dateRange?.start,
+      toDate: filters.dateRange?.end,
+      employeeId: isPMUser 
+        ? user?.id 
+        : filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
+      departmentId: isPMUser 
+        ? undefined // PM user không cần department
+        : filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+      // Forward all filters from manager
+      search: filters.search,
+      status: filters.status,
+      date: filters.date,
+      dateRange: filters.dateRange,
+      employee: filters.employee,
+      employees: isPMUser 
+        ? (user?.id ? String(user.id) : undefined)
+        : filters.employees,
+      departments: isPMUser 
+        ? undefined // PM user không cần department
+        : filters.departments,
+      products: filters.products,
+      warningLevel: filters.warningLevel,
+      quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
+      // If we are in customer search mode (badge triggered by selecting a customer),
+      // show countMode 'sale' to count sales instead of unique customers while customer filter is active.
+      // If user is in customer-search mode or there is a customer search text, count sales instead of customers
+      countMode: isCountingSales ? 'sale' : 'customer',
+    };
+  }, [
     filters.dateRange?.start,
     filters.dateRange?.end,
     filters.employees,
@@ -215,13 +220,14 @@ function ManagerOrderContent() {
     filters.search,
     filters.status,
     filters.date,
-    JSON.stringify(filters.dateRange),
+    filters.dateRange, // ✅ Bỏ JSON.stringify để tránh tạo object mới
     filters.employee,
     filters.products,
     filters.warningLevel,
     filters.quantity,
     isPMUser,
     user?.id,
+    isInCustomerSearchMode, // ✅ Thêm dependency này
   ]);
 
   const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount(customerCountFilters);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getAccessToken } from '@/lib/auth';
 
 interface CustomerCountFilters {
@@ -23,11 +23,26 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
   const [count, setCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // ✅ Prevent duplicate calls
+  const isFetchingRef = useRef(false);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchCount = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    // ✅ Skip nếu đang fetch
+    if (isFetchingRef.current) return;
+    
+    // ✅ Debounce fetch để tránh multiple calls
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+    
+    fetchTimeoutRef.current = setTimeout(async () => {
+      isFetchingRef.current = true;
+      
+      try {
+        setLoading(true);
+        setError(null);
       // If multiple employees selected (CSV), fetch per-employee and sum counts
       const employeesCsv = filters?.employees;
       if (employeesCsv && employeesCsv.includes(",")) {
@@ -113,18 +128,30 @@ export const useCustomerCount = (filters?: CustomerCountFilters) => {
         const data = await response.json();
         setCount(data.customerCount);
       }
-    } catch (err) {
-      console.error('Error fetching customer count:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setCount(null);
-    } finally {
-      setLoading(false);
-    }
+      } catch (err) {
+        console.error('Error fetching customer count:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error');
+        setCount(null);
+      } finally {
+        setLoading(false);
+        isFetchingRef.current = false;
+      }
+    }, 150); // ✅ Debounce 150ms
+    
+    // Cleanup timeout
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [filters]);
 
   useEffect(() => {
-    fetchCount();
-  }, [fetchCount]);
+    // ✅ Chỉ fetch khi có filters hoặc filters thay đổi
+    if (filters) {
+      fetchCount();
+    }
+  }, [fetchCount, filters]);
 
   return { 
     count, 
