@@ -20,6 +20,7 @@ export const URL_PERMISSION_MAPPING = {
   
   // 👨‍💼 PRODUCT MANAGER
   '/dashboard/manager-pm-transactions': { name: 'quan-ly-giao-dich-pm', action: 'read' },
+  '/dashboard/pm-orders-no-product': { name: 'don-hang-khong-co-ma-sp', action: 'read' },
   '/dashboard/products': { name: 'quan-ly-san-pham', action: 'read' },
   
   // 👤 TÀI KHOẢN

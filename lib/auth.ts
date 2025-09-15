@@ -161,40 +161,82 @@ export function setAccessToken(token: string) {
       return;
     }
 
-    // Lưu token đầy đủ vào localStorage trước khi xử lý shortToken
+    // Store full token in localStorage
     localStorage.setItem('access_token', JSON.stringify(cleanToken));
-    // Parse token payload to remove permissions before storing short version in cookie
-    let shortToken = "";
-    try {
-      const parts = cleanToken.split(".");
-      if (parts.length === 3) {
-        // JWT: header.payload.signature
-        let base64 = parts[1];
-        const payload = JSON.parse(base64UrlDecode(base64));
-        // Remove permissions field
-        const { permissions, ...shortPayload } = payload;
-        // Encode short payload back to base64url
-        const shortPayloadStr = JSON.stringify(shortPayload);
-        let shortPayloadBase64 = btoa(shortPayloadStr)
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=+$/, "");
-        // Rebuild short token (header.shortPayload.signature)
-        shortToken = [parts[0], shortPayloadBase64, parts[2]].join(".");
-      } else {
-        // Fallback: just use first 10 chars
-        shortToken = cleanToken.substring(0, 10);
+    console.log("🔍 [Debug] Original token length:", cleanToken.length);
+    
+    // For cookie, store only a truncated version for size limits
+    // But keep it as a valid token structure
+    let cookieToken = cleanToken;
+    
+    // If token is too long for cookie (> 4KB), truncate the payload but keep structure
+    if (cleanToken.length > 4000) {
+      try {
+        const parts = cleanToken.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(base64UrlDecode(parts[1]));
+          // Remove large fields but keep essential ones
+          const essentialPayload = {
+            sub: payload.sub,
+            username: payload.username,
+            roles: payload.roles,
+            exp: payload.exp,
+            zaloLinkStatus: payload.zaloLinkStatus,
+            status: payload.status,
+            isBlock: payload.isBlock
+          };
+          
+          // Re-encode the essential payload
+          const essentialPayloadStr = JSON.stringify(essentialPayload);
+          const essentialPayloadBase64 = btoa(unescape(encodeURIComponent(essentialPayloadStr)))
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_")
+            .replace(/=+$/, "");
+          
+          cookieToken = [parts[0], essentialPayloadBase64, "signature-removed"].join(".");
+          
+          // Nếu token rút gọn vẫn quá dài, cắt signature và chỉ giữ header + payload
+          if (cookieToken.length > 4000) {
+            cookieToken = parts[0] + "." + essentialPayloadBase64 + ".short";
+          }
+          
+        }
+      } catch (e) {
+        console.error("❌ [SetAccessToken] Error creating cookie token:", e);
+        // Fallback: tạo một token minimal với chỉ thông tin cần thiết
+        try {
+          const parts = cleanToken.split(".");
+          if (parts.length === 3) {
+            const payload = JSON.parse(base64UrlDecode(parts[1]));
+            const minimalPayload = {
+              sub: payload.sub,
+              exp: payload.exp,
+              roles: payload.roles || [],
+              zaloLinkStatus: payload.zaloLinkStatus || 0
+            };
+            const minimalPayloadStr = JSON.stringify(minimalPayload);
+            const minimalPayloadBase64 = btoa(unescape(encodeURIComponent(minimalPayloadStr)))
+              .replace(/\+/g, "-")
+              .replace(/\//g, "_")
+              .replace(/=+$/, "");
+            cookieToken = parts[0] + "." + minimalPayloadBase64 + ".minimal";
+          } else {
+            cookieToken = "";
+          }
+        } catch (fallbackError) {
+          console.error("❌ [SetAccessToken] Fallback token creation failed:", fallbackError);
+          cookieToken = "";
+        }
       }
-    } catch (e) {
-      console.error("❌ [SetAccessToken] Error building short token:", e);
-      shortToken = cleanToken.substring(0, 10);
     }
 
-    // Save full token to localStorage (with expiry if needed)
-    localStorage.setItem('access_token', JSON.stringify(cleanToken));
-
-    // Save short token to cookie
-    document.cookie = `access_token=${shortToken}; path=/; max-age=${2147483647}`;
+    // Always try to set cookie, even with fallback token
+    if (cookieToken) {
+      document.cookie = `access_token=${cookieToken}; path=/; max-age=${2147483647}`;
+      console.log("✅ [SetAccessToken] Cookie token set, length:", cookieToken.length);
+    } else {
+      console.warn("⚠️ [SetAccessToken] No cookie token could be created");
+    }
   } catch (error) {
     console.error("❌ [SetAccessToken] Error setting token:", error);
   }

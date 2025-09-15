@@ -88,6 +88,11 @@ export async function middleware(request: NextRequest) {
     } catch (error) {
       // Clear token cookies when middleware sees malformed token to avoid repeat errors
       console.error('Token decode error in middleware:', error);
+      // Clear invalid cookies and redirect to login
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('access_token');
+      response.cookies.delete('refresh_token');
+      return response;
     }
   }
 
@@ -133,14 +138,76 @@ export async function middleware(request: NextRequest) {
           const data = await refreshResponse.json();
           if (data.access_token) {
             const response = NextResponse.next();
-            // Set new access token
-            // TODO: Đổi cơ chế lưu access token từ cookies sang localStorage
-            // response.cookies.set('access_token', data.access_token, {
-            //   httpOnly: false,
-            //   secure: process.env.NODE_ENV === 'production',
-            //   sameSite: 'lax',
-            //   maxAge: 30 * 24 * 60 * 60, // 30 days
-            // });
+            
+            // Xử lý token quá dài như trong setAccessToken
+            let cookieToken = data.access_token;
+            if (data.access_token.length > 4000) {
+              try {
+                const parts = data.access_token.split(".");
+                if (parts.length === 3) {
+                  const payload = JSON.parse(base64UrlDecode(parts[1]));
+                  // Remove large fields but keep essential ones
+                  const essentialPayload = {
+                    sub: payload.sub,
+                    username: payload.username,
+                    roles: payload.roles,
+                    exp: payload.exp,
+                    zaloLinkStatus: payload.zaloLinkStatus,
+                    status: payload.status,
+                    isBlock: payload.isBlock
+                  };
+                  
+                  // Re-encode the essential payload
+                  const essentialPayloadStr = JSON.stringify(essentialPayload);
+                  const essentialPayloadBase64 = btoa(unescape(encodeURIComponent(essentialPayloadStr)))
+                    .replace(/\+/g, "-")
+                    .replace(/\//g, "_")
+                    .replace(/=+$/, "");
+                  
+                  cookieToken = [parts[0], essentialPayloadBase64, "signature-removed"].join(".");
+                  
+                  // Nếu token rút gọn vẫn quá dài, cắt signature
+                  if (cookieToken.length > 4000) {
+                    cookieToken = parts[0] + "." + essentialPayloadBase64 + ".short";
+                  }
+                }
+              } catch (e) {
+                console.error("❌ [Middleware] Error creating shortened token:", e);
+                // Fallback: tạo token minimal
+                try {
+                  const parts = data.access_token.split(".");
+                  if (parts.length === 3) {
+                    const payload = JSON.parse(base64UrlDecode(parts[1]));
+                    const minimalPayload = {
+                      sub: payload.sub,
+                      exp: payload.exp,
+                      roles: payload.roles || [],
+                      zaloLinkStatus: payload.zaloLinkStatus || 0
+                    };
+                    const minimalPayloadStr = JSON.stringify(minimalPayload);
+                    const minimalPayloadBase64 = btoa(unescape(encodeURIComponent(minimalPayloadStr)))
+                      .replace(/\+/g, "-")
+                      .replace(/\//g, "_")
+                      .replace(/=+$/, "");
+                    cookieToken = parts[0] + "." + minimalPayloadBase64 + ".minimal";
+                  }
+                } catch (fallbackError) {
+                  console.error("❌ [Middleware] Fallback token creation failed:", fallbackError);
+                  cookieToken = data.access_token.substring(0, 100); // Last resort
+                }
+              }
+            }
+            
+            // Set processed token to cookie
+            response.cookies.set('access_token', cookieToken, {
+              httpOnly: false,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 30 * 24 * 60 * 60, // 30 days
+            });
+            
+            console.log("✅ [Middleware] Set shortened token to cookie, length:", cookieToken.length);
+            
             // Set new refresh token if provided
             if (data.refresh_token) {
               response.cookies.set('refresh_token', data.refresh_token, {
