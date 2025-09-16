@@ -112,6 +112,8 @@ interface OrderManagementProps {
   viewRequireAnalysis?: boolean;
   // Show product code column for PM transaction management
   showProductCode?: boolean;
+  // Skip owner check for PM context - PM can delete product code for all visible orders
+  skipOwnerCheck?: boolean;
 }
 
 // Function tính toán extended động
@@ -248,6 +250,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   actionMode = "edit",
   viewRequireAnalysis = true,
   showProductCode = false,
+  skipOwnerCheck = false,
 }) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const { currentUser } = useCurrentUser();
@@ -1597,20 +1600,37 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     disabled={actionMode === "view-only"}
                                   />
                                   {orderDetail.product?.productCode && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
-                                      onClick={() => {
-                                        setHighlightedRowId(orderDetail.id);
-                                        setDeletingProductCodeDetail(orderDetail);
-                                        setIsDeleteProductCodeModalOpen(true);
-                                      }}
-                                      disabled={actionMode === "view-only"}
-                                      title="Xóa mã sản phẩm"
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
+                                          onClick={() => {
+                                            if (skipOwnerCheck || isOwner(orderDetail)) {
+                                              setHighlightedRowId(orderDetail.id);
+                                              setDeletingProductCodeDetail(orderDetail);
+                                              setIsDeleteProductCodeModalOpen(true);
+                                            }
+                                          }}
+                                          disabled={actionMode === "view-only" || (!skipOwnerCheck && !isOwner(orderDetail))}
+                                          title={
+                                            skipOwnerCheck || isOwner(orderDetail)
+                                              ? "Xóa mã sản phẩm"
+                                              : "Chỉ chủ sở hữu được xóa mã sản phẩm"
+                                          }
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>
+                                          {skipOwnerCheck || isOwner(orderDetail)
+                                            ? "Xóa mã sản phẩm"
+                                            : "Chỉ chủ sở hữu đơn hàng mới được xóa mã sản phẩm"}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
                                   )}
                                 </div>
                               </TableCell>

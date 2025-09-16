@@ -1446,6 +1446,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
               onEdit={handleEditProductCode}
               onDeleteProductCode={handleDeleteProductCode}
               showProductCode={true}
+              skipOwnerCheck={true}
             />
           </PaginatedTable>
         </CardContent>

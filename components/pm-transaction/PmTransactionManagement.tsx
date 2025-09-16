@@ -1979,6 +1979,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               actionMode="edit"
               viewRequireAnalysis={false}
               showProductCode={true}
+              skipOwnerCheck={true}
               onEdit={handleEditProductCode}
               onDeleteProductCode={handleDeleteProductCode}
               onSearch={(s) => {
