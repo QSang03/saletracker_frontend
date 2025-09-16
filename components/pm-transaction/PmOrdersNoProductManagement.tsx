@@ -1335,7 +1335,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
       <Card className="w-full max-w-full">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-xl font-bold">
-            📦 Đơn hàng không có mã sản phẩm
+            📦 Đơn hàng 
           </CardTitle>
           <div className="flex gap-2 flex-wrap">
             <Button
