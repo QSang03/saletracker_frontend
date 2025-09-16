@@ -925,6 +925,42 @@ export default function CampaignModal({
     return (p || "").replace(/\D/g, "").replace(/^84(?=\d{8,})/, "0");
   }, []);
 
+  // Detect legacy landline area codes (pre-2017) and suggest the new one
+  const getLegacyAreaCodeHint = useCallback((raw: string) => {
+    // Chuẩn hoá về dạng "0…" để so khớp
+    const digits = (raw || "")
+      .replace(/\D/g, "")
+      .replace(/^84(?=\d{8,})/, "0");
+
+    // Một số mapping phổ biến; có thể mở rộng sau
+    const legacyMap: Record<string, string> = {
+      "08": "028",   // TP.HCM
+      "04": "024",   // Hà Nội
+      "073": "0275", // Bến Tre (ví dụ user nêu)
+     
+    };
+
+    // Kiểm tra dạng độ dài hợp lệ cho từng prefix cũ:
+    // - '08'/'04' + 8 số = 10 số
+    // - '073' + 7 số     = 10 số
+    for (const oldPrefix of Object.keys(legacyMap)) {
+      const localLen = oldPrefix.length === 2 ? 8 : 7;
+      const re = new RegExp(`^${oldPrefix}\\d{${localLen}}$`);
+      if (re.test(digits)) {
+        const suggested = legacyMap[oldPrefix];
+        const tail = digits.replace(new RegExp(`^${oldPrefix}`), "");
+        return {
+          old: `${oldPrefix}`,
+          suggested,
+          // Gợi ý số mới để user dễ sửa ngay
+          suggestedNumber: `${suggested}${tail}`,
+          message: `Số điện thoại cố định đang dùng mã vùng cũ ${oldPrefix}. Vui lòng cập nhật sang số mới).`,
+        };
+      }
+    }
+    return null;
+  }, []);
+
   // ✅ ENHANCED PHONE VALIDATION FUNCTION - MATCH BACKEND NESTJS VALIDATION
   const isValidVietnamPhone = useCallback((phone: string): boolean => {
     // Remove all spaces first (backend @Matches(/^\S+$/) - no whitespace allowed)
@@ -941,11 +977,11 @@ export default function CampaignModal({
       /^(0|\+84)[3-9]\d{8}$/, // 0x xxxxxxxx format
       /^84[3-9]\d{8}$/, // 84x xxxxxxxx format (without +)
 
-      // Specific Vietnam mobile prefixes (more accurate)
+      // Specific Vietnam mobile prefixes (more accurate) - includes 07x
       /^(0|\+84)(32|33|34|35|36|37|38|39|56|58|59|70|76|77|78|79|81|82|83|84|85|86|87|88|89|90|91|92|93|94|96|97|98|99)\d{7}$/, // Mobile 10 digits
       /^84(32|33|34|35|36|37|38|39|56|58|59|70|76|77|78|79|81|82|83|84|85|86|87|88|89|90|91|92|93|94|96|97|98|99)\d{7}$/, // Mobile without + prefix
 
-      // Landline patterns
+      // Landline patterns (đầu 2x...), tổng thể 0(2x) + 8 số
       /^(0|\+84)(2[0-9])\d{8}$/, // Landline 10 digits (0xx xxxx xxxx)
       /^84(2[0-9])\d{8}$/, // Landline without + prefix
     ];
@@ -985,32 +1021,45 @@ export default function CampaignModal({
             type: "invalid_format",
           });
         } else {
-          // ✅ SECOND CHECK: Vietnam phone number format validation
-          if (!isValidVietnamPhone(phone)) {
+          // ✅ FIRST CHECK: Legacy area code detection (check before general validation)
+          const hint = getLegacyAreaCodeHint(phone);
+          if (hint) {
+            // Ưu tiên báo rõ là "mã vùng cũ" và gợi ý số mới
             errors.push({
               index,
               field: "phone_number",
-              message: "Số điện thoại không đúng định dạng (VD: 0987654321)",
+              message: `Số điện thoại không hợp lệ do dùng mã vùng cũ (${hint.old}). ` +
+                       `Vui lòng đổi sang ${hint.suggested} — gợi ý: ${hint.suggestedNumber}`,
               type: "invalid_format",
             });
           } else {
-            // ✅ ADDITIONAL CHECKS: Length and basic format
-            const cleanDigits = phone.replace(/[\D]/g, ""); // Remove all non-digits
+            // ✅ SECOND CHECK: Vietnam phone number format validation
+            if (!isValidVietnamPhone(phone)) {
+              errors.push({
+                index,
+                field: "phone_number",
+                message: "Số điện thoại không đúng định dạng (VD: 0987654321)",
+                type: "invalid_format",
+              });
+            } else {
+              // ✅ ADDITIONAL CHECKS: Length and basic format
+              const cleanDigits = phone.replace(/[\D]/g, ""); // Remove all non-digits
 
-            if (cleanDigits.length < 9) {
-              errors.push({
-                index,
-                field: "phone_number",
-                message: "Số điện thoại quá ngắn (tối thiểu 9 chữ số)",
-                type: "invalid_format",
-              });
-            } else if (cleanDigits.length > 12) {
-              errors.push({
-                index,
-                field: "phone_number",
-                message: "Số điện thoại quá dài (tối đa 12 chữ số)",
-                type: "invalid_format",
-              });
+              if (cleanDigits.length < 9) {
+                errors.push({
+                  index,
+                  field: "phone_number",
+                  message: "Số điện thoại quá ngắn (tối thiểu 9 chữ số)",
+                  type: "invalid_format",
+                });
+              } else if (cleanDigits.length > 12) {
+                errors.push({
+                  index,
+                  field: "phone_number",
+                  message: "Số điện thoại quá dài (tối đa 12 chữ số)",
+                  type: "invalid_format",
+                });
+              }
             }
           }
         }
@@ -1042,7 +1091,7 @@ export default function CampaignModal({
 
       return errors;
     },
-    [isValidVietnamPhone]
+    [isValidVietnamPhone, getLegacyAreaCodeHint]
   );
 
   const validateAllCustomers = useCallback((): CustomerValidationError[] => {

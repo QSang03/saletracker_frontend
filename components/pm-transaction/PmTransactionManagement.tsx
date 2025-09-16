@@ -897,6 +897,21 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     const currentFilters = getCurrentPmFilters();
     const updatedFilters = { ...currentFilters, search: customerName.trim(), page: 1 };
     savePmFiltersToStorage(updatedFilters);
+    
+    // ✅ Trigger fetch data ngay lập tức để search realtime
+    fetchOrders({
+      page: 1,
+      pageSize: pageSize,
+      search: customerName.trim(),
+      status: statusFilter === 'all' ? '' : statusFilter,
+      date: dateFilter === 'all' || dateFilter === 'custom' ? '' : dateFilter,
+      dateRange: dateRangeState?.start && dateRangeState?.end ? dateRangeState as { start: string; end: string } : undefined,
+      departments: departmentsSelected.join(','),
+      employees: employeesSelected.join(','),
+      warningLevel: warningLevelFilter,
+      quantity: minQuantity,
+      conversationType: conversationTypesSelected.join(','),
+    });
   };
 
   // When departments change, remove any selected employees that no longer belong to the available set
