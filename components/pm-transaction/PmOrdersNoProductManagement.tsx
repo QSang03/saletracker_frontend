@@ -1090,13 +1090,33 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
 
       console.log('✅ Xóa mã sản phẩm thành công');
       
-      // Refresh data after successful deletion
-      await fetchOrders();
+      // Lưu vị trí scroll hiện tại
+      const currentScrollPosition = window.scrollY || document.documentElement.scrollTop;
+      
+      // Refresh data after successful deletion - giữ nguyên trang hiện tại
+      await fetchOrders({
+        page: currentPage,
+        pageSize: pageSize,
+        search: searchTerm,
+        status: statusFilter === 'all' ? '' : statusFilter,
+        date: dateFilter === 'all' || dateFilter === 'custom' ? '' : dateFilter,
+        dateRange: dateRangeState?.start && dateRangeState?.end ? dateRangeState as { start: string; end: string } : undefined,
+        departments: departmentsSelected.join(','),
+        employees: employeesSelected.join(','),
+        warningLevel: warningLevelFilter,
+        quantity: minQuantity,
+        conversationType: conversationTypesSelected.join(','),
+      });
+      
+      // Khôi phục vị trí scroll sau khi data đã load
+      setTimeout(() => {
+        window.scrollTo(0, currentScrollPosition);
+      }, 100);
     } catch (error) {
       console.error('Error deleting product code:', error);
       setError('Có lỗi khi xóa mã sản phẩm. Vui lòng thử lại hoặc liên hệ quản trị viên.');
     }
-  }, []);
+  }, [currentPage, pageSize, searchTerm, statusFilter, dateFilter, dateRangeState, departmentsSelected, employeesSelected, warningLevelFilter, minQuantity, conversationTypesSelected]);
 
   const getEmployeeDisplay = useCallback((employee: any) => {
     if (!employee) return 'N/A';

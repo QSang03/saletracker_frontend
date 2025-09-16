@@ -1586,20 +1586,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                       --
                                     </span>
                                   )}
-                                  <ProductCodeEditor
-                                    currentProductCode={orderDetail.product?.productCode || ""}
-                                    orderDetailId={Number(orderDetail.id)}
-                                    onUpdate={(newCode: string) => {
-                                      // Cập nhật local state
-                                      if (onReload) {
-                                        onReload();
-                                      }
-                                    }}
-                                    onOpen={() => setEditingProductCodeId(orderDetail.id)}
-                                    onClose={() => setEditingProductCodeId(null)}
-                                    disabled={actionMode === "view-only"}
-                                  />
-                                  {orderDetail.product?.productCode && (
+                                  {!hideEditButtons && (
+                                    <ProductCodeEditor
+                                      currentProductCode={orderDetail.product?.productCode || ""}
+                                      orderDetailId={Number(orderDetail.id)}
+                                      onUpdate={(newCode: string) => {
+                                        // Cập nhật local state
+                                        if (onReload) {
+                                          onReload();
+                                        }
+                                      }}
+                                      onOpen={() => setEditingProductCodeId(orderDetail.id)}
+                                      onClose={() => setEditingProductCodeId(null)}
+                                      disabled={actionMode === "view-only"}
+                                    />
+                                  )}
+                                  {orderDetail.product?.productCode && !hideDeleteButtons && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
