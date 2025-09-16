@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
+import DeleteProductCodeModal from "./DeleteProductCodeModal";
 import EditCustomerNameModal from "./EditCustomerNameModal";
 import AddToBlacklistModal from "./AddToBlacklistModal";
 import BulkActions from "./BulkActions";
@@ -74,6 +75,7 @@ interface OrderManagementProps {
   onReload: () => void;
   onEdit?: (orderDetail: OrderDetail, data: any) => void;
   onDelete?: (orderDetail: OrderDetail, reason?: string) => void;
+  onDeleteProductCode?: (orderDetail: OrderDetail, reason?: string) => void;
   onEditCustomerName?: (
     orderDetail: OrderDetail,
     newCustomerName: string
@@ -230,6 +232,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onReload,
   onEdit,
   onDelete,
+  onDeleteProductCode,
   onEditCustomerName,
   onBulkDelete,
   onBulkExtend,
@@ -297,6 +300,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isHideModalOpen, setIsHideModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  
+  // Modal xóa mã sản phẩm
+  const [deletingProductCodeDetail, setDeletingProductCodeDetail] = useState<OrderDetail | null>(null);
+  const [isDeleteProductCodeModalOpen, setIsDeleteProductCodeModalOpen] = useState(false);
+  
+  // Highlight dòng đang được thao tác
+  const [highlightedRowId, setHighlightedRowId] = useState<string | number | null>(null);
   // Notes history modal
   const [notesHistoryDetail, setNotesHistoryDetail] =
     useState<OrderDetail | null>(null);
@@ -538,6 +548,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     modalOpenRef.current = !!(
       isEditModalOpen ||
       isDeleteModalOpen ||
+      isDeleteProductCodeModalOpen ||
       isHideModalOpen ||
       isViewModalOpen ||
       isEditCustomerNameModalOpen ||
@@ -551,6 +562,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   }, [
     isEditModalOpen,
     isDeleteModalOpen,
+    isDeleteProductCodeModalOpen,
     isHideModalOpen,
     isViewModalOpen,
     isEditCustomerNameModalOpen,
@@ -737,6 +749,33 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       onDelete(deletingDetail, reason);
       withSkipClear(() => setIsDeleteModalOpen(false));
       setDeletingDetail(null);
+    }
+  };
+
+  const handleDeleteProductCodeCancel = () => {
+    withSkipClear(() => setIsDeleteProductCodeModalOpen(false));
+    setDeletingProductCodeDetail(null);
+    setHighlightedRowId(null);
+  };
+
+  const handleDeleteProductCodeConfirm = (reason?: string) => {
+    console.log('🟡 handleDeleteProductCodeConfirm được gọi với:', { 
+      deletingProductCodeDetail: deletingProductCodeDetail?.id, 
+      reason, 
+      hasOnDeleteProductCode: !!onDeleteProductCode 
+    });
+    
+    if (deletingProductCodeDetail && onDeleteProductCode) {
+      console.log('🟢 Gọi onDeleteProductCode...');
+      onDeleteProductCode(deletingProductCodeDetail, reason);
+      withSkipClear(() => setIsDeleteProductCodeModalOpen(false));
+      setDeletingProductCodeDetail(null);
+      setHighlightedRowId(null);
+    } else {
+      console.log('🔴 Không thể gọi onDeleteProductCode:', { 
+        hasDeletingProductCodeDetail: !!deletingProductCodeDetail, 
+        hasOnDeleteProductCode: !!onDeleteProductCode 
+      });
     }
   };
 
@@ -1300,16 +1339,18 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                   displayOrders.map((orderDetail, index) => (
                     <TableRow
                       key={orderDetail.id || index}
-                      {...(focusedRowId === orderDetail.id || editingProductCodeId === orderDetail.id
-                        ? { "data-focused-row-id": String(orderDetail.id) }
-                        : {})}
                       className={`${getRowClassName(orderDetail, index)} ${
-                        focusedRowId === orderDetail.id
+                        highlightedRowId === orderDetail.id
+                          ? "focused-no-hover ring-2 ring-yellow-400 shadow-lg bg-yellow-100 border-yellow-300"
+                          : focusedRowId === orderDetail.id
                           ? "focused-no-hover ring-2 ring-indigo-300 shadow-lg bg-amber-300"
                           : editingProductCodeId === orderDetail.id
                           ? "focused-no-hover ring-2 ring-blue-400 shadow-lg bg-blue-100"
                           : ""
                       }`}
+                      {...(highlightedRowId === orderDetail.id || focusedRowId === orderDetail.id || editingProductCodeId === orderDetail.id
+                        ? { "data-focused-row-id": String(orderDetail.id) }
+                        : {})}
                     >
                       {(() => {
                         const owner = isOwner(orderDetail);
@@ -1555,6 +1596,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     onClose={() => setEditingProductCodeId(null)}
                                     disabled={actionMode === "view-only"}
                                   />
+                                  {orderDetail.product?.productCode && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
+                                      onClick={() => {
+                                        setHighlightedRowId(orderDetail.id);
+                                        setDeletingProductCodeDetail(orderDetail);
+                                        setIsDeleteProductCodeModalOpen(true);
+                                      }}
+                                      disabled={actionMode === "view-only"}
+                                      title="Xóa mã sản phẩm"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             )}
@@ -1865,6 +1922,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           isOpen={isDeleteModalOpen}
           onClose={handleDeleteCancel}
           onConfirm={handleDeleteConfirm}
+          loading={loading}
+        />
+      )}
+
+      {deletingProductCodeDetail && (
+        <DeleteProductCodeModal
+          orderDetail={deletingProductCodeDetail}
+          isOpen={isDeleteProductCodeModalOpen}
+          onClose={handleDeleteProductCodeCancel}
+          onConfirm={handleDeleteProductCodeConfirm}
           loading={loading}
         />
       )}

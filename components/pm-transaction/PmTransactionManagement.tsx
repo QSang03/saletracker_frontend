@@ -1527,6 +1527,75 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     ]);
   };
 
+  // Handle edit product code
+  const handleEditProductCode = useCallback(async (orderDetail: any, data: any) => {
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        throw new Error('No access token');
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_id: data.product_id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update product code');
+      }
+
+      // Refresh data after successful update
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error updating product code:', error);
+      setError('Có lỗi khi cập nhật mã sản phẩm');
+    }
+  }, []);
+
+  // Handle delete product code
+  const handleDeleteProductCode = useCallback(async (orderDetail: any, reason?: string) => {
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        throw new Error('No access token');
+      }
+
+      console.log('🗑️ [PM] Xóa mã sản phẩm khỏi đơn hàng:', orderDetail.id, 'Lý do:', reason);
+
+      // Sử dụng endpoint PUT để update order detail (backend chỉ hỗ trợ PUT)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_id: null, // Xóa mã sản phẩm bằng cách set product_id = null
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`Failed to delete product code: ${response.status}`);
+      }
+
+      console.log('✅ [PM] Xóa mã sản phẩm thành công');
+      
+      // Refresh data after successful deletion
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error deleting product code:', error);
+      setError('Có lỗi khi xóa mã sản phẩm');
+    }
+  }, []);
+
   if (!isPM && !isAdmin) {
     return (
       <Alert>
@@ -1910,6 +1979,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               actionMode="edit"
               viewRequireAnalysis={false}
               showProductCode={true}
+              onEdit={handleEditProductCode}
+              onDeleteProductCode={handleDeleteProductCode}
               onSearch={(s) => {
                 performCustomerSearch(s || "");
               }}

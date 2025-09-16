@@ -1059,6 +1059,45 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
     }
   }, []);
 
+  const handleDeleteProductCode = useCallback(async (orderDetail: OrderDetail, reason?: string) => {
+    console.log('🚀 handleDeleteProductCode được gọi với:', { orderDetail: orderDetail.id, reason });
+    
+    try {
+      const token = getAccessToken();
+      if (!token) {
+        throw new Error('No access token');
+      }
+
+      console.log('🗑️ Xóa mã sản phẩm khỏi đơn hàng:', orderDetail.id, 'Lý do:', reason);
+
+      // Sử dụng endpoint PUT để update order detail (backend chỉ hỗ trợ PUT)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_id: null, // Xóa mã sản phẩm bằng cách set product_id = null
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`Failed to delete product code: ${response.status}`);
+      }
+
+      console.log('✅ Xóa mã sản phẩm thành công');
+      
+      // Refresh data after successful deletion
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error deleting product code:', error);
+      setError('Có lỗi khi xóa mã sản phẩm. Vui lòng thử lại hoặc liên hệ quản trị viên.');
+    }
+  }, []);
+
   const getEmployeeDisplay = useCallback((employee: any) => {
     if (!employee) return 'N/A';
     return employee.fullName || employee.username || 'N/A';
@@ -1405,6 +1444,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
               startIndex={(currentPage - 1) * pageSize}
               onReload={handleRefresh}
               onEdit={handleEditProductCode}
+              onDeleteProductCode={handleDeleteProductCode}
               showProductCode={true}
             />
           </PaginatedTable>

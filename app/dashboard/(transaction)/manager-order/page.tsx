@@ -493,6 +493,56 @@ function ManagerOrderContent() {
   [deleteOrderDetail, refetch, saveCurrentPosition]
   ); // ✅ Thay đổi dependency
 
+  // ✅ Handle delete product code
+  const handleDeleteProductCode = useCallback(
+    async (orderDetail: OrderDetail, reason?: string) => {
+      try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+        
+        const token = getAccessToken();
+        if (!token) {
+          throw new Error('No access token');
+        }
+
+        console.log('🔑 Token type:', typeof token, 'Token length:', token?.length);
+        console.log('🗑️ Xóa mã sản phẩm khỏi đơn hàng:', orderDetail.id, 'Lý do:', reason);
+
+        // Sử dụng endpoint PUT để update order detail
+        const requestBody = {
+          product_id: null, // Xóa mã sản phẩm bằng cách set product_id = null
+        };
+        
+        console.log('📤 Request URL:', `${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`);
+        console.log('📤 Request body:', requestBody);
+        console.log('📤 Authorization header:', `Bearer ${token?.substring(0, 20)}...`);
+        
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error:', response.status, errorText);
+          throw new Error(`Failed to delete product code: ${response.status}`);
+        }
+
+        console.log('✅ Xóa mã sản phẩm thành công');
+        setAlert({ type: "success", message: "Xóa mã sản phẩm thành công!" });
+        refetch();
+      } catch (err) {
+        console.error("Error deleting product code:", err);
+        setAlert({ type: "error", message: "Có lỗi khi xóa mã sản phẩm. Vui lòng thử lại hoặc liên hệ quản trị viên." });
+      }
+    },
+    [refetch, saveCurrentPosition]
+  );
+
   // ✅ Handle bulk delete
   const handleBulkDelete = useCallback(
     async (orderDetails: OrderDetail[], reason?: string) => {
@@ -1231,6 +1281,7 @@ function ManagerOrderContent() {
               onReload={handleReload}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onDeleteProductCode={handleDeleteProductCode}
               onEditCustomerName={handleEditCustomerName}
               onAddToBlacklist={handleAddToBlacklist}
               onBulkDelete={handleBulkDelete}
