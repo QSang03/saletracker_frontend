@@ -100,14 +100,13 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
   const [exportLoading, setExportLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
   const [dateRangeState, setDateRangeState] = useState<{
     start?: string;
     end?: string;
@@ -1369,7 +1368,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
             enablePageSize={true}
             enableGoToPage={true}
             page={currentPage}
-            total={total}
+            total={totalItems}
             pageSize={pageSize}
             onPageChange={(p) => setCurrentPage(p)}
             onPageSizeChange={(s) => setPageSize(s)}

@@ -793,12 +793,16 @@ function ManagerOrderContent() {
     return rows;
   }, [filters, isPMUser, user?.id, isAdmin, includeHiddenExport]);
 
-  // ✅ Handle search từ double-click tên khách hàng
+  // ✅ Handle search từ double-click tên khách hàng - giống PM
   const handleSearch = useCallback(
     (searchTerm: string) => {
-      performCustomerSearch(searchTerm);
+      if (!searchTerm || !searchTerm.trim()) return;
+      
+      // ✅ Chỉ update search term, không reset các filter khác - giống PM
+      setSearch(searchTerm.trim());
+      setPage(1);
     },
-    [performCustomerSearch]
+    [setSearch, setPage]
   );
 
   // ✅ Handle restore previous state
@@ -1109,9 +1113,14 @@ function ManagerOrderContent() {
             pageSize={filters.pageSize}
             onFilterChange={handleFilterChange}
             onClearSearch={() => {
-              // Clear the inline search but keep other filters
-              setSearch("");
-              // Don't call handleRestorePrevious() as it will clear other filters like employees
+              // Clear search and exit customer search mode - giống PM
+              if (isInCustomerSearchMode) {
+                // Restore previous state when clearing customer search
+                handleRestorePrevious();
+              } else {
+                // Just clear search without affecting other filters
+                setSearch("");
+              }
             }}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
