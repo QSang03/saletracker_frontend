@@ -1,491 +1,668 @@
 "use client";
-import React, { useMemo, useState, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { ServerResponseAlert } from "@/components/ui/loading/ServerResponseAlert";
-import { Shield, Save, Rocket, Upload, Settings, Search } from "lucide-react";
-import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Settings,
+  FileSpreadsheet,
+  Upload,
+  RefreshCw,
+  Download,
+  Filter,
+  Users,
+  History,
+} from "lucide-react";
+import CustomerHistoryModal from "@/components/contact-list/zalo/auto-greeting/CustomerHistoryModal";
+import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
+import { getAccessToken } from "@/lib/auth";
 
-type Customer = {
-  name: string;
-  daysAgo: number;
-  status: "ok" | "warning" | "danger";
-  statusText: string;
-};
-
-type PermissionUser = {
-  id: number;
-  name: string;
-  email: string;
-  canEdit: boolean;
-  customMessage: string;
-};
+interface Customer {
+  id: string;
+  userId: number;
+  zaloDisplayName: string;
+  salutation: string;
+  greetingMessage: string;
+  conversationType?: 'group' | 'private';
+  lastMessageDate?: string; // ISO string format - từ customer_message_history
+  customerLastMessageDate?: string; // ISO string format - từ customers.last_message_date
+  customerStatus?: 'urgent' | 'reminder' | 'normal'; // Trạng thái từ bảng customers
+  daysSinceLastMessage: number;
+  status: "ready" | "urgent" | "stable"; // Trạng thái tính toán dựa trên ngày
+}
 
 export default function AutoGreetingPage() {
-  // Settings state
-  const [aiActive, setAiActive] = useState(true);
-  const [cycleDays, setCycleDays] = useState<number>(10);
-  const [execTime, setExecTime] = useState("09:00");
-  const [template, setTemplate] = useState(
-    "🌟 Chào bạn! Chúc bạn ngày mới tràn đầy năng lượng!"
-  );
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Permission state
-  const [permissionOpen, setPermissionOpen] = useState(false);
-  const [permissionData, setPermissionData] = useState<PermissionUser[]>([
-    { id: 1, name: "Admin System", email: "admin@saletracker.com", canEdit: true, customMessage: "Toàn quyền" },
-    { id: 2, name: "Nguyễn Văn A", email: "nva@company.com", canEdit: true, customMessage: "Chỉnh sửa template" },
-    { id: 3, name: "Trần Thị B", email: "ttb@company.com", canEdit: true, customMessage: "Chỉ xem" },
-    { id: 4, name: "Lê Văn C", email: "lvc@company.com", canEdit: false, customMessage: "Không có quyền" },
-    { id: 5, name: "Phạm Thị D", email: "ptd@company.com", canEdit: false, customMessage: "Không có quyền" },
-    { id: 6, name: "Hoàng Văn E", email: "hve@company.com", canEdit: true, customMessage: "Chỉnh sửa template" },
-  ]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [permissionFilter, setPermissionFilter] = useState<"all" | "allowed" | "denied">("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showExportModal, setShowExportModal] = useState(false);
 
-  // Customers sample
-  const customers: Customer[] = [
-    { name: "Nguyễn Văn A", daysAgo: 8, status: "warning", statusText: "Cần gửi" },
-    { name: "Trần Thị B", daysAgo: 12, status: "danger", statusText: "Khẩn cấp" },
-    { name: "Lê Văn C", daysAgo: 2, status: "ok", statusText: "Ổn định" },
-    { name: "Phạm Văn D", daysAgo: 6, status: "warning", statusText: "Cần gửi" },
-    { name: "Vũ Thị E", daysAgo: 15, status: "danger", statusText: "Khẩn cấp" },
-    { name: "Đỗ Văn F", daysAgo: 1, status: "ok", statusText: "Ổn định" },
-    { name: "Hoàng Thị G", daysAgo: 10, status: "warning", statusText: "Cần gửi" },
-    { name: "Lý Văn H", daysAgo: 3, status: "ok", statusText: "Ổn định" },
-    { name: "Bùi Thị I", daysAgo: 18, status: "danger", statusText: "Khẩn cấp" },
-    { name: "Ngô Văn K", daysAgo: 9, status: "warning", statusText: "Cần gửi" },
-  ];
-
-  // View modal state
-  const [viewOpen, setViewOpen] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-
-  // Alerts (use shared ServerResponseAlert)
-  const [alert, setAlert] = useState<{ type: "success" | "error" | "warning" | "info"; message: string } | null>(null);
-  const showAlert = useCallback((message: string, type: "success" | "error" | "warning" | "info" = "info") => {
-    setAlert({ type, message });
+  // Load filters from localStorage on component mount
+  useEffect(() => {
+    const savedFilters = localStorage.getItem('auto-greeting-filters');
+    if (savedFilters) {
+      try {
+        const filters = JSON.parse(savedFilters);
+        if (filters.searchTerm) setSearchTerm(filters.searchTerm);
+        if (filters.statusFilter) setStatusFilter(filters.statusFilter);
+        if (filters.dateFilter) setDateFilter(filters.dateFilter);
+        if (filters.itemsPerPage) setItemsPerPage(filters.itemsPerPage);
+      } catch (error) {
+        console.error('Error loading filters from localStorage:', error);
+        // Clear corrupted data
+        localStorage.removeItem('auto-greeting-filters');
+      }
+    }
   }, []);
-  const closeAlert = useCallback(() => setAlert(null), []);
 
-  // Derived filtered permission data
-  const filteredPermissionData = useMemo(() => {
-    let data = permissionData;
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    const filters: any = {};
+    
+    // Only save non-empty values
+    if (searchTerm.trim()) filters.searchTerm = searchTerm;
+    if (statusFilter && statusFilter !== "all") filters.statusFilter = statusFilter;
+    if (dateFilter) filters.dateFilter = dateFilter;
+    if (itemsPerPage && itemsPerPage !== 10) filters.itemsPerPage = itemsPerPage;
+    
+    // Only save if there are any filters to save
+    if (Object.keys(filters).length > 0) {
+      localStorage.setItem('auto-greeting-filters', JSON.stringify(filters));
+    } else {
+      // Remove from localStorage if no filters are set
+      localStorage.removeItem('auto-greeting-filters');
+    }
+  }, [searchTerm, statusFilter, dateFilter, itemsPerPage]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  // Filter customers based on search term, status, and date
+  useEffect(() => {
+    let filtered = customers;
+
+    // Search filter
     if (searchTerm.trim()) {
-      const s = searchTerm.toLowerCase();
-      data = data.filter((u) => u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s));
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter((customer) => {
+        return (
+          customer.id.toLowerCase().includes(searchLower) ||
+          customer.zaloDisplayName.toLowerCase().includes(searchLower) ||
+          customer.salutation.toLowerCase().includes(searchLower) ||
+          customer.greetingMessage.toLowerCase().includes(searchLower) ||
+          customer.userId.toString().includes(searchLower) ||
+          (customer.conversationType && customer.conversationType.toLowerCase().includes(searchLower)) ||
+          (customer.customerStatus && customer.customerStatus.toLowerCase().includes(searchLower))
+        );
+      });
     }
-    if (permissionFilter === "allowed") data = data.filter((u) => u.canEdit);
-    if (permissionFilter === "denied") data = data.filter((u) => !u.canEdit);
-    return data;
-  }, [permissionData, searchTerm, permissionFilter]);
 
-  // Handlers
-  const toggleAi = () => {
-    setAiActive((prev) => {
-      const next = !prev;
-      showAlert(next ? "Hệ thống AI đã được kích hoạt" : "Hệ thống AI đã tạm dừng", next ? "success" : "info");
-      return next;
-    });
-  };
-
-  const saveSettings = () => {
-    showAlert("Đang lưu cấu hình...", "info");
-    setTimeout(() => {
-      showAlert("Cài đặt đã được lưu", "success");
-    }, 1000);
-  };
-
-  const runNow = () => {
-    showAlert("Đang thực thi...", "info");
-    setTimeout(() => {
-      showAlert("Đã gửi thành công 25 tin nhắn", "success");
-    }, 1200);
-  };
-
-  const handleFileUpload: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const file = e.target.files?.[0];
-    if (file) showAlert(`Đã tải lên: ${file.name}`, "success");
-  };
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const getInitials = (name: string) =>
-    name
-      .split(" ")
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-
-  const updatePermission = (userId: number, newPermission: string) => {
-    setPermissionData((list) => list.map((u) => (u.id === userId ? { ...u, customMessage: newPermission } : u)));
-    const user = permissionData.find((u) => u.id === userId);
-    if (user && newPermission.trim().length > 0) showAlert(`Đã cập nhật quyền "${newPermission}" cho ${user.name}`, "success");
-  };
-
-  const toggleUserPermission = (userId: number, hasPermission: boolean) => {
-    setPermissionData((list) => list.map((u) => (u.id === userId ? { ...u, canEdit: hasPermission } : u)));
-    const user = permissionData.find((u) => u.id === userId);
-    if (user) showAlert(hasPermission ? `Đã kích hoạt quyền cho ${user.name}` : `Đã vô hiệu hóa quyền của ${user.name}`, hasPermission ? "success" : "info");
-  };
-
-  const deleteUser = (userId: number) => {
-    if (userId === 1) {
-      showAlert("Không thể xóa tài khoản Admin", "error");
-      return;
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((customer) => customer.customerStatus === statusFilter);
     }
-    const user = permissionData.find((u) => u.id === userId);
-    setPermissionData((list) => list.filter((u) => u.id !== userId));
-    if (user) showAlert(`Đã xóa user ${user.name}`, "info");
+
+    // Date filter
+    if (dateFilter) {
+      const filterDate = new Date(dateFilter);
+      filtered = filtered.filter((customer) => {
+        if (customer.lastMessageDate) {
+          const messageDate = new Date(customer.lastMessageDate);
+          return messageDate.toDateString() === filterDate.toDateString();
+        }
+        return false;
+      });
+    }
+
+    setFilteredCustomers(filtered);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [customers, searchTerm, statusFilter, dateFilter]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentCustomers = filteredCustomers.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
-  const PERMISSION_OPTIONS = [
-    "Toàn quyền",
-    "Chỉnh sửa template",
-    "Chỉ xem",
-    "Không có quyền",
-  ] as const;
-
-  // Local search + pagination for customers table
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const filteredCustomers = useMemo(() => {
-    const s = customerSearch.trim().toLowerCase();
-    if (!s) return customers;
-    return customers.filter((c) => c.name.toLowerCase().includes(s));
-  }, [customers, customerSearch]);
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredCustomers.slice(start, start + pageSize);
-  }, [filteredCustomers, page, pageSize]);
-
-  const openView = (cus: Customer) => {
-    setSelectedCustomer(cus);
-    setViewOpen(true);
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
   };
 
-  const remindNow = () => {
-    if (selectedCustomer) {
-      showAlert(`Đã gửi nhắc lại tới ${selectedCustomer.name}`, "success");
-      setViewOpen(false);
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setDateFilter("");
+    setCurrentPage(1);
+    // Clear from localStorage when user explicitly clears filters
+    localStorage.removeItem('auto-greeting-filters');
+  };
+
+  // Prepare data for CSVExportPanel
+  const getExportData = () => {
+    const headers = [
+      "STT",
+      "Mã Khách Hàng", 
+      "Tên Zalo Khách",
+      "Xưng hô",
+      "Lời Chào",
+      "Loại Hội Thoại",
+      "Tin Nhắn Cuối",
+      "Lần Cuối Gửi",
+      "Số Ngày",
+      "Trạng Thái"
+    ];
+
+    const data = currentCustomers.map((customer, index) => [
+      startIndex + index + 1,
+      customer.id,
+      customer.zaloDisplayName,
+      customer.salutation || "",
+      customer.greetingMessage || "",
+      customer.conversationType === 'group' ? 'Nhóm' : 
+      customer.conversationType === 'private' ? 'Cá nhân' : 'Chưa xác định',
+      customer.customerLastMessageDate 
+        ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
+        : "Chưa có",
+      customer.lastMessageDate 
+        ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
+        : "Chưa gửi",
+      customer.daysSinceLastMessage === 999 ? "∞" : customer.daysSinceLastMessage,
+      customer.customerStatus === 'urgent' ? 'Cần báo gấp' :
+      customer.customerStatus === 'reminder' ? 'Cần nhắc nhở' :
+      customer.customerStatus === 'normal' ? 'Bình thường' : 'Bình thường'
+    ]);
+
+    return { headers, data };
+  };
+
+  // Fetch all data for export (with current filters)
+  const getExportAllData = async () => {
+    try {
+      const token = getAccessToken();
+      const response = await fetch("/api/auto-greeting/export-customers-filtered", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          searchTerm,
+          statusFilter,
+          dateFilter
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch all data");
+      }
+
+      const data = await response.json();
+      const customers = data.data || [];
+      
+      // Convert to CSVExportPanel format
+      return customers.map((customer: any, index: number) => [
+        index + 1,
+        customer.id,
+        customer.zaloDisplayName,
+        customer.salutation || "",
+        customer.greetingMessage || "",
+        customer.conversationType === 'group' ? 'Nhóm' : 
+      customer.conversationType === 'private' ? 'Cá nhân' : 'Chưa xác định',
+        customer.customerLastMessageDate 
+          ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
+          : "Chưa có",
+        customer.lastMessageDate 
+          ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
+          : "Chưa gửi",
+        customer.daysSinceLastMessage === 999 ? "∞" : customer.daysSinceLastMessage,
+        customer.customerStatus === 'urgent' ? 'Cần báo gấp' :
+        customer.customerStatus === 'reminder' ? 'Cần nhắc nhở' :
+        customer.customerStatus === 'normal' ? 'Bình thường' : 'Bình thường'
+      ]);
+    } catch (error) {
+      console.error("Error fetching all data:", error);
+      return [];
     }
   };
+
+  const loadCustomers = async () => {
+    setLoading(true);
+    try {
+      const token = getAccessToken();
+      const response = await fetch("/api/auto-greeting/customers", {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Fetched customers data:", data);
+      console.log(
+        "Data length:",
+        Array.isArray(data) ? data.length : "Not an array"
+      );
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch customers:", error);
+      setCustomers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const token = getAccessToken();
+      const response = await fetch("/api/auto-greeting/import-customers", {
+        method: "POST",
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: formData,
+      });
+
+      if (response.ok) {
+        await loadCustomers();
+      }
+    } catch (error) {
+      console.error("Failed to upload file:", error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
 
   return (
-    <div className="h-full overflow-hidden">
-      <div className="h-full overflow-y-auto p-6 space-y-6">
-        {/* Header Card */}
-        <Card className="shadow-sm border-0 bg-gradient-to-r from-blue-50 to-purple-50">
-          <CardHeader className="pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-6">
+        <Settings className="h-6 w-6 text-gray-600" />
+        <h1 className="text-2xl font-semibold text-gray-800">
                   Gửi lời chào tự động
-                </CardTitle>
-                <p className="text-gray-600 mt-1">Hệ thống AI duy trì lịch sử chat Zalo trong vòng 14 ngày</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => setPermissionOpen(true)} className="transition-all duration-200">
-                  <Shield className="h-4 w-4 mr-2" /> Quản lý quyền
-                </Button>
-                <Button onClick={() => setSettingsOpen(true)} variant="outline" className="transition-all duration-200 hover:bg-gray-50">
-                  <Settings className="h-4 w-4 mr-2" /> Cấu hình hệ thống
-                </Button>
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="transition-all duration-200 hover:bg-gray-50">
-                  <Upload className="h-4 w-4 mr-2" /> Upload danh sách
-                </Button>
-                <Button variant="outline" onClick={runNow} className="transition-all duration-200 hover:bg-gray-50">
-                  <Rocket className="h-4 w-4 mr-2" /> Chạy ngay
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
+        </h1>
+      </div>
 
-        {alert && (
-          <div className="animate-in slide-in-from-top duration-300">
-            <ServerResponseAlert type={alert.type} message={alert.message} onClose={closeAlert} />
+      {/* Search and Filter Controls */}
+      <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
+        <div className="flex flex-wrap gap-4 items-center">
+          <Input 
+            placeholder="Tìm kiếm..." 
+            className="w-64"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Chọn trạng thái" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả trạng thái</SelectItem>
+              <SelectItem value="urgent">Cần báo gấp</SelectItem>
+              <SelectItem value="reminder">Cần nhắc nhở</SelectItem>
+              <SelectItem value="normal">Bình thường</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input 
+            type="date" 
+            className="w-48"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            placeholder="Lọc theo ngày"
+          />
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Dòng/trang</span>
+            <Select value={itemsPerPage.toString()} onValueChange={(value) => handleItemsPerPageChange(parseInt(value))}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
+        </div>
+              </div>
 
-        {/* Customers Table (like campaigns page) */}
-        <Card className="shadow-sm border-0">
-          <CardContent className="p-3">
-            <PaginatedTable
-              enableSearch
-              enablePageSize
-              page={page}
-              pageSize={pageSize}
-              total={filteredCustomers.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              onFilterChange={(f) => {
-                setCustomerSearch(f.search?.trim() || "");
-                setPage(1);
-              }}
-              onResetFilter={() => {
-                setCustomerSearch("");
-                setPage(1);
-              }}
-            >
-              <div className="w-full">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted">
-                      <th className="text-left font-semibold px-3 py-2">Khách hàng</th>
-                      <th className="text-left font-semibold px-3 py-2">Lần tương tác gần nhất</th>
-                      <th className="text-left font-semibold px-3 py-2">Trạng thái</th>
-                      <th className="text-left font-semibold px-3 py-2">Hành động</th>
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-3 mb-4 justify-end">
+        <Button
+          variant="outline"
+          className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+        >
+          <span className="flex items-start justify-center">
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Tải file mẫu Excel
+          </span>
+        </Button>
+        <Button
+          onClick={() => fileInputRef.current?.click()}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+          disabled={uploading}
+        >
+          <span className="flex items-start justify-center">
+            <Upload className="h-4 w-4 mr-2" />
+            {uploading ? "Đang upload..." : "+ Nhập file danh sách khách hàng"}
+          </span>
+                </Button>
+        <Button
+          onClick={loadCustomers}
+          variant="outline"
+          className="bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+        >
+          <span className="flex items-start justify-center">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Làm mới
+          </span>
+                </Button>
+        <Button
+          onClick={() => setShowExportModal(true)}
+          variant="outline"
+          className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+        >
+          <span className="flex items-start justify-center">
+            <Download className="h-4 w-4 mr-2" />
+            Xuất Excel
+          </span>
+                </Button>
+        <Button
+          onClick={clearFilters}
+          variant="outline"
+          className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+        >
+          <span className="flex items-start justify-center">
+            <Filter className="h-4 w-4 mr-2" />
+            Xóa filter
+          </span>
+                </Button>
+              </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+
+      {/* Data Table */}
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="p-4 border-b">
+          <span className="text-sm text-gray-600">
+            Tổng số dòng: {filteredCustomers.length}
+          </span>
+          </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  #
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Tên Zalo Khách
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Lời Chào
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Loại Hội Thoại
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Tin Nhắn Cuối
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Lần Cuối Gửi
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Số Ngày
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Trạng Thái
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                  Thao Tác
+                </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.map((c, idx) => (
-                      <tr key={idx} className="border-t">
-                        <td className="px-3 py-2 font-medium">{c.name}</td>
-                        <td className="px-3 py-2">📅 {c.daysAgo} ngày trước</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={
-                              c.status === "ok"
-                                ? "px-3 py-1 rounded-full text-xs font-semibold text-white bg-green-600"
-                                : c.status === "warning"
-                                ? "px-3 py-1 rounded-full text-xs font-semibold text-white bg-orange-600"
-                                : "px-3 py-1 rounded-full text-xs font-semibold text-white bg-red-600"
-                            }
-                          >
-                            {c.statusText}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => openView(c)}>Xem</Button>
-                            <Button size="sm" variant="secondary">Nhắc lại</Button>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="px-4 py-8 text-center text-gray-500"
+                  >
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                      Đang tải dữ liệu...
                           </div>
                         </td>
                       </tr>
-                    ))}
-                    {pageRows.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
-                          Không có khách hàng nào
+                     ) : currentCustomers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={9}
+                    className="px-4 py-8 text-center text-gray-500"
+                  >
+                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                    <div>Chưa có khách hàng nào</div>
+                    <div className="text-sm mt-1">
+                      Hãy upload file Excel để thêm khách hàng
+                          </div>
                         </td>
                       </tr>
+                     ) : (
+                       currentCustomers.map((customer, index) => {
+                  return (
+                    <tr
+                      key={customer.id}
+                      className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                    >
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                        {index + 1}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 border-b">
+                        {customer.zaloDisplayName}
+                        {customer.salutation ? ` (${customer.salutation})` : ""}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b max-w-xs truncate">
+                        {customer.greetingMessage}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          customer.conversationType === 'group' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : customer.conversationType === 'private'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {customer.conversationType === 'group' ? 'Nhóm' : 
+                           customer.conversationType === 'private' ? 'Cá nhân' : 'Chưa xác định'}
+                    </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                        {customer.customerLastMessageDate
+                          ? (() => {
+                              try {
+                                // Parse ISO string from backend
+                                const date = new Date(customer.customerLastMessageDate);
+                                return isNaN(date.getTime())
+                                  ? "Invalid Date"
+                                  : date.toLocaleString("vi-VN");
+                              } catch (error) {
+                                return "Invalid Date";
+                              }
+                            })()
+                          : "Chưa có"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                        {customer.lastMessageDate
+                          ? (() => {
+                              try {
+                                // Parse ISO string from backend
+                                const date = new Date(customer.lastMessageDate);
+                                return isNaN(date.getTime())
+                                  ? "Invalid Date"
+                                  : date.toLocaleString("vi-VN");
+                              } catch (error) {
+                                return "Invalid Date";
+                              }
+                            })()
+                          : "Chưa gửi"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                        {customer.daysSinceLastMessage === 999
+                          ? "∞"
+                          : customer.daysSinceLastMessage}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          customer.customerStatus === 'urgent' 
+                            ? 'bg-red-200 text-red-900' 
+                            : customer.customerStatus === 'reminder'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : customer.customerStatus === 'normal'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {customer.customerStatus === 'urgent' ? 'Cần báo gấp' :
+                           customer.customerStatus === 'reminder' ? 'Cần nhắc nhở' :
+                           customer.customerStatus === 'normal' ? 'Bình thường' :
+                           'Bình thường'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 border-b">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setOpenCustomerId(customer.id)}
+                          className="border-gray-300 text-gray-600 hover:bg-gray-50"
+                        >
+                          <span className="flex items-start justify-center">
+                            <History className="h-4 w-4 mr-1" />
+                            Lịch sử
+                          </span>
+                        </Button>
+                        </td>
+                      </tr>
+                  );
+                })
                     )}
                   </tbody>
                 </table>
-              </div>
-            </PaginatedTable>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Hidden file input for upload */}
-      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileUpload} />
-
-      {/* Settings Dialog */}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" /> Cấu hình hệ thống
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/30">
-              <div>
-                <div className="font-semibold">Kích hoạt AI tự động</div>
-                <div className="text-sm text-muted-foreground">Tự động gửi lời chào để duy trì kết nối</div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="p-4 border-t bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Hiển thị {startIndex + 1} - {Math.min(endIndex, filteredCustomers.length)} trong {filteredCustomers.length} kết quả
               </div>
-              <Switch checked={aiActive} onCheckedChange={toggleAi} />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      Trước
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const page = i + 1;
+                        return (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePageChange(page)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {page}
+                          </Button>
+                        );
+                      })}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Chu kỳ gửi (ngày)</label>
-                <Input type="number" min={1} max={13} value={cycleDays} onChange={(e) => setCycleDays(Number(e.target.value))} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold">Thời gian thực thi</label>
-                <Input type="time" value={execTime} onChange={(e) => setExecTime(e.target.value)} />
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-sm font-semibold">Template tin nhắn</label>
-                <Textarea
-                  placeholder="Nhập nội dung..."
-                  value={template}
-                  onChange={(e) => setTemplate(e.target.value)}
-                  className="min-h-[88px]"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setSettingsOpen(false)}>Đóng</Button>
-              <Button onClick={() => { saveSettings(); setSettingsOpen(false); }}>
-                <Save className="h-4 w-4 mr-2" /> Lưu
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      Sau
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* View Customer Dialog */}
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Chi tiết khách hàng{selectedCustomer ? ` — ${selectedCustomer.name}` : ""}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <div className="text-sm text-muted-foreground">Lần tương tác gần nhất</div>
-                  <div className="font-semibold">📅 {selectedCustomer.daysAgo} ngày trước</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-sm text-muted-foreground">Trạng thái</div>
-                  <div>
-                    <span
-                      className={
-                        selectedCustomer.status === "ok"
-                          ? "px-3 py-1 rounded-full text-xs font-semibold text-white bg-green-600"
-                          : selectedCustomer.status === "warning"
-                          ? "px-3 py-1 rounded-full text-xs font-semibold text-white bg-orange-600"
-                          : "px-3 py-1 rounded-full text-xs font-semibold text-white bg-red-600"
-                      }
-                    >
-                      {selectedCustomer.statusText}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-sm font-semibold">Nội dung dự kiến</div>
-                <div className="p-3 rounded-md border bg-muted/30 text-sm">
-                  {template}
-                </div>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setViewOpen(false)}>Đóng</Button>
-                <Button onClick={remindNow}>Nhắc lại ngay</Button>
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Permission Dialog */}
-      <Dialog open={permissionOpen} onOpenChange={setPermissionOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" /> Quản lý quyền chỉnh sửa tin nhắn
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="pl-8"
-                  placeholder="Tìm kiếm theo tên hoặc email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <select
-                className="w-full sm:w-[180px] h-9 px-3 py-1.5 text-sm bg-white border rounded-md"
-                value={permissionFilter}
-                onChange={(e) => setPermissionFilter(e.target.value as any)}
-              >
-                <option value="all">Tất cả quyền</option>
-                <option value="allowed">Có quyền</option>
-                <option value="denied">Không có quyền</option>
-              </select>
             </div>
 
-            <div className="rounded-md border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-                  <tr>
-                    <th className="text-left font-semibold px-3 py-2">Người dùng</th>
-                    <th className="text-left font-semibold px-3 py-2">Quyền chỉnh sửa</th>
-                    <th className="text-left font-semibold px-3 py-2">Trạng thái</th>
-                    <th className="text-left font-semibold px-3 py-2">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPermissionData.map((user) => (
-                    <tr key={user.id} className="border-t">
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white flex items-center justify-center text-xs font-bold">
-                            {getInitials(user.name)}
-                          </div>
-                          <div>
-                            <div className="font-semibold">{user.name}</div>
-                            <div className="text-xs text-muted-foreground">{user.email}</div>
-                          </div>
+          {/* Customer History Modal */}
+      <CustomerHistoryModal
+        customerId={openCustomerId}
+        open={!!openCustomerId}
+        onClose={() => setOpenCustomerId(null)}
+      />
+
+      {/* Export Excel Panel */}
+      <CSVExportPanel
+        open={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        defaultExportCount={itemsPerPage}
+        {...getExportData()}
+        fetchAllData={getExportAllData}
+        filtersDescription={
+          <div className="space-y-1">
+            <div><strong>Bộ lọc hiện tại:</strong></div>
+            {searchTerm && <div>• Tìm kiếm: "{searchTerm}"</div>}
+            {statusFilter !== "all" && <div>• Trạng thái: {statusFilter === 'urgent' ? 'Cần báo gấp' : statusFilter === 'reminder' ? 'Cần nhắc nhở' : 'Bình thường'}</div>}
+            {dateFilter && <div>• Ngày: {new Date(dateFilter).toLocaleDateString('vi-VN')}</div>}
+            <div>• Tổng số khách hàng: {filteredCustomers.length}</div>
                         </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <Select
-                          value={
-                            PERMISSION_OPTIONS.includes(
-                              user.customMessage as (typeof PERMISSION_OPTIONS)[number]
-                            )
-                              ? (user.customMessage as string)
-                              : "Chỉ xem"
-                          }
-                          onValueChange={(val) => updatePermission(user.id, val)}
-                        >
-                          <SelectTrigger className="w-[220px]">
-                            <SelectValue placeholder="Chọn quyền" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PERMISSION_OPTIONS.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <Switch checked={user.canEdit} onCheckedChange={(v) => toggleUserPermission(user.id, !!v)} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => deleteUser(user.id)}
-                          disabled={user.id === 1}
-                          className={user.id === 1 ? "opacity-60 cursor-not-allowed" : ""}
-                        >
-                          Xóa
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        }
+      />
     </div>
   );
 }
