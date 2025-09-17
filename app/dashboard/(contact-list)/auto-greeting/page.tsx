@@ -18,10 +18,15 @@ import {
   Filter,
   Users,
   History,
+  Trash2,
 } from "lucide-react";
 import CustomerHistoryModal from "@/components/contact-list/zalo/auto-greeting/CustomerHistoryModal";
+import DeleteCustomerModal from "@/components/contact-list/zalo/auto-greeting/DeleteCustomerModal";
+import ImportExcelModal from "@/components/contact-list/zalo/auto-greeting/ImportExcelModal";
 import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
 import { getAccessToken } from "@/lib/auth";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { toast } from "sonner";
 
 interface Customer {
   id: string;
@@ -33,16 +38,22 @@ interface Customer {
   lastMessageDate?: string; // ISO string format - từ customer_message_history
   customerLastMessageDate?: string; // ISO string format - từ customers.last_message_date
   customerStatus?: 'urgent' | 'reminder' | 'normal'; // Trạng thái từ bảng customers
-  daysSinceLastMessage: number;
+  daysSinceLastMessage: number | null;
   status: "ready" | "urgent" | "stable"; // Trạng thái tính toán dựa trên ngày
 }
 
 export default function AutoGreetingPage() {
+  const { currentUser } = useCurrentUser();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [recentlyImportedIds, setRecentlyImportedIds] = useState<Set<string>>(new Set());
   const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [conversationTypeFilter, setConversationTypeFilter] = useState<string>("all");
@@ -89,7 +100,6 @@ export default function AutoGreetingPage() {
       localStorage.removeItem('auto-greeting-filters');
     }
   }, [searchTerm, statusFilter, conversationTypeFilter, dateFilter, itemsPerPage]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadCustomers();
@@ -106,8 +116,8 @@ export default function AutoGreetingPage() {
         return (
           customer.id.toLowerCase().includes(searchLower) ||
           customer.zaloDisplayName.toLowerCase().includes(searchLower) ||
-          customer.salutation.toLowerCase().includes(searchLower) ||
-          customer.greetingMessage.toLowerCase().includes(searchLower) ||
+          (customer.salutation && customer.salutation.toLowerCase().includes(searchLower)) ||
+          (customer.greetingMessage && customer.greetingMessage.toLowerCase().includes(searchLower)) ||
           customer.userId.toString().includes(searchLower) ||
           (customer.conversationType && customer.conversationType.toLowerCase().includes(searchLower)) ||
           (customer.customerStatus && customer.customerStatus.toLowerCase().includes(searchLower))
@@ -137,9 +147,19 @@ export default function AutoGreetingPage() {
       });
     }
 
+    // Sắp xếp: những customer vừa import lên đầu
+    filtered.sort((a, b) => {
+      const aIsRecentlyImported = recentlyImportedIds.has(a.id);
+      const bIsRecentlyImported = recentlyImportedIds.has(b.id);
+      
+      if (aIsRecentlyImported && !bIsRecentlyImported) return -1;
+      if (!aIsRecentlyImported && bIsRecentlyImported) return 1;
+      return 0; // Giữ nguyên thứ tự nếu cả hai đều import hoặc không import
+    });
+
     setFilteredCustomers(filtered);
     setCurrentPage(1); // Reset to first page when filters change
-  }, [customers, searchTerm, statusFilter, conversationTypeFilter, dateFilter]);
+  }, [customers, searchTerm, statusFilter, conversationTypeFilter, dateFilter, recentlyImportedIds]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
@@ -195,7 +215,7 @@ export default function AutoGreetingPage() {
       customer.lastMessageDate 
         ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
         : "Chưa gửi",
-      customer.daysSinceLastMessage === 999 ? "∞" : customer.daysSinceLastMessage,
+      customer.daysSinceLastMessage === null ? "Chưa có" : customer.daysSinceLastMessage,
       customer.customerStatus === 'urgent' ? 'Cần báo gấp' :
       customer.customerStatus === 'reminder' ? 'Cần nhắc nhở' :
       customer.customerStatus === 'normal' ? 'Bình thường' : 'Bình thường'
@@ -245,7 +265,7 @@ export default function AutoGreetingPage() {
         customer.lastMessageDate 
           ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
           : "Chưa gửi",
-        customer.daysSinceLastMessage === 999 ? "∞" : customer.daysSinceLastMessage,
+        customer.daysSinceLastMessage === null ? "Chưa có" : customer.daysSinceLastMessage,
         customer.customerStatus === 'urgent' ? 'Cần báo gấp' :
         customer.customerStatus === 'reminder' ? 'Cần nhắc nhở' :
         customer.customerStatus === 'normal' ? 'Bình thường' : 'Bình thường'
@@ -285,40 +305,155 @@ export default function AutoGreetingPage() {
     }
   };
 
-  const handleFileUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
 
+  const handleImportSuccess = async (importedIds: string[]) => {
+    // Set recently imported IDs for highlighting
+    setRecentlyImportedIds(new Set(importedIds));
+    // Clear highlight after 30 seconds
+    setTimeout(() => {
+      setRecentlyImportedIds(new Set());
+    }, 30000);
+    
+    await loadCustomers(); // Reload danh sách
+  };
+
+  const handleImportFromContacts = async () => {
+    setLoading(true);
+    try {
       const token = getAccessToken();
-      const response = await fetch("/api/auto-greeting/import-customers", {
+      const response = await fetch("/api/auto-greeting/import-from-contacts", {
         method: "POST",
         headers: {
+          'Content-Type': 'application/json',
           ...(token && { Authorization: `Bearer ${token}` }),
         },
-        body: formData,
+        body: JSON.stringify({ userId: currentUser?.id }),
       });
 
       if (response.ok) {
-        await loadCustomers();
+        // Backend bây giờ luôn trả về file Excel
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        
+        // Lấy tên file từ header
+        const contentDisposition = response.headers.get('content-disposition');
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+          : `danh-sach-khach-hang-tu-danh-ba-${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        alert('Đã tải xuống file Excel danh sách khách hàng từ danh bạ!');
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to import from contacts");
       }
     } catch (error) {
-      console.error("Failed to upload file:", error);
+      console.error("Failed to import from contacts:", error);
+      alert(`Lỗi khi nhập từ danh bạ: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      setUploading(false);
+      setLoading(false);
     }
   };
 
-  const handleFileInputChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      handleFileUpload(file);
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
+    try {
+      const response = await fetch("/api/auto-greeting/download-template", {
+        method: "GET",
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        
+        // Lấy tên file từ header
+        const contentDisposition = response.headers.get('content-disposition');
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+          : `mau-danh-sach-khach-hang-${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        toast.success('Đã tải xuống file mẫu Excel!', {
+          description: 'File mẫu đã được tải xuống thư mục Downloads',
+          duration: 3000,
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to download template");
+      }
+    } catch (error) {
+      console.error("Failed to download template:", error);
+      toast.error('Lỗi khi tải file mẫu', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+        duration: 5000,
+      });
+    } finally {
+      setDownloadingTemplate(false);
     }
   };
 
+  const handleDeleteCustomer = (customer: Customer) => {
+    setCustomerToDelete(customer);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!customerToDelete) return;
+
+    setDeleting(true);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`/api/auto-greeting/customers/${customerToDelete.id}`, {
+        method: "DELETE",
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+
+      if (response.ok) {
+        toast.success('Đã xóa khách hàng thành công!', {
+          description: `Khách hàng "${customerToDelete.zaloDisplayName}" đã được xóa`,
+          duration: 3000,
+        });
+        await loadCustomers(); // Reload danh sách
+        setDeleteModalOpen(false);
+        setCustomerToDelete(null);
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete customer");
+      }
+    } catch (error) {
+      console.error("Failed to delete customer:", error);
+      toast.error('Lỗi khi xóa khách hàng', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+        duration: 5000,
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+    setCustomerToDelete(null);
+  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -389,22 +524,27 @@ export default function AutoGreetingPage() {
         <Button
           variant="outline"
           className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+          onClick={handleDownloadTemplate}
+          disabled={downloadingTemplate}
         >
           <span className="flex items-start justify-center">
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Tải file mẫu Excel
+            {downloadingTemplate ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+            )}
+            {downloadingTemplate ? "Đang tạo file mẫu..." : "Tải file mẫu Excel"}
           </span>
         </Button>
         <Button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => setImportModalOpen(true)}
           className="bg-blue-600 hover:bg-blue-700 text-white"
-          disabled={uploading}
         >
           <span className="flex items-start justify-center">
             <Upload className="h-4 w-4 mr-2" />
-            {uploading ? "Đang upload..." : "+ Nhập file danh sách khách hàng"}
+            + Nhập file danh sách khách hàng
           </span>
-                </Button>
+        </Button>
         <Button
           onClick={loadCustomers}
           variant="outline"
@@ -426,6 +566,17 @@ export default function AutoGreetingPage() {
           </span>
                 </Button>
         <Button
+          onClick={handleImportFromContacts}
+          variant="outline"
+          className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+          disabled={loading}
+        >
+          <span className="flex items-start justify-center">
+            <Users className="h-4 w-4 mr-2" />
+            {loading ? "Đang tải..." : "Nhập từ Danh bạ"}
+          </span>
+                </Button>
+        <Button
           onClick={clearFilters}
           variant="outline"
           className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
@@ -437,13 +588,6 @@ export default function AutoGreetingPage() {
                 </Button>
               </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={handleFileInputChange}
-        className="hidden"
-      />
 
       {/* Data Table */}
       <div className="bg-white rounded-lg shadow-sm border">
@@ -517,7 +661,11 @@ export default function AutoGreetingPage() {
                   return (
                     <tr
                       key={customer.id}
-                      className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                      className={`${
+                        recentlyImportedIds.has(customer.id) 
+                          ? "bg-green-50 border-l-4 border-l-green-400" 
+                          : index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                      } transition-colors duration-300`}
                     >
                       <td className="px-4 py-3 text-sm text-gray-600 border-b">
                         {index + 1}
@@ -572,8 +720,8 @@ export default function AutoGreetingPage() {
                           : "Chưa gửi"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        {customer.daysSinceLastMessage === 999
-                          ? "∞"
+                        {customer.daysSinceLastMessage === null
+                          ? "Chưa có"
                           : customer.daysSinceLastMessage}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600 border-b">
@@ -593,17 +741,26 @@ export default function AutoGreetingPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 border-b">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setOpenCustomerId(customer.id)}
-                          className="border-gray-300 text-gray-600 hover:bg-gray-50"
-                        >
-                          <span className="flex items-start justify-center">
-                            <History className="h-4 w-4 mr-1" />
-                            Lịch sử
-                          </span>
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setOpenCustomerId(customer.id)}
+                            className="border-gray-300 text-gray-600 hover:bg-gray-50"
+                            title="Xem lịch sử tin nhắn"
+                          >
+                            <History className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteCustomer(customer)}
+                            className="border-red-300 text-red-600 hover:bg-red-50"
+                            title="Xóa khách hàng"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                         </td>
                       </tr>
                   );
@@ -683,6 +840,22 @@ export default function AutoGreetingPage() {
             <div>• Tổng số khách hàng: {filteredCustomers.length}</div>
                         </div>
         }
+      />
+
+      {/* Delete Customer Modal */}
+      <DeleteCustomerModal
+        customer={customerToDelete}
+        isOpen={deleteModalOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        loading={deleting}
+      />
+
+      {/* Import Excel Modal */}
+      <ImportExcelModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImportSuccess={handleImportSuccess}
       />
     </div>
   );

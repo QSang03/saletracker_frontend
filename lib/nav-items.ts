@@ -18,6 +18,7 @@ export const navItems = [
       roles: ["admin", "analysis", "view", "PM"]
     },
     { title: "Quản lý Blacklist", url: "/dashboard/order-blacklist", roles: ["admin", "analysis", "view"] },
+    { title: "Quản lý Chặn Phân Tích", url: "/dashboard/analysis-block-management", roles: ["admin"] },
     { title: "Quản lý Đơn hàng đã xóa", url: "/dashboard/order-trashed", roles: ["admin", "analysis", "view"] },
     { title: "Quản lý Đơn hàng đã ẩn", url: "/dashboard/order-hidden", roles: ["admin", "analysis", "view"] },
   ],

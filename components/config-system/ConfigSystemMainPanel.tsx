@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { motion } from "framer-motion";
 import { getAccessToken } from "@/lib/auth";
 
@@ -10,11 +11,18 @@ const SECTION_TITLES: Record<string, string> = {
   debt: "CÔNG NỢ",
   holiday: "LỊCH NGHỈ",
   transaction: "GIAO DỊCH",
-  campaign: "CHIẾN DỊCH KINH DOANH"
+  campaign: "CHIẾN DỊCH KINH DOANH",
+  customer_greeting: "CHÀO KHÁCH HÀNG",
+  auto_reply: "TRẢ LỜI TỰ ĐỘNG",
+  order_v2: "ĐƠN HÀNG V2",
+  semantic_index: "CHỈ MỤC NGỮ NGHĨA",
+  zalo_contact_sync: "ĐỒNG BỘ DANH BẠ ZALO",
+  zalo_conversation_name_updater: "CẬP NHẬT TÊN CUỘC TRÒ CHUYỆN ZALO",
+  product_management: "QUẢN LÝ SẢN PHẨM",
   // Thêm các section khác nếu cần
 };
 
-const SECTION_ALLOWED = ["system", "debt", "campaign", "transaction"];
+const SECTION_ALLOWED = ["system", "debt", "campaign", "transaction", "customer_greeting", "auto_reply", "order_v2", "semantic_index", "zalo_contact_sync", "zalo_conversation_name_updater", "product_management"];
 
 interface ConfigSystemMainPanelProps {
   allConfigs: any[];
@@ -32,6 +40,7 @@ export default function ConfigSystemMainPanel({ allConfigs, onConfirm, onSaved }
 
   const [fields, setFields] = useState<Record<string, string>>({});
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>("");
 
   useEffect(() => {
     if (editingKey === null) {
@@ -83,8 +92,23 @@ export default function ConfigSystemMainPanel({ allConfigs, onConfirm, onSaved }
 
   return (
     <div className="w-full max-w-7xl mx-auto py-8 space-y-10">
+      <div className="mb-4">
+        <Input
+          placeholder="Tìm kiếm section (tiêu đề hoặc key)..."
+          value={searchTerm}
+          onChange={(e: any) => setSearchTerm(e.target.value)}
+          className="max-w-md"
+        />
+      </div>
       {Object.entries(sectionConfigs || {})
         .filter(([section]) => SECTION_ALLOWED.includes(section))
+        .filter(([section]) => {
+          if (!searchTerm) return true;
+          const term = searchTerm.toLowerCase();
+          const title = (SECTION_TITLES[section] || section).toLowerCase();
+          const key = section.toLowerCase();
+          return title.includes(term) || key.includes(term);
+        })
         .map(([section, configs]) => (
           <div key={section}>
             <motion.h2
@@ -102,30 +126,103 @@ export default function ConfigSystemMainPanel({ allConfigs, onConfirm, onSaved }
             >
               {SECTION_TITLES[section] || section}
             </motion.h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {Array.isArray(configs) && configs.filter((config: any) => config.type === "number").map((config: any) => (
-                <div
-                  key={config.name}
-                  className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 bg-white rounded-lg shadow-sm border p-4"
-                >
-                  <div className="flex-1 font-medium text-gray-800">{config.display_name}</div>
-                  <Input
-                    type={config.type}
-                    value={fields[config.name] ?? ""}
-                    onChange={e => handleInputChange(config.name, e.target.value)}
-                    className="w-full md:w-24"
-                    disabled={editingKey !== null && editingKey !== config.name}
-                  />
-                  <Button
-                    size="sm"
-                    className="mt-2 md:mt-0"
-                    onClick={() => handleSave(config)}
-                    disabled={editingKey !== null && editingKey !== config.name}
-                  >
-                    Lưu
-                  </Button>
+            <div className="space-y-6">
+              {/* Toggle Fields (hidden for system section) */}
+              {section !== "system" && Array.isArray(configs) && configs.some((config: any) => config.type === "toggle") && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">Cài đặt bật/tắt</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {configs.filter((config: any) => config.type === "toggle").map((config: any) => (
+                      <div
+                        key={config.name}
+                        className="flex items-center justify-between bg-white rounded-lg shadow-sm border p-4"
+                      >
+                        <div className="font-medium text-gray-800 text-sm">{config.display_name}</div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={String(fields[config.name]) === "1"}
+                            onCheckedChange={(checked) => handleInputChange(config.name, checked ? "1" : "0")}
+                            disabled={editingKey !== null && editingKey !== config.name}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => handleSave(config)}
+                            disabled={editingKey !== null && editingKey !== config.name}
+                          >
+                            Lưu
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* Number Fields */}
+              {Array.isArray(configs) && configs.filter((config: any) => config.type === "number").length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">Cài đặt số</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {configs.filter((config: any) => config.type === "number").map((config: any) => (
+                      <div
+                        key={config.name}
+                        className="flex flex-col gap-2 bg-white rounded-lg shadow-sm border p-4"
+                      >
+                        <div className="font-medium text-gray-800 text-sm">{config.display_name}</div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            value={fields[config.name] ?? ""}
+                            onChange={e => handleInputChange(config.name, e.target.value)}
+                            className="flex-1"
+                            disabled={editingKey !== null && editingKey !== config.name}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => handleSave(config)}
+                            disabled={editingKey !== null && editingKey !== config.name}
+                          >
+                            Lưu
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Text Fields */}
+              {Array.isArray(configs) && configs.filter((config: any) => config.type === "text").length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">Cài đặt văn bản</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {configs.filter((config: any) => config.type === "text").map((config: any) => (
+                      <div
+                        key={config.name}
+                        className="flex flex-col gap-2 bg-white rounded-lg shadow-sm border p-4"
+                      >
+                        <div className="font-medium text-gray-800 text-sm">{config.display_name}</div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={fields[config.name] ?? ""}
+                            onChange={e => handleInputChange(config.name, e.target.value)}
+                            className="flex-1"
+                            disabled={editingKey !== null && editingKey !== config.name}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => handleSave(config)}
+                            disabled={editingKey !== null && editingKey !== config.name}
+                          >
+                            Lưu
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}

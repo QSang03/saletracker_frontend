@@ -12,6 +12,7 @@ import { OrderDetail } from "@/types";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useOrders } from "@/hooks/useOrders";
 import type { OrderFilters } from "@/hooks/useOrders";
+import { useAnalysisBlock } from "@/hooks/useAnalysisBlock";
 import PaginatedTable, {
   Filters,
 } from "@/components/ui/pagination/PaginatedTable";
@@ -35,27 +36,26 @@ const calculateDynamicExtended = (
   originalExtended: number | undefined
 ): number | string => {
   if (!createdAt || !originalExtended) return "--";
-  
+
   try {
-    const createdDate = typeof createdAt === "string" 
-      ? new Date(createdAt) 
-      : createdAt;
-    
+    const createdDate =
+      typeof createdAt === "string" ? new Date(createdAt) : createdAt;
+
     if (isNaN(createdDate.getTime())) return "--";
-    
+
     // Ngày hết hạn = ngày tạo + extended (theo ngày thực tế)
     const expiredDate = new Date(createdDate);
     expiredDate.setHours(0, 0, 0, 0);
     expiredDate.setDate(expiredDate.getDate() + originalExtended);
-    
+
     // Ngày hiện tại (bỏ giờ)
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    
+
     // Số ngày còn lại (có thể âm nếu đã hết hạn)
     const diffMs = expiredDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    
+
     return diffDays;
   } catch (error) {
     console.error("Error calculating dynamic extended:", error);
@@ -85,7 +85,14 @@ function ManagerOrderContent() {
     products: Array<{ value: number; label: string }>;
   }>({ departments: [], products: [] });
 
-  const { canExportInDepartment, user, isPM, isManager, isAnalysisRole, isAdmin } = useDynamicPermission();
+  const {
+    canExportInDepartment,
+    user,
+    isPM,
+    isManager,
+    isAnalysisRole,
+    isAdmin,
+  } = useDynamicPermission();
   const {
     orders,
     total,
@@ -114,7 +121,7 @@ function ManagerOrderContent() {
     bulkDeleteOrderDetails,
     bulkExtendOrderDetails,
     bulkAddNotesOrderDetails,
-  bulkHideOrderDetails,
+    bulkHideOrderDetails,
     addToBlacklist,
     isLoading,
     error,
@@ -127,6 +134,9 @@ function ManagerOrderContent() {
     canGoBack,
     isRestoring,
   } = useOrders();
+
+  // Analysis block hook
+  const { addAnalysisBlock } = useAnalysisBlock();
 
   // ✅ Helper functions để lưu và khôi phục vị trí
   const saveCurrentPosition = useCallback(() => {
@@ -143,7 +153,7 @@ function ManagerOrderContent() {
       if (preservedState.currentPage !== filters.page) {
         setPage(preservedState.currentPage);
       }
-      
+
       // Khôi phục scroll position sau khi data đã load
       setTimeout(() => {
         window.scrollTo(0, preservedState.scrollPosition);
@@ -177,42 +187,53 @@ function ManagerOrderContent() {
   // ✅ SỬA: Xác định xem user có phải là PM đơn thuần (không có manager)
   // User có cả PM và Manager thì xem như Manager, không phải PM
   const isPMUser = isPM && !isManager;
-  
+
   // 💡 Hiển thị số lượng khách hàng ở tiêu đề
   // PM users chỉ thấy số lượng khách hàng của chính họ
   // User có cả PM và Manager thì xem như Manager (không bị giới hạn)
   const customerCountFilters = useMemo(() => {
     // ✅ Tối ưu: Chỉ tạo object mới khi thực sự cần thiết
-    const isCountingSales = isInCustomerSearchMode || (filters.search && String(filters.search).trim() !== '');
-    
+    const isCountingSales =
+      isInCustomerSearchMode ||
+      (filters.search && String(filters.search).trim() !== "");
+
     return {
       fromDate: filters.dateRange?.start,
       toDate: filters.dateRange?.end,
-      employeeId: isPMUser 
-        ? user?.id 
-        : filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
-      departmentId: isPMUser 
+      employeeId: isPMUser
+        ? user?.id
+        : filters.employees
+        ? Number(filters.employees.split(",")[0])
+        : undefined,
+      departmentId: isPMUser
         ? undefined // PM user không cần department
-        : filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
+        : filters.departments
+        ? Number(filters.departments.split(",")[0])
+        : undefined,
       // Forward all filters from manager
       search: filters.search,
       status: filters.status,
       date: filters.date,
       dateRange: filters.dateRange,
       employee: filters.employee,
-      employees: isPMUser 
-        ? (user?.id ? String(user.id) : undefined)
+      employees: isPMUser
+        ? user?.id
+          ? String(user.id)
+          : undefined
         : filters.employees,
-      departments: isPMUser 
+      departments: isPMUser
         ? undefined // PM user không cần department
         : filters.departments,
       products: filters.products,
       warningLevel: filters.warningLevel,
-      quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
+      quantity:
+        typeof filters.quantity === "number"
+          ? String(filters.quantity)
+          : filters.quantity,
       // If we are in customer search mode (badge triggered by selecting a customer),
       // show countMode 'sale' to count sales instead of unique customers while customer filter is active.
       // If user is in customer-search mode or there is a customer search text, count sales instead of customers
-      countMode: isCountingSales ? 'sale' : 'customer',
+      countMode: isCountingSales ? "sale" : "customer",
     };
   }, [
     filters.dateRange?.start,
@@ -232,11 +253,17 @@ function ManagerOrderContent() {
     isInCustomerSearchMode, // ✅ Thêm dependency này
   ]);
 
-  const { count: customerCount, loading: customerCountLoading, error: customerCountError } = useCustomerCount(customerCountFilters);
+  const {
+    count: customerCount,
+    loading: customerCountLoading,
+    error: customerCountError,
+  } = useCustomerCount(customerCountFilters);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   // Badge label depends on whether we're counting sales (sale) or customers
-  const isCountingSales = isInCustomerSearchMode || (filters.search && String(filters.search).trim() !== '');
-  const customerCountLabel = isCountingSales ? 'nhân viên' : 'khách hàng';
+  const isCountingSales =
+    isInCustomerSearchMode ||
+    (filters.search && String(filters.search).trim() !== "");
+  const customerCountLabel = isCountingSales ? "nhân viên" : "khách hàng";
   // Toggle: admin may include hidden items when exporting
   const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
 
@@ -266,8 +293,12 @@ function ManagerOrderContent() {
     if (isPMUser) {
       return [];
     }
-    
-    if (!filters.departments || typeof filters.departments !== 'string' || filters.departments === "") {
+
+    if (
+      !filters.departments ||
+      typeof filters.departments !== "string" ||
+      filters.departments === ""
+    ) {
       return allEmployeeOptions; // Nếu không chọn department nào, hiển thị tất cả
     }
 
@@ -281,7 +312,9 @@ function ManagerOrderContent() {
 
     // Lọc employees theo departments đã chọn
     const filtered = filterOptions.departments
-  .filter((dept) => dept && selectedDepartmentIds.includes(String(dept.value)))
+      .filter(
+        (dept) => dept && selectedDepartmentIds.includes(String(dept.value))
+      )
       .reduce((acc, dept) => {
         dept.users.forEach((user) => {
           if (!acc.find((emp) => emp.value === user.value.toString())) {
@@ -292,18 +325,30 @@ function ManagerOrderContent() {
       }, [] as { label: string; value: string }[]);
 
     return filtered;
-  }, [filters.departments, filterOptions.departments, allEmployeeOptions, isPMUser]);
+  }, [
+    filters.departments,
+    filterOptions.departments,
+    allEmployeeOptions,
+    isPMUser,
+  ]);
 
   // Dynamic department options: when employees are selected, only include departments that contain those employees (like blacklist behavior)
   const departmentOptions = useMemo(() => {
     if (isPMUser) return [];
-    const all = filterOptions.departments.map((d) => ({ label: d.label, value: d.value.toString(), users: d.users }));
-    if (!filters.employees || filters.employees.trim() === '') {
+    const all = filterOptions.departments.map((d) => ({
+      label: d.label,
+      value: d.value.toString(),
+      users: d.users,
+    }));
+    if (!filters.employees || filters.employees.trim() === "") {
       return all.map(({ label, value }) => ({ label, value }));
     }
-    const selectedEmployeeIds = filters.employees.split(',').filter((e) => e);
-    if (selectedEmployeeIds.length === 0) return all.map(({ label, value }) => ({ label, value }));
-    const subset = all.filter((dept) => dept.users.some((u) => selectedEmployeeIds.includes(String(u.value))));
+    const selectedEmployeeIds = filters.employees.split(",").filter((e) => e);
+    if (selectedEmployeeIds.length === 0)
+      return all.map(({ label, value }) => ({ label, value }));
+    const subset = all.filter((dept) =>
+      dept.users.some((u) => selectedEmployeeIds.includes(String(u.value)))
+    );
     return subset.map(({ label, value }) => ({ label, value }));
   }, [isPMUser, filterOptions.departments, filters.employees]);
 
@@ -395,7 +440,10 @@ function ManagerOrderContent() {
 
       // Handle conversation type (group/personal)
       let conversationTypeValue = "";
-      if (Array.isArray(paginatedFilters.conversationType) && paginatedFilters.conversationType.length > 0) {
+      if (
+        Array.isArray(paginatedFilters.conversationType) &&
+        paginatedFilters.conversationType.length > 0
+      ) {
         conversationTypeValue = paginatedFilters.conversationType.join(",");
       }
 
@@ -414,9 +462,9 @@ function ManagerOrderContent() {
         employees: employeesValue,
         departments: departmentsValue,
         products: productsValue,
-  quantity: quantityValue,
+        quantity: quantityValue,
         warningLevel: warningLevelValue,
-  conversationType: conversationTypeValue,
+        conversationType: conversationTypeValue,
         productCode: productCodeValue,
         page: shouldResetPage ? 1 : filters.page,
       };
@@ -460,7 +508,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         await updateOrderDetail(Number(orderDetail.id), {
           status: data.status,
           unit_price: data.unit_price,
@@ -490,7 +538,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         await deleteOrderDetail(Number(orderDetail.id), reason);
         setAlert({ type: "success", message: "Xóa order detail thành công!" });
         refetch();
@@ -499,7 +547,7 @@ function ManagerOrderContent() {
         setAlert({ type: "error", message: "Lỗi khi xóa order detail!" });
       }
     },
-  [deleteOrderDetail, refetch, saveCurrentPosition]
+    [deleteOrderDetail, refetch, saveCurrentPosition]
   ); // ✅ Thay đổi dependency
 
   // ✅ Handle delete product code
@@ -508,45 +556,68 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         const token = getAccessToken();
         if (!token) {
-          throw new Error('No access token');
+          throw new Error("No access token");
         }
 
-        console.log('🔑 Token type:', typeof token, 'Token length:', token?.length);
-        console.log('🗑️ Xóa mã sản phẩm khỏi đơn hàng:', orderDetail.id, 'Lý do:', reason);
+        console.log(
+          "🔑 Token type:",
+          typeof token,
+          "Token length:",
+          token?.length
+        );
+        console.log(
+          "🗑️ Xóa mã sản phẩm khỏi đơn hàng:",
+          orderDetail.id,
+          "Lý do:",
+          reason
+        );
 
         // Sử dụng endpoint PUT để update order detail
         const requestBody = {
           product_id: null, // Xóa mã sản phẩm bằng cách set product_id = null
         };
-        
-        console.log('📤 Request URL:', `${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`);
-        console.log('📤 Request body:', requestBody);
-        console.log('📤 Authorization header:', `Bearer ${token?.substring(0, 20)}...`);
-        
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(requestBody),
-        });
+
+        console.log(
+          "📤 Request URL:",
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`
+        );
+        console.log("📤 Request body:", requestBody);
+        console.log(
+          "📤 Authorization header:",
+          `Bearer ${token?.substring(0, 20)}...`
+        );
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(requestBody),
+          }
+        );
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('API Error:', response.status, errorText);
+          console.error("API Error:", response.status, errorText);
           throw new Error(`Failed to delete product code: ${response.status}`);
         }
 
-        console.log('✅ Xóa mã sản phẩm thành công');
+        console.log("✅ Xóa mã sản phẩm thành công");
         setAlert({ type: "success", message: "Xóa mã sản phẩm thành công!" });
         refetch();
       } catch (err) {
         console.error("Error deleting product code:", err);
-        setAlert({ type: "error", message: "Có lỗi khi xóa mã sản phẩm. Vui lòng thử lại hoặc liên hệ quản trị viên." });
+        setAlert({
+          type: "error",
+          message:
+            "Có lỗi khi xóa mã sản phẩm. Vui lòng thử lại hoặc liên hệ quản trị viên.",
+        });
       }
     },
     [refetch, saveCurrentPosition]
@@ -558,7 +629,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkDeleteOrderDetails(ids, reason);
         setAlert({
@@ -580,12 +651,12 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         // Lọc ra những đơn hàng chi tiết hợp lệ để gia hạn
         const validOrders = orderDetails.filter(
           (order) => order.status !== "completed" && order.status !== "demand"
         );
-        
+
         const invalidOrders = orderDetails.filter(
           (order) => order.status === "completed" || order.status === "demand"
         );
@@ -594,13 +665,15 @@ function ManagerOrderContent() {
         if (validOrders.length > 0) {
           const validIds = validOrders.map((od) => Number(od.id));
           await bulkExtendOrderDetails(validIds);
-          
+
           let message = `Đã gia hạn ${validOrders.length} đơn hàng chi tiết thành công!`;
           if (invalidOrders.length > 0) {
-            const invalidIds = invalidOrders.map((order) => order.id).join(", ");
+            const invalidIds = invalidOrders
+              .map((order) => order.id)
+              .join(", ");
             message += ` (Bỏ qua ${invalidOrders.length} đơn có trạng thái "Đã chốt" hoặc "Nhu cầu": ${invalidIds})`;
           }
-          
+
           setAlert({
             type: "success",
             message: message,
@@ -614,7 +687,10 @@ function ManagerOrderContent() {
         }
       } catch (err) {
         console.error("Error bulk extending order details:", err);
-        setAlert({ type: "error", message: "Lỗi khi gia hạn nhiều đơn hàng chi tiết!" });
+        setAlert({
+          type: "error",
+          message: "Lỗi khi gia hạn nhiều đơn hàng chi tiết!",
+        });
       }
     },
     [bulkExtendOrderDetails, refetch, saveCurrentPosition]
@@ -626,7 +702,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkAddNotesOrderDetails(ids, notes);
         setAlert({
@@ -651,7 +727,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         await updateOrderDetailCustomerName(
           Number(orderDetail.id),
           newCustomerName,
@@ -679,7 +755,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         await addToBlacklist(Number(orderDetail.id), reason);
         setAlert({
           type: "success",
@@ -694,13 +770,63 @@ function ManagerOrderContent() {
     [addToBlacklist, refetch, saveCurrentPosition]
   );
 
+  // ✅ Handle analysis block
+  const handleAnalysisBlock = useCallback(
+    async (
+      orderDetail: OrderDetail,
+      data: { reason?: string; blockType: "analysis" | "reporting" | "stats" }
+    ) => {
+      try {
+        // Extract customer ID from metadata
+        let customerId: string | null = null;
+        if (orderDetail.metadata) {
+          try {
+            if (typeof orderDetail.metadata === "string") {
+              const parsed = JSON.parse(orderDetail.metadata);
+              customerId = parsed.customer_id || null;
+            } else if (typeof orderDetail.metadata === "object") {
+              customerId = orderDetail.metadata.customer_id || null;
+            }
+          } catch (error) {
+            console.error("Error parsing metadata:", error);
+          }
+        }
+
+        if (!customerId) {
+          throw new Error("Không tìm thấy Customer ID trong metadata");
+        }
+
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+
+        await addAnalysisBlock({
+          zaloContactId: customerId,
+          reason: data.reason,
+          blockType: data.blockType,
+        });
+
+        setAlert({
+          type: "success",
+          message: `Đã chặn phân tích thành công! (${data.blockType})`,
+        });
+        refetch();
+      } catch (err: any) {
+        console.error("Error adding analysis block:", err);
+        const errorMessage = err.message || "Lỗi khi chặn phân tích!";
+        setAlert({ type: "error", message: errorMessage });
+        throw err; // Re-throw để modal không đóng
+      }
+    },
+    [addAnalysisBlock, refetch, saveCurrentPosition]
+  );
+
   // ✅ Handle hide (single)
   const handleHide = useCallback(
     async (orderDetail: OrderDetail, reason: string) => {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         await bulkHideOrderDetails([Number(orderDetail.id)], reason);
         setAlert({ type: "success", message: "Đã ẩn đơn hàng thành công!" });
         refetch();
@@ -718,7 +844,7 @@ function ManagerOrderContent() {
       try {
         // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
         saveCurrentPosition();
-        
+
         const ids = orderDetails.map((od) => Number(od.id));
         await bulkHideOrderDetails(ids, reason);
         setAlert({
@@ -749,29 +875,42 @@ function ManagerOrderContent() {
     if (filters.dateRange && filters.dateRange.start && filters.dateRange.end) {
       params.append(
         "dateRange",
-        JSON.stringify({ start: filters.dateRange.start, end: filters.dateRange.end })
+        JSON.stringify({
+          start: filters.dateRange.start,
+          end: filters.dateRange.end,
+        })
       );
     }
-  if (typeof filters.quantity === "number") params.append("quantity", String(filters.quantity));
-  // Admin or PM can include hidden items when exporting all
-  if ((isAdmin || isPMUser) && includeHiddenExport) params.append("includeHidden", "1");
-    
+    if (typeof filters.quantity === "number")
+      params.append("quantity", String(filters.quantity));
+    // Admin or PM can include hidden items when exporting all
+    if ((isAdmin || isPMUser) && includeHiddenExport)
+      params.append("includeHidden", "1");
+
     // Nếu user là PM đơn thuần, chỉ export đơn hàng của chính họ (giống như user thường)
     if (isPMUser) {
       if (user?.id) params.append("employees", String(user.id));
       // Không set departments để backend filter theo user hiện tại
     } else {
       // User có cả PM và Manager thì xem như Manager (có thể export tất cả)
-      if (filters.employee?.trim()) params.append("employee", filters.employee.trim());
-      if (filters.employees?.trim()) params.append("employees", filters.employees.trim());
-      if (filters.departments?.trim()) params.append("departments", filters.departments.trim());
+      if (filters.employee?.trim())
+        params.append("employee", filters.employee.trim());
+      if (filters.employees?.trim())
+        params.append("employees", filters.employees.trim());
+      if (filters.departments?.trim())
+        params.append("departments", filters.departments.trim());
     }
-    if (filters.products?.trim()) params.append("products", filters.products.trim());
-    if (filters.warningLevel?.trim()) params.append("warningLevel", filters.warningLevel.trim());
-  if (filters.conversationType?.trim()) params.append("conversationType", filters.conversationType.trim());
-    if (filters.productCode?.trim()) params.append("productCode", filters.productCode.trim());
+    if (filters.products?.trim())
+      params.append("products", filters.products.trim());
+    if (filters.warningLevel?.trim())
+      params.append("warningLevel", filters.warningLevel.trim());
+    if (filters.conversationType?.trim())
+      params.append("conversationType", filters.conversationType.trim());
+    if (filters.productCode?.trim())
+      params.append("productCode", filters.productCode.trim());
     if (filters.sortField) params.append("sortField", filters.sortField);
-    if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
+    if (filters.sortDirection)
+      params.append("sortDirection", filters.sortDirection);
 
     const token = getAccessToken();
     const res = await fetch(
@@ -785,7 +924,8 @@ function ManagerOrderContent() {
       }
     );
 
-    if (!res.ok) throw new Error(`Failed to fetch all orders for export: ${res.status}`);
+    if (!res.ok)
+      throw new Error(`Failed to fetch all orders for export: ${res.status}`);
     const result = await res.json();
     const list: OrderDetail[] = Array.isArray(result)
       ? result
@@ -857,23 +997,23 @@ function ManagerOrderContent() {
   const handleSearch = useCallback(
     async (searchTerm: string) => {
       if (!searchTerm || !searchTerm.trim()) return;
-      
+
       // ✅ Tạo search term với exact match cho customer name
       // Sử dụng dấu ngoặc kép để backend có thể hiểu đây là exact match
       const exactSearchTerm = `"${searchTerm.trim()}"`;
-      
+
       // ✅ Tạo filters mới với search term exact match
       const newFilters = {
         ...filters,
         search: exactSearchTerm,
-        page: 1
+        page: 1,
       };
-      
+
       // ✅ Sử dụng flushSync để đảm bảo state được cập nhật ngay lập tức - giống PmTransactionManagement
       flushSync(() => {
         setFilters(newFilters);
       });
-      
+
       // ✅ Trigger fetch data ngay lập tức - giống PmTransactionManagement
       try {
         await refetch();
@@ -892,7 +1032,13 @@ function ManagerOrderContent() {
   // ✅ Handle sort từ OrderManagement
   const handleSort = useCallback(
     (
-      field: "quantity" | "unit_price" | "created_at" | "conversation_start" | "conversation_end" | null,
+      field:
+        | "quantity"
+        | "unit_price"
+        | "created_at"
+        | "conversation_start"
+        | "conversation_end"
+        | null,
       direction: "asc" | "desc" | null
     ) => {
       // ✅ Batch update tất cả cùng lúc
@@ -922,7 +1068,11 @@ function ManagerOrderContent() {
   // ✅ Clear employees when departments change - CHỈ khi thực sự cần thiết
   useEffect(() => {
     // Chỉ xử lý khi có cả departments và employees, và filterOptions đã load xong
-    if (filters.departments && filters.employees && filterOptions.departments.length > 0) {
+    if (
+      filters.departments &&
+      filters.employees &&
+      filterOptions.departments.length > 0
+    ) {
       const selectedDepartmentIds = filters.departments
         .split(",")
         .filter((d) => d);
@@ -947,11 +1097,16 @@ function ManagerOrderContent() {
         );
 
         // CHỈ cập nhật khi có employees không hợp lệ VÀ số lượng khác biệt đáng kể
-        if (validSelectedEmployees.length !== selectedEmployeeIds.length && 
-            validSelectedEmployees.length > 0) {
+        if (
+          validSelectedEmployees.length !== selectedEmployeeIds.length &&
+          validSelectedEmployees.length > 0
+        ) {
           // Có employees không hợp lệ, cần cập nhật
           setEmployees(validSelectedEmployees.join(","));
-        } else if (validSelectedEmployees.length === 0 && selectedEmployeeIds.length > 0) {
+        } else if (
+          validSelectedEmployees.length === 0 &&
+          selectedEmployeeIds.length > 0
+        ) {
           // Nếu không có employees hợp lệ nào, chỉ xóa khi departments thực sự thay đổi
           // Không tự động xóa để tránh mất bộ lọc khi F5
         }
@@ -1015,18 +1170,20 @@ function ManagerOrderContent() {
 
     const result = {
       search: filters.search || "",
-      departments: isPMUser 
+      departments: isPMUser
         ? [] // PM đơn thuần không cần filter theo department
         : filters.departments
         ? filters.departments.split(",").filter((d) => d)
         : [],
       roles: [],
-      statuses: filters.status ? [filters.status] : [],
+      statuses: filters.status 
+        ? filters.status.split(",").filter((s) => s.trim())
+        : [],
       categories: filters.products
         ? filters.products.split(",").filter((p) => p)
         : [], // Products
       brands: [], // Không sử dụng brands nữa
-  warningLevels: parsedWarningLevels, // Mức độ cảnh báo (values)
+      warningLevels: parsedWarningLevels, // Mức độ cảnh báo (values)
       dateRange:
         filters.dateRange && filters.dateRange.start && filters.dateRange.end
           ? {
@@ -1036,10 +1193,14 @@ function ManagerOrderContent() {
           : { from: undefined, to: undefined },
       singleDate: filters.date ? new Date(filters.date) : undefined,
       quantity: filters.quantity || 1, // Thêm quantity filter
-  conversationType: filters.conversationType ? filters.conversationType.split(',').filter(Boolean) : [],
+      conversationType: filters.conversationType
+        ? filters.conversationType.split(",").filter(Boolean)
+        : [],
       productCode: filters.productCode || "", // Thêm productCode filter
       employees: isPMUser
-        ? user?.id ? [String(user.id)] : [] // PM đơn thuần chỉ hiển thị đơn hàng của chính họ
+        ? user?.id
+          ? [String(user.id)]
+          : [] // PM đơn thuần chỉ hiển thị đơn hàng của chính họ
         : filters.employees
         ? filters.employees.split(",").filter((e) => e)
         : [],
@@ -1055,11 +1216,11 @@ function ManagerOrderContent() {
     filters.dateRange?.start,
     filters.dateRange?.end,
     filters.date,
-  filters.conversationType,
+    filters.conversationType,
     filters.quantity,
     filters.productCode,
     filters.employees,
-  filters.warningLevel,
+    filters.warningLevel,
     isPMUser,
     user?.id,
   ]);
@@ -1089,8 +1250,14 @@ function ManagerOrderContent() {
             <div className="text-sm text-gray-500">
               {isPM && !isAnalysisRole ? (
                 <div>
-                  <p>PM cần có role <strong>analysis</strong> để truy cập trang này.</p>
-                  <p>Hoặc cần có role <strong>manager</strong> để xem như quản lý.</p>
+                  <p>
+                    PM cần có role <strong>analysis</strong> để truy cập trang
+                    này.
+                  </p>
+                  <p>
+                    Hoặc cần có role <strong>manager</strong> để xem như quản
+                    lý.
+                  </p>
                 </div>
               ) : (
                 <p>Vui lòng liên hệ quản trị viên để được cấp quyền.</p>
@@ -1143,19 +1310,23 @@ function ManagerOrderContent() {
           <CardTitle className="text-xl font-bold flex items-center gap-2">
             📦 Quản lý đơn hàng
             {/* Badge số khách hàng */}
-      {customerCountLoading ? (
-              <span className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full animate-pulse">Đang tải...</span>
-            ) : typeof customerCount === 'number' ? (
+            {customerCountLoading ? (
+              <span className="ml-2 px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded-full animate-pulse">
+                Đang tải...
+              </span>
+            ) : typeof customerCount === "number" ? (
               <button
                 type="button"
                 className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full hover:from-blue-600 hover:to-purple-700 transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 font-semibold cursor-pointer"
                 title="Xem danh sách khách hàng"
                 onClick={() => setCustomerDialogOpen(true)}
               >
-        👥 {customerCount.toLocaleString()} {customerCountLabel}
+                👥 {customerCount.toLocaleString()} {customerCountLabel}
               </button>
             ) : customerCountError ? (
-              <span className="ml-2 px-2 py-1 text-xs bg-red-200 text-red-600 rounded-full">Lỗi tải dữ liệu</span>
+              <span className="ml-2 px-2 py-1 text-xs bg-red-200 text-red-600 rounded-full">
+                Lỗi tải dữ liệu
+              </span>
             ) : null}
           </CardTitle>
           <div className="flex gap-2 flex-wrap">
@@ -1222,7 +1393,9 @@ function ManagerOrderContent() {
                       <Switch
                         aria-label="Bao gồm đơn ẩn"
                         checked={includeHiddenExport}
-                        onCheckedChange={(v: any) => setIncludeHiddenExport(Boolean(v))}
+                        onCheckedChange={(v: any) =>
+                          setIncludeHiddenExport(Boolean(v))
+                        }
                       />
                       <div className="text-sm">Bao gồm đơn ẩn</div>
                     </div>
@@ -1248,7 +1421,10 @@ function ManagerOrderContent() {
                 data: orders.map((orderDetail, idx) => [
                   idx + 1,
                   orderDetail.id ?? "--",
-                  calculateDynamicExtended(orderDetail.created_at, orderDetail.extended),
+                  calculateDynamicExtended(
+                    orderDetail.created_at,
+                    orderDetail.extended
+                  ),
                   orderDetail.created_at
                     ? (() => {
                         const d =
@@ -1280,7 +1456,8 @@ function ManagerOrderContent() {
                   orderDetail.raw_item || "--",
                   orderDetail.quantity ?? "--",
                   orderDetail.unit_price
-                    ? Number(orderDetail.unit_price).toLocaleString("vi-VN") + "₫"
+                    ? Number(orderDetail.unit_price).toLocaleString("vi-VN") +
+                      "₫"
                     : "--",
                   (() => {
                     switch (orderDetail.status) {
@@ -1305,7 +1482,6 @@ function ManagerOrderContent() {
             }}
             getExportAllData={getExportAllData}
             initialFilters={memoizedInitialFilters}
-            
           >
             <OrderManagement
               orders={orders}
@@ -1317,6 +1493,7 @@ function ManagerOrderContent() {
               onDeleteProductCode={handleDeleteProductCode}
               onEditCustomerName={handleEditCustomerName}
               onAddToBlacklist={handleAddToBlacklist}
+              onAnalysisBlock={handleAnalysisBlock}
               onBulkDelete={handleBulkDelete}
               onBulkExtend={handleBulkExtend}
               onBulkNotes={handleBulkNotes}
@@ -1343,33 +1520,42 @@ function ManagerOrderContent() {
       )}
 
       {/* Dialog danh sách khách hàng */}
-    <CustomerListDialog
+      <CustomerListDialog
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
         filters={{
-      fromDate: filters.dateRange?.start,
-      toDate: filters.dateRange?.end,
-      employeeId: isPMUser 
-        ? user?.id 
-        : filters.employees ? Number(filters.employees.split(',')[0]) : undefined,
-      departmentId: isPMUser 
-        ? undefined // PM user không cần department
-        : filters.departments ? Number(filters.departments.split(',')[0]) : undefined,
-      // Forward all manager filters so list matches
-      search: filters.search,
-      status: filters.status,
-      date: filters.date,
-      dateRange: filters.dateRange,
-      employee: filters.employee,
-      employees: isPMUser 
-        ? (user?.id ? String(user.id) : undefined)
-        : filters.employees,
-      departments: isPMUser 
-        ? undefined // PM user không cần department
-        : filters.departments,
-      products: filters.products,
-      warningLevel: filters.warningLevel,
-      quantity: typeof filters.quantity === 'number' ? String(filters.quantity) : filters.quantity,
+          fromDate: filters.dateRange?.start,
+          toDate: filters.dateRange?.end,
+          employeeId: isPMUser
+            ? user?.id
+            : filters.employees
+            ? Number(filters.employees.split(",")[0])
+            : undefined,
+          departmentId: isPMUser
+            ? undefined // PM user không cần department
+            : filters.departments
+            ? Number(filters.departments.split(",")[0])
+            : undefined,
+          // Forward all manager filters so list matches
+          search: filters.search,
+          status: filters.status,
+          date: filters.date,
+          dateRange: filters.dateRange,
+          employee: filters.employee,
+          employees: isPMUser
+            ? user?.id
+              ? String(user.id)
+              : undefined
+            : filters.employees,
+          departments: isPMUser
+            ? undefined // PM user không cần department
+            : filters.departments,
+          products: filters.products,
+          warningLevel: filters.warningLevel,
+          quantity:
+            typeof filters.quantity === "number"
+              ? String(filters.quantity)
+              : filters.quantity,
         }}
         onSelectCustomer={(payload) => {
           // Close dialog
@@ -1389,7 +1575,11 @@ function ManagerOrderContent() {
             mergedBase.departments = af.departments ?? undefined;
             mergedBase.products = af.products ?? undefined;
             mergedBase.warningLevel = af.warningLevel ?? undefined;
-            if (af.quantity !== undefined) mergedBase.quantity = typeof af.quantity === 'string' ? Number(af.quantity) : af.quantity;
+            if (af.quantity !== undefined)
+              mergedBase.quantity =
+                typeof af.quantity === "string"
+                  ? Number(af.quantity)
+                  : af.quantity;
           }
 
           // Ensure sale is represented in employees (CSV of ids) so the select shows it as selected

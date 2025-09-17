@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const MASTER_KEY = process.env.NEXT_PUBLIC_MASTER_KEY || 'nkcai';
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    
     // Get authorization header from the incoming request
     const authHeader = request.headers.get('authorization');
     
+    // Get form data from the request
+    const formData = await request.formData();
+    
+    // Forward the request to backend
     const response = await fetch(`${API_BASE_URL}/auto-greeting/import-customers`, {
       method: 'POST',
       headers: {
+        'X-Master-Key': MASTER_KEY,
         ...(authHeader && { 'Authorization': authHeader }),
       },
       body: formData,

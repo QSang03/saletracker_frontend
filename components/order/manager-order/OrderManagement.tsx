@@ -50,12 +50,14 @@ import {
   Hash,
   User,
   X,
+  BarChart3,
 } from "lucide-react";
 import EditOrderDetailModal from "./EditOrderDetailModal";
 import DeleteOrderDetailModal from "./DeleteOrderDetailModal";
 import DeleteProductCodeModal from "./DeleteProductCodeModal";
 import EditCustomerNameModal from "./EditCustomerNameModal";
 import AddToBlacklistModal from "./AddToBlacklistModal";
+import AnalysisBlockModal from "./AnalysisBlockModal";
 import BulkActions from "./BulkActions";
 import BulkDeleteModal from "./BulkDeleteModal";
 import BulkExtendModal from "./BulkExtendModal";
@@ -84,6 +86,7 @@ interface OrderManagementProps {
   onBulkExtend?: (orderDetails: OrderDetail[]) => void;
   onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
   onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
+  onAnalysisBlock?: (orderDetail: OrderDetail, data: { reason?: string; blockType: 'analysis' | 'reporting' | 'stats' }) => Promise<void>;
   onBulkHide?: (orderDetails: OrderDetail[], reason: string) => void;
   onHide?: (orderDetail: OrderDetail, reason: string) => void;
   onSearch?: (searchTerm: string) => void;
@@ -240,6 +243,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onBulkExtend,
   onBulkNotes,
   onAddToBlacklist,
+  onAnalysisBlock,
   onBulkHide,
   onHide,
   onSearch,
@@ -330,6 +334,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [addingToBlacklist, setAddingToBlacklist] =
     useState<OrderDetail | null>(null);
   const [isAddToBlacklistModalOpen, setIsAddToBlacklistModalOpen] =
+    useState(false);
+
+  // Analysis block states
+  const [analysisBlockDetail, setAnalysisBlockDetail] =
+    useState<OrderDetail | null>(null);
+  const [isAnalysisBlockModalOpen, setIsAnalysisBlockModalOpen] =
     useState(false);
 
   // Bulk selection states
@@ -556,6 +566,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       isViewModalOpen ||
       isEditCustomerNameModalOpen ||
       isAddToBlacklistModalOpen ||
+      isAnalysisBlockModalOpen ||
       isBulkDeleteModalOpen ||
       isBulkExtendModalOpen ||
       isBulkNotesModalOpen ||
@@ -570,6 +581,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     isViewModalOpen,
     isEditCustomerNameModalOpen,
     isAddToBlacklistModalOpen,
+    isAnalysisBlockModalOpen,
     isBulkDeleteModalOpen,
     isBulkExtendModalOpen,
     isBulkNotesModalOpen,
@@ -889,6 +901,31 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleAddToBlacklistCancel = () => {
     withSkipClear(() => setIsAddToBlacklistModalOpen(false));
     setAddingToBlacklist(null);
+  };
+
+  // Analysis block handlers
+  const handleAnalysisBlockClick = (orderDetail: OrderDetail) => {
+    setFocusSafely(orderDetail.id);
+    setAnalysisBlockDetail(orderDetail);
+    setIsAnalysisBlockModalOpen(true);
+  };
+
+  const handleAnalysisBlockConfirm = async (data: { reason?: string; blockType: 'analysis' | 'reporting' | 'stats' }) => {
+    if (analysisBlockDetail && onAnalysisBlock) {
+      try {
+        await onAnalysisBlock(analysisBlockDetail, data);
+        withSkipClear(() => setIsAnalysisBlockModalOpen(false));
+        setAnalysisBlockDetail(null);
+      } catch (error) {
+        console.error('Error in analysis block confirmation:', error);
+        // Don't close modal on error
+      }
+    }
+  };
+
+  const handleAnalysisBlockCancel = () => {
+    withSkipClear(() => setIsAnalysisBlockModalOpen(false));
+    setAnalysisBlockDetail(null);
   };
 
   // Data được sort từ backend, không cần sort ở frontend nữa
@@ -1896,13 +1933,31 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                       </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p>
-                                        {owner
-                                          ? "Thêm vào blacklist"
-                                          : "Chỉ chủ sở hữu đơn hàng mới được thao tác"}
-                                      </p>
+                                      {owner
+                                        ? "Thêm vào blacklist"
+                                        : "Chỉ chủ sở hữu được thao tác"}
                                     </TooltipContent>
                                   </Tooltip>
+
+                                  {/* Analysis Block Button - Chỉ hiển thị cho Admin */}
+                                  {currentUser?.roles?.some(role => role.name === 'admin') && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          onClick={() => handleAnalysisBlockClick(orderDetail)}
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 w-7 p-0 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 transition-colors"
+                                          title="Chặn phân tích (Chỉ Admin)"
+                                        >
+                                          <BarChart3 className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        Chặn phân tích (Chỉ Admin)
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
                                 </POrderDynamic>
                               </div>
                             </TableCell>
@@ -3407,6 +3462,15 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         isOpen={isAddToBlacklistModalOpen}
         onClose={handleAddToBlacklistCancel}
         onConfirm={handleAddToBlacklistConfirm}
+        loading={loading}
+      />
+
+      {/* Analysis Block modal */}
+      <AnalysisBlockModal
+        orderDetail={analysisBlockDetail}
+        isOpen={isAnalysisBlockModalOpen}
+        onClose={handleAnalysisBlockCancel}
+        onConfirm={handleAnalysisBlockConfirm}
         loading={loading}
       />
 
