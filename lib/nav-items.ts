@@ -64,7 +64,7 @@ export const navItems = [
     icon: "UserCircle",
     items: [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
-      // { title: "Cấu hình khách hàng", url: "/dashboard/auto-greeting", roles: ["admin", "manager", "view", "PM"] },
+      { title: "Cấu hình khách hàng", url: "/dashboard/auto-greeting", roles: ["admin", "manager", "view", "PM"] },
       { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
     ],
   },

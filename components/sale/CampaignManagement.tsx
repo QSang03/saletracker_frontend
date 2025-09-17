@@ -374,7 +374,7 @@ const CampaignRow = React.memo(
     );
 
     const canDeleteCampaign = useMemo(
-      () => canDelete && campaign.status === CampaignStatus.DRAFT,
+      () => canDelete && (campaign.status === CampaignStatus.DRAFT || campaign.status === CampaignStatus.PAUSED),
       [canDelete, campaign.status]
     );
 
@@ -991,8 +991,8 @@ export default function CampaignManagement({
           toast.error("Bạn không có quyền xóa chiến dịch");
           return;
         }
-        if (payload.status !== CampaignStatus.DRAFT) {
-          toast.error("Chỉ có thể xóa chiến dịch ở trạng thái bản nháp");
+        if (payload.status !== CampaignStatus.DRAFT && payload.status !== CampaignStatus.PAUSED) {
+          toast.error("Chỉ có thể xóa chiến dịch ở trạng thái bản nháp hoặc tạm dừng");
           return;
         }
       }
@@ -1129,8 +1129,17 @@ export default function CampaignManagement({
           }
 
           case "delete": {
-            await campaignAPI.delete(payload.id);
-            toast.success("Đã xóa chiến dịch");
+            try {
+              await campaignAPI.delete(payload.id);
+              toast.success("Đã xóa chiến dịch");
+            } catch (error: any) {
+              console.error("Error deleting campaign:", error);
+              const errorMessage =
+                error?.response?.data?.message ||
+                "Có lỗi xảy ra khi xóa chiến dịch";
+              toast.error(errorMessage);
+              return;
+            }
             break;
           }
 

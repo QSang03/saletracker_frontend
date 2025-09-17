@@ -45,6 +45,7 @@ export default function AutoGreetingPage() {
   const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [conversationTypeFilter, setConversationTypeFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -58,6 +59,7 @@ export default function AutoGreetingPage() {
         const filters = JSON.parse(savedFilters);
         if (filters.searchTerm) setSearchTerm(filters.searchTerm);
         if (filters.statusFilter) setStatusFilter(filters.statusFilter);
+        if (filters.conversationTypeFilter) setConversationTypeFilter(filters.conversationTypeFilter);
         if (filters.dateFilter) setDateFilter(filters.dateFilter);
         if (filters.itemsPerPage) setItemsPerPage(filters.itemsPerPage);
       } catch (error) {
@@ -75,6 +77,7 @@ export default function AutoGreetingPage() {
     // Only save non-empty values
     if (searchTerm.trim()) filters.searchTerm = searchTerm;
     if (statusFilter && statusFilter !== "all") filters.statusFilter = statusFilter;
+    if (conversationTypeFilter && conversationTypeFilter !== "all") filters.conversationTypeFilter = conversationTypeFilter;
     if (dateFilter) filters.dateFilter = dateFilter;
     if (itemsPerPage && itemsPerPage !== 10) filters.itemsPerPage = itemsPerPage;
     
@@ -85,7 +88,7 @@ export default function AutoGreetingPage() {
       // Remove from localStorage if no filters are set
       localStorage.removeItem('auto-greeting-filters');
     }
-  }, [searchTerm, statusFilter, dateFilter, itemsPerPage]);
+  }, [searchTerm, statusFilter, conversationTypeFilter, dateFilter, itemsPerPage]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -117,6 +120,11 @@ export default function AutoGreetingPage() {
       filtered = filtered.filter((customer) => customer.customerStatus === statusFilter);
     }
 
+    // Conversation type filter
+    if (conversationTypeFilter !== "all") {
+      filtered = filtered.filter((customer) => customer.conversationType === conversationTypeFilter);
+    }
+
     // Date filter
     if (dateFilter) {
       const filterDate = new Date(dateFilter);
@@ -131,7 +139,7 @@ export default function AutoGreetingPage() {
 
     setFilteredCustomers(filtered);
     setCurrentPage(1); // Reset to first page when filters change
-  }, [customers, searchTerm, statusFilter, dateFilter]);
+  }, [customers, searchTerm, statusFilter, conversationTypeFilter, dateFilter]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
@@ -151,6 +159,7 @@ export default function AutoGreetingPage() {
   const clearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
+    setConversationTypeFilter("all");
     setDateFilter("");
     setCurrentPage(1);
     // Clear from localStorage when user explicitly clears filters
@@ -209,6 +218,7 @@ export default function AutoGreetingPage() {
         body: JSON.stringify({
           searchTerm,
           statusFilter,
+          conversationTypeFilter,
           dateFilter
         }),
       });
@@ -338,6 +348,16 @@ export default function AutoGreetingPage() {
               <SelectItem value="urgent">Cần báo gấp</SelectItem>
               <SelectItem value="reminder">Cần nhắc nhở</SelectItem>
               <SelectItem value="normal">Bình thường</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={conversationTypeFilter} onValueChange={setConversationTypeFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Chọn loại hội thoại" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả loại</SelectItem>
+              <SelectItem value="group">Nhóm</SelectItem>
+              <SelectItem value="private">Cá nhân</SelectItem>
             </SelectContent>
           </Select>
           <Input 
@@ -658,6 +678,7 @@ export default function AutoGreetingPage() {
             <div><strong>Bộ lọc hiện tại:</strong></div>
             {searchTerm && <div>• Tìm kiếm: "{searchTerm}"</div>}
             {statusFilter !== "all" && <div>• Trạng thái: {statusFilter === 'urgent' ? 'Cần báo gấp' : statusFilter === 'reminder' ? 'Cần nhắc nhở' : 'Bình thường'}</div>}
+            {conversationTypeFilter !== "all" && <div>• Loại hội thoại: {conversationTypeFilter === 'group' ? 'Nhóm' : 'Cá nhân'}</div>}
             {dateFilter && <div>• Ngày: {new Date(dateFilter).toLocaleDateString('vi-VN')}</div>}
             <div>• Tổng số khách hàng: {filteredCustomers.length}</div>
                         </div>

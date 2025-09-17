@@ -7,6 +7,7 @@ import React, {
   useMemo,
   Suspense,
 } from "react";
+import { flushSync } from "react-dom";
 import { OrderDetail } from "@/types";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { useOrders } from "@/hooks/useOrders";
@@ -101,6 +102,7 @@ function ManagerOrderContent() {
     setDepartments,
     setProducts,
     setWarningLevel,
+    setProductCode,
     setSortField,
     setSortDirection,
     refetch,
@@ -397,6 +399,12 @@ function ManagerOrderContent() {
         conversationTypeValue = paginatedFilters.conversationType.join(",");
       }
 
+      // Handle product code filter
+      let productCodeValue = "";
+      if (paginatedFilters.productCode && paginatedFilters.productCode.trim()) {
+        productCodeValue = paginatedFilters.productCode.trim();
+      }
+
       // ✅ SỬA: Build complete new filters object với statuses
       const newFilters: Partial<OrderFilters> = {
         search: searchValue,
@@ -409,6 +417,7 @@ function ManagerOrderContent() {
   quantity: quantityValue,
         warningLevel: warningLevelValue,
   conversationType: conversationTypeValue,
+        productCode: productCodeValue,
         page: shouldResetPage ? 1 : filters.page,
       };
 
@@ -760,6 +769,7 @@ function ManagerOrderContent() {
     if (filters.products?.trim()) params.append("products", filters.products.trim());
     if (filters.warningLevel?.trim()) params.append("warningLevel", filters.warningLevel.trim());
   if (filters.conversationType?.trim()) params.append("conversationType", filters.conversationType.trim());
+    if (filters.productCode?.trim()) params.append("productCode", filters.productCode.trim());
     if (filters.sortField) params.append("sortField", filters.sortField);
     if (filters.sortDirection) params.append("sortDirection", filters.sortDirection);
 
@@ -845,14 +855,33 @@ function ManagerOrderContent() {
 
   // ✅ Handle search từ double-click tên khách hàng - giống PM
   const handleSearch = useCallback(
-    (searchTerm: string) => {
+    async (searchTerm: string) => {
       if (!searchTerm || !searchTerm.trim()) return;
       
-      // ✅ Chỉ update search term, không reset các filter khác - giống PM
-      setSearch(searchTerm.trim());
-      setPage(1);
+      // ✅ Tạo search term với exact match cho customer name
+      // Sử dụng dấu ngoặc kép để backend có thể hiểu đây là exact match
+      const exactSearchTerm = `"${searchTerm.trim()}"`;
+      
+      // ✅ Tạo filters mới với search term exact match
+      const newFilters = {
+        ...filters,
+        search: exactSearchTerm,
+        page: 1
+      };
+      
+      // ✅ Sử dụng flushSync để đảm bảo state được cập nhật ngay lập tức - giống PmTransactionManagement
+      flushSync(() => {
+        setFilters(newFilters);
+      });
+      
+      // ✅ Trigger fetch data ngay lập tức - giống PmTransactionManagement
+      try {
+        await refetch();
+      } catch (error) {
+        console.error("Error refetching after search:", error);
+      }
     },
-    [setSearch, setPage]
+    [setFilters, filters, refetch]
   );
 
   // ✅ Handle restore previous state
@@ -1008,6 +1037,7 @@ function ManagerOrderContent() {
       singleDate: filters.date ? new Date(filters.date) : undefined,
       quantity: filters.quantity || 1, // Thêm quantity filter
   conversationType: filters.conversationType ? filters.conversationType.split(',').filter(Boolean) : [],
+      productCode: filters.productCode || "", // Thêm productCode filter
       employees: isPMUser
         ? user?.id ? [String(user.id)] : [] // PM đơn thuần chỉ hiển thị đơn hàng của chính họ
         : filters.employees
@@ -1027,6 +1057,7 @@ function ManagerOrderContent() {
     filters.date,
   filters.conversationType,
     filters.quantity,
+    filters.productCode,
     filters.employees,
   filters.warningLevel,
     isPMUser,
@@ -1156,6 +1187,8 @@ function ManagerOrderContent() {
             enableQuantityFilter={true} // Bật bộ lọc số lượng
             quantityLabel="Số lượng"
             defaultQuantity={1} // Mặc định là 1
+            enableProductCodeFilter={true} // Bật bộ lọc mã sản phẩm
+            productCodeLabel="Mã sản phẩm"
             singleDateLabel="Ngày tạo đơn"
             dateRangeLabel="Khoảng thời gian"
             page={filters.page}

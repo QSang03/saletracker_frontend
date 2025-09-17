@@ -26,6 +26,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface PaginatedTableProps {
   emptyText?: string;
@@ -80,6 +87,9 @@ interface PaginatedTableProps {
   enableQuantityFilter?: boolean;
   quantityLabel?: string;
   defaultQuantity?: number;
+  // Thêm props cho product code filter
+  enableProductCodeFilter?: boolean;
+  productCodeLabel?: string;
   dateRangeLabel?: string;
   singleDateLabel?: string;
   defaultPageSize?: number;
@@ -160,6 +170,7 @@ export type Filters = {
   quantity?: number; // Thêm quantity filter
   minQuantity?: number; // Số lượng tối thiểu
   conversationType?: string[]; // Thêm conversation type filter
+  productCode?: string; // 'has' | 'no' để lọc đơn có/không có mã sản phẩm
   dateRange: DateRange;
   singleDate?: Date | string; // Support both Date and string
   employees: (string | number)[];
@@ -207,6 +218,9 @@ export default function PaginatedTable({
   enableQuantityFilter,
   quantityLabel = "Số lượng",
   defaultQuantity = 1,
+  // Thêm props cho product code filter
+  enableProductCodeFilter,
+  productCodeLabel = "Mã sản phẩm",
   defaultPageSize = 10,
   page,
   total,
@@ -432,6 +446,15 @@ export default function PaginatedTable({
     [availableZaloLinkStatuses]
   );
 
+  // Product code options
+  const productCodeOptions = useMemo(
+    () => [
+      { value: "has", label: "Có mã sản phẩm" },
+      { value: "no", label: "Không có mã sản phẩm" },
+    ],
+    []
+  );
+
   const [filters, setFilters] = useState<Filters>(() => {
     return {
       search: initialFilters?.search || "",
@@ -448,6 +471,7 @@ export default function PaginatedTable({
         ? (initialFilters.quantity as number | undefined)
         : undefined,
       conversationType: initialFilters?.conversationType || [], // ✅ SỬA: Conversation type initialization
+      productCode: initialFilters?.productCode || "", // Thêm productCode initialization
       dateRange: initialFilters?.dateRange || {
         from: undefined,
         to: undefined,
@@ -618,6 +642,10 @@ export default function PaginatedTable({
               memoizedInitialFilters.conversationType !== undefined
                 ? memoizedInitialFilters.conversationType
                 : prev.conversationType,
+            productCode:
+              memoizedInitialFilters.productCode !== undefined
+                ? memoizedInitialFilters.productCode
+                : prev.productCode,
             dateRange:
               memoizedInitialFilters.dateRange !== undefined
                 ? memoizedInitialFilters.dateRange
@@ -657,6 +685,7 @@ export default function PaginatedTable({
             "warningLevels",
             "quantity",
             "conversationType", // ✅ SỬA: Include conversation type in sync
+            "productCode", // ✅ SỬA: Include product code in sync
             "dateRange",
             "singleDate",
             "employees",
@@ -1458,6 +1487,26 @@ export default function PaginatedTable({
                 <p>Chọn số lượng tối thiểu để lọc các đơn có số lượng &ge; giá trị này.</p>
               </TooltipContent>
             </Tooltip>
+          )}
+          {enableProductCodeFilter && (
+            <div className="min-w-0 w-full">
+              <Select
+                value={filters.productCode && filters.productCode.trim() ? filters.productCode : "all"}
+                onValueChange={(value) => updateFilter("productCode", value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="min-w-0 w-full border rounded px-2 py-1 text-sm">
+                  <SelectValue placeholder={`Chọn ${productCodeLabel}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả</SelectItem>
+                  {productCodeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
           {enableSingleDateFilter && (
             <DatePicker

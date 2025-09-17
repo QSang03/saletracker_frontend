@@ -113,6 +113,18 @@ export const buildUrlWithFilters = (filters: any, basePath?: string): string => 
     params.set('warningLevel', filters.warningLevel.trim());
   }
   
+  if (filters.conversationType?.trim()) {
+    params.set('conversationType', filters.conversationType.trim());
+  }
+  
+  if (filters.productCode?.trim()) {
+    params.set('productCode', filters.productCode.trim());
+  }
+  
+  if (typeof filters.quantity === 'number') {
+    params.set('quantity', filters.quantity.toString());
+  }
+  
   if (filters.sortField) {
     params.set('sortField', filters.sortField);
   }

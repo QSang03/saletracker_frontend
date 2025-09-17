@@ -5,7 +5,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { searchTerm, statusFilter, dateFilter } = body;
+    const { searchTerm, statusFilter, conversationTypeFilter, dateFilter } = body;
 
     // Get authorization header from the incoming request
     const authHeader = request.headers.get('authorization');
@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         searchTerm,
         statusFilter,
+        conversationTypeFilter,
         dateFilter
       }),
     });

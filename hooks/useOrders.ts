@@ -30,6 +30,7 @@ interface OrderFilters {
   warningLevel?: string;
   quantity?: number; // Thêm bộ lọc số lượng
   conversationType?: string; // CSV: 'group', 'personal'
+  productCode?: string; // 'has' | 'no' để lọc đơn có/không có mã sản phẩm
   sortField?:
     | "quantity"
     | "unit_price"
@@ -73,6 +74,7 @@ interface UseOrdersReturn {
   setProducts: (products: string, resetPage?: boolean) => void;
   setWarningLevel: (warningLevel: string, resetPage?: boolean) => void;
   setQuantity: (quantity: number, resetPage?: boolean) => void; // Thêm setter cho quantity
+  setProductCode: (productCode: string, resetPage?: boolean) => void; // Thêm setter cho productCode
   setSortField: (
     sortField:
       | "quantity"
@@ -206,6 +208,7 @@ const saveFiltersToStorage = (filters: OrderFilters): void => {
       products: filters.products || "",
       warningLevel: filters.warningLevel || "",
       conversationType: filters.conversationType || "",
+      productCode: filters.productCode || "",
       sortField: filters.sortField || null,
       sortDirection: filters.sortDirection || null,
       quantity:
@@ -280,6 +283,7 @@ export const useOrders = (options?: {
     const products = searchParams.get("products") || "";
     const warningLevel = searchParams.get("warningLevel") || "";
     const conversationType = searchParams.get("conversationType") || "";
+    const productCode = searchParams.get("productCode") || "";
     const quantity = parseInt(searchParams.get("quantity") || "1"); // Mặc định là 1
     const sortField = searchParams.get("sortField") as
       | "quantity"
@@ -319,6 +323,7 @@ export const useOrders = (options?: {
         products,
         warningLevel,
         conversationType,
+        productCode,
         quantity,
         ownOnly,
         // Nếu URL truyền sortField thì dùng, nếu không thì để null để backend tự quyết định
@@ -342,6 +347,7 @@ export const useOrders = (options?: {
       products: savedFilters.products || "",
       warningLevel: savedFilters.warningLevel || "",
       conversationType: (savedFilters as any).conversationType || "",
+      productCode: (savedFilters as any).productCode || "",
       quantity: savedFilters.quantity || 1, // Mặc định là 1
       // Mặc định để null để backend tự quyết định sort
       sortField: savedFilters.sortField || null,
@@ -709,6 +715,9 @@ export const useOrders = (options?: {
         if (typeof currentFilters.quantity === "number") {
           params.append("quantity", String(currentFilters.quantity));
         }
+        if (currentFilters.productCode && currentFilters.productCode.trim()) {
+          params.append("productCode", currentFilters.productCode.trim());
+        }
         if (currentFilters.ownOnly === "1") {
           params.append("ownOnly", "1");
         }
@@ -880,6 +889,18 @@ export const useOrders = (options?: {
     [filters, updateFiltersAndUrl]
   );
 
+  const setProductCode = useCallback(
+    (productCode: string, resetPage = true) => {
+      const newFilters = {
+        ...filters,
+        productCode,
+        page: resetPage ? 1 : filters.page,
+      };
+      updateFiltersAndUrl(newFilters);
+    },
+    [filters, updateFiltersAndUrl]
+  );
+
   const setSortField = useCallback(
     (
       sortField:
@@ -968,6 +989,7 @@ export const useOrders = (options?: {
       products: "",
       warningLevel: "",
       conversationType: "",
+      productCode: "",
       quantity: 1, // Reset về mặc định 1
       sortField: null,
       sortDirection: null,
@@ -2211,6 +2233,7 @@ export const useOrders = (options?: {
     setProducts,
     setWarningLevel,
     setQuantity,
+    setProductCode,
     setSortField,
     setSortDirection,
 
