@@ -36,7 +36,8 @@ export const useDynamicPermission = () => {
 
   // Lấy tất cả roles của user
   const userRoles = useMemo(() => {
-    return user?.roles?.map((role: Role) => role.name) || [];
+    const roles = user?.roles?.map((role: Role) => role.name) || [];
+    return roles;
   }, [user?.roles]);
 
   // Lấy tất cả departments của user
@@ -51,7 +52,8 @@ export const useDynamicPermission = () => {
 
   // Kiểm tra role "view"
   const isViewRole = useMemo(() => {
-    return userRoles.includes("view");
+    const result = userRoles.includes("view");
+    return result;
   }, [userRoles]);
 
   // Kiểm tra role "analysis"

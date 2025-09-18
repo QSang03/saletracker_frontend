@@ -38,13 +38,6 @@ export default function ProductTable() {
   const isComponentMounted = useRef(true);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Đảm bảo user được load trước khi gọi API
-  useEffect(() => {
-    console.log('🔍 [Frontend Product PM Debug] User context changed:', user);
-    if (user && user.roles) {
-      console.log('🔍 [Frontend Product PM Debug] User roles loaded:', user.roles.map((r: any) => r.name));
-    }
-  }, [user]);
 
   // ✅ TÁCH RIÊNG: PM có role phụ (pm-phongban)
   const isPMWithDepartmentRole = isPM && hasPMSpecificRoles();
@@ -55,7 +48,6 @@ export default function ProductTable() {
   // Helper: lấy tất cả permissions từ các PM custom roles
   const getAllPMCustomPermissions = (): string[] => {
     const pmPermissions = getPMPermissions();
-    console.log('🔍 [Frontend Product PM Debug] getPMPermissions() returned:', pmPermissions);
     const filtered = pmPermissions.filter(p => 
       typeof p === 'string' && (p.toLowerCase().startsWith('pm_') || p.toLowerCase().startsWith('cat_') || p.toLowerCase().startsWith('brand_'))
     );
@@ -70,8 +62,6 @@ export default function ProductTable() {
       return p; // Giữ nguyên nếu đã có pm_
     });
     
-    console.log('🔍 [Frontend Product PM Debug] Filtered PM permissions:', filtered);
-    console.log('🔍 [Frontend Product PM Debug] Converted PM permissions:', converted);
     return converted;
   };
 
@@ -83,9 +73,6 @@ export default function ProductTable() {
       role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
     );
     
-    console.log('🔍 [Frontend Product PM Debug] Full user object:', user);
-    console.log('🔍 [Frontend Product PM Debug] User roles:', userRoles.map((r: any) => r.name));
-    console.log('🔍 [Frontend Product PM Debug] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
     
     // Nếu có role pm_username_n thì là custom mode
     return pmCustomRoles.length > 0;
@@ -93,6 +80,8 @@ export default function ProductTable() {
 
   // Cleanup on unmount
   useEffect(() => {
+    isComponentMounted.current = true;
+    
     return () => {
       isComponentMounted.current = false;
       if (refreshIntervalRef.current) {
@@ -116,15 +105,13 @@ export default function ProductTable() {
       params.set('page', String(productPage));
       params.set('pageSize', String(productPageSize));
 
-      // ✅ PM có quyền riêng (pm_permissions): thêm thông tin về chế độ PM
-      console.log('🔍 [Frontend Product PM] isPMWithPermissionRole:', isPMWithPermissionRole);
-      console.log('🔍 [Frontend Product PM] isPMCustomMode():', isPMCustomMode());
-      
-      if (isPMWithPermissionRole) {
+      // ✅ Role view và admin: bỏ qua tất cả logic PM, fetch tất cả products
+      if (isViewRole || isAdmin) {
+        // Không thêm bất kỳ tham số PM nào, để backend trả về tất cả products
+      } else if (isPMWithPermissionRole) {
         // Kiểm tra chế độ PM
         if (isPMCustomMode()) {
           // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
-          console.log('🔍 [Frontend Product PM] Using PM Custom Mode');
           
           // Lấy thông tin từng role từ user context (đã có permissions từ database)
           const userRoles = user?.roles || [];
@@ -132,7 +119,6 @@ export default function ProductTable() {
             role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
           );
           
-          console.log('🎯 [Frontend Product PM] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
           
           // Tạo object chứa thông tin từng role từ database
           const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
@@ -175,134 +161,108 @@ export default function ProductTable() {
               categories: roleCategories 
             };
             
-            console.log(`🔑 [Frontend Product PM] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
           });
           
           // Gửi thông tin từng role
           params.set('pmCustomMode', 'true');
           params.set('rolePermissions', JSON.stringify(rolePermissions));
-          console.log('📤 [Frontend Product PM] Sending rolePermissions:', rolePermissions);
           
         } else {
           // Chế độ tổ hợp chung: gửi tất cả permissions
-          console.log('🔍 [Frontend Product PM] Using PM General Mode');
           const allPMPermissions = getAllPMCustomPermissions();
-          console.log('📋 [Frontend Product PM] All PM permissions:', allPMPermissions);
           if (allPMPermissions.length > 0) {
             params.set('pmPermissions', allPMPermissions.join(','));
           }
           params.set('pmCustomMode', 'false');
-          console.log('📤 [Frontend Product PM] Sending pmCustomMode=false with permissions:', allPMPermissions);
         }
       } else {
-        console.log('❌ [Frontend Product PM] Not PM with permission role, skipping pmCustomMode');
       }
       
-      // Debug: in ra tất cả params trước khi gửi
-      console.log('🔍 [Frontend Product PM] Final params:', Object.fromEntries(params.entries()));
 
       const qs = params.toString();
       const url = `${process.env.NEXT_PUBLIC_API_URL}/products${qs ? `?${qs}` : ''}`;
+      
       const r = await fetch(url, { headers: getAuthHeaders() });
+      
+      if (!r.ok) {
+        const errorText = await r.text();
+        throw new Error(`HTTP ${r.status}: ${errorText}`);
+      }
+      
       const json = await r.json();
       
       if (!isComponentMounted.current) return;
       
-  // New backend returns { data, total }
-  if (Array.isArray(json)) {
+      // New backend returns { data, total }
+      if (Array.isArray(json)) {
         setProducts(json);
         setTotalProducts(json.length);
       } else {
-        setProducts(json?.data ?? []);
-        setTotalProducts(json?.total ?? (json?.data?.length ?? 0));
+        const data = json?.data ?? [];
+        const total = json?.total ?? (data?.length ?? 0);
+        setProducts(data);
+        setTotalProducts(total);
       }
     } catch (err) {
       console.error("Lỗi fetch products:", err);
       if (!isComponentMounted.current) return;
-  setProducts([]);
-  setTotalProducts(0);
+      setProducts([]);
+      setTotalProducts(0);
     }
   };
 
   const fetchBrands = async (silent = false) => {
     try {
-      if (isPMWithPermissionRole) {
-        // ✅ PM có quyền riêng: lấy brands từ dữ liệu thực tế mà user có quyền
+      if (isViewRole || isAdmin) {
+        // Role view/admin: lấy trực tiếp từ bảng brands
         const params = new URLSearchParams();
         params.set('page', '1');
         params.set('pageSize', '1000');
-        
-        // Thêm PM permissions để chỉ lấy products mà user có quyền
-        if (isPMCustomMode()) {
-          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
-          const userRoles = user?.roles || [];
-          const pmCustomRoles = userRoles.filter((role: any) => 
-            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
-          );
-          
-          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
-          
-          // Tạm thời: chia permissions theo logic cụ thể
-          const allUserPermissions = getPMPermissions();
-          const convertedPermissions = allUserPermissions.map(p => {
-            if (p.toLowerCase().startsWith('cat_')) {
-              return `pm_${p}`;
-            } else if (p.toLowerCase().startsWith('brand_')) {
-              return `pm_${p}`;
-            }
-            return p;
-          });
-          
-          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-          
-          pmCustomRoles.forEach((role: any, index: number) => {
-            const roleName = role.name;
-            let roleBrands: string[] = [];
-            let roleCategories: string[] = [];
-            
-            if (index === 0) {
-              roleBrands = brands;
-              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban'));
-            } else if (index === 1) {
-              roleBrands = brands.filter(brand => brand.includes('lenovo'));
-              roleCategories = categories.filter(cat => cat.includes('man-hinh'));
-            }
-            
-            rolePermissions[roleName] = { brands: roleBrands, categories: roleCategories };
-          });
-          
-          params.set('pmCustomMode', 'true');
-          params.set('rolePermissions', JSON.stringify(rolePermissions));
-        } else {
-          // Chế độ tổ hợp chung
-          const allPMPermissions = getAllPMCustomPermissions();
-          if (allPMPermissions.length > 0) {
-            params.set('pmPermissions', allPMPermissions.join(','));
-          }
-          params.set('pmCustomMode', 'false');
-        }
-        
         const qs = params.toString();
-        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products?${qs}`, { headers: getAuthHeaders() });
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands?${qs}`, { headers: getAuthHeaders() });
         const json = await r.json();
-        
         if (!isComponentMounted.current) return;
-        
-        // ✅ Tạo brands từ permissions thay vì từ dữ liệu thực tế
-        // Vì dữ liệu thực tế có thể không đầy đủ
-        const allPMPermissions = getAllPMCustomPermissions();
-        const pmBrands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-        
-        console.log('🔍 [Frontend Product Filter] PM Brands from permissions:', pmBrands);
-        
-        const brandsList = pmBrands.map((brand, index) => ({
-          id: index + 1,
-          name: brand.replace('pm_brand_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          descriptions: ''
-        }));
-        
-        setBrands(brandsList);
+        let allBrands: Brand[] = Array.isArray(json) ? json : (json?.data ?? []);
+        if (allBrands.length === 0) {
+          // Fallback: derive from products
+          const pr = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products?page=1&pageSize=1000`, { headers: getAuthHeaders() });
+          const pj = await pr.json();
+          const allProducts = Array.isArray(pj) ? pj : (pj?.data ?? []);
+          const brandMap = new Map<string, Brand>();
+          allProducts.forEach((p: any) => {
+            if (p.brand && p.brand.name) {
+              brandMap.set(p.brand.name, p.brand);
+            }
+          });
+          allBrands = Array.from(brandMap.values());
+        }
+        setBrands(allBrands);
+      } else if (isPMWithPermissionRole) {
+        // PM có quyền riêng: lấy danh sách brands thực từ DB rồi lọc theo permissions
+        const params = new URLSearchParams();
+        params.set('page', '1');
+        params.set('pageSize', '1000');
+        const qs = params.toString();
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands?${qs}`, { headers: getAuthHeaders() });
+        const json = await r.json();
+        if (!isComponentMounted.current) return;
+        const allBrands: Brand[] = Array.isArray(json) ? json : (json?.data ?? []);
+
+        const slugify = (v: string) =>
+          (v || '')
+            .toLowerCase()
+            .normalize('NFKD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        const allowed = new Set(
+          getAllPMCustomPermissions()
+            .filter((p) => p.toLowerCase().startsWith('pm_brand_'))
+            .map((p) => p.toLowerCase())
+        );
+        const filteredBrands = allBrands.filter((b) => allowed.has(`pm_brand_${slugify(b.name)}`));
+        setBrands(filteredBrands);
       } else {
         // User thường: lấy tất cả brands
         const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands`, { headers: getAuthHeaders() });
@@ -321,82 +281,62 @@ export default function ProductTable() {
 
   const fetchCategories = async (silent = false) => {
     try {
-      if (isPMWithPermissionRole) {
-        // ✅ PM có quyền riêng: lấy categories từ dữ liệu thực tế mà user có quyền
+      if (isViewRole || isAdmin) {
+        // Role view/admin: lấy trực tiếp từ bảng categories
         const params = new URLSearchParams();
         params.set('page', '1');
         params.set('pageSize', '1000');
-        
-        // Thêm PM permissions để chỉ lấy products mà user có quyền
-        if (isPMCustomMode()) {
-          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
-          const userRoles = user?.roles || [];
-          const pmCustomRoles = userRoles.filter((role: any) => 
-            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
-          );
-          
-          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
-          
-          // Tạm thời: chia permissions theo logic cụ thể
-          const allUserPermissions = getPMPermissions();
-          const convertedPermissions = allUserPermissions.map(p => {
-            if (p.toLowerCase().startsWith('cat_')) {
-              return `pm_${p}`;
-            } else if (p.toLowerCase().startsWith('brand_')) {
-              return `pm_${p}`;
-            }
-            return p;
-          });
-          
-          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-          
-          pmCustomRoles.forEach((role: any, index: number) => {
-            const roleName = role.name;
-            let roleBrands: string[] = [];
-            let roleCategories: string[] = [];
-            
-            if (index === 0) {
-              roleBrands = brands;
-              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban'));
-            } else if (index === 1) {
-              roleBrands = brands.filter(brand => brand.includes('lenovo'));
-              roleCategories = categories.filter(cat => cat.includes('man-hinh'));
-            }
-            
-            rolePermissions[roleName] = { brands: roleBrands, categories: roleCategories };
-          });
-          
-          params.set('pmCustomMode', 'true');
-          params.set('rolePermissions', JSON.stringify(rolePermissions));
-        } else {
-          // Chế độ tổ hợp chung
-          const allPMPermissions = getAllPMCustomPermissions();
-          if (allPMPermissions.length > 0) {
-            params.set('pmPermissions', allPMPermissions.join(','));
-          }
-          params.set('pmCustomMode', 'false');
-        }
-        
         const qs = params.toString();
-        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products?${qs}`, { headers: getAuthHeaders() });
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories?${qs}`, { headers: getAuthHeaders() });
         const json = await r.json();
-        
         if (!isComponentMounted.current) return;
-        
-        // ✅ Tạo categories từ permissions thay vì từ dữ liệu thực tế
-        // Vì dữ liệu thực tế có thể không đầy đủ
-        const allPMPermissions = getAllPMCustomPermissions();
-        const pmCategories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-        
-        console.log('🔍 [Frontend Product Filter] PM Categories from permissions:', pmCategories);
-        
-        const categoriesList = pmCategories.map((category, index) => ({
-          id: index + 1,
-          catName: category.replace('pm_cat_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-        }));
-        
-        setCategories(categoriesList);
+        let allCategories: Category[] = Array.isArray(json) ? json : (json?.data ?? []);
+        if (allCategories.length === 0) {
+          // Fallback: derive from products
+          const pr = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/products?page=1&pageSize=1000`, { headers: getAuthHeaders() });
+          const pj = await pr.json();
+          const allProducts = Array.isArray(pj) ? pj : (pj?.data ?? []);
+          const categoryMap = new Map<string, Category>();
+          allProducts.forEach((p: any) => {
+            if (Array.isArray(p.categories)) {
+              p.categories.forEach((cat: any) => {
+                if (cat && cat.catName) {
+                  categoryMap.set(cat.catName, cat);
+                }
+              });
+            } else if (p.category && p.category.catName) {
+              categoryMap.set(p.category.catName, p.category);
+            }
+          });
+          allCategories = Array.from(categoryMap.values());
+        }
+        setCategories(allCategories);
+      } else if (isPMWithPermissionRole) {
+        // PM có quyền riêng: lấy danh sách categories thực từ DB rồi lọc theo permissions
+        const params = new URLSearchParams();
+        params.set('page', '1');
+        params.set('pageSize', '1000');
+        const qs = params.toString();
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories?${qs}`, { headers: getAuthHeaders() });
+        const json = await r.json();
+        if (!isComponentMounted.current) return;
+        const allCategories: Category[] = Array.isArray(json) ? json : (json?.data ?? []);
+
+        const slugify = (v: string) =>
+          (v || '')
+            .toLowerCase()
+            .normalize('NFKD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        const allowed = new Set(
+          getAllPMCustomPermissions()
+            .filter((p) => p.toLowerCase().startsWith('pm_cat_'))
+            .map((p) => p.toLowerCase())
+        );
+        const filteredCategories = allCategories.filter((c) => allowed.has(`pm_cat_${slugify(c.catName)}`));
+        setCategories(filteredCategories);
       } else {
         // User thường: lấy tất cả categories
         const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/categories`, { headers: getAuthHeaders() });
@@ -525,7 +465,8 @@ export default function ProductTable() {
   // (Giữ chỗ nếu cần trong tương lai)
 
   // Filtered products
-  const filteredProducts = useMemo(() => {
+  const filteredProducts = useMemo((): Product[] => {
+    
     // If user is PM and not admin/view, restrict by pm_{slug} permissions
     let pmAllowedSlugs: string[] = [];
     if (isPM && !isAdmin && !isViewRole) {
@@ -561,6 +502,8 @@ export default function ProductTable() {
     }
 
     const matchesPmScope = (p: Product) => {
+      // Role view và admin xem tất cả sản phẩm
+      if (isViewRole || isAdmin) return true;
       if (pmAllowedSlugs.length === 0) return true;
       // check categories
       const catSlugs = (
@@ -633,6 +576,8 @@ export default function ProductTable() {
       const matchParent = productFilter.parentOnly ? (!p.categories || p.categories.length === 0) : true;
       return matchName && matchBrand && matchCategory && matchParent && matchesPmScope(p);
     });
+    
+    return filteredProducts;
   }, [products, productFilter, isPM, isAdmin, isViewRole, userPermissions, isPMWithPermissionRole, getAllPMCustomPermissions]);
 
   // Pagination for products
@@ -736,7 +681,7 @@ export default function ProductTable() {
                   <TableCell colSpan={6} className="text-center py-4 text-gray-400">Không có sản phẩm nào phù hợp.</TableCell>
                 </TableRow>
               ) : (
-                displayedProducts.map((p, idx) => (
+                displayedProducts.map((p: Product, idx: number) => (
                   <TableRow
                     key={p.id}
                     className={idx % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-900'}
@@ -748,7 +693,7 @@ export default function ProductTable() {
                     <TableCell className="px-3 py-2">
                       <TruncatedText
                         text={Array.isArray(p.categories) && p.categories.length > 0
-                          ? p.categories.map((c) => c.catName).join(', ')
+                          ? p.categories.map((c: any) => c.catName).join(', ')
                           : (p.category?.catName || '-')}
                         maxChars={48}
                       />

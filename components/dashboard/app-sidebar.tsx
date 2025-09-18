@@ -74,8 +74,8 @@ export function AppSidebar({
   const isViewRole = currentUser?.roles?.some((r: any) => r.name === 'view');
 
   const effectiveNavItems = navItems.filter(group => {
-  // Show Product Manager group only to admin or users with any pm role
-  if (group.title === 'Product Manager' && !isAdmin && !isPMRole) return false;
+  // Show Product Manager group to admin, PM role, or view role
+  if (group.title === 'Product Manager' && !isAdmin && !isPMRole && !isViewRole) return false;
   // Không ẩn nhóm 'Giao dịch' cho PM users nữa - để họ có thể thấy "Quản lý đơn hàng"
   return true;
   });

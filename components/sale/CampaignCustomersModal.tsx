@@ -220,6 +220,10 @@ export default function CampaignCustomersModal({
 }: CampaignCustomersModalProps) {
   const pageSize = 1000000;
   const [customers, setCustomers] = useState<CustomerWithStatus[]>([]);
+  // Thêm state lưu tổng số khách hàng thực tế
+  const [totalCount, setTotalCount] = useState<number>(0);
+  // ✅ THÊM MỚI: State lưu toàn bộ customers để tính thống kê (không bị ảnh hưởng bởi filter)
+  const [allCustomersForStats, setAllCustomersForStats] = useState<CustomerWithStatus[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<
     CustomerWithStatus[]
   >([]);
@@ -275,6 +279,28 @@ export default function CampaignCustomersModal({
     return Boolean(event.status || event.interaction_data);
   };
 
+  // Fetch tổng số khách hàng thực tế (không filter)
+  const fetchTotalCount = useCallback(async () => {
+    if (!campaign) return;
+
+    try {
+      const response = await campaignAPI.getCampaignCustomers(campaign.id, {
+        page: 1,
+        limit: pageSize, // Lấy tất cả để có dữ liệu cho thống kê
+      });
+
+      const allData = response.data || [];
+      setTotalCount(
+        (response.total ?? response.meta?.total ?? allData.length) || 0
+      );
+      
+      // ✅ Lưu toàn bộ dữ liệu để tính thống kê
+      setAllCustomersForStats(allData);
+    } catch (error) {
+      console.error("Error fetching total count:", error);
+    }
+  }, [campaign]);
+
   const fetchCustomers = useCallback(
     async (searchQuery = "", status = "all") => {
       if (!campaign) return;
@@ -282,6 +308,7 @@ export default function CampaignCustomersModal({
       try {
         setLoading(true);
 
+        // Lấy filtered customers
         const response = await campaignAPI.getCampaignCustomers(campaign.id, {
           search: searchQuery,
           status: status === "all" ? undefined : status,
@@ -291,6 +318,14 @@ export default function CampaignCustomersModal({
 
         const allCustomers = response.data || [];
         setCustomers(allCustomers);
+        
+        // Chỉ cập nhật totalCount khi không có filter (để giữ tổng số thực tế)
+        if (!searchQuery && status === "all") {
+          setTotalCount(
+            (response.total ?? response.meta?.total ?? allCustomers.length) || 0
+          );
+        }
+        
         setDisplayCount(20);
       } catch (error) {
         console.error("Error fetching customers:", error);
@@ -308,49 +343,63 @@ export default function CampaignCustomersModal({
     async (customerId: string, changes: any, interactionData?: any) => {
       try {
         const customerIndex = customers.findIndex((c) => c.id === customerId);
-        if (customerIndex === -1) {
+        const statsCustomerIndex = allCustomersForStats.findIndex((c) => c.id === customerId);
+        
+        if (customerIndex === -1 && statsCustomerIndex === -1) {
           // Nếu không tìm thấy customer, có thể là customer mới được thêm
           await fetchCustomers(searchTerm, statusFilter);
+          await fetchTotalCount(); // ✅ Cập nhật cả stats data
           return;
         }
 
         // ✅ CHỈ cập nhật những field thay đổi, GIỮ NGUYÊN data cũ
         if (changes || interactionData) {
-          setCustomers((prev) => {
-            const newCustomers = [...prev];
-            const existingCustomer = newCustomers[customerIndex];
+          const updatedFields: any = {};
 
-            const updatedFields: any = {};
+          // Xử lý status changes
+          if (changes?.status) {
+            updatedFields.status = changes.status.new || changes.status;
+          }
 
-            // Xử lý status changes
-            if (changes?.status) {
-              updatedFields.status = changes.status.new || changes.status;
-            }
+          // Xử lý interaction changes
+          if (interactionData) {
+            updatedFields.conversation_metadata =
+              interactionData.conversation_metadata;
+            updatedFields.total_interactions =
+              interactionData.total_interactions ||
+              (customerIndex !== -1 ? customers[customerIndex].total_interactions : 0);
+            updatedFields.last_interaction_at =
+              interactionData.last_interaction_at;
+          }
 
-            // Xử lý interaction changes
-            if (interactionData) {
-              updatedFields.conversation_metadata =
-                interactionData.conversation_metadata;
-              updatedFields.total_interactions =
-                interactionData.total_interactions ||
-                existingCustomer.total_interactions;
-              updatedFields.last_interaction_at =
-                interactionData.last_interaction_at;
-            }
+          // Xử lý sent_at changes
+          if (changes?.sent_at) {
+            updatedFields.sent_at = changes.sent_at.new;
+          }
 
-            // Xử lý sent_at changes
-            if (changes?.sent_at) {
-              updatedFields.sent_at = changes.sent_at.new;
-            }
+          // ✅ Cập nhật customers (filtered data)
+          if (customerIndex !== -1) {
+            setCustomers((prev) => {
+              const newCustomers = [...prev];
+              newCustomers[customerIndex] = {
+                ...newCustomers[customerIndex],
+                ...updatedFields,
+              };
+              return newCustomers;
+            });
+          }
 
-            // ✅ MERGE chỉ những field cần thiết
-            newCustomers[customerIndex] = {
-              ...existingCustomer,
-              ...updatedFields,
-            };
-
-            return newCustomers;
-          });
+          // ✅ Cập nhật allCustomersForStats (full data cho thống kê)
+          if (statsCustomerIndex !== -1) {
+            setAllCustomersForStats((prev) => {
+              const newStats = [...prev];
+              newStats[statsCustomerIndex] = {
+                ...newStats[statsCustomerIndex],
+                ...updatedFields,
+              };
+              return newStats;
+            });
+          }
 
           console.log(`✅ Updated customer ${customerId} specifically:`, {
             changes,
@@ -362,13 +411,15 @@ export default function CampaignCustomersModal({
         // ✅ FALLBACK: Chỉ fetch khi cần thiết
         console.log(`⚠️ Fallback to full customer refresh for ${customerId}`);
         await fetchCustomers(searchTerm, statusFilter);
+        await fetchTotalCount(); // ✅ Cập nhật cả stats data
       } catch (error) {
         console.error("Error updating specific customer:", error);
         // Fallback to full reload
         await fetchCustomers(searchTerm, statusFilter);
+        await fetchTotalCount(); // ✅ Cập nhật cả stats data
       }
     },
-    [customers, searchTerm, statusFilter, fetchCustomers]
+    [customers, allCustomersForStats, searchTerm, statusFilter, fetchCustomers, fetchTotalCount]
   );
 
   // ✅ CẬP NHẬT: Tối ưu interaction log update handler
@@ -481,6 +532,9 @@ export default function CampaignCustomersModal({
 
   useEffect(() => {
     if (isOpen && campaign) {
+      // Fetch tổng số khách hàng thực tế trước
+      fetchTotalCount();
+      // Sau đó fetch danh sách khách hàng theo filter
       fetchCustomers(searchTerm, statusFilter);
     }
   }, [isOpen, campaign]);
@@ -490,6 +544,7 @@ export default function CampaignCustomersModal({
       setSearchTerm("");
       setStatusFilter("all");
       setCustomers([]);
+      setAllCustomersForStats([]); // ✅ Reset stats data
       setFilteredCustomers([]);
       setDisplayCount(20);
     }
@@ -768,6 +823,45 @@ export default function CampaignCustomersModal({
     }
   };
 
+  // ✅ THÊM MỚI: Tính toán thống kê trạng thái
+  const getStatusStats = () => {
+    const stats = {
+      pending: 0,
+      sent: 0,
+      failed: 0,
+      customer_replied: 0,
+      staff_handled: 0,
+      reminder_sent: 0,
+      total_sent: 0, // Tổng gửi = sent + customer_replied + staff_handled + reminder_sent
+    };
+
+    // ✅ SỬA: Dùng allCustomersForStats thay vì customers để không bị ảnh hưởng bởi filter
+    allCustomersForStats.forEach((customer) => {
+      const status = customer.status;
+      if (!status || status === LogStatus.PENDING) {
+        stats.pending++;
+      } else if (status === LogStatus.SENT) {
+        stats.sent++;
+        stats.total_sent++;
+      } else if (status === LogStatus.FAILED) {
+        stats.failed++;
+      } else if (status === LogStatus.CUSTOMER_REPLIED) {
+        stats.customer_replied++;
+        stats.total_sent++;
+      } else if (status === LogStatus.STAFF_HANDLED) {
+        stats.staff_handled++;
+        stats.total_sent++;
+      } else if (status === LogStatus.REMINDER_SENT) {
+        stats.reminder_sent++;
+        stats.total_sent++;
+      }
+    });
+
+    return stats;
+  };
+
+  const statusStats = getStatusStats();
+
   if (!campaign) return null;
 
   const tableHeaders = [
@@ -843,34 +937,33 @@ export default function CampaignCustomersModal({
                       Danh sách khách hàng chiến dịch
                     </DialogTitle>
                     <DialogDescription className="text-sm text-gray-600">
-                      Chiến dịch:{" "}
+                      Chiến dịch: {" "}
                       <span className="font-medium text-gray-900">
                         {campaign.name}
                       </span>
                       <AnimatePresence>
-                        {customers.length > 0 && (
+                        {(totalCount > 0 || customers.length > 0) && (
                           <motion.span
                             className="ml-2"
                             initial={{ opacity: 0, x: 10 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -10 }}
                           >
-                            • Tổng số:{" "}
+                            • Tổng số: {" "}
                             <motion.span
                               className="font-medium"
-                              key={customers.length}
+                              key={totalCount}
                               initial={{ scale: 1.2, color: "#2563eb" }}
                               animate={{ scale: 1, color: "inherit" }}
                               transition={{ duration: 0.3 }}
                             >
-                              {customers.length.toLocaleString()}
+                              {totalCount.toLocaleString()}
                             </motion.span>{" "}
                             khách hàng
-                            {filteredCustomers.length !== customers.length && (
+                            {filteredCustomers.length !== totalCount && (
                               <span className="text-blue-600">
                                 {" "}
-                                • Hiển thị:{" "}
-                                {filteredCustomers.length.toLocaleString()}
+                                • Hiển thị: {filteredCustomers.length.toLocaleString()}
                               </span>
                             )}
                           </motion.span>
@@ -1023,6 +1116,143 @@ export default function CampaignCustomersModal({
                     </div>
                   </motion.div>
                 </div>
+
+                {/* ✅ THÊM MỚI: Status Statistics */}
+                {totalCount > 0 && (
+                  <div className="flex-shrink-0 p-4 border-b bg-gray-50">
+                    <motion.div
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      {/* Tổng gửi */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 text-white"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-white/20 rounded">
+                            <CheckCircle className="h-4 w-4 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-indigo-100">Tổng gửi</p>
+                            <p className="text-lg font-bold text-white">
+                              {statusStats.total_sent.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                      {/* Chưa gửi */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-yellow-100 rounded">
+                            <Clock className="h-4 w-4 text-yellow-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Chưa gửi</p>
+                            <p className="text-lg font-semibold text-yellow-700">
+                              {statusStats.pending.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Đã gửi */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-blue-100 rounded">
+                            <CheckCircle className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Đã gửi</p>
+                            <p className="text-lg font-semibold text-blue-700">
+                              {statusStats.sent.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Gửi lỗi */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-red-100 rounded">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Gửi lỗi</p>
+                            <p className="text-lg font-semibold text-red-700">
+                              {statusStats.failed.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* KH phản hồi */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-green-100 rounded">
+                            <MessageCircle className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">KH phản hồi</p>
+                            <p className="text-lg font-semibold text-green-700">
+                              {statusStats.customer_replied.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Đã xử lý */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-purple-100 rounded">
+                            <User className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Đã xử lý</p>
+                            <p className="text-lg font-semibold text-purple-700">
+                              {statusStats.staff_handled.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      {/* Đã nhắc lại */}
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-orange-100 rounded">
+                            <AlertCircle className="h-4 w-4 text-orange-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Đã nhắc lại</p>
+                            <p className="text-lg font-semibold text-orange-700">
+                              {statusStats.reminder_sent.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  </div>
+                )}
 
                 {/* Table Container */}
                 <div className="flex-1 overflow-hidden">

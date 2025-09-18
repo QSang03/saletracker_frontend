@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,11 +19,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { 
-  Upload, 
-  FileSpreadsheet, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Upload,
+  FileSpreadsheet,
+  CheckCircle,
+  XCircle,
   AlertTriangle,
   Eye,
   EyeOff,
@@ -28,7 +34,7 @@ import {
   User,
   MessageSquare,
   Clock,
-  Trash2
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAccessToken } from "@/lib/auth";
@@ -51,7 +57,7 @@ interface ExistingCustomer {
   customerLastMessageDate?: string;
   customerStatus?: string;
   daysSinceLastMessage: number | null;
-  status: 'ready' | 'urgent' | 'stable';
+  status: "ready" | "urgent" | "stable";
 }
 
 interface CustomerValidationError {
@@ -85,34 +91,39 @@ export default function ImportExcelModal({
   const [uploading, setUploading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [uploadedCustomers, setUploadedCustomers] = useState<Customer[]>([]);
-  const [existingCustomers, setExistingCustomers] = useState<ExistingCustomer[]>([]);
-  const [customerValidationErrors, setCustomerValidationErrors] = useState<CustomerValidationError[]>([]);
+  const [existingCustomers, setExistingCustomers] = useState<
+    ExistingCustomer[]
+  >([]);
+  const [customerValidationErrors, setCustomerValidationErrors] = useState<
+    CustomerValidationError[]
+  >([]);
   const [currentErrorIndex, setCurrentErrorIndex] = useState<number>(0);
   const [showDetails, setShowDetails] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [highlightedRowRef, setHighlightedRowRef] = useState<HTMLDivElement | null>(null);
+  const [highlightedRowRef, setHighlightedRowRef] =
+    useState<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch existing customers when modal opens
   const fetchExistingCustomers = useCallback(async () => {
     if (!currentUser) return;
-    
+
     try {
       const token = getAccessToken();
-      const response = await fetch('/api/auto-greeting/customers', {
+      const response = await fetch("/api/auto-greeting/customers", {
         headers: {
           ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         // Backend returns array directly, not wrapped in {customers: []}
         setExistingCustomers(Array.isArray(data) ? data : []);
       }
     } catch (error) {
-      console.error('Error fetching existing customers:', error);
+      console.error("Error fetching existing customers:", error);
     }
   }, [currentUser]);
 
@@ -135,53 +146,54 @@ export default function ImportExcelModal({
     }
   }, [open, fetchExistingCustomers]);
 
-  const validateCustomer = useCallback((
-    customer: Customer,
-    index: number
-  ): CustomerValidationError[] => {
-    const errors: CustomerValidationError[] = [];
+  const validateCustomer = useCallback(
+    (customer: Customer, index: number): CustomerValidationError[] => {
+      const errors: CustomerValidationError[] = [];
 
-    // Validate zalo display name
-    if (!customer.zaloDisplayName || customer.zaloDisplayName.trim() === "") {
-      errors.push({
-        index,
-        field: "zaloDisplayName",
-        message: "Tên hiển thị Zalo không được để trống",
-        type: "empty",
-      });
-    } else if (customer.zaloDisplayName.trim().length < 2) {
-      errors.push({
-        index,
-        field: "zaloDisplayName",
-        message: "Tên hiển thị Zalo quá ngắn (tối thiểu 2 ký tự)",
-        type: "invalid_format",
-      });
-    } else if (customer.zaloDisplayName.trim().length > 100) {
-      errors.push({
-        index,
-        field: "zaloDisplayName",
-        message: "Tên hiển thị Zalo quá dài (tối đa 100 ký tự)",
-        type: "invalid_format",
-      });
-    } else {
-      // Check for duplicates with existing customers
-      const normalizedName = customer.zaloDisplayName.trim().toLowerCase();
-      const isDuplicate = existingCustomers.some(existing => 
-        existing.zaloDisplayName.trim().toLowerCase() === normalizedName
-      );
-      
-      if (isDuplicate) {
+      // Validate zalo display name
+      if (!customer.zaloDisplayName || customer.zaloDisplayName.trim() === "") {
         errors.push({
           index,
           field: "zaloDisplayName",
-          message: "Tên hiển thị Zalo đã tồn tại trong danh sách",
-          type: "duplicate",
+          message: "Tên hiển thị Zalo không được để trống",
+          type: "empty",
         });
-      }
-    }
+      } else if (customer.zaloDisplayName.trim().length < 2) {
+        errors.push({
+          index,
+          field: "zaloDisplayName",
+          message: "Tên hiển thị Zalo quá ngắn (tối thiểu 2 ký tự)",
+          type: "invalid_format",
+        });
+      } else if (customer.zaloDisplayName.trim().length > 100) {
+        errors.push({
+          index,
+          field: "zaloDisplayName",
+          message: "Tên hiển thị Zalo quá dài (tối đa 100 ký tự)",
+          type: "invalid_format",
+        });
+      } else {
+        // Check for duplicates with existing customers
+        const normalizedName = customer.zaloDisplayName.trim().toLowerCase();
+        const isDuplicate = existingCustomers.some(
+          (existing) =>
+            existing.zaloDisplayName.trim().toLowerCase() === normalizedName
+        );
 
-    return errors;
-  }, [existingCustomers]);
+        if (isDuplicate) {
+          errors.push({
+            index,
+            field: "zaloDisplayName",
+            message: "Tên hiển thị Zalo đã tồn tại trong danh sách",
+            type: "duplicate",
+          });
+        }
+      }
+
+      return errors;
+    },
+    [existingCustomers]
+  );
 
   const validateAllCustomers = useCallback((): CustomerValidationError[] => {
     const allErrors: CustomerValidationError[] = [];
@@ -208,18 +220,23 @@ export default function ImportExcelModal({
     }
   }, [uploadedCustomers, validateAllCustomers]);
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
-      if (selectedFile.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' && 
-          !selectedFile.name.endsWith('.xlsx')) {
-        toast.error('Vui lòng chọn file Excel (.xlsx)');
+      if (
+        selectedFile.type !==
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" &&
+        !selectedFile.name.endsWith(".xlsx")
+      ) {
+        toast.error("Vui lòng chọn file Excel (.xlsx)");
         return;
       }
       setFile(selectedFile);
       setImportResult(null);
       setUploadedCustomers([]);
-      
+
       // Parse file to preview
       await parseExcelFile(selectedFile);
     }
@@ -227,14 +244,14 @@ export default function ImportExcelModal({
 
   const parseExcelFile = async (file: File) => {
     try {
-      const ExcelJS = (await import('exceljs')).default;
+      const ExcelJS = (await import("exceljs")).default;
       const workbook = new ExcelJS.Workbook();
       const buffer = await file.arrayBuffer();
       await workbook.xlsx.load(buffer);
-      
+
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
-        toast.error('File Excel không có dữ liệu');
+        toast.error("File Excel không có dữ liệu");
         return;
       }
 
@@ -248,8 +265,12 @@ export default function ImportExcelModal({
         let hasHeaders = false;
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           const text = cell.text?.toLowerCase().trim();
-          if (text === 'tên hiển thị zalo' || text === 'xưng hô' || text === 'tin nhắn chào') {
-            headers[colNumber] = cell.text?.trim() || '';
+          if (
+            text === "tên hiển thị zalo" ||
+            text === "xưng hô" ||
+            text === "tin nhắn chào"
+          ) {
+            headers[colNumber] = cell.text?.trim() || "";
             hasHeaders = true;
           }
         });
@@ -260,7 +281,7 @@ export default function ImportExcelModal({
       }
 
       if (headerRowIndex === -1) {
-        toast.error('Không tìm thấy header row trong file Excel');
+        toast.error("Không tìm thấy header row trong file Excel");
         return;
       }
 
@@ -269,7 +290,7 @@ export default function ImportExcelModal({
         const row = worksheet.getRow(r);
         let hasData = false;
         const rowData: any = {};
-        
+
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           const headerName = headers[colNumber];
           const text = cell.text?.trim();
@@ -280,12 +301,16 @@ export default function ImportExcelModal({
         });
 
         // Skip empty rows and footer
-        const name = rowData['Tên hiển thị Zalo'];
-        if (hasData && name && !String(name).toLowerCase().startsWith('tổng số khách hàng')) {
+        const name = rowData["Tên hiển thị Zalo"];
+        if (
+          hasData &&
+          name &&
+          !String(name).toLowerCase().startsWith("tổng số khách hàng")
+        ) {
           customers.push({
             zaloDisplayName: name,
-            salutation: rowData['Xưng hô'] || '',
-            greetingMessage: rowData['Tin nhắn chào'] || '',
+            salutation: rowData["Xưng hô"] || "",
+            greetingMessage: rowData["Tin nhắn chào"] || "",
           });
         }
       }
@@ -293,10 +318,9 @@ export default function ImportExcelModal({
       setUploadedCustomers(customers);
       setShowPreview(true);
       toast.success(`Đã tải ${customers.length} khách hàng từ file Excel`);
-      
     } catch (error) {
-      console.error('Error parsing Excel file:', error);
-      toast.error('Lỗi khi đọc file Excel');
+      console.error("Error parsing Excel file:", error);
+      toast.error("Lỗi khi đọc file Excel");
     }
   };
 
@@ -318,50 +342,51 @@ export default function ImportExcelModal({
     setUploading(true);
     try {
       // Tạo file Excel mới chỉ chứa các dòng không có lỗi
-      const validCustomers = uploadedCustomers.filter((_, index) => 
-        !customerValidationErrors.some(error => error.index === index)
+      const validCustomers = uploadedCustomers.filter(
+        (_, index) =>
+          !customerValidationErrors.some((error) => error.index === index)
       );
 
       // Tạo workbook mới với chỉ valid customers
-      const ExcelJS = (await import('exceljs')).default;
+      const ExcelJS = (await import("exceljs")).default;
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Danh sách khách hàng');
+      const worksheet = workbook.addWorksheet("Danh sách khách hàng");
 
       // Thêm headers
       worksheet.columns = [
-        { header: 'Tên hiển thị Zalo', key: 'zaloDisplayName', width: 30 },
-        { header: 'Xưng hô', key: 'salutation', width: 15 },
-        { header: 'Tin nhắn chào', key: 'greetingMessage', width: 50 },
+        { header: "Tên hiển thị Zalo", key: "zaloDisplayName", width: 30 },
+        { header: "Xưng hô", key: "salutation", width: 15 },
+        { header: "Tin nhắn chào", key: "greetingMessage", width: 50 },
       ];
 
       // Thêm data
-      validCustomers.forEach(customer => {
+      validCustomers.forEach((customer) => {
         worksheet.addRow({
           zaloDisplayName: customer.zaloDisplayName,
-          salutation: customer.salutation || '',
-          greetingMessage: customer.greetingMessage || '',
+          salutation: customer.salutation || "",
+          greetingMessage: customer.greetingMessage || "",
         });
       });
 
       // Tạo buffer từ workbook
       const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
-      
+
       // Tạo file mới từ blob
-      const cleanFile = new File([blob], 'clean_customers.xlsx', { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      const cleanFile = new File([blob], "clean_customers.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
 
       const formData = new FormData();
-      formData.append('file', cleanFile);
+      formData.append("file", cleanFile);
 
       const token = getAccessToken();
-      const response = await fetch('/api/auto-greeting/import-customers', {
-        method: 'POST',
+      const response = await fetch("/api/auto-greeting/import-customers", {
+        method: "POST",
         headers: {
-          ...(token && { 'Authorization': `Bearer ${token}` }),
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
         body: formData,
       });
@@ -390,10 +415,9 @@ export default function ImportExcelModal({
           onClose();
         }, 2000); // Delay 2s để user thấy thông báo lỗi
       }
-
     } catch (error) {
-      console.error('Import error:', error);
-      toast.error('Lỗi khi import file Excel');
+      console.error("Import error:", error);
+      toast.error("Lỗi khi import file Excel");
     } finally {
       setUploading(false);
     }
@@ -414,15 +438,16 @@ export default function ImportExcelModal({
 
   // Navigation functions for errors
   const navigateToNextError = useCallback(() => {
-    setCurrentErrorIndex(prev => {
+    setCurrentErrorIndex((prev) => {
       const nextIndex = prev + 1;
       return nextIndex >= customerValidationErrors.length ? 0 : nextIndex;
     });
   }, [customerValidationErrors.length]);
 
   const navigateToPrevError = useCallback(() => {
-    setCurrentErrorIndex(prev => {
-      const prevIndex = prev === 0 ? customerValidationErrors.length - 1 : prev - 1;
+    setCurrentErrorIndex((prev) => {
+      const prevIndex =
+        prev === 0 ? customerValidationErrors.length - 1 : prev - 1;
       return prevIndex;
     });
   }, [customerValidationErrors.length]);
@@ -465,18 +490,18 @@ export default function ImportExcelModal({
   }, [currentErrorIndex, customerValidationErrors]);
 
   const handleRemoveCustomer = (index: number) => {
-    setUploadedCustomers(prev => prev.filter((_, i) => i !== index));
+    setUploadedCustomers((prev) => prev.filter((_, i) => i !== index));
   };
 
   const getErrorTypeIcon = (type: string) => {
     switch (type) {
-      case 'empty':
+      case "empty":
         return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'invalid_format':
+      case "invalid_format":
         return <AlertTriangle className="h-4 w-4 text-orange-500" />;
-      case 'duplicate':
+      case "duplicate":
         return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'backend_error':
+      case "backend_error":
         return <XCircle className="h-4 w-4 text-red-500" />;
       default:
         return <AlertTriangle className="h-4 w-4 text-gray-500" />;
@@ -485,36 +510,43 @@ export default function ImportExcelModal({
 
   // Calculate duplicate statistics
   const getDuplicateStats = useCallback(() => {
-    const duplicateErrors = customerValidationErrors.filter(error => error.type === 'duplicate');
-    const duplicateNames = duplicateErrors.map(error => uploadedCustomers[error.index]?.zaloDisplayName).filter(Boolean);
-    
+    const duplicateErrors = customerValidationErrors.filter(
+      (error) => error.type === "duplicate"
+    );
+    const duplicateNames = duplicateErrors
+      .map((error) => uploadedCustomers[error.index]?.zaloDisplayName)
+      .filter(Boolean);
+
     return {
       count: duplicateErrors.length,
       names: duplicateNames.slice(0, 3), // Show first 3 examples
-      hasMore: duplicateNames.length > 3
+      hasMore: duplicateNames.length > 3,
     };
   }, [customerValidationErrors, uploadedCustomers]);
 
   const getErrorTypeColor = (type: string) => {
     switch (type) {
-      case 'empty':
-        return 'bg-red-50 border-red-200';
-      case 'invalid_format':
-        return 'bg-orange-50 border-orange-200';
-      case 'duplicate':
-        return 'bg-yellow-50 border-yellow-200';
-      case 'backend_error':
-        return 'bg-red-50 border-red-200';
+      case "empty":
+        return "bg-red-50 border-red-200";
+      case "invalid_format":
+        return "bg-orange-50 border-orange-200";
+      case "duplicate":
+        return "bg-yellow-50 border-yellow-200";
+      case "backend_error":
+        return "bg-red-50 border-red-200";
       default:
-        return 'bg-gray-50 border-gray-200';
+        return "bg-gray-50 border-gray-200";
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="!max-w-[50vw] !max-h-[95vh] p-0 overflow-auto border-0 bg-transparent no-scrollbar-modal" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+      <DialogContent
+        className="!max-w-[50vw] !max-h-[95vh] p-0 overflow-auto border-0 bg-transparent no-scrollbar-modal"
+        style={{ msOverflowStyle: "none", scrollbarWidth: "none" }}
+      >
         <style>{`.no-scrollbar-modal { -ms-overflow-style: none; scrollbar-width: none; } .no-scrollbar-modal::-webkit-scrollbar { display: none; }`}</style>
-        
+
         {/* Floating background particles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-4 left-6 text-blue-300 animate-pulse">
@@ -585,7 +617,10 @@ export default function ImportExcelModal({
                 <div className="relative bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border-2 border-blue-200 shadow-inner">
                   <div className="space-y-4">
                     <div>
-                      <Label htmlFor="file" className="text-lg font-semibold text-gray-700 mb-3 block">
+                      <Label
+                        htmlFor="file"
+                        className="text-lg font-semibold text-gray-700 mb-3 block"
+                      >
                         Chọn file Excel
                       </Label>
                       <Input
@@ -601,7 +636,9 @@ export default function ImportExcelModal({
                     {file && (
                       <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                         <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                        <span className="text-green-800 font-medium">{file.name}</span>
+                        <span className="text-green-800 font-medium">
+                          {file.name}
+                        </span>
                         <span className="text-green-600 text-sm">
                           ({(file.size / 1024).toFixed(1)} KB)
                         </span>
@@ -621,7 +658,8 @@ export default function ImportExcelModal({
                         <div className="flex items-center gap-3">
                           <Table className="h-6 w-6 text-blue-600" />
                           <h3 className="text-lg font-semibold text-gray-800">
-                            Xem trước dữ liệu ({uploadedCustomers.length} khách hàng)
+                            Xem trước dữ liệu ({uploadedCustomers.length} khách
+                            hàng)
                           </h3>
                         </div>
                         <Button
@@ -649,11 +687,14 @@ export default function ImportExcelModal({
                           <TableBody>
                             {uploadedCustomers.map((customer, index) => {
                               const hasError = customerValidationErrors.some(
-                                error => error.index === index
+                                (error) => error.index === index
                               );
-                              const isCurrentError = customerValidationErrors.length > 0 &&
-                                currentErrorIndex < customerValidationErrors.length &&
-                                customerValidationErrors[currentErrorIndex]?.index === index;
+                              const isCurrentError =
+                                customerValidationErrors.length > 0 &&
+                                currentErrorIndex <
+                                  customerValidationErrors.length &&
+                                customerValidationErrors[currentErrorIndex]
+                                  ?.index === index;
                               return (
                                 <TableRow
                                   key={index}
@@ -661,7 +702,9 @@ export default function ImportExcelModal({
                                   className={`${
                                     hasError ? "bg-red-50 border-red-200" : ""
                                   } ${
-                                    isCurrentError ? "ring-2 ring-blue-500 bg-blue-100" : ""
+                                    isCurrentError
+                                      ? "ring-2 ring-blue-500 bg-blue-100"
+                                      : ""
                                   } transition-all`}
                                 >
                                   <TableCell className="text-center text-sm text-gray-500">
@@ -670,20 +713,32 @@ export default function ImportExcelModal({
                                   <TableCell>
                                     <div className="flex items-center gap-2">
                                       <User className="h-4 w-4 text-gray-400" />
-                                      <span className={hasError ? "text-red-600 font-medium" : ""}>
+                                      <span
+                                        className={
+                                          hasError
+                                            ? "text-red-600 font-medium"
+                                            : ""
+                                        }
+                                      >
                                         {customer.zaloDisplayName}
                                       </span>
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <span className={hasError ? "text-red-600" : ""}>
-                                      {customer.salutation || '-'}
+                                    <span
+                                      className={hasError ? "text-red-600" : ""}
+                                    >
+                                      {customer.salutation || "-"}
                                     </span>
                                   </TableCell>
                                   <TableCell>
                                     <div className="max-w-xs truncate">
-                                      <span className={hasError ? "text-red-600" : ""}>
-                                        {customer.greetingMessage || '-'}
+                                      <span
+                                        className={
+                                          hasError ? "text-red-600" : ""
+                                        }
+                                      >
+                                        {customer.greetingMessage || "-"}
                                       </span>
                                     </div>
                                   </TableCell>
@@ -691,7 +746,9 @@ export default function ImportExcelModal({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => handleRemoveCustomer(index)}
+                                      onClick={() =>
+                                        handleRemoveCustomer(index)
+                                      }
                                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -709,7 +766,8 @@ export default function ImportExcelModal({
                           <div className="flex items-center gap-2 mb-2">
                             <AlertTriangle className="h-5 w-5 text-red-600" />
                             <span className="font-semibold text-red-800">
-                              Có {customerValidationErrors.length} lỗi validation
+                              Có {customerValidationErrors.length} lỗi
+                              validation
                             </span>
                           </div>
                           <div className="text-sm text-red-700">
@@ -730,14 +788,18 @@ export default function ImportExcelModal({
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 mb-4">
                         <CheckCircle className="h-6 w-6 text-green-600" />
-                        <h3 className="text-lg font-semibold text-gray-800">Kết quả import</h3>
+                        <h3 className="text-lg font-semibold text-gray-800">
+                          Kết quả import
+                        </h3>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-green-100 p-4 rounded-lg">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-5 w-5 text-green-600" />
-                            <span className="font-semibold text-green-800">Thành công</span>
+                            <span className="font-semibold text-green-800">
+                              Thành công
+                            </span>
                           </div>
                           <div className="text-2xl font-bold text-green-600 mt-1">
                             {importResult.success}
@@ -747,7 +809,9 @@ export default function ImportExcelModal({
                         <div className="bg-red-100 p-4 rounded-lg">
                           <div className="flex items-center gap-2">
                             <XCircle className="h-5 w-5 text-red-600" />
-                            <span className="font-semibold text-red-800">Thất bại</span>
+                            <span className="font-semibold text-red-800">
+                              Thất bại
+                            </span>
                           </div>
                           <div className="text-2xl font-bold text-red-600 mt-1">
                             {importResult.failed}
@@ -755,29 +819,37 @@ export default function ImportExcelModal({
                         </div>
                       </div>
 
-                      {importResult.errors && importResult.errors.length > 0 && (
-                        <div className="mt-4">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowDetails(!showDetails)}
-                            className="flex items-center gap-2"
-                          >
-                            {showDetails ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            {showDetails ? 'Ẩn chi tiết' : 'Xem chi tiết lỗi'}
-                          </Button>
+                      {importResult.errors &&
+                        importResult.errors.length > 0 && (
+                          <div className="mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowDetails(!showDetails)}
+                              className="flex items-center gap-2"
+                            >
+                              {showDetails ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                              {showDetails ? "Ẩn chi tiết" : "Xem chi tiết lỗi"}
+                            </Button>
 
-                          {showDetails && (
-                            <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
-                              {importResult.errors.map((error, index) => (
-                                <div key={index} className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-                                  {error}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            {showDetails && (
+                              <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
+                                {importResult.errors.map((error, index) => (
+                                  <div
+                                    key={index}
+                                    className="p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+                                  >
+                                    {error}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -805,15 +877,21 @@ export default function ImportExcelModal({
                               <div className="flex items-center gap-2 mb-2">
                                 <AlertTriangle className="h-5 w-5 text-yellow-600" />
                                 <span className="font-semibold text-yellow-800">
-                                  ⚠️ {duplicateStats.count} khách hàng trùng với danh sách hiện tại
+                                  ⚠️ {duplicateStats.count} khách hàng trùng với
+                                  danh sách hiện tại
                                 </span>
                               </div>
                               <div className="text-sm text-yellow-700">
-                                Ví dụ: {duplicateStats.names.join(', ')}
-                                {duplicateStats.hasMore && ` và ${duplicateStats.count - 3} khách hàng khác...`}
+                                Ví dụ: {duplicateStats.names.join(", ")}
+                                {duplicateStats.hasMore &&
+                                  ` và ${
+                                    duplicateStats.count - 3
+                                  } khách hàng khác...`}
                               </div>
                               <div className="text-xs text-yellow-600 mt-1">
-                                💡 Những khách hàng trùng sẽ không được import. Vui lòng xóa chúng khỏi danh sách hiện tại trước khi import.
+                                💡 Những khách hàng trùng sẽ không được import.
+                                Vui lòng xóa chúng khỏi danh sách hiện tại trước
+                                khi import.
                               </div>
                             </div>
                           );
@@ -835,7 +913,8 @@ export default function ImportExcelModal({
                               Trước
                             </Button>
                             <span className="text-sm text-gray-600">
-                              {currentErrorIndex + 1} / {customerValidationErrors.length}
+                              {currentErrorIndex + 1} /{" "}
+                              {customerValidationErrors.length}
                             </span>
                             <Button
                               variant="outline"
@@ -848,7 +927,9 @@ export default function ImportExcelModal({
                             </Button>
                           </div>
                           <div className="text-sm text-gray-600">
-                            Lỗi hiện tại: Dòng {customerValidationErrors[currentErrorIndex]?.index + 1}
+                            Lỗi hiện tại: Dòng{" "}
+                            {customerValidationErrors[currentErrorIndex]
+                              ?.index + 1}
                           </div>
                         </div>
                       )}
@@ -858,8 +939,8 @@ export default function ImportExcelModal({
                           <div
                             key={index}
                             className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                              index === currentErrorIndex 
-                                ? 'ring-2 ring-blue-500 bg-blue-50' 
+                              index === currentErrorIndex
+                                ? "ring-2 ring-blue-500 bg-blue-50"
                                 : getErrorTypeColor(error.type)
                             }`}
                             onClick={() => setCurrentErrorIndex(index)}
@@ -907,24 +988,24 @@ export default function ImportExcelModal({
               <Button
                 type="button"
                 onClick={handleImport}
-                disabled={!file || uploading || customerValidationErrors.length > 0}
+                disabled={
+                  !file || uploading || customerValidationErrors.length > 0
+                }
                 className="group relative overflow-hidden flex items-center gap-3 px-6 py-3 text-base font-bold bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-600 hover:from-blue-600 hover:via-indigo-700 hover:to-purple-700 border-0 shadow-2xl hover:shadow-blue-500/50 transform hover:scale-110 hover:-translate-y-1 transition-all duration-500 ease-out rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-[140px] justify-center"
               >
                 {/* Shimmer effect */}
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
 
                 {uploading ? (
-                  <>
+                  <span className="flex items-start justify-center">
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     <span className="relative z-10">Đang import...</span>
-                  </>
+                  </span>
                 ) : (
-                  <>
-                    <span className="flex items-center gap-2">
-                      <Upload className="w-5 h-5 relative z-10 group-hover:rotate-12 group-hover:scale-110 transition-transform duration-300" />
-                      <span className="relative z-10">📊 Import</span>
-                    </span>
-                  </>
+                  <span className="flex items-start justify-center">
+                    <Upload className="w-5 h-5 relative z-10 group-hover:rotate-12 group-hover:scale-110 transition-transform duration-300" />
+                    <span className="relative z-10">📊 Import</span>
+                  </span>
                 )}
               </Button>
             </div>
@@ -960,10 +1041,13 @@ export default function ImportExcelModal({
                 Xác nhận import
               </DialogTitle>
               <DialogDescription>
-                Có {customerValidationErrors.length} dòng có lỗi validation. Bạn có muốn bỏ qua các dòng lỗi và tiếp tục import {uploadedCustomers.length - customerValidationErrors.length} dòng còn lại không?
+                Có {customerValidationErrors.length} dòng có lỗi validation. Bạn
+                có muốn bỏ qua các dòng lỗi và tiếp tục import{" "}
+                {uploadedCustomers.length - customerValidationErrors.length}{" "}
+                dòng còn lại không?
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="flex justify-end gap-3 mt-4">
               <Button
                 variant="outline"

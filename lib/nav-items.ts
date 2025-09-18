@@ -1,5 +1,5 @@
 // Định nghĩa navItems dùng chung cho sidebar, middleware, layout
-export const navItems = [
+const baseNavItems = [
   {
     title: "Thống kê",
     icon: "FileBarChart2",
@@ -18,7 +18,7 @@ export const navItems = [
       roles: ["admin", "analysis", "view", "PM"]
     },
     { title: "Quản lý Blacklist", url: "/dashboard/order-blacklist", roles: ["admin", "analysis", "view"] },
-    { title: "Quản lý Chặn Phân Tích", url: "/dashboard/analysis-block-management", roles: ["admin"] },
+    { title: "Quản lý Chặn Phân Tích", url: "/dashboard/analysis-block-management", roles: ["admin", "view"] },
     { title: "Quản lý Đơn hàng đã xóa", url: "/dashboard/order-trashed", roles: ["admin", "analysis", "view"] },
     { title: "Quản lý Đơn hàng đã ẩn", url: "/dashboard/order-hidden", roles: ["admin", "analysis", "view"] },
   ],
@@ -45,7 +45,7 @@ export const navItems = [
     items: [
       { title: "Quản lý giao dịch", url: "/dashboard/manager-pm-transactions", roles: ["admin", "PM", "view"] },
       { title: "Đơn hàng chưa có mã", url: "/dashboard/pm-orders-no-product", roles: ["admin", "PM", "view"] },
-      { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin", "pm", "view"] },
+      { title: "Quản lý sản phẩm", url: "/dashboard/products", roles: ["admin", "PM", "view"] },
     ],
   },
   {
@@ -79,3 +79,7 @@ export const navItems = [
     ],
   },
 ];
+
+
+// Export navItems gốc để middleware sử dụng
+export const navItems = baseNavItems;

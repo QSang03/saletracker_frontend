@@ -566,44 +566,67 @@ export default function UserRoleAndPermissionModal({
       'giao-dich': {
         name: '💰 GIAO DỊCH',
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('don-hang') || p.name.includes('blacklist')) && isReadOrExport(p))
+          permissions.filter(p => (
+            p.name === 'quan-ly-don-hang' ||
+            p.name === 'quan-ly-blacklist' || 
+            p.name === 'analysis-block-management' ||
+            p.name === 'don-hang-da-xoa' ||
+            p.name === 'don-hang-da-an'
+          ) && isReadOrExport(p))
         )
       },
       'cong-no': {
         name: '💳 CÔNG NỢ',
-    // Loại bỏ các quyền thống kê công nợ (thong-ke-cong-no) để tránh trùng với nhóm THỐNG KÊ
+        // Loại bỏ các quyền thống kê công nợ (thong-ke-cong-no) để tránh trùng với nhóm THỐNG KÊ
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('cong-no') || p.name.includes('nhac-no')) && !p.name.startsWith('thong-ke') && isReadOrExport(p))
+          permissions.filter(p => (p.name === 'cong-no' || p.name === 'cau-hinh-nhac-no') && isReadOrExport(p))
         )
       },
       'chien-dich': {
         name: '📢 CHIẾN DỊCH',
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('chien-dich') || p.name.includes('gui-tin-nhan')) && isReadOrExport(p))
+          permissions.filter(p => (p.name === 'cau-hinh-gui-tin-nhan' || p.name === 'lich-chien-dich') && isReadOrExport(p))
         )
       },
       'product-manager': {
         name: '👨‍💼 PRODUCT MANAGER',
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('giao-dich-pm') || p.name.includes('san-pham')) && isReadOrExport(p))
+          permissions.filter(p => (
+            p.name === 'quan-ly-giao-dich-pm' || 
+            p.name === 'quan-ly-san-pham' ||
+            p.name === 'don-hang-chua-co-ma'
+          ) && isReadOrExport(p))
         )
       },
       'tai-khoan': {
         name: '👤 TÀI KHOẢN',
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('tai-khoan') || p.name.includes('bo-phan') || p.name.includes('zalo') || p.name.includes('phan-quyen')) && isReadOrExport(p))
+          permissions.filter(p => (
+            p.name === 'quan-ly-tai-khoan' || 
+            p.name === 'quan-ly-bo-phan' || 
+            p.name === 'quan-ly-zalo' || 
+            p.name === 'roles'
+          ) && isReadOrExport(p))
         )
       },
       'thong-tin': {
         name: 'ℹ️ THÔNG TIN',
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('lien-ket') || p.name.includes('zalo-nkc')) && isReadOrExport(p))
+          permissions.filter(p => (
+            p.name === 'link-account' || 
+            p.name === 'auto-greeting' ||
+            p.name === 'zalo-nkc'
+          ) && isReadOrExport(p))
         )
       },
       'cai-dat': {
         name: '⚙️ CÀI ĐẶT',
         permissions: dedupByNameAction(
-          permissions.filter(p => (p.name.includes('cau-hinh') || p.name.includes('chat-gpt')) && isReadOrExport(p))
+          permissions.filter(p => (
+            p.name === 'config-system' ||
+            p.name === 'service-monitor' ||
+            p.name === 'gpt-oss'
+          ) && isReadOrExport(p))
         )
       }
     };

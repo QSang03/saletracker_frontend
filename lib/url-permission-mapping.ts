@@ -1,4 +1,5 @@
 // Mapping giữa URL và permissions để kiểm tra quyền truy cập cho role view
+// Đồng bộ với tên permission trong giao diện phân quyền
 export const URL_PERMISSION_MAPPING = {
   // 📊 THỐNG KÊ
   '/dashboard/transactions': { name: 'thong-ke-giao-dich', action: 'read' },
@@ -7,6 +8,7 @@ export const URL_PERMISSION_MAPPING = {
   // 💰 GIAO DỊCH
   '/dashboard/manager-order': { name: 'quan-ly-don-hang', action: 'read' },
   '/dashboard/order-blacklist': { name: 'quan-ly-blacklist', action: 'read' },
+  '/dashboard/analysis-block-management': { name: 'analysis-block-management', action: 'read' },
   '/dashboard/order-trashed': { name: 'don-hang-da-xoa', action: 'read' },
   '/dashboard/order-hidden': { name: 'don-hang-da-an', action: 'read' },
   
@@ -20,23 +22,24 @@ export const URL_PERMISSION_MAPPING = {
   
   // 👨‍💼 PRODUCT MANAGER
   '/dashboard/manager-pm-transactions': { name: 'quan-ly-giao-dich-pm', action: 'read' },
-  '/dashboard/pm-orders-no-product': { name: 'don-hang-khong-co-ma-sp', action: 'read' },
+  '/dashboard/pm-orders-no-product': { name: 'don-hang-chua-co-ma', action: 'read' },
   '/dashboard/products': { name: 'quan-ly-san-pham', action: 'read' },
   
   // 👤 TÀI KHOẢN
   '/dashboard/manage': { name: 'quan-ly-tai-khoan', action: 'read' },
   '/dashboard/department': { name: 'quan-ly-bo-phan', action: 'read' },
   '/dashboard/zalo': { name: 'quan-ly-zalo', action: 'read' },
-  '/dashboard/roles': { name: 'phan-quyen', action: 'read' },
+  '/dashboard/roles': { name: 'roles', action: 'read' },
   
   // ℹ️ THÔNG TIN
-  '/dashboard/link-account': { name: 'lien-ket-tai-khoan', action: 'read' },
+  '/dashboard/link-account': { name: 'link-account', action: 'read' },
+  '/dashboard/auto-greeting': { name: 'auto-greeting', action: 'read' },
   '/dashboard/zalo-nkc': { name: 'zalo-nkc', action: 'read' },
   
   // ⚙️ CÀI ĐẶT
-  '/dashboard/config-system': { name: 'cau-hinh-he-thong', action: 'read' },
-  '/dashboard/service-monitor': { name: 'cau-hinh-server', action: 'read' },
-  '/dashboard/gpt-oss': { name: 'chat-gpt-oss', action: 'read' },
+  '/dashboard/config-system': { name: 'config-system', action: 'read' },
+  '/dashboard/service-monitor': { name: 'service-monitor', action: 'read' },
+  '/dashboard/gpt-oss': { name: 'gpt-oss', action: 'read' },
 } as const;
 
 // Helper function để lấy permission từ URL
@@ -48,16 +51,11 @@ export function getPermissionFromUrl(url: string): { name: string; action: strin
 export function canAccessUrl(url: string, userPermissions: Array<{ name: string; action: string }>): boolean {
   const permission = getPermissionFromUrl(url);
   if (!permission) return true; // Nếu không có mapping, cho phép truy cập
-  // Accept variants so frontend mapping (thong-ke-*) and simple slugs both work
+  
   const { name, action } = permission;
-  // Derive slug from mapping name: if mapping already uses thong-ke- or thong_ke_ prefix, strip it
-  const slug = name.replace(/^thong[-_]ke[-_]/, '');
-  const alt1 = `thong-ke-${slug}`;
-  const alt2 = `thong_ke_${slug}`;
-
+  
+  // Kiểm tra exact match với permission name
   return userPermissions.some(p => {
-    const pname = p.name || '';
-    const matchesName = pname === name || pname === slug || pname === alt1 || pname === alt2;
-    return matchesName && p.action === action;
+    return p.name === name && p.action === action;
   });
 }

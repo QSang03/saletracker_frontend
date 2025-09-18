@@ -141,22 +141,45 @@ export function useHiddenOrders() {
         if (filtersToUse.sortDirection)
           params.set("sortDirection", filtersToUse.sortDirection);
 
-        // Hidden date range
+        // Hidden date range với validation 14 ngày
         if (
           filtersToUse.hiddenDateRange?.from &&
           filtersToUse.hiddenDateRange?.to
         ) {
-          params.set(
-            "hiddenDateRange",
-            JSON.stringify({
-              start: filtersToUse.hiddenDateRange.from
-                .toISOString()
-                .split("T")[0],
-              end: filtersToUse.hiddenDateRange.to
-                .toISOString()
-                .split("T")[0],
-            })
+          // ✅ THÊM: Validation giới hạn 14 ngày
+          const daysDiff = Math.ceil(
+            (filtersToUse.hiddenDateRange.to.getTime() - filtersToUse.hiddenDateRange.from.getTime()) / (1000 * 60 * 60 * 24)
           );
+          
+          if (daysDiff > 14) {
+            // Nếu vượt quá 14 ngày, giới hạn về 14 ngày từ ngày bắt đầu
+            const adjustedTo = new Date(filtersToUse.hiddenDateRange.from);
+            adjustedTo.setDate(adjustedTo.getDate() + 14);
+            
+            params.set(
+              "hiddenDateRange",
+              JSON.stringify({
+                start: filtersToUse.hiddenDateRange.from
+                  .toISOString()
+                  .split("T")[0],
+                end: adjustedTo
+                  .toISOString()
+                  .split("T")[0],
+              })
+            );
+          } else {
+            params.set(
+              "hiddenDateRange",
+              JSON.stringify({
+                start: filtersToUse.hiddenDateRange.from
+                  .toISOString()
+                  .split("T")[0],
+                end: filtersToUse.hiddenDateRange.to
+                  .toISOString()
+                  .split("T")[0],
+              })
+            );
+          }
         }
 
         const res = await fetch(
@@ -213,9 +236,28 @@ export function useHiddenOrders() {
           (key) => key !== "page" && key !== "pageSize"
         );
 
+        // ✅ THÊM: Validation cho hiddenDateRange
+        let validatedFilters = { ...newFilters };
+        if (newFilters.hiddenDateRange?.from && newFilters.hiddenDateRange?.to) {
+          const daysDiff = Math.ceil(
+            (newFilters.hiddenDateRange.to.getTime() - newFilters.hiddenDateRange.from.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          
+          if (daysDiff > 14) {
+            // Nếu vượt quá 14 ngày, giới hạn về 14 ngày từ ngày bắt đầu
+            const adjustedTo = new Date(newFilters.hiddenDateRange.from);
+            adjustedTo.setDate(adjustedTo.getDate() + 14);
+            
+            validatedFilters.hiddenDateRange = {
+              from: newFilters.hiddenDateRange.from,
+              to: adjustedTo
+            };
+          }
+        }
+
         const updated = {
           ...prev,
-          ...newFilters,
+          ...validatedFilters,
           page: shouldResetPage ? 1 : newFilters.page || prev.page,
         };
 

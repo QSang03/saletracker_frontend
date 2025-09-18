@@ -140,6 +140,7 @@ interface PaginatedTableProps {
   onBrandCategoryChange?: (brandCategories: (string | number)[]) => void; // Handler cho bộ lọc gộp
   onWarningLevelChange?: (warningLevels: (string | number)[]) => void;
   onDateRangeChange?: (dateRange: DateRange | undefined) => void;
+  onDateRangeValidationError?: (message: string) => void; // ✅ THÊM: Callback cho validation error
   // When true, render only the controls (filters + pagination) without a content area
   controlsOnly?: boolean;
   // Hide the built-in pager (Prev/Next + page indicator). Useful when embedding this toolbar at the top
@@ -246,6 +247,7 @@ export default function PaginatedTable({
   onBrandCategoryChange,
   onWarningLevelChange,
   onDateRangeChange,
+  onDateRangeValidationError,
   isRestoring = false,
   controlsOnly = false,
   hidePager = false,
@@ -1560,7 +1562,54 @@ export default function PaginatedTable({
                     mode="range"
                     defaultMonth={filters.dateRange.from}
                     selected={filters.dateRange}
+                    disabled={(date) => {
+                      // ✅ THÊM: Disable các ngày không được phép chọn
+                      if (!filters.dateRange.from) {
+                        // Nếu chưa chọn ngày bắt đầu, chỉ disable các ngày quá cũ (hơn 14 ngày trước)
+                        const fourteenDaysAgo = new Date();
+                        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+                        return date < fourteenDaysAgo || date > new Date();
+                      } else {
+                        // Nếu đã chọn ngày bắt đầu, disable các ngày ngoài khoảng 14 ngày
+                        const maxDate = new Date(filters.dateRange.from);
+                        maxDate.setDate(maxDate.getDate() + 14);
+                        const minDate = new Date(filters.dateRange.from);
+                        minDate.setDate(minDate.getDate() - 14);
+                        
+                        return date < minDate || date > maxDate || date > new Date();
+                      }
+                    }}
                     onSelect={(dateRange) => {
+                      // ✅ THÊM: Validation giới hạn 14 ngày cho hidden orders
+                      if (dateRange && dateRange.from && dateRange.to) {
+                        const daysDiff = Math.ceil(
+                          (dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 60 * 60 * 24)
+                        );
+                        
+                        if (daysDiff > 14) {
+                          // Nếu vượt quá 14 ngày, giới hạn về 14 ngày từ ngày bắt đầu
+                          const adjustedTo = new Date(dateRange.from);
+                          adjustedTo.setDate(adjustedTo.getDate() + 14);
+                          
+                          const adjustedDateRange = {
+                            from: dateRange.from,
+                            to: adjustedTo
+                          };
+                          
+                          updateFilter("dateRange", adjustedDateRange);
+                          
+                          if (onDateRangeChange) {
+                            onDateRangeChange(adjustedDateRange);
+                          }
+                          
+                          // Hiển thị thông báo cho user
+                          if (onDateRangeValidationError) {
+                            onDateRangeValidationError("Khoảng thời gian được giới hạn tối đa 14 ngày cho đơn hàng đã ẩn");
+                          }
+                          return;
+                        }
+                      }
+                      
                       updateFilter(
                         "dateRange",
                         dateRange || { from: undefined, to: undefined }

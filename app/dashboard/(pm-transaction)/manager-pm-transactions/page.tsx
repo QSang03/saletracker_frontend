@@ -51,11 +51,11 @@ export default function ManagerPMTransactionsPage() {
     return null;
   }
 
-  const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments();
-  const hasSpecificPMRole = isAdmin || (pmDepartments && pmDepartments.length > 0);
+  const pmDepartments = (isAdmin || isViewRole) ? getAccessibleDepartments() : getPMDepartments();
+  const hasSpecificPMRole = isAdmin || isViewRole || (pmDepartments && pmDepartments.length > 0);
   
   // Nếu user có role analysis, chỉ hiển thị đơn hàng của chính họ
-  const isAnalysisUser = isAnalysisRole && !isAdmin && !isPM;
+  const isAnalysisUser = isAnalysisRole && !isAdmin && !isPM && !isViewRole;
 
   return (
     <div className="h-full overflow-hidden relative">
@@ -68,7 +68,7 @@ export default function ManagerPMTransactionsPage() {
         </div>
 
         {/* Hiển thị thông báo nếu chỉ có role PM mà không có pm_{phong_ban} */}
-        {!isAdmin && !hasSpecificPMRole && !isAnalysisUser && (
+        {!isAdmin && !isViewRole && !hasSpecificPMRole && !isAnalysisUser && (
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>

@@ -114,6 +114,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   }>({ departments: [], products: [], brands: [], categories: [], brandCategories: [] });
   // Toggle: admin or PM may include hidden items when exporting
   const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
+  // Toggle: show hidden orders from last N days
+  const [showHiddenOrders, setShowHiddenOrders] = useState(false);
+  const [hiddenOrdersDays, setHiddenOrdersDays] = useState(7); // Default 7 days
   const [departmentsSelected, setDepartmentsSelected] = useState<
     (string | number)[]
   >([]);
@@ -150,6 +153,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     warningLevel?: string; // CSV
     quantity?: number;
     conversationType?: string; // CSV
+    showHiddenOrders?: boolean;
+    hiddenOrdersDays?: number;
   };
 
   // LocalStorage helpers for PM filters
@@ -240,6 +245,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         Array.isArray(conversationTypesSelected) && conversationTypesSelected.length > 0
           ? conversationTypesSelected.join(",")
           : "",
+      showHiddenOrders,
+      hiddenOrdersDays,
     };
   };
 
@@ -312,6 +319,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           setConversationTypesSelected(
             f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
           );
+
+          // Apply hidden orders settings
+          setShowHiddenOrders(f.showHiddenOrders || false);
+          setHiddenOrdersDays(f.hiddenOrdersDays || 7);
         });
       }, 0);
       
@@ -474,6 +485,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       const effWarning = eff ? eff.warningLevel : warningLevelFilter;
       const effQty = eff ? eff.quantity : minQuantity;
       const effConversationType = eff ? eff.conversationType : (conversationTypesSelected.length > 0 ? conversationTypesSelected.join(',') : '');
+      const effShowHiddenOrders = eff ? eff.showHiddenOrders : showHiddenOrders;
+      const effHiddenOrdersDays = eff ? eff.hiddenOrdersDays : hiddenOrdersDays;
 
       const params = new URLSearchParams();
       params.set('page', String(effPage));
@@ -599,6 +612,22 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // ✅ SỬA: Conversation type filter - xử lý tương tự như manager order
       if (effConversationType) params.set('conversationType', effConversationType);
 
+      // ✅ Add hidden orders parameter
+      if (effShowHiddenOrders) {
+        params.set('includeHidden', '1');
+        // Calculate date range for hidden orders (last N days)
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - (effHiddenOrdersDays || 7));
+        
+        // Format dates as YYYY-MM-DD
+        const startDateStr = startDate.toISOString().split('T')[0];
+        const endDateStr = endDate.toISOString().split('T')[0];
+        
+        // Override existing date filters when showing hidden orders
+        params.set('hiddenOrdersDateRange', JSON.stringify({ start: startDateStr, end: endDateStr }));
+      }
+
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const token = getAccessToken();
       const url = `${baseUrl}/orders/pm-transactions?${params.toString()}`;
@@ -719,6 +748,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     filtersRestored,
     minQuantity,
     conversationTypesSelected, // ✅ SỬA: Include conversation types in fetch effect
+    showHiddenOrders,
+    hiddenOrdersDays,
   ]);
 
   // removed duplicate sync effect — pageSize/dateRangeState/departments/employees/warningLevel are handled
@@ -975,6 +1006,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     warningLevelFilter,
     minQuantity,
     conversationTypesSelected, // ✅ SỬA: Include conversation types in auto-save
+    showHiddenOrders,
+    hiddenOrdersDays,
     filtersLoaded,
     isRestoring,
   ]);
@@ -1044,6 +1077,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         warningLevel: warningLevelCsv,
         quantity: quantityVal,
         conversationType: conversationTypeCsv,
+        showHiddenOrders,
+        hiddenOrdersDays,
       };
 
       // Use setTimeout to avoid calling flushSync from lifecycle methods
@@ -1237,6 +1272,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       warningLevel: "",
       quantity: undefined,
       conversationType: "", // ✅ SỬA: Reset conversation type
+      showHiddenOrders: false,
+      hiddenOrdersDays: 7,
     };
 
     // ✅ Use setTimeout to avoid calling flushSync from lifecycle methods
@@ -1256,6 +1293,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         setWarningLevelFilter("");
         setMinQuantity(undefined);
         setConversationTypesSelected([]);
+        setShowHiddenOrders(false);
+        setHiddenOrdersDays(7);
       });
     }, 0);
     
@@ -1378,7 +1417,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     // orders when exporting all data.
     const filtersDescription = (
       <div className="flex items-center justify-start gap-4">
-  { (isAdmin || isPM) && (
+  { (isAdmin || isPM || isViewRole) && (
           <div className="flex items-center gap-2">
             <Switch
               aria-label="Bao gồm đơn ẩn"
@@ -1461,9 +1500,25 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
     }
 
-    // Admin can include hidden items when exporting all
-    if ((isAdmin || isPM) && includeHiddenExport) {
+    // Admin, PM, or view role can include hidden items when exporting all
+    if ((isAdmin || isPM || isViewRole) && includeHiddenExport) {
       params.set("includeHidden", "1");
+    }
+
+    // Include hidden orders from last N days if toggle is enabled
+    if (showHiddenOrders) {
+      params.set("includeHidden", "1");
+      // Calculate date range for hidden orders (last N days)
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - (hiddenOrdersDays || 7));
+      
+      // Format dates as YYYY-MM-DD
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      // Override existing date filters when showing hidden orders
+      params.set("hiddenOrdersDateRange", JSON.stringify({ start: startDateStr, end: endDateStr }));
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -1631,7 +1686,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     }
   }, [currentPage, pageSize, searchTerm, statusFilter, dateFilter, dateRangeState, departmentsSelected, employeesSelected, warningLevelFilter, minQuantity, conversationTypesSelected]);
 
-  if (!isPM && !isAdmin) {
+  if (!isPM && !isAdmin && !isViewRole) {
     return (
       <Alert>
         <AlertCircle className="h-4 w-4" />
@@ -1642,8 +1697,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     );
   }
 
-  // Nếu không phải admin và cũng không có role PM cụ thể thì hiện thông báo
-  if (!isAdmin && !hasSpecificPMRole) {
+  // Nếu không phải admin, view role và cũng không có role PM cụ thể thì hiện thông báo
+  if (!isAdmin && !isViewRole && !hasSpecificPMRole) {
     return (
       <Card>
         <CardHeader>
@@ -1671,7 +1726,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           <CardTitle className="text-xl font-bold">
             Danh sách giao dịch
           </CardTitle>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <Button
               variant="outline"
               onClick={() => fetchOrders()}
@@ -1679,6 +1734,56 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             >
               🔄 Làm mới
             </Button>
+            
+            {/* Hidden Orders Toggle */}
+            <div className="flex items-center gap-2 border rounded-lg px-3 py-2">
+              <Switch
+                checked={showHiddenOrders}
+                onCheckedChange={(checked) => {
+                  setShowHiddenOrders(checked);
+                  setCurrentPage(1);
+                  // Save to localStorage immediately
+                  updatePmFiltersAndStorage({
+                    showHiddenOrders: checked,
+                    page: 1
+                  });
+                }}
+              />
+              <Label className="text-sm font-medium">
+                Hiển thị đơn ẩn
+              </Label>
+              
+              {showHiddenOrders && (
+                <div className="flex items-center gap-2 ml-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Trong
+                  </Label>
+                  <Select
+                    value={String(hiddenOrdersDays)}
+                    onValueChange={(value) => {
+                      const days = parseInt(value, 10);
+                      setHiddenOrdersDays(days);
+                      setCurrentPage(1);
+                      // Save to localStorage immediately
+                      updatePmFiltersAndStorage({
+                        hiddenOrdersDays: days,
+                        page: 1
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="w-20 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 ngày</SelectItem>
+                      <SelectItem value="7">7 ngày</SelectItem>
+                      <SelectItem value="14">14 ngày</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            
             {/* include hidden option moved into Export modal */}
           </div>
         </CardHeader>
@@ -1992,6 +2097,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                dateRangeState,
                dateFilter,
                conversationTypesSelected, // ✅ SỬA: Include conversation types in initialFilters dependencies
+               showHiddenOrders,
+               hiddenOrdersDays,
              ])}
              enableQuantityFilter={true}
              enableConversationTypeFilter={true}
@@ -2011,7 +2118,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               onReload={fetchOrders}
               loading={loading}
               showActions={true}
-              actionMode="edit"
+              actionMode={isViewRole ? "view-only" : "edit"}
               viewRequireAnalysis={false}
               showProductCode={true}
               skipOwnerCheck={true}

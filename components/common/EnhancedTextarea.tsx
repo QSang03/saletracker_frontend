@@ -443,15 +443,15 @@ const EnhancedTextarea: React.FC<EnhancedTextareaProps> = ({
                 }`}
               >
                 {hasValidationErrors ? (
-                  <>
+                  <span className="flex items-start justify-center">
                     <AlertCircle className="w-3 h-3" />
                     <span>Lỗi</span>
-                  </>
+                  </span>
                 ) : value ? (
-                  <>
+                  <span className="flex items-start justify-center">
                     <span className="text-green-500">✓</span>
                     <span>Hợp lệ</span>
-                  </>
+                  </span>
                 ) : (
                   <span>Chưa kiểm tra</span>
                 )}

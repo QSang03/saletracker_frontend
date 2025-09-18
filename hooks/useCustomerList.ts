@@ -37,6 +37,15 @@ export function useCustomerList(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const filtersRef = useRef<CustomerListFilters | undefined>(initialFilters);
+  
+  // ✅ Use refs to track latest state values
+  const pageRef = useRef(page);
+  const pageSizeRef = useRef(pageSize);
+  
+  // Update refs when state changes
+  useEffect(() => { pageRef.current = page; }, [page]);
+  useEffect(() => { pageSizeRef.current = pageSize; }, [pageSize]);
+  
   // Guard against race conditions between rapid pagination/filters changes
   const abortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
@@ -61,9 +70,9 @@ export function useCustomerList(
         isFetchingRef.current = false;
         return;
       }
-      const pageToLoad = nextPage ?? page;
+      const pageToLoad = nextPage ?? pageRef.current;
       const filtersToUse = nextFilters ?? filtersRef.current;
-      const pageSizeToLoad = nextPageSize ?? pageSize;
+      const pageSizeToLoad = nextPageSize ?? pageSizeRef.current;
       // Increment request id and cancel previous request
       const reqId = ++requestIdRef.current;
       if (abortRef.current) {
@@ -130,7 +139,7 @@ export function useCustomerList(
         clearTimeout(fetchTimeoutRef.current);
       }
     };
-  }, [page, pageSize]);
+  }, []);
 
   // ✅ Prevent duplicate calls
   const isSettingFiltersRef = useRef(false);

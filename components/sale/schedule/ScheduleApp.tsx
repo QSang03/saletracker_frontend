@@ -5773,40 +5773,56 @@ export default function CompleteScheduleApp() {
                                 onClick={() => focusScheduleInCalendar(schedule)}
                               >
                                 <CardContent className="p-3">
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
-                                      <h4 className="font-medium text-sm truncate mb-1">
+                                  {/* Header với tên lịch và badge trạng thái */}
+                                  <div className="flex items-start gap-2 mb-2">
+                                    <div className="flex-1 min-w-0" style={{ maxWidth: 'calc(100% - 120px)' }}>
+                                      <h4 
+                                        className="font-medium text-sm mb-1 line-clamp-2 leading-tight overflow-hidden text-ellipsis" 
+                                        title={schedule.name}
+                                        style={{ 
+                                          wordBreak: 'break-word',
+                                          display: '-webkit-box',
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: 'vertical'
+                                        }}
+                                      >
                                         {schedule.name}
                                       </h4>
                                       <div className="flex items-center gap-2">
                                         <div
-                                          className={`w-2 h-2 rounded-full ${color.bg}`}
+                                          className={`w-2 h-2 rounded-full flex-shrink-0 ${color.bg}`}
                                         />
-                                        <span className="text-xs text-slate-500 truncate">
+                                        <span 
+                                          className="text-xs text-slate-500 truncate" 
+                                          title={schedule.department?.name}
+                                          style={{ maxWidth: '120px' }}
+                                        >
                                           {schedule.department?.name}
                                         </span>
                                       </div>
                                     </div>
 
-                                    <Badge
-                                      variant={
-                                        schedule.status ===
-                                        ScheduleStatus.ACTIVE
-                                          ? "active"
+                                    <div className="flex-shrink-0 w-[100px] flex justify-end">
+                                      <Badge
+                                        variant={
+                                          schedule.status ===
+                                          ScheduleStatus.ACTIVE
+                                            ? "active"
+                                            : schedule.status ===
+                                              ScheduleStatus.EXPIRED
+                                            ? "destructive"
+                                            : "secondary"
+                                        }
+                                        className="text-[10px] px-1.5 py-0.5 whitespace-nowrap"
+                                      >
+                                        {schedule.status === ScheduleStatus.ACTIVE
+                                          ? "Hoạt động"
                                           : schedule.status ===
                                             ScheduleStatus.EXPIRED
-                                          ? "destructive"
-                                          : "secondary"
-                                      }
-                                      className="text-xs"
-                                    >
-                                      {schedule.status === ScheduleStatus.ACTIVE
-                                        ? "Lịch Đang Hoạt động"
-                                        : schedule.status ===
-                                          ScheduleStatus.EXPIRED
-                                        ? "Hết hạn"
-                                        : "Lịch Đã Xác Nhận"}
-                                    </Badge>
+                                          ? "Hết hạn"
+                                          : "Đã xác nhận"}
+                                      </Badge>
+                                    </div>
                                   </div>
 
                                   <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
@@ -5879,14 +5895,14 @@ export default function CompleteScheduleApp() {
                                     </p>
                                   )}
 
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs text-slate-400">
+                                  <div className="flex items-center justify-between pt-2 border-t border-gray-50">
+                                    <span className="text-xs text-slate-400 flex-shrink-0 mr-2" style={{ maxWidth: 'calc(100% - 80px)' }}>
                                       {new Date(
                                         schedule.created_at
                                       ).toLocaleDateString("vi-VN")}
                                     </span>
 
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 flex-shrink-0" style={{ minWidth: '72px' }}>
                                       {!isViewRole && (
                                         <>
                                           <Button

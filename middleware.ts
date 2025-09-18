@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { navItems } from './lib/nav-items';
+import { getPermissionFromUrl } from './lib/url-permission-mapping';
 import type { User } from './types';
 import { base64UrlDecode } from './lib/auth';
 
@@ -35,13 +36,30 @@ function getFirstAccessibleUrl(userRoles: string[]): string | null {
   return null;
 }
 
-function isAccessible(userRoles: string[], url: string): boolean {
-  // Nếu user có role "view", cho phép truy cập tất cả routes
-  // Permissions sẽ được kiểm tra ở component level
-  if (userRoles.includes('view')) {
-    return true;
+function isAccessible(userRoles: string[], url: string, userPermissions: any[] = []): boolean {
+  // Kiểm tra role view có permissions cụ thể không
+  const isViewRole = userRoles.includes('view');
+  if (isViewRole && userPermissions.length > 0) {
+    const permission = getPermissionFromUrl(url);
+    if (permission) {
+      // Debug log để kiểm tra
+      console.log(`🔍 [Middleware] Checking permission for ${url}:`, {
+        requiredPermission: permission,
+        userPermissions: userPermissions.map(p => `${p.name}(${p.action})`),
+        hasPermission: userPermissions.some(
+          (perm: any) => perm.name === permission.name && perm.action === permission.action
+        )
+      });
+      
+      // Kiểm tra xem user có permission cho chức năng này không
+      const hasPermission = userPermissions.some(
+        (perm: any) => perm.name === permission.name && perm.action === permission.action
+      );
+      return hasPermission;
+    }
   }
 
+  // Fallback to role-based check
   for (const group of navItems) {
     for (const item of group.items) {
       if (item.url === url && (!item.roles || hasRole(userRoles, item.roles))) {
@@ -59,6 +77,7 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get('access_token')?.value;
   let isValid = false;
   let userRoles: string[] = [];
+  let userPermissions: any[] = [];
   let zaloLinkStatus: number = 0;
 
   if (token) {
@@ -78,6 +97,11 @@ export async function middleware(request: NextRequest) {
       if (payload.roles && Array.isArray(payload.roles)) {
         // Normalize role names to lowercase for consistent comparisons
         userRoles = payload.roles.map((role: any) => (role.name || role).toString().toLowerCase());
+      }
+
+      // Lấy permissions từ payload cho role view
+      if (payload.permissions && Array.isArray(payload.permissions)) {
+        userPermissions = payload.permissions;
       }
 
       // Lấy zaloLinkStatus từ payload
@@ -249,7 +273,7 @@ export async function middleware(request: NextRequest) {
     }
   }
   const allUrls = navItems.flatMap((g: any) => g.items.map((i: any) => i.url));
-  if (allUrls.includes(pathname) && !isAccessible(userRoles, pathname)) {
+  if (allUrls.includes(pathname) && !isAccessible(userRoles, pathname, userPermissions)) {
     const firstUrl = getFirstAccessibleUrl(userRoles);
     if (firstUrl) {
       return NextResponse.redirect(new URL(firstUrl, request.url));

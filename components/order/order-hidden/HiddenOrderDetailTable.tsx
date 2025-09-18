@@ -627,6 +627,7 @@ export default function HiddenOrderManagement({
   // When parent indicates a restoring/reset action, force the PaginatedTable to clear internal UI
   isRestoring={isRestoring}
         onFilterChange={handleFilterChange}
+        onDateRangeValidationError={(message) => onAlert("warning", message)}
         loading={loading}
         canExport={true}
         getExportData={getExportData}

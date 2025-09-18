@@ -51,7 +51,7 @@ export default function PMOrdersNoProductPage() {
     return null;
   }
 
-  const pmDepartments = isAdmin ? getAccessibleDepartments() : getPMDepartments();
+  const pmDepartments = (isAdmin || isViewRole) ? getAccessibleDepartments() : getPMDepartments();
 
   return (
     <div className="flex flex-col gap-4 pt-0 pb-4 min-h-[calc(100vh-4rem)]">

@@ -1373,7 +1373,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
     }, 500);
   }, []);
 
-  if (!isPM && !isAdmin) {
+  if (!isPM && !isAdmin && !isViewRole) {
     return (
       <Alert>
         <AlertCircle className="h-4 w-4" />
@@ -1384,8 +1384,8 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
     );
   }
 
-  // Nếu không phải admin và cũng không có role PM cụ thể thì hiện thông báo
-  if (!isAdmin && !hasSpecificPMRole) {
+  // Nếu không phải admin, view role và cũng không có role PM cụ thể thì hiện thông báo
+  if (!isAdmin && !isViewRole && !hasSpecificPMRole) {
     return (
       <Card>
         <CardHeader>
@@ -1482,6 +1482,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
               onDeleteProductCode={handleDeleteProductCode}
               showProductCode={true}
               skipOwnerCheck={true}
+              actionMode={isViewRole ? "view-only" : "edit"}
             />
           </PaginatedTable>
         </CardContent>

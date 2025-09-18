@@ -29,8 +29,6 @@ export function getAccessTokenShort(): string | null {
       return decodeURIComponent(value);
     }
   }
-
-  console.warn("No access_token found in cookies");
   return null;
 }
 
@@ -70,11 +68,13 @@ export function base64UrlDecode(str: string): string {
 export function getUserFromToken(token: string): any | null {
   try {
     if (!token || typeof token !== "string") {
+      console.log('🔍 [getUserFromToken] No token or invalid token type');
       return null;
     }
 
     const parts = token.split(".");
     if (parts.length !== 3) {
+      console.log('🔍 [getUserFromToken] Invalid token format, parts:', parts.length);
       return null;
     }
 
@@ -92,7 +92,7 @@ export function getUserFromToken(token: string): any | null {
       return null;
     }
 
-    return {
+    const userData = {
       id: payload.sub,
       username: payload.username || "",
       fullName: payload.fullName || "",
@@ -109,6 +109,8 @@ export function getUserFromToken(token: string): any | null {
       nickName: payload.nickName || "",
       email: payload.email || "",
     };
+    
+    return userData;
   } catch (error) {
     console.error("Token decode error:", error);
     return null;
@@ -163,13 +165,9 @@ export function setAccessToken(token: string) {
 
     // Store full token in localStorage
     localStorage.setItem('access_token', JSON.stringify(cleanToken));
-    console.log("🔍 [Debug] Original token length:", cleanToken.length);
     
-    // For cookie, store only a truncated version for size limits
-    // But keep it as a valid token structure
     let cookieToken = cleanToken;
     
-    // If token is too long for cookie (> 4KB), truncate the payload but keep structure
     if (cleanToken.length > 4000) {
       try {
         const parts = cleanToken.split(".");
@@ -233,9 +231,6 @@ export function setAccessToken(token: string) {
     // Always try to set cookie, even with fallback token
     if (cookieToken) {
       document.cookie = `access_token=${cookieToken}; path=/; max-age=${2147483647}`;
-      console.log("✅ [SetAccessToken] Cookie token set, length:", cookieToken.length);
-    } else {
-      console.warn("⚠️ [SetAccessToken] No cookie token could be created");
     }
   } catch (error) {
     console.error("❌ [SetAccessToken] Error setting token:", error);

@@ -48,7 +48,10 @@ const DeleteCustomerModal: React.FC<DeleteCustomerModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="!max-w-[25vw] !max-h-[95vh] p-0 overflow-auto border-0 bg-transparent no-scrollbar-modal" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+      <DialogContent
+        className="!max-w-[25vw] !max-h-[95vh] p-0 overflow-auto border-0 bg-transparent no-scrollbar-modal"
+        style={{ msOverflowStyle: "none", scrollbarWidth: "none" }}
+      >
         <style>{`.no-scrollbar-modal { -ms-overflow-style: none; scrollbar-width: none; } .no-scrollbar-modal::-webkit-scrollbar { display: none; }`}</style>
         {/* Floating background particles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -174,12 +177,19 @@ const DeleteCustomerModal: React.FC<DeleteCustomerModalProps> = ({
                 variant="outline"
                 onClick={handleClose}
                 disabled={loading}
-                className="group relative overflow-hidden flex items-center gap-2 px-6 py-3 text-base font-semibold border-2 border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 ease-out min-w-[120px]"
+                className="h-12 px-6 bg-white text-gray-700 font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-3 justify-center border-2 border-gray-200"
               >
-                <span className="flex items-center gap-2">
-                  <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
-                  <span>Hủy</span>
-                </span>
+                {loading ? (
+                  <span className="flex items-start justify-center">
+                    <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                    Đang hủy...
+                  </span>
+                ) : (
+                  <span className="flex items-start justify-center">
+                    <X className="w-5 h-5 mr-1" />
+                    Hủy
+                  </span>
+                )}
               </Button>
 
               {/* Delete Button */}
@@ -188,25 +198,18 @@ const DeleteCustomerModal: React.FC<DeleteCustomerModalProps> = ({
                 variant="destructive"
                 onClick={handleConfirm}
                 disabled={loading}
-                className="group relative overflow-hidden flex items-center gap-3 px-6 py-3 text-base font-bold bg-gradient-to-r from-red-500 via-pink-600 to-red-600 hover:from-red-600 hover:via-pink-700 hover:to-red-700 border-0 shadow-2xl hover:shadow-red-500/50 transform hover:scale-110 hover:-translate-y-1 transition-all duration-500 ease-out rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-[140px] justify-center"
+                className="h-12 px-6 bg-gradient-to-r from-orange-500 via-amber-500 to-red-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-3 justify-center"
               >
-                {/* Shimmer effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-
-                <div className="absolute inset-0 bg-gradient-to-r from-red-400/50 to-pink-500/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
-
                 {loading ? (
-                  <>
+                  <span className="flex items-start justify-center">
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span className="relative z-10">Đang xóa...</span>
-                  </>
+                    Đang xóa...
+                  </span>
                 ) : (
-                  <>
-                    <span className="flex items-center gap-2">
-                      <Trash2 className="w-5 h-5 relative z-10 group-hover:rotate-12 group-hover:scale-110 transition-transform duration-300" />
-                      <span className="relative z-10">🗑️ Xóa</span>
-                    </span>
-                  </>
+                  <span className="flex items-start justify-center">
+                    <Trash2 className="w-5 h-5 mr-1" />
+                    Xóa
+                  </span>
                 )}
               </Button>
             </div>
