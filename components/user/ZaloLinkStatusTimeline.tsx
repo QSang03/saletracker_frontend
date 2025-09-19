@@ -69,10 +69,20 @@ export const ZaloLinkStatusTimeline: React.FC<Props> = ({ userId, authToken, aut
       });
       if (!res.ok) throw new Error('Load logs failed');
       const data = await res.json();
-    setLogs(data.logs || []);
-    if (typeof data.total === 'number') setTotal(data.total);
-    if (typeof data.limit === 'number') setLimit(data.limit);
-    if (typeof data.page === 'number') setPage(data.page);
+      
+      // Loại bỏ duplicate entries dựa trên timestamp và status
+      const uniqueLogs = (data.logs || []).filter((log: LogItem, index: number, arr: LogItem[]) => {
+        return arr.findIndex(l => 
+          l.triggeredAt === log.triggeredAt && 
+          l.oldStatus === log.oldStatus && 
+          l.newStatus === log.newStatus
+        ) === index;
+      });
+      
+      setLogs(uniqueLogs);
+      if (typeof data.total === 'number') setTotal(data.total);
+      if (typeof data.limit === 'number') setLimit(data.limit);
+      if (typeof data.page === 'number') setPage(data.page);
     } catch (e: any) {
       setError(e.message || 'Unexpected error');
     } finally {
@@ -104,24 +114,12 @@ export const ZaloLinkStatusTimeline: React.FC<Props> = ({ userId, authToken, aut
 
       socket.on('zalo_link_status:changed', (payload: any) => {
         if (payload?.userId !== userId) return;
-        // prepend new change (optimistic) then optionally reload page 1
-        setLogs(prev => [
-          {
-            id: Date.now(), // temp id (will differ from DB id)
-            oldStatus: payload.oldStatus,
-            newStatus: payload.newStatus,
-            oldStatusLabel: statusLabel(payload.oldStatus),
-            newStatusLabel: statusLabel(payload.newStatus),
-            triggeredAt: payload.triggeredAt?.replace('T',' ').replace('Z','') || new Date().toISOString(),
-          },
-          ...prev,
-        ]);
-        // refresh first page to sync real DB id (small debounce)
+        // Chỉ reload dữ liệu từ server, không thêm optimistic update để tránh duplicate
         setTimeout(() => {
           if (mountedRef.current) {
             load();
           }
-        }, 400);
+        }, 200);
       });
 
       socket.on('disconnect', () => {
