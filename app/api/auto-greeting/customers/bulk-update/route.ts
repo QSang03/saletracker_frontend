@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
-const MASTER_KEY = process.env.NEXT_PUBLIC_MASTER_KEY || 'nkcai';
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -14,7 +13,6 @@ export async function PATCH(request: NextRequest) {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY,
         ...(authHeader && { 'Authorization': authHeader }),
       },
       body: JSON.stringify(body),

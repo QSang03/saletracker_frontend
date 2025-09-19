@@ -44,6 +44,8 @@ interface Customer {
   zaloDisplayName: string;
   salutation?: string;
   greetingMessage?: string;
+  zaloId?: string; // Thêm zaloId field
+  isActive?: number;
 }
 
 interface ExistingCustomer {
@@ -58,6 +60,7 @@ interface ExistingCustomer {
   customerStatus?: string;
   daysSinceLastMessage: number | null;
   status: "ready" | "urgent" | "stable";
+  isActive: number; // 1: active, 0: inactive
 }
 
 interface CustomerValidationError {
@@ -65,6 +68,12 @@ interface CustomerValidationError {
   field: "zaloDisplayName" | "salutation" | "greetingMessage";
   message: string;
   type: "empty" | "invalid_format" | "duplicate" | "backend_error";
+}
+
+interface DuplicateInfo {
+  index: number;
+  existingCustomer: ExistingCustomer;
+  newCustomer: Customer;
 }
 
 interface ImportResult {
@@ -97,6 +106,7 @@ export default function ImportExcelModal({
   const [customerValidationErrors, setCustomerValidationErrors] = useState<
     CustomerValidationError[]
   >([]);
+  const [duplicates, setDuplicates] = useState<DuplicateInfo[]>([]);
   const [currentErrorIndex, setCurrentErrorIndex] = useState<number>(0);
   const [showDetails, setShowDetails] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -136,6 +146,7 @@ export default function ImportExcelModal({
       setUploadedCustomers([]);
       setExistingCustomers([]);
       setCustomerValidationErrors([]);
+      setDuplicates([]);
       setCurrentErrorIndex(0);
       setShowDetails(false);
       setShowPreview(false);
@@ -172,28 +183,34 @@ export default function ImportExcelModal({
           message: "Tên hiển thị Zalo quá dài (tối đa 100 ký tự)",
           type: "invalid_format",
         });
-      } else {
-        // Check for duplicates with existing customers
-        const normalizedName = customer.zaloDisplayName.trim().toLowerCase();
-        const isDuplicate = existingCustomers.some(
-          (existing) =>
-            existing.zaloDisplayName.trim().toLowerCase() === normalizedName
-        );
-
-        if (isDuplicate) {
-          errors.push({
-            index,
-            field: "zaloDisplayName",
-            message: "Tên hiển thị Zalo đã tồn tại trong danh sách",
-            type: "duplicate",
-          });
-        }
       }
 
       return errors;
     },
     [existingCustomers]
   );
+
+  const findDuplicates = useCallback((): DuplicateInfo[] => {
+    const duplicates: DuplicateInfo[] = [];
+
+    uploadedCustomers.forEach((customer, index) => {
+      const normalizedName = customer.zaloDisplayName.trim().toLowerCase();
+      const existingCustomer = existingCustomers.find(
+        (existing) =>
+          existing.zaloDisplayName.trim().toLowerCase() === normalizedName
+      );
+
+      if (existingCustomer) {
+        duplicates.push({
+          index,
+          existingCustomer,
+          newCustomer: customer,
+        });
+      }
+    });
+
+    return duplicates;
+  }, [uploadedCustomers, existingCustomers]);
 
   const validateAllCustomers = useCallback((): CustomerValidationError[] => {
     const allErrors: CustomerValidationError[] = [];
@@ -210,15 +227,18 @@ export default function ImportExcelModal({
   useEffect(() => {
     if (uploadedCustomers.length > 0) {
       const errors = validateAllCustomers();
+      const duplicates = findDuplicates();
       setCustomerValidationErrors(errors);
+      setDuplicates(duplicates);
       if (errors.length > 0) {
         setCurrentErrorIndex(0);
       }
     } else {
       setCustomerValidationErrors([]);
+      setDuplicates([]);
       setCurrentErrorIndex(0);
     }
-  }, [uploadedCustomers, validateAllCustomers]);
+  }, [uploadedCustomers, validateAllCustomers, findDuplicates]);
 
   const handleFileSelect = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -263,19 +283,32 @@ export default function ImportExcelModal({
       for (let r = 1; r <= Math.min(10, worksheet.rowCount); r++) {
         const row = worksheet.getRow(r);
         let hasHeaders = false;
+        
+        // Build complete headers map for this row
+        const tempHeaders: { [key: number]: string } = {};
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-          const text = cell.text?.toLowerCase().trim();
-          if (
-            text === "tên hiển thị zalo" ||
-            text === "xưng hô" ||
-            text === "tin nhắn chào"
-          ) {
-            headers[colNumber] = cell.text?.trim() || "";
-            hasHeaders = true;
+          const text = cell.text?.trim() || '';
+          if (text) {
+            tempHeaders[colNumber] = text;
           }
         });
-        if (hasHeaders) {
+        
+        // Check if this row contains the expected headers
+        const headerValues = Object.values(tempHeaders).map(h => h.toLowerCase().trim());
+        const hasRequiredHeaders = headerValues.some(h => 
+          h === "tên hiển thị zalo" || 
+          h === "xưng hô" || 
+          h === "tin nhắn chào" || 
+          h === "kích hoạt" ||
+          h === "trạng thái" ||
+          h === "zalo id"
+        );
+        
+        if (hasRequiredHeaders) {
+          // Use the complete headers map
+          Object.assign(headers, tempHeaders);
           headerRowIndex = r;
+          hasHeaders = true;
           break;
         }
       }
@@ -293,10 +326,42 @@ export default function ImportExcelModal({
 
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           const headerName = headers[colNumber];
-          const text = cell.text?.trim();
-          if (headerName && text) {
+          let text = '';
+          
+          // Handle different cell value types properly
+          if (cell.value !== null && cell.value !== undefined) {
+            if (typeof cell.value === 'number') {
+              // For large numbers, use toFixed to avoid scientific notation
+              if (Math.abs(cell.value) > 1e15) {
+                text = cell.value.toFixed(0);
+              } else {
+                text = String(cell.value);
+              }
+            } else if (typeof cell.value === 'string') {
+              text = cell.value.trim();
+            } else if (cell.value && typeof cell.value === 'object' && 'result' in cell.value) {
+              // Handle formula cells
+              if (typeof cell.value.result === 'number') {
+                if (Math.abs(cell.value.result) > 1e15) {
+                  text = cell.value.result.toFixed(0);
+                } else {
+                  text = String(cell.value.result);
+                }
+              } else {
+                text = String(cell.value.result || '').trim();
+              }
+            } else if (cell.text) {
+              text = cell.text.trim();
+            } else {
+              text = String(cell.value).trim();
+            }
+          }
+          // Always include cells with headerName, even if text is empty
+          if (headerName) {
             rowData[headerName] = text;
-            hasData = true;
+            if (text) {
+              hasData = true;
+            }
           }
         });
 
@@ -307,11 +372,38 @@ export default function ImportExcelModal({
           name &&
           !String(name).toLowerCase().startsWith("tổng số khách hàng")
         ) {
-          customers.push({
+          // Parse isActive field - check both possible column names
+          let isActive = 1; // default to active
+          const isActiveValue = rowData["Kích hoạt"] || rowData["Trạng thái"];
+          if (isActiveValue) {
+            const normalizedValue = isActiveValue.toLowerCase().trim();
+            if (
+              normalizedValue === "tắt" ||
+              normalizedValue === "0" ||
+              normalizedValue === "false" ||
+              normalizedValue === "không" ||
+              normalizedValue === "chưa kích hoạt"
+            ) {
+              isActive = 0;
+            } else if (
+              normalizedValue === "kích hoạt" ||
+              normalizedValue === "1" ||
+              normalizedValue === "true" ||
+              normalizedValue === "có"
+            ) {
+              isActive = 1;
+            }
+          }
+
+          const customerData = {
             zaloDisplayName: name,
             salutation: rowData["Xưng hô"] || "",
             greetingMessage: rowData["Tin nhắn chào"] || "",
-          });
+            zaloId: rowData["Zalo ID"] || "", // Thêm zaloId từ cột ẩn
+            isActive: isActive,
+          };
+          
+          customers.push(customerData);
         }
       }
 
@@ -319,7 +411,6 @@ export default function ImportExcelModal({
       setShowPreview(true);
       toast.success(`Đã tải ${customers.length} khách hàng từ file Excel`);
     } catch (error) {
-      console.error("Error parsing Excel file:", error);
       toast.error("Lỗi khi đọc file Excel");
     }
   };
@@ -327,8 +418,11 @@ export default function ImportExcelModal({
   const handleImport = async () => {
     if (!file || !currentUser) return;
 
-    // Kiểm tra nếu có validation errors
-    if (customerValidationErrors.length > 0) {
+    // Kiểm tra nếu có validation errors (không bao gồm duplicates)
+    const nonDuplicateErrors = customerValidationErrors.filter(
+      (error) => error.type !== "duplicate"
+    );
+    if (nonDuplicateErrors.length > 0) {
       setShowConfirmModal(true);
       return;
     }
@@ -341,10 +435,12 @@ export default function ImportExcelModal({
 
     setUploading(true);
     try {
-      // Tạo file Excel mới chỉ chứa các dòng không có lỗi
+      // Tạo file Excel mới chỉ chứa các dòng không có lỗi (không bao gồm duplicates)
       const validCustomers = uploadedCustomers.filter(
         (_, index) =>
-          !customerValidationErrors.some((error) => error.index === index)
+          !customerValidationErrors.some(
+            (error) => error.index === index && error.type !== "duplicate"
+          )
       );
 
       // Tạo workbook mới với chỉ valid customers
@@ -357,6 +453,8 @@ export default function ImportExcelModal({
         { header: "Tên hiển thị Zalo", key: "zaloDisplayName", width: 30 },
         { header: "Xưng hô", key: "salutation", width: 15 },
         { header: "Tin nhắn chào", key: "greetingMessage", width: 50 },
+        { header: "Trạng thái", key: "isActive", width: 15 }, // Changed from "Kích hoạt" to "Trạng thái" to match backend
+        { header: "Zalo ID", key: "zaloId", width: 20 }, // Make it visible, not hidden
       ];
 
       // Thêm data
@@ -365,6 +463,8 @@ export default function ImportExcelModal({
           zaloDisplayName: customer.zaloDisplayName,
           salutation: customer.salutation || "",
           greetingMessage: customer.greetingMessage || "",
+          isActive: customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
+          zaloId: customer.zaloId || "", // Make sure zaloId is included
         });
       });
 
@@ -416,7 +516,6 @@ export default function ImportExcelModal({
         }, 2000); // Delay 2s để user thấy thông báo lỗi
       }
     } catch (error) {
-      console.error("Import error:", error);
       toast.error("Lỗi khi import file Excel");
     } finally {
       setUploading(false);
@@ -507,22 +606,6 @@ export default function ImportExcelModal({
         return <AlertTriangle className="h-4 w-4 text-gray-500" />;
     }
   };
-
-  // Calculate duplicate statistics
-  const getDuplicateStats = useCallback(() => {
-    const duplicateErrors = customerValidationErrors.filter(
-      (error) => error.type === "duplicate"
-    );
-    const duplicateNames = duplicateErrors
-      .map((error) => uploadedCustomers[error.index]?.zaloDisplayName)
-      .filter(Boolean);
-
-    return {
-      count: duplicateErrors.length,
-      names: duplicateNames.slice(0, 3), // Show first 3 examples
-      hasMore: duplicateNames.length > 3,
-    };
-  }, [customerValidationErrors, uploadedCustomers]);
 
   const getErrorTypeColor = (type: string) => {
     switch (type) {
@@ -656,7 +739,6 @@ export default function ImportExcelModal({
                     <div className="space-y-4">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <Table className="h-6 w-6 text-blue-600" />
                           <h3 className="text-lg font-semibold text-gray-800">
                             Xem trước dữ liệu ({uploadedCustomers.length} khách
                             hàng)
@@ -668,8 +750,10 @@ export default function ImportExcelModal({
                           onClick={() => setShowPreview(false)}
                           className="flex items-center gap-2"
                         >
-                          <EyeOff className="h-4 w-4" />
-                          Ẩn preview
+                          <span className="flex items-start justify-center gap-2">
+                            <EyeOff className="h-4 w-4" />
+                            Ẩn preview
+                          </span>
                         </Button>
                       </div>
 
@@ -681,6 +765,7 @@ export default function ImportExcelModal({
                               <TableHead>Tên hiển thị Zalo</TableHead>
                               <TableHead>Xưng hô</TableHead>
                               <TableHead>Tin nhắn chào</TableHead>
+                              <TableHead className="w-24">Trạng thái</TableHead>
                               <TableHead className="w-16">Thao tác</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -740,6 +825,25 @@ export default function ImportExcelModal({
                                       >
                                         {customer.greetingMessage || "-"}
                                       </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2">
+                                      {customer.isActive === 1 ? (
+                                        <>
+                                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                          <span className="text-green-600 font-medium text-sm">
+                                            Kích hoạt
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                          <span className="text-red-600 font-medium text-sm">
+                                            Tắt
+                                          </span>
+                                        </>
+                                      )}
                                     </div>
                                   </TableCell>
                                   <TableCell>
@@ -868,36 +972,60 @@ export default function ImportExcelModal({
                         </h3>
                       </div>
 
-                      {/* Duplicate Summary */}
-                      {(() => {
-                        const duplicateStats = getDuplicateStats();
-                        if (duplicateStats.count > 0) {
-                          return (
-                            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                              <div className="flex items-center gap-2 mb-2">
-                                <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                                <span className="font-semibold text-yellow-800">
-                                  ⚠️ {duplicateStats.count} khách hàng trùng với
-                                  danh sách hiện tại
-                                </span>
+                      {/* Duplicate Preview */}
+                      {duplicates.length > 0 && (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center gap-2 mb-3">
+                            <AlertTriangle className="h-5 w-5 text-blue-600" />
+                            <span className="font-semibold text-blue-800">
+                              🔄 {duplicates.length} khách hàng sẽ được cập nhật
+                            </span>
+                          </div>
+                          <div className="text-sm text-blue-700 mb-2">
+                            Những khách hàng sau sẽ được cập nhật với thông tin
+                            mới từ file Excel:
+                          </div>
+                          <div className="max-h-40 overflow-y-auto space-y-2">
+                            {duplicates.map((duplicate, index) => (
+                              <div
+                                key={index}
+                                className="p-2 bg-white border border-blue-200 rounded text-xs"
+                              >
+                                <div className="font-medium text-blue-800">
+                                  {duplicate.newCustomer.zaloDisplayName}
+                                </div>
+                                <div className="text-blue-600 mt-1">
+                                  <div>
+                                    • Xưng hô: "
+                                    {duplicate.existingCustomer.salutation ||
+                                      "Trống"}
+                                    " → "
+                                    {duplicate.newCustomer.salutation ||
+                                      "Trống"}
+                                    "
+                                  </div>
+                                  <div>
+                                    • Lời chào:{" "}
+                                    {duplicate.newCustomer.greetingMessage
+                                      ? "Có"
+                                      : "Trống"}
+                                  </div>
+                                  <div>
+                                    • Kích hoạt:{" "}
+                                    {duplicate.existingCustomer.isActive === 1
+                                      ? "Đang bật"
+                                      : "Đang tắt"}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-sm text-yellow-700">
-                                Ví dụ: {duplicateStats.names.join(", ")}
-                                {duplicateStats.hasMore &&
-                                  ` và ${
-                                    duplicateStats.count - 3
-                                  } khách hàng khác...`}
-                              </div>
-                              <div className="text-xs text-yellow-600 mt-1">
-                                💡 Những khách hàng trùng sẽ không được import.
-                                Vui lòng xóa chúng khỏi danh sách hiện tại trước
-                                khi import.
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
+                            ))}
+                          </div>
+                          <div className="text-xs text-blue-600 mt-2">
+                            💡 Thông tin cũ sẽ được thay thế bằng thông tin mới
+                            từ file Excel.
+                          </div>
+                        </div>
+                      )}
 
                       {/* Navigation Controls */}
                       {customerValidationErrors.length > 1 && (
@@ -989,7 +1117,11 @@ export default function ImportExcelModal({
                 type="button"
                 onClick={handleImport}
                 disabled={
-                  !file || uploading || customerValidationErrors.length > 0
+                  !file ||
+                  uploading ||
+                  customerValidationErrors.filter(
+                    (error) => error.type !== "duplicate"
+                  ).length > 0
                 }
                 className="group relative overflow-hidden flex items-center gap-3 px-6 py-3 text-base font-bold bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-600 hover:from-blue-600 hover:via-indigo-700 hover:to-purple-700 border-0 shadow-2xl hover:shadow-blue-500/50 transform hover:scale-110 hover:-translate-y-1 transition-all duration-500 ease-out rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-[140px] justify-center"
               >
@@ -1003,7 +1135,6 @@ export default function ImportExcelModal({
                   </span>
                 ) : (
                   <span className="flex items-start justify-center">
-                    <Upload className="w-5 h-5 relative z-10 group-hover:rotate-12 group-hover:scale-110 transition-transform duration-300" />
                     <span className="relative z-10">📊 Import</span>
                   </span>
                 )}

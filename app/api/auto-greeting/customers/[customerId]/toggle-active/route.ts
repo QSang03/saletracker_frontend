@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-export async function DELETE(request: NextRequest) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ customerId: string }> }
+) {
   try {
+    const { customerId } = await params;
     const body = await request.json();
     
     // Get authorization header from the incoming request
     const authHeader = request.headers.get('authorization');
     
-    const response = await fetch(`${API_BASE_URL}/auto-greeting/customers/bulk-delete`, {
-      method: 'DELETE',
+    const response = await fetch(`${API_BASE_URL}/auto-greeting/customers/${customerId}/toggle-active`, {
+      method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         ...(authHeader && { 'Authorization': authHeader }),
@@ -19,16 +23,16 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error('Backend response not ok:', response.status, response.statusText);
-      throw new Error(`Backend error: ${response.status} ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(errorData.message || `Backend error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error bulk deleting customers:', error);
+    console.error('Error toggling customer active status:', error);
     return NextResponse.json(
-      { error: 'Failed to bulk delete customers', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to toggle customer active status', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

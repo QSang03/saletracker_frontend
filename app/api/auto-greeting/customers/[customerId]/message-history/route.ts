@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
-const MASTER_KEY = process.env.NEXT_PUBLIC_MASTER_KEY || 'nkcai';
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +15,6 @@ export async function GET(
     const response = await fetch(`${API_BASE_URL}/auto-greeting/customers/${customerId}/message-history`, {
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY,
         ...(authHeader && { 'Authorization': authHeader }),
       },
     });

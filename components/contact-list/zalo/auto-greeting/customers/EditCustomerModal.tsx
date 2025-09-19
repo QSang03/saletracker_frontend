@@ -19,6 +19,8 @@ import {
   User,
   MessageSquare,
   FileText,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 interface Customer {
@@ -33,6 +35,7 @@ interface Customer {
   customerStatus?: "urgent" | "reminder" | "normal";
   daysSinceLastMessage: number | null;
   status: "ready" | "urgent" | "stable";
+  isActive: number; // 1: active, 0: inactive
 }
 
 interface SystemConfig {
@@ -50,12 +53,13 @@ interface EditCustomerModalProps {
     zaloDisplayName: string;
     salutation: string;
     greetingMessage: string;
+    isActive: number;
   };
   systemConfig: SystemConfig | null;
   saving: boolean;
   onClose: () => void;
   onSave: () => void;
-  onFormChange: (field: string, value: string) => void;
+  onFormChange: (field: string, value: string | number) => void;
 }
 
 const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
@@ -264,6 +268,50 @@ const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* Trạng thái kích hoạt */}
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 text-base font-bold text-gray-700">
+                      <span className="w-5 h-5 flex items-center justify-center">
+                        {editForm.isActive === 1 ? '🟢' : '🔴'}
+                      </span>
+                      Trạng thái kích hoạt
+                    </label>
+
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-gradient-to-r from-green-200 to-blue-200 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
+                      <div className="relative flex items-center gap-4 p-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
+                        <Button
+                          type="button"
+                          variant={editForm.isActive === 1 ? "default" : "outline"}
+                          onClick={() => onFormChange("isActive", 1)}
+                          className={`flex items-center gap-2 ${
+                            editForm.isActive === 1
+                              ? 'bg-green-500 hover:bg-green-600 text-white border-green-500'
+                              : 'border-gray-300 text-gray-600 hover:bg-green-50'
+                          }`}
+                        >
+                          <span className="">
+                            <CheckCircle className="w-4 h-4" />
+                          Kích hoạt
+                          </span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={editForm.isActive === 0 ? "default" : "outline"}
+                          onClick={() => onFormChange("isActive", 0)}
+                          className={`flex items-center gap-2 ${
+                            editForm.isActive === 0
+                              ? 'bg-red-500 hover:bg-red-600 text-white border-red-500'
+                              : 'border-gray-300 text-gray-600 hover:bg-red-50'
+                          }`}
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Chưa kích hoạt
+                        </Button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Action buttons */}

@@ -16,37 +16,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Gọi trực tiếp API contacts từ frontend
-    const CONTACTS_API_BASE_URL = process.env.NEXT_PUBLIC_CONTACTS_API_URL || 'http://192.168.117.19:5555';
-    const contactsUrl = `${CONTACTS_API_BASE_URL}/contacts?page=1&limit=1000&user_id=${userId}`;
+    // Gọi trực tiếp API greeting-contacts từ frontend
+    const CONTACTS_API_BASE_URL = process.env.NEXT_PUBLIC_CONTACTS_API_URL || 'http://192.168.117.224:5555';
+    const contactsUrl = `${CONTACTS_API_BASE_URL}/greeting-contacts?page=1&limit=1000&user_id=${userId}`;
     
-    console.log('Calling contacts API:', contactsUrl);
-    console.log('Auth header:', authHeader ? 'Present' : 'Missing');
-    console.log('Auth header value:', authHeader);
     
-    // Thử với X-Master-Key như trong useOrders.ts
     const headers: any = {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'X-Master-Key': process.env.NEXT_PUBLIC_MASTER_KEY || '',
+      'X-Master-Key': process.env.NEXT_PUBLIC_MASTER_KEY || 'nkcai',
     };
     
-    console.log('Request headers:', headers);
     
     const contactsResponse = await fetch(contactsUrl, {
       headers,
     });
 
     if (!contactsResponse.ok) {
-      console.error('Contacts API response not ok:', contactsResponse.status, contactsResponse.statusText);
-      throw new Error(`Contacts API error: ${contactsResponse.status} ${contactsResponse.statusText}`);
+      console.error('Greeting-contacts API response not ok:', contactsResponse.status, contactsResponse.statusText);
+      throw new Error(`Greeting-contacts API error: ${contactsResponse.status} ${contactsResponse.statusText}`);
     }
 
     const contactsData = await contactsResponse.json();
-    console.log('Contacts data received:', contactsData);
 
     if (!contactsData.success || !contactsData.data) {
-      throw new Error('Invalid contacts API response format');
+      throw new Error('Invalid greeting-contacts API response format');
     }
 
     const contacts = contactsData.data;
@@ -57,26 +51,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Lọc bỏ những tên có cấu trúc User_ + số
-    const filteredContacts = contacts.filter((contact: any) => {
-      const displayName = contact.display_name || contact.name || '';
-      // Bỏ qua nếu tên bắt đầu bằng "User_" và theo sau là số
-      return !displayName.match(/^User_\d+$/);
-    });
+    // No need to filter User_ patterns since greeting-contacts already provides filtered data
+    const filteredContacts = contacts;
 
-    console.log(`Filtered ${contacts.length - filteredContacts.length} contacts with User_ pattern`);
-    console.log(`Remaining contacts: ${filteredContacts.length}`);
+
+    // Lấy danh sách khách hàng đã có trong hệ thống để ưu tiên trạng thái isActive
+    const existingCustomersResponse = await fetch(`${API_BASE_URL}/auto-greeting/customers?userId=${userId}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...(authHeader && { 'Authorization': authHeader }),
+      },
+    });
+    
+    let existingCustomersMap = new Map();
+    if (existingCustomersResponse.ok) {
+      const existingCustomersData = await existingCustomersResponse.json();
+      if (existingCustomersData && existingCustomersData.length > 0) {
+        existingCustomersData.forEach((customer: any) => {
+          if (customer.zaloDisplayName) {
+            existingCustomersMap.set(customer.zaloDisplayName.toLowerCase().trim(), customer.isActive);
+          }
+        });
+      }
+    }
+    
 
     // Tạo Excel file từ contacts data
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Danh sách khách hàng từ danh bạ');
 
-    // Định nghĩa cột (không có header tự động)
+    // Định nghĩa cột (không có header tự động) - thêm cột ẩn zalo_id và cột Trạng thái
     worksheet.columns = [
       { key: 'name', width: 30 },
       { key: 'salutation', width: 20 },
       { key: 'greeting', width: 50 },
+      { key: 'isActive', width: 15 }, // Cột Trạng thái
+      { key: 'zalo_id', width: 0, hidden: true }, // Cột ẩn chứa zalo_conversation_id
     ];
 
     // Title row với styling đẹp - chỉ style cho 3 cột đầu
@@ -92,7 +104,7 @@ export async function POST(request: NextRequest) {
       bottom: { style: 'medium', color: { argb: '1F4E78' } },
       right: { style: 'medium', color: { argb: '1F4E78' } }
     };
-    worksheet.mergeCells(`A${titleRow.number}:C${titleRow.number}`);
+    worksheet.mergeCells(`A${titleRow.number}:D${titleRow.number}`);
 
     // Date row với styling nhẹ nhàng - chỉ style cho 3 cột đầu
     const now = new Date();
@@ -109,16 +121,16 @@ export async function POST(request: NextRequest) {
       bottom: { style: 'thin', color: { argb: 'D9D9D9' } },
       right: { style: 'thin', color: { argb: 'D9D9D9' } }
     };
-    worksheet.mergeCells(`A${dateRow.number}:C${dateRow.number}`);
+    worksheet.mergeCells(`A${dateRow.number}:D${dateRow.number}`);
 
     // Dòng trống
     worksheet.addRow([]);
 
-    // Header row
-    const headerRow = worksheet.addRow(['Tên hiển thị Zalo', 'Xưng hô', 'Tin nhắn chào']);
+    // Header row - bao gồm cột ẩn zalo_id
+    const headerRow = worksheet.addRow(['Tên hiển thị Zalo', 'Xưng hô', 'Tin nhắn chào', 'Trạng thái', 'Zalo ID']);
     
-    // Chỉ style cho 3 cột đầu tiên (A, B, C)
-    for (let col = 1; col <= 3; col++) {
+    // Style cho 4 cột hiển thị đầu tiên (A, B, C, D), cột E (zalo_id) sẽ ẩn
+    for (let col = 1; col <= 4; col++) {
       const cell = headerRow.getCell(col);
       cell.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '4472C4' } };
@@ -133,16 +145,32 @@ export async function POST(request: NextRequest) {
 
     // Thêm dữ liệu
     filteredContacts.forEach((contact: any, index: number) => {
-      // Tạo row với dữ liệu
+      const displayName = contact.display_name || 'Chưa có tên';
+      const normalizedName = displayName.toLowerCase().trim();
+      
+      // Ưu tiên trạng thái từ hệ thống (không dùng contact_is_active từ API)
+      let isActiveStatus = '';
+      const systemIsActive = existingCustomersMap.get(normalizedName);
+      if (systemIsActive !== undefined) {
+        // Ưu tiên: Trạng thái từ hệ thống
+        isActiveStatus = systemIsActive === 1 ? 'Kích hoạt' : 'Chưa kích hoạt';
+      }
+      // Không dùng contact_is_active từ API vì đó là trạng thái khác
+      // Nếu không có trong hệ thống, isActiveStatus sẽ là chuỗi rỗng ''
+      
+      
+      // Tạo row với dữ liệu bao gồm zalo_conversation_id
       const rowData = [
-        contact.display_name || contact.name || 'Chưa có tên',
+        displayName,
         '',
-        ''
+        '',
+        isActiveStatus, // Cột Trạng thái - ưu tiên hệ thống
+        contact.zalo_conversation_id || '' // Thêm zalo_id vào cột ẩn
       ];
       const excelRow = worksheet.addRow(rowData);
       
-      // Chỉ style cho 3 cột đầu tiên (A, B, C)
-      for (let col = 1; col <= 3; col++) {
+      // Style cho 4 cột hiển thị đầu tiên (A, B, C, D)
+      for (let col = 1; col <= 4; col++) {
         const cell = excelRow.getCell(col);
         cell.font = { name: 'Arial', size: 10 };
         cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
@@ -177,7 +205,7 @@ export async function POST(request: NextRequest) {
       bottom: { style: 'thin', color: { argb: 'A6A6A6' } },
       right: { style: 'thin', color: { argb: 'A6A6A6' } }
     };
-    worksheet.mergeCells(`A${worksheet.rowCount}:C${worksheet.rowCount}`);
+    worksheet.mergeCells(`A${worksheet.rowCount}:D${worksheet.rowCount}`);
 
     // Auto-fit columns
     worksheet.columns.forEach((column: any) => {

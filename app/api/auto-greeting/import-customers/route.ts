@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-const MASTER_KEY = process.env.NEXT_PUBLIC_MASTER_KEY || 'nkcai';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +14,6 @@ export async function POST(request: NextRequest) {
     const response = await fetch(`${API_BASE_URL}/auto-greeting/import-customers`, {
       method: 'POST',
       headers: {
-        'X-Master-Key': MASTER_KEY,
         ...(authHeader && { 'Authorization': authHeader }),
       },
       body: formData,
