@@ -146,38 +146,38 @@ export const ZaloLinkStatusTimeline: React.FC<Props> = ({ userId, authToken, aut
   return (
     <div className="space-y-4">
       <div className="flex items-center">
-        <h3 className="text-sm font-semibold">Lịch sử liên kết Zalo (Realtime)</h3>
+        <h3 className="text-lg font-semibold">Lịch sử liên kết Zalo (Realtime)</h3>
       </div>
-      {loading && <div className="text-xs text-muted-foreground">Đang tải...</div>}
-      {error && <div className="text-xs text-red-500">{error}</div>}
-      {(!loading && logs.length === 0) && <div className="text-xs text-muted-foreground">Chưa có log</div>}
-      <ul className="space-y-2 text-xs">
+      {loading && <div className="text-sm text-muted-foreground">Đang tải...</div>}
+      {error && <div className="text-sm text-red-500">{error}</div>}
+      {(!loading && logs.length === 0) && <div className="text-sm text-muted-foreground">Chưa có log</div>}
+      <ul className="space-y-3 text-sm">
         {logs.map(l => (
           <li
             key={l.id}
             className={`p-2 rounded border bg-background flex items-center gap-3 border-l-4 ${rowAccent(l.newStatus)}`}
           >
-            <div className="flex-1 space-y-0.5">
+            <div className="flex-1 space-y-1">
               <div className="flex items-center gap-1 flex-wrap">
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded border ${statusBadge(l.oldStatus)}`}>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border ${statusBadge(l.oldStatus)}`}>
                   {l.oldStatus}<span className="hidden sm:inline">{l.oldStatusLabel}</span>
                 </span>
-                <span className="text-[10px] opacity-60">➜</span>
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded border ${statusBadge(l.newStatus)}`}>
+                <span className="text-xs opacity-60">➜</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border ${statusBadge(l.newStatus)}`}>
                   {l.newStatus}<span className="hidden sm:inline">{l.newStatusLabel}</span>
                 </span>
               </div>
-              <div className="text-[10px] text-muted-foreground font-mono">{l.triggeredAt || '-'}</div>
+              <div className="text-xs text-muted-foreground font-mono">{l.triggeredAt || '-'}</div>
             </div>
           </li>
         ))}
       </ul>
       <div className="flex items-center justify-between pt-2 border-t mt-3">
-        <div className="text-[10px] text-muted-foreground">Trang {pages === 0 ? 0 : page}/{pages} • {total} log</div>
+        <div className="text-sm text-muted-foreground">Trang {pages === 0 ? 0 : page}/{pages} • {total} log</div>
         <div className="flex items-center gap-1">
-          <button disabled={page<=1} onClick={() => setPage(p=>Math.max(1,p-1))} className="text-[10px] px-2 py-1 border rounded disabled:opacity-40">Prev</button>
-          <button disabled={page>=pages} onClick={() => setPage(p=>Math.min(pages,p+1))} className="text-[10px] px-2 py-1 border rounded disabled:opacity-40">Next</button>
-          <select value={limit} onChange={e=>{setPage(1); setLimit(Number(e.target.value));}} className="text-[10px] border rounded px-1 py-0.5">
+          <button disabled={page<=1} onClick={() => setPage(p=>Math.max(1,p-1))} className="text-sm px-3 py-1.5 border rounded disabled:opacity-40">Prev</button>
+          <button disabled={page>=pages} onClick={() => setPage(p=>Math.min(pages,p+1))} className="text-sm px-3 py-1.5 border rounded disabled:opacity-40">Next</button>
+          <select value={limit} onChange={e=>{setPage(1); setLimit(Number(e.target.value));}} className="text-sm border rounded px-2 py-1">
             {[5,10,20,50].map(n=> <option key={n} value={n}>{n}/trang</option>)}
           </select>
         </div>

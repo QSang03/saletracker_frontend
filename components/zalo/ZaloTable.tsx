@@ -12,7 +12,7 @@ import {
 import { User } from "@/types";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Volume2, VolumeX, MessageSquare, MessageSquareOff, Eye } from "lucide-react";
+import { Volume2, VolumeX, MessageSquare, MessageSquareOff, Eye, Star, Zap, Sparkles } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import ZaloLinkStatusTimeline from "@/components/user/ZaloLinkStatusTimeline";
@@ -368,15 +368,71 @@ export default React.memo(function ZaloTable({
         </TableBody>
       </Table>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Lịch sử liên kết Zalo {logUser?.fullName ? `- ${logUser.fullName}` : ''}</DialogTitle>
-          </DialogHeader>
-          {logUser && (
-            <div className="mt-2">
-              <ZaloLinkStatusTimeline userId={logUser.id} autoRefreshMs={10000} />
+        <DialogContent 
+          className="!max-w-[60vw] !max-h-[95vh] p-0 overflow-auto border-0 bg-transparent no-scrollbar-modal"
+          style={{ msOverflowStyle: "none", scrollbarWidth: "none" }}
+        >
+          <style>{`.no-scrollbar-modal { -ms-overflow-style: none; scrollbar-width: none; } .no-scrollbar-modal::-webkit-scrollbar { display: none; }`}</style>
+          
+          {/* Floating background particles */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-4 left-6 text-blue-300 animate-pulse">
+              <Star className="w-2 h-2 opacity-60" />
             </div>
-          )}
+            <div
+              className="absolute top-8 right-8 text-indigo-300 animate-bounce"
+              style={{ animationDelay: "0.5s" }}
+            >
+              <Zap className="w-3 h-3 opacity-40" />
+            </div>
+            <div
+              className="absolute bottom-6 left-12 text-purple-300 animate-ping"
+              style={{ animationDelay: "1s" }}
+            >
+              <Star className="w-2 h-2 opacity-30" />
+            </div>
+            <div
+              className="absolute bottom-12 right-6 text-blue-200 animate-pulse"
+              style={{ animationDelay: "1.5s" }}
+            >
+              <Sparkles className="w-3 h-3 opacity-50" />
+            </div>
+          </div>
+
+          {/* Main modal container with stunning effects */}
+          <div className="relative p-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 rounded-3xl animate-gradient-shift">
+            <div className="relative bg-gradient-to-br from-white via-blue-50 to-indigo-50 backdrop-blur-xl rounded-3xl shadow-2xl">
+              {/* Header with enhanced design */}
+              <DialogHeader className="relative p-8 pb-4">
+                {/* Floating sparkles in header */}
+                <div className="absolute top-4 right-4 text-blue-400 animate-bounce">
+                  <Sparkles className="w-5 h-5 drop-shadow-lg" />
+                </div>
+                
+                {/* Title with icon */}
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-30"></div>
+                    <div className="relative bg-gradient-to-r from-blue-500 to-indigo-600 p-3 rounded-full shadow-lg">
+                      <Eye className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    Lịch sử liên kết Zalo {logUser?.fullName ? `- ${logUser.fullName}` : ''}
+                  </DialogTitle>
+                </div>
+              </DialogHeader>
+
+              {/* Content area */}
+              {logUser && (
+                <div className="px-8 pb-8">
+                  <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-blue-100">
+                    <ZaloLinkStatusTimeline userId={logUser.id} autoRefreshMs={10000} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
