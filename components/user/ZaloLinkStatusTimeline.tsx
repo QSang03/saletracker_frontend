@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { CheckCircle, XCircle, AlertCircle, ArrowRight, Clock, Activity } from 'lucide-react';
 
 interface LogItem {
   id: number;
@@ -20,9 +21,18 @@ interface Props {
 // màu cho badge
 const statusBadge = (s: number) => {
   switch (s) {
-    case 1: return 'bg-green-100 text-green-700 border-green-300';
-    case 2: return 'bg-red-100 text-red-700 border-red-300';
-    default: return 'bg-gray-100 text-gray-600 border-gray-300';
+    case 1: return 'bg-green-50 text-green-700 border-green-200 shadow-sm';
+    case 2: return 'bg-red-50 text-red-700 border-red-200 shadow-sm';
+    default: return 'bg-gray-50 text-gray-600 border-gray-200 shadow-sm';
+  }
+};
+
+// icon cho status
+const statusIcon = (s: number) => {
+  switch (s) {
+    case 1: return <CheckCircle className="w-3 h-3" />;
+    case 2: return <XCircle className="w-3 h-3" />;
+    default: return <AlertCircle className="w-3 h-3" />;
   }
 };
 
@@ -143,45 +153,140 @@ export const ZaloLinkStatusTimeline: React.FC<Props> = ({ userId, authToken, aut
     }
   };
 
+  // Format timestamp từ "2025-09-19 14:53:36.000000" thành "14:53 2025-09-19"
+  const formatTimestamp = (timestamp: string) => {
+    if (!timestamp) return '-';
+    try {
+      const date = new Date(timestamp);
+      const time = date.toLocaleTimeString('vi-VN', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+      });
+      const dateStr = date.toLocaleDateString('vi-VN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      return `${time} ${dateStr}`;
+    } catch (e) {
+      return timestamp;
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center">
-        <h3 className="text-lg font-semibold">Lịch sử liên kết Zalo (Realtime)</h3>
-      </div>
-      {loading && <div className="text-sm text-muted-foreground">Đang tải...</div>}
-      {error && <div className="text-sm text-red-500">{error}</div>}
-      {(!loading && logs.length === 0) && <div className="text-sm text-muted-foreground">Chưa có log</div>}
-      <ul className="space-y-3 text-sm">
-        {logs.map(l => (
-          <li
-            key={l.id}
-            className={`p-2 rounded border bg-background flex items-center gap-3 border-l-4 ${rowAccent(l.newStatus)}`}
-          >
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border ${statusBadge(l.oldStatus)}`}>
-                  {l.oldStatus}<span className="hidden sm:inline">{l.oldStatusLabel}</span>
-                </span>
-                <span className="text-xs opacity-60">➜</span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border ${statusBadge(l.newStatus)}`}>
-                  {l.newStatus}<span className="hidden sm:inline">{l.newStatusLabel}</span>
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground font-mono">{l.triggeredAt || '-'}</div>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center justify-between pt-2 border-t mt-3">
-        <div className="text-sm text-muted-foreground">Trang {pages === 0 ? 0 : page}/{pages} • {total} log</div>
-        <div className="flex items-center gap-1">
-          <button disabled={page<=1} onClick={() => setPage(p=>Math.max(1,p-1))} className="text-sm px-3 py-1.5 border rounded disabled:opacity-40">Prev</button>
-          <button disabled={page>=pages} onClick={() => setPage(p=>Math.min(pages,p+1))} className="text-sm px-3 py-1.5 border rounded disabled:opacity-40">Next</button>
-          <select value={limit} onChange={e=>{setPage(1); setLimit(Number(e.target.value));}} className="text-sm border rounded px-2 py-1">
-            {[5,10,20,50].map(n=> <option key={n} value={n}>{n}/trang</option>)}
-          </select>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center w-10 h-10 bg-blue-100 rounded-full">
+          <Activity className="w-5 h-5 text-blue-600" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Lịch sử liên kết Zalo</h3>
+          <p className="text-sm text-gray-500">Theo dõi trạng thái realtime</p>
         </div>
       </div>
+
+      {/* Loading & Error States */}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
+          <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+          Đang tải dữ liệu...
+        </div>
+      )}
+      
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">
+          <XCircle className="w-4 h-4" />
+          {error}
+        </div>
+      )}
+      
+      {(!loading && logs.length === 0) && (
+        <div className="text-center py-8">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <Clock className="w-8 h-8 text-gray-400" />
+          </div>
+          <p className="text-sm text-gray-500">Chưa có lịch sử liên kết</p>
+        </div>
+      )}
+
+      {/* Timeline */}
+      {logs.length > 0 && (
+        <div className="space-y-4">
+          {logs.map((l, index) => (
+            <div
+              key={l.id}
+              className={`relative p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-shadow ${rowAccent(l.newStatus)}`}
+            >
+              {/* Timeline dot */}
+              <div className="absolute -left-2 top-6 w-4 h-4 bg-white border-2 border-gray-300 rounded-full"></div>
+              
+              <div className="flex items-start gap-4">
+                {/* Status badges */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border ${statusBadge(l.oldStatus)}`}>
+                      {statusIcon(l.oldStatus)}
+                      <span className="font-semibold">{l.oldStatus}</span>
+                      <span className="hidden sm:inline text-xs opacity-75">{l.oldStatusLabel}</span>
+                    </div>
+                    
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                    
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border ${statusBadge(l.newStatus)}`}>
+                      {statusIcon(l.newStatus)}
+                      <span className="font-semibold">{l.newStatus}</span>
+                      <span className="hidden sm:inline text-xs opacity-75">{l.newStatusLabel}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Timestamp */}
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Clock className="w-3 h-3" />
+                    <span className="font-mono">{formatTimestamp(l.triggeredAt)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {logs.length > 0 && (
+        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+          <div className="text-sm text-gray-600">
+            Trang <span className="font-semibold">{pages === 0 ? 0 : page}</span> / <span className="font-semibold">{pages}</span> • 
+            Tổng <span className="font-semibold">{total}</span> bản ghi
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              disabled={page <= 1} 
+              onClick={() => setPage(p => Math.max(1, p - 1))} 
+              className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Trước
+            </button>
+            <button 
+              disabled={page >= pages} 
+              onClick={() => setPage(p => Math.min(pages, p + 1))} 
+              className="text-sm px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Sau
+            </button>
+            <select 
+              value={limit} 
+              onChange={e => { setPage(1); setLimit(Number(e.target.value)); }} 
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white hover:bg-gray-50 transition-colors"
+            >
+              {[5, 10, 20, 50].map(n => (
+                <option key={n} value={n}>{n}/trang</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
