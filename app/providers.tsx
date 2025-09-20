@@ -4,6 +4,7 @@ import { TokenRefreshProvider } from "@/components/providers/TokenRefreshProvide
 import { CurrentUserProvider } from "@/components/providers/CurrentUserProvider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from '@/contexts/AuthContext';
+import ThemeInitializer from "@/components/theme/ThemeInitializer";
 
 import { WebSocketProvider } from '@/contexts/WebSocketContext';
 
@@ -12,14 +13,9 @@ type Props = {
 };
 
 export function Providers({ children }: Props) {
-  // Force theme to light in localStorage on every render
-  if (typeof window !== "undefined") {
-    localStorage.setItem("theme", "light");
-    document.documentElement.classList.remove("dark");
-    document.documentElement.classList.add("light");
-  }
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+      <ThemeInitializer />
       <AuthProvider>
         <CurrentUserProvider>
           <TokenRefreshProvider>

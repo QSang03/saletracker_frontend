@@ -65,7 +65,7 @@ const baseNavItems = [
     icon: "UserCircle",
     items: [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
-      { title: "Cấu hình khách hàng", url: "/dashboard/auto-greeting" },
+      { title: "Lời chào tự động", url: "/dashboard/auto-greeting" },
       { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
     ],
   },

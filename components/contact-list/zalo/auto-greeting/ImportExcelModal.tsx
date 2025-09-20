@@ -496,25 +496,20 @@ export default function ImportExcelModal({
 
       if (result.success > 0) {
         toast.success(`Import thành công ${result.success} khách hàng!`);
-        if (result.importedIds) {
-          onImportSuccess(result.importedIds);
-        }
-        // Đóng modal sau khi import thành công
-        setTimeout(() => {
-          onClose();
-        }, 1500); // Delay 1.5s để user thấy thông báo thành công
       }
 
       if (result.failed > 0) {
         toast.error(`${result.failed} khách hàng import thất bại`);
       }
 
-      // Nếu không có khách hàng nào import thành công, đóng modal sau 2s
-      if (result.success === 0) {
-        setTimeout(() => {
-          onClose();
-        }, 2000); // Delay 2s để user thấy thông báo lỗi
-      }
+      // Luôn gọi onImportSuccess để refresh data, dù thành công hay thất bại
+      // Vì có thể có records được update thay vì tạo mới
+      onImportSuccess(result.importedIds || []);
+
+      // Đóng modal sau khi xử lý xong
+      setTimeout(() => {
+        onClose();
+      }, result.success > 0 ? 1500 : 2000);
     } catch (error) {
       toast.error("Lỗi khi import file Excel");
     } finally {

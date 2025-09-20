@@ -286,29 +286,29 @@ const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                           type="button"
                           variant={editForm.isActive === 1 ? "default" : "outline"}
                           onClick={() => onFormChange("isActive", 1)}
-                          className={`flex items-center gap-2 ${
+                          className={`flex items-center gap-2 whitespace-nowrap ${
                             editForm.isActive === 1
                               ? 'bg-green-500 hover:bg-green-600 text-white border-green-500'
                               : 'border-gray-300 text-gray-600 hover:bg-green-50'
                           }`}
                         >
-                          <span className="">
-                            <CheckCircle className="w-4 h-4" />
-                          Kích hoạt
-                          </span>
+                          <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="whitespace-nowrap">Kích hoạt</span></div>
                         </Button>
                         <Button
                           type="button"
                           variant={editForm.isActive === 0 ? "default" : "outline"}
                           onClick={() => onFormChange("isActive", 0)}
-                          className={`flex items-center gap-2 ${
+                          className={`flex items-center gap-2 whitespace-nowrap ${
                             editForm.isActive === 0
                               ? 'bg-red-500 hover:bg-red-600 text-white border-red-500'
                               : 'border-gray-300 text-gray-600 hover:bg-red-50'
                           }`}
                         >
+                          <div className="flex items-center gap-2">
                           <XCircle className="w-4 h-4" />
-                          Chưa kích hoạt
+                          <span className="whitespace-nowrap">Chưa kích hoạt</span></div>
                         </Button>
                       </div>
                     </div>

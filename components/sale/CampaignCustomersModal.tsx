@@ -521,6 +521,14 @@ export default function CampaignCustomersModal({
         filtered = filtered.filter(
           (customer) => customer.status === statusFilter || customer.status == null
         );
+      } else if (statusFilter === "sent") {
+        // ✅ SỬA: Filter "sent" bao gồm tất cả trạng thái đã gửi
+        filtered = filtered.filter((customer) => 
+          customer.status === LogStatus.SENT ||
+          customer.status === LogStatus.CUSTOMER_REPLIED ||
+          customer.status === LogStatus.STAFF_HANDLED ||
+          customer.status === LogStatus.REMINDER_SENT
+        );
       } else {
         filtered = filtered.filter((customer) => customer.status === statusFilter);
       }
@@ -832,7 +840,6 @@ export default function CampaignCustomersModal({
       customer_replied: 0,
       staff_handled: 0,
       reminder_sent: 0,
-      total_sent: 0, // Tổng gửi = sent + customer_replied + staff_handled + reminder_sent
     };
 
     // ✅ SỬA: Dùng allCustomersForStats thay vì customers để không bị ảnh hưởng bởi filter
@@ -842,18 +849,17 @@ export default function CampaignCustomersModal({
         stats.pending++;
       } else if (status === LogStatus.SENT) {
         stats.sent++;
-        stats.total_sent++;
       } else if (status === LogStatus.FAILED) {
         stats.failed++;
       } else if (status === LogStatus.CUSTOMER_REPLIED) {
         stats.customer_replied++;
-        stats.total_sent++;
+        stats.sent++; // ✅ SỬA: Cũng tính vào "đã gửi"
       } else if (status === LogStatus.STAFF_HANDLED) {
         stats.staff_handled++;
-        stats.total_sent++;
+        stats.sent++; // ✅ SỬA: Cũng tính vào "đã gửi"
       } else if (status === LogStatus.REMINDER_SENT) {
         stats.reminder_sent++;
-        stats.total_sent++;
+        stats.sent++; // ✅ SỬA: Cũng tính vào "đã gửi"
       }
     });
 
@@ -1121,32 +1127,16 @@ export default function CampaignCustomersModal({
                 {totalCount > 0 && (
                   <div className="flex-shrink-0 p-4 border-b bg-gray-50">
                     <motion.div
-                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3"
+                      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.2 }}
                     >
-                      {/* Tổng gửi */}
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        className="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-lg p-3 shadow-md hover:shadow-lg transition-all duration-200 text-white"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <div className="p-1 bg-white/20 rounded">
-                            <CheckCircle className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-xs text-indigo-100">Tổng gửi</p>
-                            <p className="text-lg font-bold text-white">
-                              {statusStats.total_sent.toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
                       {/* Chưa gửi */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => handleStatusFilterChange("pending")}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="p-1 bg-yellow-100 rounded">
@@ -1164,7 +1154,8 @@ export default function CampaignCustomersModal({
                       {/* Đã gửi */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => handleStatusFilterChange("sent")}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="p-1 bg-blue-100 rounded">
@@ -1182,7 +1173,8 @@ export default function CampaignCustomersModal({
                       {/* Gửi lỗi */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => handleStatusFilterChange("failed")}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="p-1 bg-red-100 rounded">
@@ -1200,7 +1192,8 @@ export default function CampaignCustomersModal({
                       {/* KH phản hồi */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => handleStatusFilterChange("customer_replied")}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="p-1 bg-green-100 rounded">
@@ -1218,7 +1211,8 @@ export default function CampaignCustomersModal({
                       {/* Đã xử lý */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => handleStatusFilterChange("staff_handled")}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="p-1 bg-purple-100 rounded">
@@ -1236,7 +1230,8 @@ export default function CampaignCustomersModal({
                       {/* Đã nhắc lại */}
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200"
+                        className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer"
+                        onClick={() => handleStatusFilterChange("reminder_sent")}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="p-1 bg-orange-100 rounded">

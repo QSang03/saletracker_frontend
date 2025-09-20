@@ -50,6 +50,7 @@ interface Customer {
   id: string;
   userId: number;
   zaloDisplayName: string;
+  userDisplayName?: string; // Tên hiển thị của user sở hữu
   salutation: string;
   greetingMessage: string;
   conversationType?: "group" | "private";
@@ -77,6 +78,17 @@ const AutoGreetingCustomerList: React.FC<
   AutoGreetingCustomerListProps
 > = () => {
   const { currentUser } = useCurrentUser();
+
+  // Helper function để kiểm tra user có quyền xem thông tin người sở hữu không
+  const canViewOwnerInfo = () => {
+    if (!currentUser?.roles) return false;
+    return currentUser.roles.some((role: any) => 
+      role.name === 'admin' || 
+      role.name === 'Admin' || 
+      role.name === 'view' || 
+      role.name === 'View'
+    );
+  };
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -187,6 +199,8 @@ const AutoGreetingCustomerList: React.FC<
         return (
           customer.id.toLowerCase().includes(searchLower) ||
           customer.zaloDisplayName.toLowerCase().includes(searchLower) ||
+          (canViewOwnerInfo() && customer.userDisplayName && 
+            customer.userDisplayName.toLowerCase().includes(searchLower)) ||
           (customer.salutation &&
             customer.salutation.toLowerCase().includes(searchLower)) ||
           (customer.greetingMessage &&
@@ -563,12 +577,30 @@ const AutoGreetingCustomerList: React.FC<
   };
 
   const handleImportSuccess = async (importedIds: string[]) => {
-    setRecentlyImportedIds(new Set(importedIds));
-    setTimeout(() => {
-      setRecentlyImportedIds(new Set());
-    }, 30000);
+    // Set loading để user biết đang refresh
+    setLoading(true);
+    
+    try {
+      // Set recently imported IDs để highlight
+      setRecentlyImportedIds(new Set(importedIds));
+      setTimeout(() => {
+        setRecentlyImportedIds(new Set());
+      }, 30000);
 
-    await loadCustomers();
+      // Fetch lại data để hiển thị danh sách mới nhất
+      await loadCustomers();
+      
+      // Cập nhật refresh key để trigger re-render
+      setRefreshKey(prev => prev + 1);
+      
+      // Thông báo cho user biết đã refresh data
+      toast.success("Đã cập nhật danh sách khách hàng");
+    } catch (error) {
+      console.error("Error refreshing data after import:", error);
+      toast.error("Lỗi khi cập nhật danh sách khách hàng");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleImportFromContacts = async () => {
@@ -774,10 +806,15 @@ const AutoGreetingCustomerList: React.FC<
 
   // Prepare data for CSVExportPanel
   const getExportData = () => {
-    const headers = [
+    const baseHeaders = [
       "STT",
       "Mã Khách Hàng",
       "Tên Zalo Khách",
+    ];
+
+    const ownerHeader = "Người Sở Hữu";
+    
+    const remainingHeaders = [
       "Xưng hô",
       "Lời Chào",
       "Loại Hội Thoại",
@@ -788,35 +825,55 @@ const AutoGreetingCustomerList: React.FC<
       "Kích Hoạt",
     ];
 
-    const data = currentCustomers.map((customer, index) => [
-      startIndex + index + 1,
-      customer.id,
-      customer.zaloDisplayName,
-      customer.salutation || "",
-      customer.greetingMessage || "",
-      customer.conversationType === "group"
-        ? "Nhóm"
-        : customer.conversationType === "private"
-        ? "Cá nhân"
-        : "Chưa xác định",
-      customer.customerLastMessageDate
-        ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
-        : "Chưa có",
-      customer.lastMessageDate
-        ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
-        : "Chưa gửi",
-      customer.daysSinceLastMessage === null
-        ? "Chưa có"
-        : customer.daysSinceLastMessage,
-      customer.customerStatus === "urgent"
-        ? "Cần báo gấp"
-        : customer.customerStatus === "reminder"
-        ? "Cần nhắc nhở"
-        : customer.customerStatus === "normal"
-        ? "Bình thường"
-        : "Bình thường",
-      customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
-    ]);
+    // Chỉ thêm cột "Người Sở Hữu" nếu user có quyền
+    const headers = canViewOwnerInfo() 
+      ? [...baseHeaders, ownerHeader, ...remainingHeaders]
+      : [...baseHeaders, ...remainingHeaders];
+
+    const data = currentCustomers.map((customer, index) => {
+      const baseData = [
+        startIndex + index + 1,
+        customer.id,
+        customer.zaloDisplayName,
+        customer.salutation || "",
+        customer.greetingMessage || "",
+        customer.conversationType === "group"
+          ? "Nhóm"
+          : customer.conversationType === "private"
+          ? "Cá nhân"
+          : "Chưa xác định",
+        customer.customerLastMessageDate
+          ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
+          : "Chưa có",
+        customer.lastMessageDate
+          ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
+          : "Chưa gửi",
+        customer.daysSinceLastMessage === null
+          ? "Chưa có"
+          : customer.daysSinceLastMessage,
+        customer.customerStatus === "urgent"
+          ? "Cần báo gấp"
+          : customer.customerStatus === "reminder"
+          ? "Cần nhắc nhở"
+          : customer.customerStatus === "normal"
+          ? "Bình thường"
+          : "Bình thường",
+        customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
+      ];
+
+      // Chỉ thêm userDisplayName nếu user có quyền
+      if (canViewOwnerInfo()) {
+        return [
+          baseData[0], // STT
+          baseData[1], // Mã Khách Hàng
+          baseData[2], // Tên Zalo Khách
+          customer.userDisplayName || `User ${customer.userId}`, // Người Sở Hữu
+          ...baseData.slice(3) // Các cột còn lại
+        ];
+      }
+
+      return baseData;
+    });
 
     return { headers, data };
   };
@@ -850,35 +907,50 @@ const AutoGreetingCustomerList: React.FC<
       const data = await response.json();
       const customers = data.data || [];
 
-      return customers.map((customer: any, index: number) => [
-        index + 1,
-        customer.id,
-        customer.zaloDisplayName,
-        customer.salutation || "",
-        customer.greetingMessage || "",
-        customer.conversationType === "group"
-          ? "Nhóm"
-          : customer.conversationType === "private"
-          ? "Cá nhân"
-          : "Chưa xác định",
-        customer.customerLastMessageDate
-          ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
-          : "Chưa có",
-        customer.lastMessageDate
-          ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
-          : "Chưa gửi",
-        customer.daysSinceLastMessage === null
-          ? "Chưa có"
-          : customer.daysSinceLastMessage,
-        customer.customerStatus === "urgent"
-          ? "Cần báo gấp"
-          : customer.customerStatus === "reminder"
-          ? "Cần nhắc nhở"
-          : customer.customerStatus === "normal"
-          ? "Bình thường"
-          : "Bình thường",
-        customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
-      ]);
+      return customers.map((customer: any, index: number) => {
+        const baseData = [
+          index + 1,
+          customer.id,
+          customer.zaloDisplayName,
+          customer.salutation || "",
+          customer.greetingMessage || "",
+          customer.conversationType === "group"
+            ? "Nhóm"
+            : customer.conversationType === "private"
+            ? "Cá nhân"
+            : "Chưa xác định",
+          customer.customerLastMessageDate
+            ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
+            : "Chưa có",
+          customer.lastMessageDate
+            ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
+            : "Chưa gửi",
+          customer.daysSinceLastMessage === null
+            ? "Chưa có"
+            : customer.daysSinceLastMessage,
+          customer.customerStatus === "urgent"
+            ? "Cần báo gấp"
+            : customer.customerStatus === "reminder"
+            ? "Cần nhắc nhở"
+            : customer.customerStatus === "normal"
+            ? "Bình thường"
+            : "Bình thường",
+          customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
+        ];
+
+        // Chỉ thêm userDisplayName nếu user có quyền
+        if (canViewOwnerInfo()) {
+          return [
+            baseData[0], // STT
+            baseData[1], // Mã Khách Hàng
+            baseData[2], // Tên Zalo Khách
+            customer.userDisplayName || `User ${customer.userId}`, // Người Sở Hữu
+            ...baseData.slice(3) // Các cột còn lại
+          ];
+        }
+
+        return baseData;
+      });
     } catch (error) {
       console.error("Error fetching all data:", error);
       return [];
@@ -965,6 +1037,11 @@ const AutoGreetingCustomerList: React.FC<
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
                   Tên Zalo Khách
                 </th>
+                {canViewOwnerInfo() && (
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Người Sở Hữu
+                  </th>
+                )}
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
                   Lời Chào
                 </th>
@@ -980,7 +1057,7 @@ const AutoGreetingCustomerList: React.FC<
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
                   Số Ngày
                 </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b whitespace-nowrap">
                   Trạng Thái
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
@@ -1045,6 +1122,11 @@ const AutoGreetingCustomerList: React.FC<
                         {customer.zaloDisplayName}
                         {customer.salutation ? ` (${customer.salutation})` : ""}
                       </td>
+                      {canViewOwnerInfo() && (
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          {customer.userDisplayName || `User ${customer.userId}`}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm text-gray-600 border-b max-w-xs">
                         <div className="space-y-1">
                           <div className="truncate">
@@ -1122,9 +1204,9 @@ const AutoGreetingCustomerList: React.FC<
                           ? "Chưa có"
                           : customer.daysSinceLastMessage}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                      <td className="px-4 py-3 text-sm text-gray-600 border-b whitespace-nowrap">
                         <span
-                          className={`px-2 py-1 rounded-full text-xs ${
+                          className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
                             customer.customerStatus === "urgent"
                               ? "bg-red-200 text-red-900"
                               : customer.customerStatus === "reminder"
@@ -1180,9 +1262,6 @@ const AutoGreetingCustomerList: React.FC<
                                 : "text-gray-500"
                             }`}
                           >
-                            {customer.isActive === 1
-                              ? "Đã kích hoạt"
-                              : "Chưa kích hoạt"}
                           </span>
                         </div>
                       </td>
