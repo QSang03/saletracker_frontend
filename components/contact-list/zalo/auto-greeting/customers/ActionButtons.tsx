@@ -85,7 +85,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
       >
         <span className="flex items-start justify-center">
           <Users className="h-4 w-4 mr-2" />
-          {loading ? "Đang tải..." : "Nhập từ Danh bạ"}
+          {loading ? "Đang tải..." : "Xuất từ Danh bạ"}
         </span>
       </Button>
       <Button

@@ -28,25 +28,44 @@ export async function POST(request: NextRequest) {
     };
     
     
-    const contactsResponse = await fetch(contactsUrl, {
+    // Tạo timeout promise
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout after 15 seconds')), 15000);
+    });
+    
+    // Tạo fetch promise
+    const fetchPromise = fetch(contactsUrl, {
       headers,
     });
+    
+    // Race between fetch and timeout
+    const contactsResponse = await Promise.race([fetchPromise, timeoutPromise]) as Response;
 
     if (!contactsResponse.ok) {
       console.error('Greeting-contacts API response not ok:', contactsResponse.status, contactsResponse.statusText);
-      throw new Error(`Greeting-contacts API error: ${contactsResponse.status} ${contactsResponse.statusText}`);
+      
+      // Bắt các lỗi cụ thể từ API
+      if (contactsResponse.status === 401 || contactsResponse.status === 403) {
+        throw new Error('Tài khoản chưa được liên kết với Zalo hoặc không có quyền truy cập');
+      } else if (contactsResponse.status === 404) {
+        throw new Error('Không tìm thấy tài khoản Zalo hoặc danh bạ trống');
+      } else if (contactsResponse.status >= 500) {
+        throw new Error('Lỗi server từ API Zalo. Vui lòng thử lại sau');
+      } else {
+        throw new Error(`Lỗi API Zalo: ${contactsResponse.status} ${contactsResponse.statusText}`);
+      }
     }
 
     const contactsData = await contactsResponse.json();
 
     if (!contactsData.success || !contactsData.data) {
-      throw new Error('Invalid greeting-contacts API response format');
+      throw new Error('Dữ liệu từ API Zalo không hợp lệ');
     }
 
     const contacts = contactsData.data;
     if (!contacts || contacts.length === 0) {
       return NextResponse.json(
-        { error: 'No contacts found' },
+        { error: 'Không tìm thấy danh bạ nào trong tài khoản Zalo' },
         { status: 404 }
       );
     }
@@ -230,8 +249,28 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error importing from contacts:', error);
+    
+    // Bắt các lỗi cụ thể
+    let errorMessage = 'Đã xảy ra lỗi không xác định';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Request timeout after 15 seconds')) {
+        errorMessage = 'Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.';
+      } else if (error.name === 'AbortError' || error.message.includes('aborted')) {
+        errorMessage = 'Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.';
+      } else if (error.message.includes('Connect Timeout') || error.message.includes('timeout')) {
+        errorMessage = 'Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.';
+      } else if (error.message.includes('fetch failed') || error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Không thể kết nối đến server Zalo. Vui lòng kiểm tra kết nối mạng hoặc liên hệ admin.';
+      } else if (error.message.includes('ENOTFOUND') || error.message.includes('DNS')) {
+        errorMessage = 'Không tìm thấy server Zalo. Vui lòng kiểm tra cấu hình mạng.';
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to import from contacts', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

@@ -636,18 +636,68 @@ const AutoGreetingCustomerList: React.FC<
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
 
-        alert("Đã tải xuống file Excel danh sách khách hàng từ danh bạ!");
+        toast.success("Đã tải xuống file Excel danh sách khách hàng từ danh bạ!");
       } else {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to import from contacts");
+        const errorData = await response.json();
+        const errorMessage = errorData.message || errorData.error || "Unknown error";
+        
+        // Bắt các lỗi cụ thể
+        if (errorMessage.includes("chưa liên kết") || errorMessage.includes("not linked") || errorMessage.includes("zalo_account_not_found")) {
+          toast.error("Tài khoản chưa được liên kết với Zalo. Vui lòng liên kết tài khoản trước khi sử dụng chức năng này.");
+        } else if (errorMessage.includes("no contacts") || errorMessage.includes("không có danh bạ")) {
+          toast.warning("Không tìm thấy danh bạ nào. Vui lòng kiểm tra lại tài khoản Zalo của bạn.");
+        } else if (errorMessage.includes("permission") || errorMessage.includes("quyền")) {
+          toast.error("Bạn không có quyền thực hiện chức năng này.");
+        } else if (errorMessage.includes("timeout") || errorMessage.includes("bị timeout") || errorMessage.includes("AbortError") || errorMessage.includes("Request timeout")) {
+          toast.error("Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.", {
+            description: "Server có thể đang quá tải hoặc mạng chậm",
+            duration: 6000,
+          });
+        } else if (errorMessage.includes("không thể kết nối") || errorMessage.includes("ECONNREFUSED")) {
+          toast.error("Không thể kết nối đến server Zalo. Vui lòng kiểm tra kết nối mạng hoặc liên hệ admin.", {
+            description: "Server Zalo có thể đang bảo trì",
+            duration: 6000,
+          });
+        } else if (errorMessage.includes("không tìm thấy server") || errorMessage.includes("DNS")) {
+          toast.error("Không tìm thấy server Zalo. Vui lòng kiểm tra cấu hình mạng.", {
+            description: "Liên hệ admin để kiểm tra cấu hình server",
+            duration: 6000,
+          });
+        } else if (errorMessage.includes("network") || errorMessage.includes("kết nối")) {
+          toast.error("Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.");
+        } else {
+          toast.error(`Lỗi khi nhập từ danh bạ: ${errorMessage}`);
+        }
       }
     } catch (error) {
       console.error("Failed to import from contacts:", error);
-      alert(
-        `Lỗi khi nhập từ danh bạ: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      
+      // Bắt lỗi network
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        toast.error("Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.");
+      } else if (error instanceof Error) {
+        const errorMessage = error.message;
+        
+        if (errorMessage.includes("chưa liên kết") || errorMessage.includes("not linked")) {
+          toast.error("Tài khoản chưa được liên kết với Zalo. Vui lòng liên kết tài khoản trước khi sử dụng chức năng này.");
+        } else if (errorMessage.includes("no contacts") || errorMessage.includes("không có danh bạ")) {
+          toast.warning("Không tìm thấy danh bạ nào. Vui lòng kiểm tra lại tài khoản Zalo của bạn.");
+        } else if (errorMessage.includes("timeout") || errorMessage.includes("bị timeout") || errorMessage.includes("AbortError") || errorMessage.includes("Request timeout")) {
+          toast.error("Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.", {
+            description: "Server có thể đang quá tải hoặc mạng chậm",
+            duration: 6000,
+          });
+        } else if (errorMessage.includes("không thể kết nối") || errorMessage.includes("ECONNREFUSED")) {
+          toast.error("Không thể kết nối đến server Zalo. Vui lòng kiểm tra kết nối mạng hoặc liên hệ admin.", {
+            description: "Server Zalo có thể đang bảo trì",
+            duration: 6000,
+          });
+        } else {
+          toast.error(`Lỗi khi nhập từ danh bạ: ${errorMessage}`);
+        }
+      } else {
+        toast.error("Đã xảy ra lỗi không xác định. Vui lòng thử lại sau.");
+      }
     } finally {
       setLoading(false);
     }
@@ -953,6 +1003,20 @@ const AutoGreetingCustomerList: React.FC<
       });
     } catch (error) {
       console.error("Error fetching all data:", error);
+      
+      // Hiển thị thông báo lỗi cho user
+      if (error instanceof Error) {
+        if (error.message.includes("network") || error.message.includes("fetch")) {
+          toast.error("Lỗi kết nối khi xuất dữ liệu. Vui lòng thử lại sau.");
+        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
+          toast.error("Bạn không có quyền xuất dữ liệu này.");
+        } else {
+          toast.error(`Lỗi khi xuất dữ liệu: ${error.message}`);
+        }
+      } else {
+        toast.error("Đã xảy ra lỗi không xác định khi xuất dữ liệu.");
+      }
+      
       return [];
     }
   };
