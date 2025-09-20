@@ -84,6 +84,10 @@ import {
 } from "@/types";
 import ModernTimePicker from "../common/ModernTimePicker";
 import ModernAttachmentSelector from "../common/ModernAttachmentSelector";
+import AttachmentTypeSelector from "../common/AttachmentTypeSelector";
+import MultiImageSelector from "../common/MultiImageSelector";
+import MultiFileSelector from "../common/MultiFileSelector";
+import MultiLinkSelector from "../common/MultiLinkSelector";
 import ModernDaySelector from "../common/ModernDaySelector"; // Import component mới
 import { useDebounce, useDebouncedCallback } from "@/hooks/useDebounce";
 import { campaignAPI } from "@/lib/campaign-api";
@@ -246,6 +250,33 @@ export default function CampaignModal({
     "image" | "link" | "file" | null
   >(null);
   const [attachmentData, setAttachmentData] = useState<string>("");
+  const [multipleImages, setMultipleImages] = useState<Array<{
+    base64: string;
+    filename?: string;
+    size?: number;
+    type?: string;
+  }>>([]);
+  const [multipleFiles, setMultipleFiles] = useState<Array<{
+    base64: string;
+    filename: string;
+    size?: number;
+    type?: string;
+  }>>([]);
+  const [multipleLinks, setMultipleLinks] = useState<Array<{
+    url: string;
+    title?: string;
+  }>>([]);
+
+  // Handle attachment type change
+  const handleAttachmentTypeChange = (newType: "image" | "link" | "file" | null) => {
+    setAttachmentType(newType);
+    // Clear all data when switching types
+    setMultipleImages([]);
+    setMultipleFiles([]);
+    setMultipleLinks([]);
+    setAttachmentData("");
+    setAttachmentMetadata(null);
+  };
 
   // Enhanced day selection states
   const [selectedDays, setSelectedDays] = useState<number | number[]>([]);
@@ -454,14 +485,29 @@ export default function CampaignModal({
 
       // Load attachment if exists
       if (campaign.messages?.attachment) {
-        setAttachmentType(campaign.messages.attachment.type);
+        handleAttachmentTypeChange(campaign.messages.attachment.type);
         if (campaign.messages.attachment.type === "link") {
           setAttachmentData(campaign.messages.attachment.url || "");
-        } else if (
-          campaign.messages.attachment.type === "image" ||
-          campaign.messages.attachment.type === "file"
-        ) {
-          setAttachmentData(campaign.messages.attachment.base64 || "");
+        } else if (campaign.messages.attachment.type === "image") {
+          // Check if it's multiple images or single image
+          if (campaign.messages.attachment.images && campaign.messages.attachment.images.length > 0) {
+            setMultipleImages(campaign.messages.attachment.images);
+            setAttachmentData(""); // Clear single image data
+          } else if (campaign.messages.attachment.base64) {
+            // Legacy single image support
+            setAttachmentData(campaign.messages.attachment.base64);
+            setMultipleImages([]);
+          }
+        } else if (campaign.messages.attachment.type === "file") {
+          // Check if it's multiple files or single file
+          if ((campaign.messages.attachment as any).files && (campaign.messages.attachment as any).files.length > 0) {
+            setMultipleFiles((campaign.messages.attachment as any).files);
+            setAttachmentData(""); // Clear single file data
+          } else if (campaign.messages.attachment.base64) {
+            // Legacy single file support
+            setAttachmentData(campaign.messages.attachment.base64);
+            setMultipleFiles([]);
+          }
           if (campaign.messages.attachment.filename) {
             setAttachmentMetadata({
               filename: campaign.messages.attachment.filename,
@@ -471,6 +517,16 @@ export default function CampaignModal({
             });
           } else {
             setAttachmentMetadata(null);
+          }
+        } else if (campaign.messages.attachment.type === "link") {
+          // Check if it's multiple links or single link
+          if ((campaign.messages.attachment as any).links && (campaign.messages.attachment as any).links.length > 0) {
+            setMultipleLinks((campaign.messages.attachment as any).links);
+            setAttachmentData(""); // Clear single link data
+          } else if (campaign.messages.attachment.url) {
+            // Legacy single link support
+            setAttachmentData(campaign.messages.attachment.url);
+            setMultipleLinks([]);
           }
         }
       }
@@ -562,8 +618,11 @@ export default function CampaignModal({
     setIncludeSaturday(true);
     setTimeOfDay("");
     setMessageContent("");
-    setAttachmentType(null);
+    handleAttachmentTypeChange(null);
     setAttachmentData("");
+    setMultipleImages([]);
+    setMultipleFiles([]);
+    setMultipleLinks([]);
     setReminders([{ content: "", minutes: 30 }]);
     setEmailSendMode("interval");
     setEmailReportsEnabled(false);
@@ -680,7 +739,14 @@ export default function CampaignModal({
         (messageContent?.trim() &&
           // ✅ KIỂM TRA ATTACHMENT BẮT BUỘC - CHẶT CHẼ HƠN
           attachmentType && // Phải chọn loại đính kèm
-          attachmentData?.trim() && // Phải có dữ liệu đính kèm
+          // Check data based on type
+          (attachmentType === "image" 
+            ? (attachmentData?.trim() || multipleImages.length > 0)
+            : attachmentType === "file"
+            ? (attachmentData?.trim() || multipleFiles.length > 0)
+            : attachmentType === "link"
+            ? (attachmentData?.trim() || multipleLinks.length > 0)
+            : attachmentData?.trim()) && // Phải có dữ liệu đính kèm
           !attachmentValidationError && // Không có lỗi validation
           // Kiểm tra schedule dựa trên loại campaign
           (selectedType === CampaignType.HOURLY_KM ||
@@ -804,7 +870,14 @@ export default function CampaignModal({
         messageValidationError !== null ||
         attachmentValidationError !== null ||
         !attachmentType || // ✅ Thêm kiểm tra
-        !attachmentData?.trim();
+        // Check data based on type
+        (attachmentType === "image" 
+          ? (!attachmentData?.trim() && multipleImages.length === 0)
+          : attachmentType === "file"
+          ? (!attachmentData?.trim() && multipleFiles.length === 0)
+          : attachmentType === "link"
+          ? (!attachmentData?.trim() && multipleLinks.length === 0)
+          : !attachmentData?.trim());
     }
 
     // Step 3: Reminders (nếu cần) - chỉ validate khi đã truy cập hoặc đang ở step này
@@ -835,6 +908,9 @@ export default function CampaignModal({
     attachmentValidationError,
     attachmentType, // ✅ Thêm dependency
     attachmentData, // ✅ Thêm dependency
+    multipleImages, // ✅ Thêm dependency cho multiple images
+    multipleFiles, // ✅ Thêm dependency cho multiple files
+    multipleLinks, // ✅ Thêm dependency cho multiple links
 
     canProceedFromTab3,
     reminderValidationErrors,
@@ -2367,15 +2443,27 @@ export default function CampaignModal({
       );
     } else {
       // Đã chọn loại, kiểm tra dữ liệu
-      if (!attachmentData?.trim()) {
-        const typeNames = {
-          image: "hình ảnh",
-          link: "liên kết",
-          file: "tệp tin",
-        };
-        errors.push(`📎 Chưa tải lên ${typeNames[attachmentType]}`);
-      } else if (attachmentValidationError) {
-        errors.push(`📎 Đính kèm: ${attachmentValidationError}`);
+      if (attachmentType === "image") {
+        // For image type, check either single image or multiple images
+        if (!attachmentData?.trim() && multipleImages.length === 0) {
+          errors.push("📎 Chưa tải lên hình ảnh");
+        } else if (attachmentValidationError) {
+          errors.push(`📎 Đính kèm: ${attachmentValidationError}`);
+        }
+      } else if (attachmentType === "file") {
+        // For file type, check either single file or multiple files
+        if (!attachmentData?.trim() && multipleFiles.length === 0) {
+          errors.push("📎 Chưa tải lên tệp tin");
+        } else if (attachmentValidationError) {
+          errors.push(`📎 Đính kèm: ${attachmentValidationError}`);
+        }
+      } else if (attachmentType === "link") {
+        // For link type, check either single link or multiple links
+        if (!attachmentData?.trim() && multipleLinks.length === 0) {
+          errors.push("📎 Chưa nhập liên kết");
+        } else if (attachmentValidationError) {
+          errors.push(`📎 Đính kèm: ${attachmentValidationError}`);
+        }
       }
     }
 
@@ -2503,6 +2591,9 @@ export default function CampaignModal({
     messageValidationError,
     attachmentType,
     attachmentData,
+    multipleImages,
+    multipleFiles,
+    multipleLinks,
     attachmentValidationError,
     selectedType,
     startTime,
@@ -2593,13 +2684,12 @@ export default function CampaignModal({
         if (!attachmentType) {
           alertMessage =
             "📎 Bắt buộc chọn loại đính kèm!\n\nVui lòng chọn một trong ba loại: Hình ảnh, Liên kết hoặc Tệp tin.";
-        } else if (!attachmentData?.trim()) {
-          const typeNames = {
-            image: "hình ảnh",
-            link: "liên kết",
-            file: "tệp tin",
-          };
-          alertMessage = `📎 Chưa tải lên ${typeNames[attachmentType]}!\n\nVui lòng hoàn thành việc đính kèm để tiếp tục.`;
+        } else if (attachmentType === "image" && !attachmentData?.trim() && multipleImages.length === 0) {
+          alertMessage = `📎 Chưa tải lên hình ảnh!\n\nVui lòng hoàn thành việc đính kèm để tiếp tục.`;
+        } else if (attachmentType === "file" && !attachmentData?.trim() && multipleFiles.length === 0) {
+          alertMessage = `📎 Chưa tải lên tệp tin!\n\nVui lòng hoàn thành việc đính kèm để tiếp tục.`;
+        } else if (attachmentType === "link" && !attachmentData?.trim() && multipleLinks.length === 0) {
+          alertMessage = `📎 Chưa nhập liên kết!\n\nVui lòng hoàn thành việc đính kèm để tiếp tục.`;
         } else {
           alertMessage = `⚠️ Vui lòng hoàn thành lịch trình & nội dung!\n\n${tabErrors.join(
             "\n"
@@ -2724,6 +2814,9 @@ export default function CampaignModal({
       needsReminderTab,
       attachmentType,
       attachmentData,
+      multipleImages,
+      multipleFiles,
+      multipleLinks,
       campaignName,
       selectedType,
       getValidationErrorsForTab2,
@@ -2812,17 +2905,30 @@ export default function CampaignModal({
       return;
     }
 
-    if (!attachmentData?.trim()) {
-      const typeNames = {
-        image: "hình ảnh",
-        link: "liên kết",
-        file: "tệp tin",
-      };
-      setAlertSafe?.({
-        type: "error",
-        message: `📎 Chưa tải lên ${typeNames[attachmentType]}!\n\nVui lòng tải lên nội dung đính kèm hoặc bỏ chọn loại đính kèm.`,
-      });
-      return;
+    if (attachmentType === "image") {
+      if (!attachmentData?.trim() && multipleImages.length === 0) {
+        setAlertSafe?.({
+          type: "error",
+          message: `📎 Chưa tải lên hình ảnh!\n\nVui lòng tải lên nội dung đính kèm hoặc bỏ chọn loại đính kèm.`,
+        });
+        return;
+      }
+    } else if (attachmentType === "file") {
+      if (!attachmentData?.trim() && multipleFiles.length === 0) {
+        setAlertSafe?.({
+          type: "error",
+          message: `📎 Chưa tải lên tệp tin!\n\nVui lòng tải lên nội dung đính kèm hoặc bỏ chọn loại đính kèm.`,
+        });
+        return;
+      }
+    } else if (attachmentType === "link") {
+      if (!attachmentData?.trim() && multipleLinks.length === 0) {
+        setAlertSafe?.({
+          type: "error",
+          message: `📎 Chưa nhập liên kết!\n\nVui lòng tải lên nội dung đính kèm hoặc bỏ chọn loại đính kèm.`,
+        });
+        return;
+      }
     }
 
     if (attachmentValidationError) {
@@ -2949,18 +3055,27 @@ export default function CampaignModal({
           type: "initial",
           text: messageContent || "", // Allow empty message in edit mode
           attachment:
-            attachmentType && attachmentData
+            attachmentType && (attachmentData || multipleImages.length > 0 || multipleFiles.length > 0 || multipleLinks.length > 0)
               ? {
                   type: attachmentType,
-                  ...(attachmentType === "image" || attachmentType === "file"
-                    ? {
-                        base64: attachmentData,
-                        ...(attachmentType === "file" &&
-                        attachmentMetadata?.filename
-                          ? { filename: attachmentMetadata.filename }
-                          : {}),
-                      }
-                    : { url: attachmentData }),
+                  ...(attachmentType === "image"
+                    ? multipleImages.length > 0
+                      ? { images: multipleImages }
+                      : { base64: attachmentData }
+                    : attachmentType === "file"
+                    ? multipleFiles.length > 0
+                      ? { files: multipleFiles }
+                      : {
+                          base64: attachmentData,
+                          ...(attachmentMetadata?.filename
+                            ? { filename: attachmentMetadata.filename }
+                            : {}),
+                        }
+                    : attachmentType === "link"
+                    ? multipleLinks.length > 0
+                      ? { links: multipleLinks }
+                      : { url: attachmentData }
+                    : {}),
                 }
               : null,
         } as any,
@@ -3812,44 +3927,54 @@ export default function CampaignModal({
                               />
                             </motion.div>
 
-                            {/* Attachment */}
+                            {/* Attachment Type Selector */}
                             <motion.div
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: 0.3 }}
                             >
-                              <ModernAttachmentSelector
+                              <AttachmentTypeSelector
                                 type={attachmentType}
-                                onTypeChange={setAttachmentType}
-                                data={attachmentData}
-                                onDataChange={setAttachmentData}
-                                required={true} // ✅ Bắt buộc chọn attachment
-                                onValidationChange={
-                                  setAttachmentValidationError
-                                }
-                                onAttachmentDataChange={(data) => {
-                                  console.log(
-                                    "Attachment data received:",
-                                    data
-                                  );
-                                  if (data) {
-                                    if (data.filename) {
-                                      // File attachment
-                                      setAttachmentMetadata({
-                                        filename: data.filename,
-                                        size: data.size,
-                                        type: data.type,
-                                      });
-                                    } else if (data.url) {
-                                      // URL attachment
-                                      setAttachmentMetadata(null); // URL không cần metadata
-                                    }
-                                  } else {
-                                    setAttachmentMetadata(null);
-                                  }
-                                }}
+                                onTypeChange={handleAttachmentTypeChange}
+                                required={true}
                               />
                             </motion.div>
+
+                            {/* Multiple Content Selector */}
+                            {attachmentType && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 }}
+                                className="mt-4"
+                              >
+                                {attachmentType === "image" ? (
+                                  <MultiImageSelector
+                                    images={multipleImages}
+                                    onImagesChange={setMultipleImages}
+                                    required={true}
+                                    onValidationChange={setAttachmentValidationError}
+                                    maxImages={5}
+                                  />
+                                ) : attachmentType === "file" ? (
+                                  <MultiFileSelector
+                                    files={multipleFiles}
+                                    onFilesChange={setMultipleFiles}
+                                    required={true}
+                                    onValidationChange={setAttachmentValidationError}
+                                    maxFiles={5}
+                                  />
+                                ) : attachmentType === "link" ? (
+                                  <MultiLinkSelector
+                                    links={multipleLinks}
+                                    onLinksChange={setMultipleLinks}
+                                    required={true}
+                                    onValidationChange={setAttachmentValidationError}
+                                    maxLinks={5}
+                                  />
+                                ) : null}
+                              </motion.div>
+                            )}
                           </CardContent>
                         </Card>
                       </motion.div>
@@ -5999,14 +6124,20 @@ export default function CampaignModal({
                             else if (
                               currentTab === "email" &&
                               canProceedFromEmailTab
-                            )
-                              // ✅ Thêm validation mới
+                            ) {
                               setCurrentTab("customers");
+                            }
                           }}
                           disabled={
                             (currentTab === "basic" && !canProceedFromTab1) ||
                             (currentTab === "schedule" &&
-                              !canProceedFromTab2) ||
+                              (!canProceedFromTab2 ||
+                                !!messageValidationError ||
+                                !!attachmentValidationError ||
+                                !attachmentType ||
+                                (attachmentType === "image" && !attachmentData?.trim() && multipleImages.length === 0) ||
+                                (attachmentType === "file" && !attachmentData?.trim() && multipleFiles.length === 0) ||
+                                (attachmentType === "link" && !attachmentData?.trim() && multipleLinks.length === 0))) ||
                             (currentTab === "reminders" &&
                               !canProceedFromTab3) ||
                             (currentTab === "email" && !canProceedFromEmailTab)
@@ -6018,10 +6149,12 @@ export default function CampaignModal({
                             (currentTab === "basic" && !canProceedFromTab1) ||
                               (currentTab === "schedule" &&
                                 (!canProceedFromTab2 ||
-                                  messageValidationError ||
-                                  attachmentValidationError ||
+                                  !!messageValidationError ||
+                                  !!attachmentValidationError ||
                                   !attachmentType ||
-                                  !attachmentData?.trim())) ||
+                                  (attachmentType === "image" && !attachmentData?.trim() && multipleImages.length === 0) ||
+                                  (attachmentType === "file" && !attachmentData?.trim() && multipleFiles.length === 0) ||
+                                  (attachmentType === "link" && !attachmentData?.trim() && multipleLinks.length === 0))) ||
                               (currentTab === "reminders" &&
                                 (!canProceedFromTab3 ||
                                   reminderValidationErrors.some(
@@ -6039,7 +6172,9 @@ export default function CampaignModal({
                               : currentTab === "schedule" && !canProceedFromTab2
                               ? !attachmentType
                                 ? "⚠️ Bắt buộc chọn loại đính kèm (Hình ảnh, Liên kết hoặc Tệp tin)"
-                                : !attachmentData?.trim()
+                                : (attachmentType === "image" && !attachmentData?.trim() && multipleImages.length === 0) ||
+                                  (attachmentType === "file" && !attachmentData?.trim() && multipleFiles.length === 0) ||
+                                  (attachmentType === "link" && !attachmentData?.trim() && multipleLinks.length === 0)
                                 ? `⚠️ Chưa tải lên ${
                                     attachmentType === "image"
                                       ? "hình ảnh"

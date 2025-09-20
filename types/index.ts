@@ -613,6 +613,25 @@ export interface CampaignFormData {
       url?: string;
       base64?: string;
       filename?: string;
+      // Support multiple images (max 5)
+      images?: Array<{
+        base64: string;
+        filename?: string;
+        size?: number;
+        type?: string;
+      }>;
+      // Support multiple files (max 5)
+      files?: Array<{
+        base64: string;
+        filename: string;
+        size?: number;
+        type?: string;
+      }>;
+      // Support multiple links (max 5)
+      links?: Array<{
+        url: string;
+        title?: string;
+      }>;
     } | null;
   };
   schedule_config?: {
@@ -654,6 +673,25 @@ export interface CampaignWithDetails extends Campaign {
       url?: string;
       base64?: string;
       filename?: string;
+      // Support multiple images (max 5)
+      images?: Array<{
+        base64: string;
+        filename?: string;
+        size?: number;
+        type?: string;
+      }>;
+      // Support multiple files (max 5)
+      files?: Array<{
+        base64: string;
+        filename: string;
+        size?: number;
+        type?: string;
+      }>;
+      // Support multiple links (max 5)
+      links?: Array<{
+        url: string;
+        title?: string;
+      }>;
     } | null;
   };
 
