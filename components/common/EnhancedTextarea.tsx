@@ -53,11 +53,11 @@ const validateBrackets = (
     /\[[^\]]*\}/g,
     /\{[^\}]*\)/g,
     /\([^)]*\}/g,
-    /["'`]\{[^}]*\}["'`]/g,
-    /["'`]\{[^}]*\}/g,
-    /\{[^}]*\}["'`]/g,
-    /["'`]\{[^}]*\}['"]/g,
-    /["'`]\{[^}]*\}`/g,
+    /['`]\{[^}]*\}['`]/g,
+    /['`]\{[^}]*\}/g,
+    /\{[^}]*\}['`]/g,
+    /['`]\{[^}]*\}[']/g,
+    /['`]\{[^}]*\}`/g,
   ];
 
   problematicPatterns.forEach((pattern) => {
@@ -78,13 +78,27 @@ const validateBrackets = (
   });
 
   // Step 4: Tìm các ký tự đặc biệt bị cấm
-  const forbiddenChars = ["{", "}", '"', "'", "`"];
+  const forbiddenChars = ["{", "}", "'", "`"]; // Removed " from forbidden chars
   const invalidChars: string[] = [];
   const invalidPositions: number[] = [];
+  
   text.split("").forEach((char, index) => {
     if (forbiddenChars.includes(char) && !isValidPosition[index]) {
       invalidChars.push(char);
       invalidPositions.push(index);
+    } else if (char === '"' && !isValidPosition[index]) {
+      // Allow " if it's used for measurements (inch notation)
+      const before = text.slice(Math.max(0, index - 5), index);
+      const after = text.slice(index + 1, Math.min(text.length, index + 3));
+      const context = before + char + after;
+      
+      // Check if it's likely used for inch notation (number followed by ")
+      const isInchNotation = /\d+\s*"/.test(context) || /\d+"\s*/.test(context);
+      
+      if (!isInchNotation) {
+        invalidChars.push(char);
+        invalidPositions.push(index);
+      }
     }
   });
 
@@ -547,6 +561,9 @@ const EnhancedTextarea: React.FC<EnhancedTextareaProps> = ({
               <li>
                 • <span className="text-green-600">✓ Được phép:</span> Ngoặc vuông [something] và ngoặc tròn (something)
               </li>
+              <li>
+                • <span className="text-green-600">✓ Được phép:</span> Dấu nháy kép " cho đo lường (ví dụ: 24", 27")
+              </li>
               {mustHavePatterns.length > 0 && (
                 <li>
                   • <span className="text-orange-600">⚠ Bắt buộc có:</span> {mustHavePatterns.map((p) => `"${p}"`).join(", ")}
@@ -556,7 +573,7 @@ const EnhancedTextarea: React.FC<EnhancedTextareaProps> = ({
                 • <span className="text-red-600">✗ Bị cấm:</span> Malformed patterns như {`{something], {something), [something}`}
               </li>
               <li>
-                • <span className="text-red-600">✗ Bị cấm:</span> Ký tự đơn lẻ {`{ } " ' \``}
+                • <span className="text-red-600">✗ Bị cấm:</span> Ký tự đơn lẻ {`{ } ' \``} và dấu " không phải đo lường
               </li>
             </ul>
           </div>
