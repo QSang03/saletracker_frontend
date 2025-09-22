@@ -6,6 +6,17 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// API function to get user roles with permissions
+export const getUserRolesWithPermissions = async () => {
+  try {
+    const response = await api.get('/users/roles-with-permissions');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching user roles with permissions:', error);
+    throw error;
+  }
+};
+
 api.interceptors.request.use(config => {
   const token = getAccessToken();
   if (token) {

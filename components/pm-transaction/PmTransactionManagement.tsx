@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { getUserRolesWithPermissions } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,6 +135,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Back/restore state
   const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
+  const [userRolesWithPermissions, setUserRolesWithPermissions] = useState<any[]>([]);
   const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
   const [filtersRestored, setFiltersRestored] = useState(false);
   const previousPmFiltersRef = useRef<PmFilters | null>(null);
@@ -531,9 +533,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
             console.log('🔍 [Frontend PM] Using PM Custom Mode');
             
-            // Lấy thông tin từng role từ user context (đã có permissions từ database)
-            const userRoles = user?.roles || [];
-            const pmCustomRoles = userRoles.filter((role: any) => 
+            // Lấy thông tin từng role từ API (đã có permissions từ database)
+            const pmCustomRoles = userRolesWithPermissions.filter((role: any) => 
               role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
             );
             
@@ -783,6 +784,21 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
   // ✅ Tối ưu: Load filter options với debounce
   const filterOptionsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Load user roles with permissions when component mounts
+  useEffect(() => {
+    const fetchUserRoles = async () => {
+      try {
+        const response = await getUserRolesWithPermissions();
+        setUserRolesWithPermissions(response.roles || []);
+        console.log('🔍 [Frontend PM] Loaded user roles with permissions:', response.roles);
+      } catch (error) {
+        console.error('❌ [Frontend PM] Error loading user roles with permissions:', error);
+      }
+    };
+    
+    fetchUserRoles();
+  }, []);
   
   useEffect(() => {
     const load = async () => {
@@ -1526,9 +1542,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
           console.log('🔍 [Frontend PM Export] Using PM Custom Mode');
           
-          // Lấy thông tin từng role từ user context (đã có permissions từ database)
-          const userRoles = user?.roles || [];
-          const pmCustomRoles = userRoles.filter((role: any) => 
+          // Lấy thông tin từng role từ API (đã có permissions từ database)
+          const pmCustomRoles = userRolesWithPermissions.filter((role: any) => 
             role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
           );
           
