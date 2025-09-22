@@ -559,14 +559,49 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             pmCustomRoles.forEach((role: any, index: number) => {
               const roleName = role.name;
               
-              // ✅ SỬA: Mỗi role sẽ có tất cả brands và categories mà user có quyền
-              // Trong tổ hợp riêng, backend sẽ xử lý logic tổ hợp 1vs1 cho từng role
+              // ✅ SỬA: Lấy permissions thực tế từ database cho từng role
+              console.log(`🔍 [Frontend PM] Role ${roleName} full object:`, role);
+              console.log(`🔍 [Frontend PM] Role ${roleName} rolePermissions:`, role.rolePermissions);
+              console.log(`🔍 [Frontend PM] Role ${roleName} rolePermissions type:`, typeof role.rolePermissions);
+              
+              // ✅ SỬA: Lấy permissions thực tế của role này từ database
+              // Mỗi role đã có permissions riêng trong bảng roles_permissions
+              let rolePermissionsList: string[] = [];
+              
+              // Lấy permissions từ rolePermissions array
+              if (role.rolePermissions && Array.isArray(role.rolePermissions)) {
+                rolePermissionsList = role.rolePermissions
+                  .filter((rp: any) => rp.isActive && rp.permission)
+                  .map((rp: any) => rp.permission.name);
+              }
+              
+              console.log(`🔍 [Frontend PM] Role ${roleName} permissions list:`, rolePermissionsList);
+              
+              // ✅ SỬA: Chỉ lấy permissions thực tế từ database, không có fallback
+              if (!rolePermissionsList || rolePermissionsList.length === 0) {
+                console.log(`⚠️ [Frontend PM] Role ${roleName} has no permissions from database, using empty array`);
+                rolePermissionsList = []; // Chỉ lấy từ database, không fallback
+              }
+              
+              // Convert permissions thành brands và categories
+              const convertedRolePermissions = rolePermissionsList.map((p: string) => {
+                if (p.toLowerCase().startsWith('cat_')) {
+                  return `pm_${p}`;
+                } else if (p.toLowerCase().startsWith('brand_')) {
+                  return `pm_${p}`;
+                }
+                return p;
+              });
+              
+              const roleBrands = convertedRolePermissions.filter((p: string) => p.toLowerCase().startsWith('pm_brand_'));
+              const roleCategories = convertedRolePermissions.filter((p: string) => p.toLowerCase().startsWith('pm_cat_'));
+              
               rolePermissions[roleName] = { 
-                brands: brands, // Tất cả brands user có quyền
-                categories: categories // Tất cả categories user có quyền
+                brands: roleBrands, 
+                categories: roleCategories 
               };
               
-              console.log(`🔑 [Frontend PM] Role ${roleName}:`, { brands: brands, categories: categories });
+              console.log(`🔑 [Frontend PM] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
             });
             
             // Gửi thông tin từng role
@@ -1519,14 +1554,48 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
            pmCustomRoles.forEach((role: any, index: number) => {
              const roleName = role.name;
              
-             // ✅ SỬA: Mỗi role sẽ có tất cả brands và categories mà user có quyền
-             // Trong tổ hợp riêng, backend sẽ xử lý logic tổ hợp 1vs1 cho từng role
+             // ✅ SỬA: Lấy permissions thực tế từ database cho từng role
+             console.log(`🔍 [Frontend PM Export] Role ${roleName} full object:`, role);
+             console.log(`🔍 [Frontend PM Export] Role ${roleName} rolePermissions:`, role.rolePermissions);
+             
+             // ✅ SỬA: Lấy permissions thực tế của role này từ database
+             // Mỗi role đã có permissions riêng trong bảng roles_permissions
+             let rolePermissionsList: string[] = [];
+             
+             // Lấy permissions từ rolePermissions array
+             if (role.rolePermissions && Array.isArray(role.rolePermissions)) {
+               rolePermissionsList = role.rolePermissions
+                 .filter((rp: any) => rp.isActive && rp.permission)
+                 .map((rp: any) => rp.permission.name);
+             }
+             
+             console.log(`🔍 [Frontend PM Export] Role ${roleName} permissions list:`, rolePermissionsList);
+             
+             // ✅ SỬA: Chỉ lấy permissions thực tế từ database, không có fallback
+             if (!rolePermissionsList || rolePermissionsList.length === 0) {
+               console.log(`⚠️ [Frontend PM Export] Role ${roleName} has no permissions from database, using empty array`);
+               rolePermissionsList = []; // Chỉ lấy từ database, không fallback
+             }
+             
+             // Convert permissions thành brands và categories
+             const convertedRolePermissions = rolePermissionsList.map((p: string) => {
+               if (p.toLowerCase().startsWith('cat_')) {
+                 return `pm_${p}`;
+               } else if (p.toLowerCase().startsWith('brand_')) {
+                 return `pm_${p}`;
+               }
+               return p;
+             });
+             
+             const roleBrands = convertedRolePermissions.filter((p: string) => p.toLowerCase().startsWith('pm_brand_'));
+             const roleCategories = convertedRolePermissions.filter((p: string) => p.toLowerCase().startsWith('pm_cat_'));
+             
              rolePermissions[roleName] = { 
-               brands: brands, // Tất cả brands user có quyền
-               categories: categories // Tất cả categories user có quyền
+               brands: roleBrands, 
+               categories: roleCategories 
              };
              
-             console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: brands, categories: categories });
+             console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
            });
           
           // Gửi thông tin từng role
