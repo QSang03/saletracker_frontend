@@ -13,6 +13,7 @@ import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import type { Product, Brand, Category } from "@/types";
 import { getAccessToken } from "@/lib/auth";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { getUserRolesWithPermissions } from "@/lib/api";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function getAuthHeaders(): HeadersInit {
@@ -33,6 +34,7 @@ export default function ProductTable() {
   // Pagination state
   const [productPage, setProductPage] = useState(1);
   const [productPageSize, setProductPageSize] = useState(10);
+  const [userRolesWithPermissions, setUserRolesWithPermissions] = useState<any[]>([]);
 
   // Thêm refs cho component lifecycle
   const isComponentMounted = useRef(true);
@@ -78,6 +80,20 @@ export default function ProductTable() {
     return pmCustomRoles.length > 0;
   };
 
+  // Load user roles with permissions when component mounts
+  useEffect(() => {
+    const fetchUserRoles = async () => {
+      try {
+        const response = await getUserRolesWithPermissions();
+        setUserRolesWithPermissions(response.roles || []);
+      } catch (error) {
+        console.error('❌ [Frontend Product] Error loading user roles with permissions:', error);
+      }
+    };
+    
+    fetchUserRoles();
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     isComponentMounted.current = true;
@@ -113,54 +129,43 @@ export default function ProductTable() {
         if (isPMCustomMode()) {
           // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
           
-          // Lấy thông tin từng role từ user context (đã có permissions từ database)
-          const userRoles = user?.roles || [];
-          const pmCustomRoles = userRoles.filter((role: any) => 
+          // Lấy thông tin từng role từ API (đã có permissions từ database)
+          const pmCustomRoles = userRolesWithPermissions.filter((role: any) => 
             role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
           );
-          
           
           // Tạo object chứa thông tin từng role từ database
           const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
           
-          // Tạm thời: chia permissions theo logic cụ thể vì rolePermissions chưa được load từ database
-          const allUserPermissions = getPMPermissions();
-          const convertedPermissions = allUserPermissions.map(p => {
-            if (p.toLowerCase().startsWith('cat_')) {
-              return `pm_${p}`;
-            } else if (p.toLowerCase().startsWith('brand_')) {
-              return `pm_${p}`;
-            }
-            return p;
-          });
-          
-          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-          
-          pmCustomRoles.forEach((role: any, index: number) => {
+          pmCustomRoles.forEach((role: any) => {
             const roleName = role.name;
             
-            // Logic chia permissions cụ thể:
-            // Role 1: may-tinh-de-ban, asus, lenovo
-            // Role 2: man-hinh, lenovo
-            let roleBrands: string[] = [];
-            let roleCategories: string[] = [];
+            // Lấy permissions từ rolePermissions array
+            let rolePermissionsList: string[] = [];
             
-            if (index === 0) {
-              // Role 1: lấy tất cả brands và category may-tinh-de-ban
-              roleBrands = brands; // Tất cả brands: asus, lenovo
-              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
-            } else if (index === 1) {
-              // Role 2: lấy brand lenovo và category man-hinh
-              roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
-              roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
+            if (role.rolePermissions && Array.isArray(role.rolePermissions)) {
+              rolePermissionsList = role.rolePermissions
+                .filter((rp: any) => rp.isActive && rp.permission)
+                .map((rp: any) => rp.permission.name);
             }
+            
+            // Convert permissions thành brands và categories
+            const convertedRolePermissions = rolePermissionsList.map((p: string) => {
+              if (p.toLowerCase().startsWith('cat_')) {
+                return `pm_${p}`;
+              } else if (p.toLowerCase().startsWith('brand_')) {
+                return `pm_${p}`;
+              }
+              return p;
+            });
+            
+            const roleBrands = convertedRolePermissions.filter((p: string) => p.toLowerCase().startsWith('pm_brand_'));
+            const roleCategories = convertedRolePermissions.filter((p: string) => p.toLowerCase().startsWith('pm_cat_'));
             
             rolePermissions[roleName] = { 
               brands: roleBrands, 
               categories: roleCategories 
             };
-            
           });
           
           // Gửi thông tin từng role
@@ -360,6 +365,11 @@ export default function ProductTable() {
   useEffect(() => {
     if (isInitialFetchingRef.current) return; // Skip nếu đang fetch
     
+    // ✅ Chỉ fetch khi userRolesWithPermissions đã được load (cho PM users)
+    if (isPMWithPermissionRole && userRolesWithPermissions.length === 0) {
+      return;
+    }
+    
     // ✅ Debounce initial fetch
     if (initialFetchTimeoutRef.current) {
       clearTimeout(initialFetchTimeoutRef.current);
@@ -379,7 +389,7 @@ export default function ProductTable() {
         clearTimeout(initialFetchTimeoutRef.current);
       }
     };
-  }, [user]); // Thêm user dependency để fetch lại khi user context thay đổi
+  }, [user, userRolesWithPermissions]); // Thêm userRolesWithPermissions dependency
 
   // ✅ Tối ưu: Re-fetch products với debounce
   const productFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
