@@ -114,9 +114,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   }>({ departments: [], products: [], brands: [], categories: [], brandCategories: [] });
   // Toggle: admin or PM may include hidden items when exporting
   const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
-  // Toggle: show hidden orders from last N days
-  const [showHiddenOrders, setShowHiddenOrders] = useState(false);
-  const [hiddenOrdersDays, setHiddenOrdersDays] = useState(7); // Default 7 days
   const [departmentsSelected, setDepartmentsSelected] = useState<
     (string | number)[]
   >([]);
@@ -153,8 +150,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     warningLevel?: string; // CSV
     quantity?: number;
     conversationType?: string; // CSV
-    showHiddenOrders?: boolean;
-    hiddenOrdersDays?: number;
   };
 
   // LocalStorage helpers for PM filters
@@ -198,8 +193,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const getCurrentPmFilters = (): PmFilters => {
     let departmentsCsv = "";
     let employeesCsv = "";
-    let brandsCsv = "";
-    let categoriesCsv = "";
     
     // ✅ SỬA: Chỉ lưu departments khi user đã chọn, không auto-fill từ pmDepartments
     departmentsCsv =
@@ -210,16 +203,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     employeesCsv =
       Array.isArray(employeesSelected) && employeesSelected.length > 0
         ? employeesSelected.join(",")
-        : "";
-    
-    brandsCsv =
-      Array.isArray(brandsSelected) && brandsSelected.length > 0
-        ? brandsSelected.join(",")
-        : "";
-    
-    categoriesCsv =
-      Array.isArray(categoriesSelected) && categoriesSelected.length > 0
-        ? categoriesSelected.join(",")
         : "";
     
     return {
@@ -234,8 +217,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           : undefined,
       departments: departmentsCsv,
       employees: employeesCsv,
-      brands: brandsCsv,
-      categories: categoriesCsv,
       brandCategories: Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0
         ? brandCategoriesSelected.join(",")
         : "",
@@ -245,8 +226,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         Array.isArray(conversationTypesSelected) && conversationTypesSelected.length > 0
           ? conversationTypesSelected.join(",")
           : "",
-      showHiddenOrders,
-      hiddenOrdersDays,
     };
   };
 
@@ -292,20 +271,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             setEmployeesSelected([]);
           }
 
-          if (f.brands) {
-            const vals = f.brands.split(",").filter(Boolean);
-            setBrandsSelected(vals);
-          } else {
-            setBrandsSelected([]);
-          }
-
-          if (f.categories) {
-            const vals = f.categories.split(",").filter(Boolean);
-            setCategoriesSelected(vals);
-          } else {
-            setCategoriesSelected([]);
-          }
-
           if (f.brandCategories) {
             const vals = f.brandCategories.split(",").filter(Boolean);
             setBrandCategoriesSelected(vals);
@@ -315,14 +280,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
           setWarningLevelFilter(f.warningLevel || "");
           setMinQuantity(typeof f.quantity === "number" ? f.quantity : undefined);
-          // ✅ SỬA: Apply conversation types từ CSV string
           setConversationTypesSelected(
             f.conversationType ? f.conversationType.split(",").filter(Boolean) : []
           );
-
-          // Apply hidden orders settings
-          setShowHiddenOrders(f.showHiddenOrders || false);
-          setHiddenOrdersDays(f.hiddenOrdersDays || 7);
         });
       }, 0);
       
@@ -485,8 +445,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       const effWarning = eff ? eff.warningLevel : warningLevelFilter;
       const effQty = eff ? eff.quantity : minQuantity;
       const effConversationType = eff ? eff.conversationType : (conversationTypesSelected.length > 0 ? conversationTypesSelected.join(',') : '');
-      const effShowHiddenOrders = eff ? eff.showHiddenOrders : showHiddenOrders;
-      const effHiddenOrdersDays = eff ? eff.hiddenOrdersDays : hiddenOrdersDays;
 
       const params = new URLSearchParams();
       params.set('page', String(effPage));
@@ -506,44 +464,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         params.set('employees', effEmployeesCsv);
       }
       
-      // ✅ PM có quyền riêng (pm_permissions): thêm brands và categories riêng biệt
+      // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories
       console.log('🔍 [Frontend PM] isPMWithPermissionRole:', isPMWithPermissionRole);
       console.log('🔍 [Frontend PM] isPMCustomMode():', isPMCustomMode());
-      console.log('🔍 [Frontend PM] Selected brands:', effBrandsCsv);
-      console.log('🔍 [Frontend PM] Selected categories:', effCategoriesCsv);
       
       if (isPMWithPermissionRole) {
-        // ✅ SỬA: Logic tổ hợp bắt buộc brands + categories
-        if (effBrandsCsv && effCategoriesCsv) {
-          // Nếu có cả brands và categories: tạo tổ hợp bắt buộc
-          const brandsArray = effBrandsCsv.split(',').filter(Boolean);
-          const categoriesArray = effCategoriesCsv.split(',').filter(Boolean);
-          
-          // Tạo tất cả tổ hợp có thể: mỗi brand phải kết hợp với mỗi category
-          const brandCategoryCombinations: string[] = [];
-          brandsArray.forEach(brand => {
-            categoriesArray.forEach(category => {
-              brandCategoryCombinations.push(`pm_brand_${brand}_pm_cat_${category}`);
-            });
-          });
-          
-          if (brandCategoryCombinations.length > 0) {
-            params.set('brandCategories', brandCategoryCombinations.join(','));
-            console.log('🔗 [Frontend PM] Brand-Category combinations:', brandCategoryCombinations);
-          }
-        } else if (effBrandsCsv && !effCategoriesCsv) {
-          // Chỉ có brands: gửi brands riêng
-          params.set('brands', effBrandsCsv);
-        } else if (!effBrandsCsv && effCategoriesCsv) {
-          // Chỉ có categories: gửi categories riêng
-          params.set('categories', effCategoriesCsv);
-        }
-        
-        // Vẫn giữ logic cũ cho brandCategories nếu cần
         if (effBrandCategoriesCsv) {
           params.set('brandCategories', effBrandCategoriesCsv);
-        } else if (!effBrandsCsv && !effCategoriesCsv) {
-          // ✅ CHỈ gửi rolePermissions khi KHÔNG có brands/categories được chọn
+        } else {
           // Kiểm tra chế độ PM
           if (isPMCustomMode()) {
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
@@ -627,25 +555,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       
       if (effWarning) params.set('warningLevel', effWarning);
       if (typeof effQty === 'number') params.set('quantity', String(effQty));
-      // ✅ SỬA: Conversation type filter - xử lý tương tự như manager order
       if (effConversationType) params.set('conversationType', effConversationType);
-
-      // ✅ Add hidden orders parameter
-      if (effShowHiddenOrders) {
-        params.set('includeHidden', '1');
-        // Calculate date range for hidden orders (last N days)
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - (effHiddenOrdersDays || 7));
-        
-        // Format dates as YYYY-MM-DD
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
-        
-        // ✅ SỬA: Không override date filters hiện tại, chỉ thêm hidden orders date range
-        // Backend sẽ xử lý logic kết hợp date filters với hidden orders
-        params.set('hiddenOrdersDateRange', JSON.stringify({ start: startDateStr, end: endDateStr }));
-      }
 
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const token = getAccessToken();
@@ -760,15 +670,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     pageSize,
     dateRangeState,
     employeesSelected,
-    brandsSelected,
-    categoriesSelected,
     warningLevelFilter,
     filtersLoaded,
     filtersRestored,
     minQuantity,
-    conversationTypesSelected, // ✅ SỬA: Include conversation types in fetch effect
-    showHiddenOrders,
-    hiddenOrdersDays,
+    conversationTypesSelected,
   ]);
 
   // removed duplicate sync effect — pageSize/dateRangeState/departments/employees/warningLevel are handled
@@ -806,36 +712,37 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         let brandCategories: any[] = [];
         
         if (isPMWithPermissionRole) {
-          // ✅ PM có quyền riêng: tạo 2 dropdown riêng biệt (Danh mục + Thương hiệu)
-          // Đơn giản: lấy tất cả unique brands và categories từ permissions
-          const allPMPermissions = getAllPMCustomPermissions();
-          console.log('🔍 [Frontend PM Filter] All PM permissions for filter:', allPMPermissions);
-          
-          // Tách brands và categories từ permissions
-          const pmBrands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-          const pmCategories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-          
-          console.log('🔍 [Frontend PM Filter] PM Brands:', pmBrands);
-          console.log('🔍 [Frontend PM Filter] PM Categories:', pmCategories);
-          
-          // Tạo filter options cho brands (loại bỏ trùng lặp)
-          const uniqueBrands = new Set(pmBrands);
-          brands = Array.from(uniqueBrands).map(brand => ({
-            value: brand.replace('pm_brand_', '').toLowerCase(),
-            label: brand.replace('pm_brand_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-          }));
-          
-          // Tạo filter options cho categories (loại bỏ trùng lặp)
-          const uniqueCategories = new Set(pmCategories);
-          categories = Array.from(uniqueCategories).map(category => ({
-            value: category.replace('pm_cat_', '').toLowerCase(),
-            label: category.replace('pm_cat_', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-          }));
-          
-          // Không cần brandCategories combinations nữa, để trống
-          brandCategories = [];
-          
-          console.log('🔍 [Frontend PM Filter] Final filter options (SEPARATE DROPDOWNS):', { brands, categories, brandCategories });
+          // Kiểm tra chế độ PM để hiển thị filter options phù hợp
+          if (isPMCustomMode()) {
+            // Chế độ tổ hợp riêng: hiển thị tất cả permissions từ các role
+            const allPMPermissions = getAllPMCustomPermissions();
+            brandCategories = allPMPermissions.map(p => ({
+              value: p,
+              label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
+            }));
+          } else {
+            // Chế độ tổ hợp chung: tạo combination như cũ
+            const allPMPermissions = getAllPMCustomPermissions();
+            const categories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+            const brands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+            
+            const combo: { value: string; label: string }[] = [];
+            if (categories.length > 0 && brands.length > 0) {
+              categories.forEach(c => {
+                brands.forEach(b => {
+                  combo.push({
+                    value: `${c}+${b}`,
+                    label: `${c.replace('pm_cat_','Cat_')}+${b.replace('pm_brand_','Brand_')}`
+                  });
+                });
+              });
+            }
+            const singles = allPMPermissions.map(p => ({
+              value: p,
+              label: p.replace('pm_cat_','Cat_').replace('pm_brand_','Brand_')
+            }));
+            brandCategories = combo.length > 0 ? combo : singles;
+          }
         }
         
         setFilterOptions({ 
@@ -947,21 +854,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     const currentFilters = getCurrentPmFilters();
     const updatedFilters = { ...currentFilters, search: customerName.trim(), page: 1 };
     savePmFiltersToStorage(updatedFilters);
-    
-    // ✅ Trigger fetch data ngay lập tức để search realtime
-    fetchOrders({
-      page: 1,
-      pageSize: pageSize,
-      search: customerName.trim(),
-      status: statusFilter === 'all' ? '' : statusFilter,
-      date: dateFilter === 'all' || dateFilter === 'custom' ? '' : dateFilter,
-      dateRange: dateRangeState?.start && dateRangeState?.end ? dateRangeState as { start: string; end: string } : undefined,
-      departments: departmentsSelected.join(','),
-      employees: employeesSelected.join(','),
-      warningLevel: warningLevelFilter,
-      quantity: minQuantity,
-      conversationType: conversationTypesSelected.join(','),
-    });
   };
 
   // When departments change, remove any selected employees that no longer belong to the available set
@@ -1020,13 +912,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     dateRangeState,
     departmentsSelected,
     employeesSelected,
-    brandsSelected,
-    categoriesSelected,
     warningLevelFilter,
     minQuantity,
-    conversationTypesSelected, // ✅ SỬA: Include conversation types in auto-save
-    showHiddenOrders,
-    hiddenOrdersDays,
+    conversationTypesSelected,
     filtersLoaded,
     isRestoring,
   ]);
@@ -1062,24 +950,19 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         } catch { /* ignore */ }
       }
 
-      // Handle warning levels (now stored as value codes directly)
+      // Warning levels now already store value codes directly
       let warningLevelCsv = '';
       if (f.warningLevels && f.warningLevels.length > 0) {
         warningLevelCsv = (f.warningLevels as (string|number)[]).map(String).join(',');
       }
 
       // Quantity
-      const quantityVal = typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity) ? (f as any).quantity as number : undefined;
+  const quantityVal = typeof (f as any).quantity === 'number' && !Number.isNaN((f as any).quantity) ? (f as any).quantity as number : undefined;
 
-      // ✅ SỬA: Conversation type - xử lý tương tự như manager order
-      let conversationTypeCsv = '';
-      if (Array.isArray(f.conversationType) && f.conversationType.length > 0) {
-        conversationTypeCsv = f.conversationType.join(',');
-      }
-
-      // ✅ Brands và Categories (từ 2 dropdown riêng biệt)
-      const brandsArr = f.brands && f.brands.length > 0 ? [...(f.brands as (string|number)[])] : [];
-      const categoriesArr = f.categories && f.categories.length > 0 ? [...(f.categories as (string|number)[])] : [];
+      // Conversation type (clone array to ensure state reference change when tags removed)
+      const convArr = (f as any).conversationType && (f as any).conversationType.length > 0
+        ? [ ...(f as any).conversationType as string[] ]
+        : [];
 
       // Construct new PmFilters snapshot
       const newSnapshot: PmFilters = {
@@ -1091,13 +974,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         dateRange: dateRangeVal,
         departments: departmentsArr.join(','),
         employees: employeesArr.join(','),
-        brands: brandsArr.join(','),
-        categories: categoriesArr.join(','),
         warningLevel: warningLevelCsv,
         quantity: quantityVal,
-        conversationType: conversationTypeCsv,
-        showHiddenOrders,
-        hiddenOrdersDays,
+        conversationType: convArr.join(','),
       };
 
       // Use setTimeout to avoid calling flushSync from lifecycle methods
@@ -1108,14 +987,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           setStatusFilter(newSnapshot.status && newSnapshot.status.length > 0 ? newSnapshot.status : 'all');
           setEmployeesSelected(employeesArr);
           setDepartmentsSelected(departmentsArr);
-          setBrandsSelected(brandsArr);
-          setCategoriesSelected(categoriesArr);
           setDateFilter(newSnapshot.date && newSnapshot.date.length > 0 ? newSnapshot.date : 'all');
           setDateRangeState(newSnapshot.dateRange ? { ...newSnapshot.dateRange } : null);
           setWarningLevelFilter(newSnapshot.warningLevel || '');
           setMinQuantity(typeof quantityVal === 'number' ? quantityVal : undefined);
-          // ✅ SỬA: Set conversation types từ CSV string
-          setConversationTypesSelected(conversationTypeCsv ? conversationTypeCsv.split(',').filter(Boolean) : []);
+          setConversationTypesSelected(convArr);
         });
       }, 0);
 
@@ -1290,9 +1166,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       brandCategories: "",
       warningLevel: "",
       quantity: undefined,
-      conversationType: "", // ✅ SỬA: Reset conversation type
-      showHiddenOrders: false,
-      hiddenOrdersDays: 7,
+      conversationType: "",
     };
 
     // ✅ Use setTimeout to avoid calling flushSync from lifecycle methods
@@ -1306,14 +1180,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         setDateRangeState(null);
         setEmployeesSelected([]);
         setDepartmentsSelected([]);
-        setBrandsSelected([]);
-        setCategoriesSelected([]);
         setBrandCategoriesSelected([]);
         setWarningLevelFilter("");
         setMinQuantity(undefined);
         setConversationTypesSelected([]);
-        setShowHiddenOrders(false);
-        setHiddenOrdersDays(7);
       });
     }, 0);
     
@@ -1436,7 +1306,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     // orders when exporting all data.
     const filtersDescription = (
       <div className="flex items-center justify-start gap-4">
-  { (isAdmin || isPM || isViewRole) && (
+  { (isAdmin || isPM) && (
           <div className="flex items-center gap-2">
             <Switch
               aria-label="Bao gồm đơn ẩn"
@@ -1487,7 +1357,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     if (typeof minQuantity === "number") {
       params.set("quantity", String(minQuantity));
     }
-    // ✅ SỬA: Conversation type filter trong export
     if (
       Array.isArray(conversationTypesSelected) &&
       conversationTypesSelected.length > 0
@@ -1497,134 +1366,31 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
     // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories trong export
     if (isPMWithPermissionRole) {
-      // ✅ SỬA: Áp dụng cùng logic tổ hợp brands + categories như fetchOrders
-      const effBrandsCsv = brandsSelected.length > 0 ? brandsSelected.join(',') : '';
-      const effCategoriesCsv = categoriesSelected.length > 0 ? categoriesSelected.join(',') : '';
-      
-      if (effBrandsCsv && effCategoriesCsv) {
-        // Nếu có cả brands và categories: tạo tổ hợp bắt buộc
-        const brandsArray = effBrandsCsv.split(',').filter(Boolean);
-        const categoriesArray = effCategoriesCsv.split(',').filter(Boolean);
-        
-        // Tạo tất cả tổ hợp có thể: mỗi brand phải kết hợp với mỗi category
-        const brandCategoryCombinations: string[] = [];
-        brandsArray.forEach(brand => {
-          categoriesArray.forEach(category => {
-            brandCategoryCombinations.push(`pm_brand_${brand}_pm_cat_${category}`);
-          });
-        });
-        
-        if (brandCategoryCombinations.length > 0) {
-          params.set('brandCategories', brandCategoryCombinations.join(','));
-          console.log('🔗 [Frontend PM Export] Brand-Category combinations:', brandCategoryCombinations);
-        }
-      } else if (effBrandsCsv && !effCategoriesCsv) {
-        // Chỉ có brands: gửi brands riêng
-        params.set('brands', effBrandsCsv);
-      } else if (!effBrandsCsv && effCategoriesCsv) {
-        // Chỉ có categories: gửi categories riêng
-        params.set('categories', effCategoriesCsv);
-      } else if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
-        // Sử dụng brandCategories đã chọn trực tiếp
+      if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
         params.set('brandCategories', brandCategoriesSelected.join(','));
       } else {
-        // ✅ SỬA: Giữ nguyên logic PM Custom Mode như trong fetchOrders
         // Kiểm tra chế độ PM
         if (isPMCustomMode()) {
-          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
-          console.log('🔍 [Frontend PM Export] Using PM Custom Mode');
-          
-          // Lấy thông tin từng role từ user context (đã có permissions từ database)
-          const userRoles = user?.roles || [];
-          const pmCustomRoles = userRoles.filter((role: any) => 
-            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
-          );
-          
-          console.log('🎯 [Frontend PM Export] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
-          
-          // Tạo object chứa thông tin từng role từ database
-          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
-          
-          // Tạm thời: chia permissions theo logic cụ thể vì rolePermissions chưa được load từ database
-          const allUserPermissions = getPMPermissions();
-          const convertedPermissions = allUserPermissions.map(p => {
-            if (p.toLowerCase().startsWith('cat_')) {
-              return `pm_${p}`;
-            } else if (p.toLowerCase().startsWith('brand_')) {
-              return `pm_${p}`;
-            }
-            return p;
-          });
-          
-          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
-          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
-          
-          pmCustomRoles.forEach((role: any, index: number) => {
-            const roleName = role.name;
-            
-            // Logic chia permissions cụ thể:
-            // Role 1: may-tinh-de-ban, asus, lenovo
-            // Role 2: man-hinh, lenovo
-            let roleBrands: string[] = [];
-            let roleCategories: string[] = [];
-            
-            if (index === 0) {
-              // Role 1: lấy tất cả brands và category may-tinh-de-ban
-              roleBrands = brands; // Tất cả brands: asus, lenovo
-              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
-            } else if (index === 1) {
-              // Role 2: lấy brand lenovo và category man-hinh
-              roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
-              roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
-            }
-            
-            rolePermissions[roleName] = { 
-              brands: roleBrands, 
-              categories: roleCategories 
-            };
-            
-            console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
-          });
-          
-          // Gửi thông tin từng role
-          params.set('pmCustomMode', 'true');
-          params.set('rolePermissions', JSON.stringify(rolePermissions));
-          console.log('📤 [Frontend PM Export] Sending rolePermissions:', rolePermissions);
-          
-        } else {
-          // Chế độ tổ hợp chung: gửi tất cả permissions
-          console.log('🔍 [Frontend PM Export] Using PM General Mode');
+          // Chế độ tổ hợp riêng: gửi tất cả permissions và để backend xử lý
           const allPMPermissions = getAllPMCustomPermissions();
-          console.log('📋 [Frontend PM Export] All PM permissions:', allPMPermissions);
           if (allPMPermissions.length > 0) {
             params.set('brandCategories', allPMPermissions.join(','));
+            params.set('pmCustomMode', 'true'); // Đánh dấu là custom mode
           }
-          params.set('pmCustomMode', 'false');
-          console.log('📤 [Frontend PM Export] Sending pmCustomMode=false with permissions:', allPMPermissions);
+        } else {
+          // Chế độ tổ hợp chung: gửi tất cả permissions để tổ hợp tự do
+          const allPMPermissions = getAllPMCustomPermissions();
+          if (allPMPermissions.length > 0) {
+            params.set('brandCategories', allPMPermissions.join(','));
+            params.set('pmCustomMode', 'false'); // Đánh dấu là general mode
+          }
         }
       }
     }
 
-    // Admin, PM, or view role can include hidden items when exporting all
-    if ((isAdmin || isPM || isViewRole) && includeHiddenExport) {
+    // Admin can include hidden items when exporting all
+    if ((isAdmin || isPM) && includeHiddenExport) {
       params.set("includeHidden", "1");
-    }
-
-    // Include hidden orders from last N days if toggle is enabled
-    if (showHiddenOrders) {
-      params.set("includeHidden", "1");
-      // Calculate date range for hidden orders (last N days)
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - (hiddenOrdersDays || 7));
-      
-      // Format dates as YYYY-MM-DD
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
-      
-      // ✅ SỬA: Không override date filters hiện tại, chỉ thêm hidden orders date range
-      // Backend sẽ xử lý logic kết hợp date filters với hidden orders
-      params.set("hiddenOrdersDateRange", JSON.stringify({ start: startDateStr, end: endDateStr }));
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
@@ -1703,96 +1469,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     ]);
   };
 
-  // Handle edit product code
-  const handleEditProductCode = useCallback(async (orderDetail: any, data: any) => {
-    try {
-      const token = getAccessToken();
-      if (!token) {
-        throw new Error('No access token');
-      }
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          product_id: data.product_id,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update product code');
-      }
-
-      // Refresh data after successful update
-      await fetchOrders();
-    } catch (error) {
-      console.error('Error updating product code:', error);
-      setError('Có lỗi khi cập nhật mã sản phẩm');
-    }
-  }, []);
-
-  // Handle delete product code
-  const handleDeleteProductCode = useCallback(async (orderDetail: any, reason?: string) => {
-    try {
-      const token = getAccessToken();
-      if (!token) {
-        throw new Error('No access token');
-      }
-
-      console.log('🗑️ [PM] Xóa mã sản phẩm khỏi đơn hàng:', orderDetail.id, 'Lý do:', reason);
-
-      // Sử dụng endpoint PUT để update order detail (backend chỉ hỗ trợ PUT)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/order-details/${orderDetail.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          product_id: null, // Xóa mã sản phẩm bằng cách set product_id = null
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error:', response.status, errorText);
-        throw new Error(`Failed to delete product code: ${response.status}`);
-      }
-
-      console.log('✅ [PM] Xóa mã sản phẩm thành công');
-      
-      // Lưu vị trí scroll hiện tại
-      const currentScrollPosition = window.scrollY || document.documentElement.scrollTop;
-      
-      // Refresh data after successful deletion - giữ nguyên trang hiện tại
-      await fetchOrders({
-        page: currentPage,
-        pageSize: pageSize,
-        search: searchTerm,
-        status: statusFilter === 'all' ? '' : statusFilter,
-        date: dateFilter === 'all' || dateFilter === 'custom' ? '' : dateFilter,
-        dateRange: dateRangeState?.start && dateRangeState?.end ? dateRangeState as { start: string; end: string } : undefined,
-        departments: departmentsSelected.join(','),
-        employees: employeesSelected.join(','),
-        warningLevel: warningLevelFilter,
-        quantity: minQuantity,
-        conversationType: conversationTypesSelected.join(','),
-      });
-      
-      // Khôi phục vị trí scroll sau khi data đã load
-      setTimeout(() => {
-        window.scrollTo(0, currentScrollPosition);
-      }, 100);
-    } catch (error) {
-      console.error('Error deleting product code:', error);
-      setError('Có lỗi khi xóa mã sản phẩm');
-    }
-  }, [currentPage, pageSize, searchTerm, statusFilter, dateFilter, dateRangeState, departmentsSelected, employeesSelected, warningLevelFilter, minQuantity, conversationTypesSelected]);
-
-  if (!isPM && !isAdmin && !isViewRole) {
+  if (!isPM && !isAdmin) {
     return (
       <Alert>
         <AlertCircle className="h-4 w-4" />
@@ -1803,8 +1480,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     );
   }
 
-  // Nếu không phải admin, view role và cũng không có role PM cụ thể thì hiện thông báo
-  if (!isAdmin && !isViewRole && !hasSpecificPMRole) {
+  // Nếu không phải admin và cũng không có role PM cụ thể thì hiện thông báo
+  if (!isAdmin && !hasSpecificPMRole) {
     return (
       <Card>
         <CardHeader>
@@ -1832,7 +1509,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           <CardTitle className="text-xl font-bold">
             Danh sách giao dịch
           </CardTitle>
-          <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant="outline"
               onClick={() => fetchOrders()}
@@ -1840,56 +1517,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             >
               🔄 Làm mới
             </Button>
-            
-            {/* Hidden Orders Toggle */}
-            <div className="flex items-center gap-2 border rounded-lg px-3 py-2">
-              <Switch
-                checked={showHiddenOrders}
-                onCheckedChange={(checked) => {
-                  setShowHiddenOrders(checked);
-                  setCurrentPage(1);
-                  // Save to localStorage immediately
-                  updatePmFiltersAndStorage({
-                    showHiddenOrders: checked,
-                    page: 1
-                  });
-                }}
-              />
-              <Label className="text-sm font-medium">
-                Hiển thị đơn ẩn
-              </Label>
-              
-              {showHiddenOrders && (
-                <div className="flex items-center gap-2 ml-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Trong
-                  </Label>
-                  <Select
-                    value={String(hiddenOrdersDays)}
-                    onValueChange={(value) => {
-                      const days = parseInt(value, 10);
-                      setHiddenOrdersDays(days);
-                      setCurrentPage(1);
-                      // Save to localStorage immediately
-                      updatePmFiltersAndStorage({
-                        hiddenOrdersDays: days,
-                        page: 1
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="w-20 h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="3">3 ngày</SelectItem>
-                      <SelectItem value="7">7 ngày</SelectItem>
-                      <SelectItem value="14">14 ngày</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            
             {/* include hidden option moved into Export modal */}
           </div>
         </CardHeader>
@@ -1899,8 +1526,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             enableStatusFilter={true}
             enableEmployeeFilter={!isAnalysisUser && isPMWithDepartmentRole}
             enableDepartmentFilter={!isAnalysisUser && isPMWithDepartmentRole}
-            enableCategoriesFilter={isPMWithPermissionRole}
-            enableBrandsFilter={isPMWithPermissionRole}
+            enableBrandCategoryFilter={isPMWithPermissionRole}
             enableDateRangeFilter={true}
             enableSingleDateFilter={true}
             enableWarningLevelFilter={true}
@@ -1912,8 +1538,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             onPageChange={(p) => setCurrentPage(p)}
             onPageSizeChange={(s) => setPageSize(s)}
             onFilterChange={handleFilterChange}
-            availableCategories={filterOptions.categories}
-            availableBrands={filterOptions.brands}
             onDepartmentChange={(vals) => {
               // immediate handler when user changes departments in the toolbar
               // eslint-disable-next-line no-console
@@ -1927,30 +1551,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               // eslint-disable-next-line no-console
               setEmployeesSelected(vals as (string | number)[]);
               setCurrentPage(1);
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
-            }}
-            onBrandsChange={(vals) => {
-              // immediate handler when user changes brands in the toolbar
-              setBrandsSelected(vals as (string | number)[]);
-              setCurrentPage(1);
-              
-              // Lưu vào localStorage
-              updatePmFiltersAndStorage({
-                brands: vals.length > 0 ? vals.join(',') : ''
-              });
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
-            }}
-            onCategoriesChange={(vals) => {
-              // immediate handler when user changes categories in the toolbar
-              setCategoriesSelected(vals as (string | number)[]);
-              setCurrentPage(1);
-              
-              // Lưu vào localStorage
-              updatePmFiltersAndStorage({
-                categories: vals.length > 0 ? vals.join(',') : ''
-              });
               
               // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
@@ -1973,11 +1573,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               
               setWarningLevelFilter(warningLevels.join(","));
               setCurrentPage(1);
-              
-              // Lưu vào localStorage
-              updatePmFiltersAndStorage({
-                warningLevel: warningLevels.join(",")
-              });
               
               // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
@@ -2138,9 +1733,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                    statusFilter && statusFilter !== "all"
                      ? statusFilter.split(",")
                      : [],
-                 // Store raw warning level values (match option.value); MultiSelectCombobox will map to labels
+                 // Hiển thị warning levels đã chọn từ localStorage
                  warningLevels: warningLevelFilter
-                   ? warningLevelFilter.split(",").filter((w) => w)
+                   ? warningLevelFilter.split(",")
                    : [],
                  dateRange: dateRangeState
                    ? (() => {
@@ -2183,12 +1778,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                      : undefined,
                  // Hiển thị employees đã chọn từ localStorage
                  employees: employeesSelected,
-                 // Hiển thị brands đã chọn từ localStorage
-                 brands: brandsSelected,
-                 // Hiển thị categories đã chọn từ localStorage
-                 categories: categoriesSelected,
                  quantity: minQuantity,
-                 // ✅ SỬA: Conversation type từ array thành string array
                  conversationType: conversationTypesSelected,
                };
              }, [
@@ -2197,14 +1787,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                warningLevelFilter,
                departmentsSelected,
                employeesSelected,
-               brandsSelected,
-               categoriesSelected,
                minQuantity,
                dateRangeState,
                dateFilter,
-               conversationTypesSelected, // ✅ SỬA: Include conversation types in initialFilters dependencies
-               showHiddenOrders,
-               hiddenOrdersDays,
+               conversationTypesSelected,
              ])}
              enableQuantityFilter={true}
              enableConversationTypeFilter={true}
@@ -2224,12 +1810,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               onReload={fetchOrders}
               loading={loading}
               showActions={true}
-              actionMode={isViewRole ? "view-only" : "edit"}
+              actionMode="edit"
               viewRequireAnalysis={false}
               showProductCode={true}
-              skipOwnerCheck={true}
-              onEdit={handleEditProductCode}
-              onDeleteProductCode={handleDeleteProductCode}
               onSearch={(s) => {
                 performCustomerSearch(s || "");
               }}
