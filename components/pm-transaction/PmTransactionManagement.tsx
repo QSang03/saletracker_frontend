@@ -524,8 +524,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         // Vẫn giữ logic cũ cho brandCategories nếu cần
         if (effBrandCategoriesCsv) {
           params.set('brandCategories', effBrandCategoriesCsv);
-        } else if (!effBrandsCsv && !effCategoriesCsv) {
-          // ✅ CHỈ gửi rolePermissions khi KHÔNG có brands/categories được chọn
+        } else {
+          // ✅ SỬA: Luôn gửi rolePermissions cho PM Custom Mode, bất kể có chọn brands/categories hay không
           // Kiểm tra chế độ PM
           if (isPMCustomMode()) {
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
@@ -559,28 +559,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             pmCustomRoles.forEach((role: any, index: number) => {
               const roleName = role.name;
               
-              // Logic chia permissions cụ thể:
-              // Role 1: may-tinh-de-ban, asus, lenovo
-              // Role 2: man-hinh, lenovo
-              let roleBrands: string[] = [];
-              let roleCategories: string[] = [];
-              
-              if (index === 0) {
-                // Role 1: lấy tất cả brands và category may-tinh-de-ban
-                roleBrands = brands; // Tất cả brands: asus, lenovo
-                roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
-              } else if (index === 1) {
-                // Role 2: lấy brand lenovo và category man-hinh
-                roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
-                roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
-              }
-              
+              // ✅ SỬA: Mỗi role sẽ có tất cả brands và categories mà user có quyền
+              // Trong tổ hợp riêng, backend sẽ xử lý logic tổ hợp 1vs1 cho từng role
               rolePermissions[roleName] = { 
-                brands: roleBrands, 
-                categories: roleCategories 
+                brands: brands, // Tất cả brands user có quyền
+                categories: categories // Tất cả categories user có quyền
               };
               
-              console.log(`🔑 [Frontend PM] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
+              console.log(`🔑 [Frontend PM] Role ${roleName}:`, { brands: brands, categories: categories });
             });
             
             // Gửi thông tin từng role
@@ -1495,13 +1481,13 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         params.set('categories', effCategoriesCsv);
       }
       
-      if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
-        // Sử dụng brandCategories đã chọn trực tiếp
-        params.set('brandCategories', brandCategoriesSelected.join(','));
-      } else {
-        // ✅ SỬA: Giữ nguyên logic PM Custom Mode như trong fetchOrders
-        // Kiểm tra chế độ PM
-        if (isPMCustomMode()) {
+       if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
+         // Sử dụng brandCategories đã chọn trực tiếp
+         params.set('brandCategories', brandCategoriesSelected.join(','));
+       } else {
+         // ✅ SỬA: Luôn gửi rolePermissions cho PM Custom Mode trong export
+         // Kiểm tra chế độ PM
+         if (isPMCustomMode()) {
           // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
           console.log('🔍 [Frontend PM Export] Using PM Custom Mode');
           
@@ -1530,32 +1516,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
           const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
           
-          pmCustomRoles.forEach((role: any, index: number) => {
-            const roleName = role.name;
-            
-            // Logic chia permissions cụ thể:
-            // Role 1: may-tinh-de-ban, asus, lenovo
-            // Role 2: man-hinh, lenovo
-            let roleBrands: string[] = [];
-            let roleCategories: string[] = [];
-            
-            if (index === 0) {
-              // Role 1: lấy tất cả brands và category may-tinh-de-ban
-              roleBrands = brands; // Tất cả brands: asus, lenovo
-              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
-            } else if (index === 1) {
-              // Role 2: lấy brand lenovo và category man-hinh
-              roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
-              roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
-            }
-            
-            rolePermissions[roleName] = { 
-              brands: roleBrands, 
-              categories: roleCategories 
-            };
-            
-            console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
-          });
+           pmCustomRoles.forEach((role: any, index: number) => {
+             const roleName = role.name;
+             
+             // ✅ SỬA: Mỗi role sẽ có tất cả brands và categories mà user có quyền
+             // Trong tổ hợp riêng, backend sẽ xử lý logic tổ hợp 1vs1 cho từng role
+             rolePermissions[roleName] = { 
+               brands: brands, // Tất cả brands user có quyền
+               categories: categories // Tất cả categories user có quyền
+             };
+             
+             console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: brands, categories: categories });
+           });
           
           // Gửi thông tin từng role
           params.set('pmCustomMode', 'true');
