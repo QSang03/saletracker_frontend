@@ -268,14 +268,16 @@ export default function CampaignModal({
   }>>([]);
 
   // Handle attachment type change
-  const handleAttachmentTypeChange = (newType: "image" | "link" | "file" | null) => {
+  const handleAttachmentTypeChange = (newType: "image" | "link" | "file" | null, clearData: boolean = true) => {
     setAttachmentType(newType);
-    // Clear all data when switching types
-    setMultipleImages([]);
-    setMultipleFiles([]);
-    setMultipleLinks([]);
-    setAttachmentData("");
-    setAttachmentMetadata(null);
+    // Clear all data when switching types (unless loading initial data)
+    if (clearData) {
+      setMultipleImages([]);
+      setMultipleFiles([]);
+      setMultipleLinks([]);
+      setAttachmentData("");
+      setAttachmentMetadata(null);
+    }
   };
 
   // Enhanced day selection states
@@ -485,10 +487,8 @@ export default function CampaignModal({
 
       // Load attachment if exists
       if (campaign.messages?.attachment) {
-        handleAttachmentTypeChange(campaign.messages.attachment.type);
-        if (campaign.messages.attachment.type === "link") {
-          setAttachmentData(campaign.messages.attachment.url || "");
-        } else if (campaign.messages.attachment.type === "image") {
+        handleAttachmentTypeChange(campaign.messages.attachment.type, false);
+        if (campaign.messages.attachment.type === "image") {
           // Check if it's multiple images or single image
           if (campaign.messages.attachment.images && campaign.messages.attachment.images.length > 0) {
             setMultipleImages(campaign.messages.attachment.images);

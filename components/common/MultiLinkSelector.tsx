@@ -121,12 +121,12 @@ const MultiLinkSelector = ({
     if (urlErrors.length === 0) {
       const newLinkData: LinkData = {
         url: newLink.trim(),
-        title: newTitle.trim() || undefined,
+        // ✅ Xóa title tùy chọn - chỉ lưu URL
       };
 
       onLinksChange([...links, newLinkData]);
       setNewLink("");
-      setNewTitle("");
+      setNewTitle(""); // Vẫn reset để tránh lỗi
     }
   };
 
@@ -292,18 +292,7 @@ const MultiLinkSelector = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-blue-800">
-              Tiêu đề (tùy chọn)
-            </label>
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Tiêu đề cho liên kết"
-              className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+          {/* ✅ Xóa cột tiêu đề tùy chọn */}
 
           <motion.button
             whileHover={{ scale: 1.02 }}

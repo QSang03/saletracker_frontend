@@ -66,7 +66,7 @@ interface ConversationMessage {
 interface CampaignInteractionLog {
   id: string;
   message_content_sent: string;
-  attachment_sent?: Record<string, any>;
+  attachment_sent?: Record<string, any> | Record<string, any>[];
   status: LogStatus;
   sent_at?: string;
   customer_replied_at?: string;
@@ -86,7 +86,7 @@ interface CampaignInteractionLog {
   reminder_metadata?: Array<{
     message: string;
     remindAt: string;
-    attachment_sent?: Record<string, any>;
+    attachment_sent?: Record<string, any> | Record<string, any>[];
     error?: string;
   }>;
   staff_handler_avatar_zalo?: string;
@@ -598,6 +598,22 @@ const ZaloAttachmentRenderer = ({
 
   const isStaff = senderType === "staff";
   const isBot = senderType === "bot";
+
+  // ✅ Handle array of attachments
+  if (Array.isArray(attachment)) {
+    return (
+      <div className="space-y-2">
+        {attachment.map((att, index) => (
+          <ZaloAttachmentRenderer
+            key={index}
+            attachment={att}
+            onImageClick={onImageClick}
+            senderType={senderType}
+          />
+        ))}
+      </div>
+    );
+  }
 
   // Image attachment
   if (

@@ -64,6 +64,22 @@ const MultiFileSelector = ({
       errors.push(`Tệp quá lớn. Tối đa ${maxSizeMB}MB`);
     }
     
+    // ✅ Giới hạn chỉ cho Word, Excel, PDF
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword', // .doc
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+    ];
+    
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+      errors.push('Chỉ chấp nhận file Word (.doc, .docx), Excel (.xls, .xlsx), PDF (.pdf)');
+    }
+    
     return errors;
   };
 
@@ -502,6 +518,7 @@ const MultiFileSelector = ({
         ref={fileInputRef}
         type="file"
         multiple
+        accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
         onChange={(e) => e.target.files && handleFiles(e.target.files)}
         className="hidden"
       />

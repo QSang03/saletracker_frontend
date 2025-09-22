@@ -448,7 +448,7 @@ export interface CampaignInteractionLog {
   campaign: Campaign;
   customer: CampaignCustomer;
   message_content_sent: string;
-  attachment_sent?: Record<string, any>;
+  attachment_sent?: Record<string, any> | Record<string, any>[];
   status: LogStatus;
   sent_at?: Date;
   customer_replied_at?: Date;
@@ -508,7 +508,7 @@ export type ThreeDayPromotion = {
 export type ReminderMetadataItem = {
   message: string;
   remindAt: string;
-  attachment_sent?: Record<string, any>;
+  attachment_sent?: Record<string, any> | Record<string, any>[];
   error?: string;
 };
 

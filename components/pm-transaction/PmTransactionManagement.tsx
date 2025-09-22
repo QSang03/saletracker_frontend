@@ -513,20 +513,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       console.log('🔍 [Frontend PM] Selected categories:', effCategoriesCsv);
       
       if (isPMWithPermissionRole) {
-        // Truyền brands và categories riêng biệt
-        if (effBrandsCsv) {
-          params.set('brands', effBrandsCsv);
-        }
-        if (effCategoriesCsv) {
-          params.set('categories', effCategoriesCsv);
-        }
-        
-        // Vẫn giữ logic cũ cho brandCategories nếu cần
-        if (effBrandCategoriesCsv) {
-          params.set('brandCategories', effBrandCategoriesCsv);
-        } else if (!effBrandsCsv && !effCategoriesCsv) {
-          // ✅ CHỈ gửi rolePermissions khi KHÔNG có brands/categories được chọn
-          // Kiểm tra chế độ PM
+        // ✅ SỬA: Ưu tiên brands và categories riêng biệt khi user đã chọn
+        if (effBrandsCsv || effCategoriesCsv) {
+          // User đã chọn brands/categories cụ thể - gửi riêng biệt
+          if (effBrandsCsv) {
+            params.set('brands', effBrandsCsv);
+          }
+          if (effCategoriesCsv) {
+            params.set('categories', effCategoriesCsv);
+          }
+          console.log('🔍 [Frontend PM] Sending separate brands/categories:', { brands: effBrandsCsv, categories: effCategoriesCsv });
+        } else {
+          // User chưa chọn brands/categories - gửi tất cả permissions theo role
           if (isPMCustomMode()) {
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
             console.log('🔍 [Frontend PM] Using PM Custom Mode');
@@ -612,7 +610,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // ✅ SỬA: Conversation type filter - xử lý tương tự như manager order
       if (effConversationType) params.set('conversationType', effConversationType);
 
-      // ✅ Add hidden orders parameter
+      // ✅ Add hidden orders parameter (không ghi đè dateRange hiện tại)
       if (effShowHiddenOrders) {
         params.set('includeHidden', '1');
         // Calculate date range for hidden orders (last N days)
@@ -624,7 +622,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
         
-        // Override existing date filters when showing hidden orders
+        // ✅ SỬA: Chỉ set hiddenOrdersDateRange, KHÔNG ghi đè dateRange hiện tại
+        // Backend sẽ xử lý cả dateRange và hiddenOrdersDateRange
         params.set('hiddenOrdersDateRange', JSON.stringify({ start: startDateStr, end: endDateStr }));
       }
 
@@ -1476,25 +1475,36 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       params.set("conversationType", conversationTypesSelected.join(","));
     }
 
-    // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories trong export
+    // ✅ PM có quyền riêng (pm_permissions): thêm brands/categories trong export
     if (isPMWithPermissionRole) {
-      if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
-        params.set('brandCategories', brandCategoriesSelected.join(','));
-      } else {
-        // Kiểm tra chế độ PM
-        if (isPMCustomMode()) {
-          // Chế độ tổ hợp riêng: gửi tất cả permissions và để backend xử lý
-          const allPMPermissions = getAllPMCustomPermissions();
-          if (allPMPermissions.length > 0) {
-            params.set('brandCategories', allPMPermissions.join(','));
-            params.set('pmCustomMode', 'true'); // Đánh dấu là custom mode
-          }
+      // ✅ SỬA: Ưu tiên brands và categories riêng biệt khi user đã chọn
+      if (Array.isArray(brandsSelected) && brandsSelected.length > 0) {
+        params.set('brands', brandsSelected.join(','));
+      }
+      if (Array.isArray(categoriesSelected) && categoriesSelected.length > 0) {
+        params.set('categories', categoriesSelected.join(','));
+      }
+      
+      // Nếu user chưa chọn brands/categories cụ thể, gửi tất cả permissions
+      if ((!brandsSelected || brandsSelected.length === 0) && (!categoriesSelected || categoriesSelected.length === 0)) {
+        if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
+          params.set('brandCategories', brandCategoriesSelected.join(','));
         } else {
-          // Chế độ tổ hợp chung: gửi tất cả permissions để tổ hợp tự do
-          const allPMPermissions = getAllPMCustomPermissions();
-          if (allPMPermissions.length > 0) {
-            params.set('brandCategories', allPMPermissions.join(','));
-            params.set('pmCustomMode', 'false'); // Đánh dấu là general mode
+          // Kiểm tra chế độ PM
+          if (isPMCustomMode()) {
+            // Chế độ tổ hợp riêng: gửi tất cả permissions và để backend xử lý
+            const allPMPermissions = getAllPMCustomPermissions();
+            if (allPMPermissions.length > 0) {
+              params.set('brandCategories', allPMPermissions.join(','));
+              params.set('pmCustomMode', 'true'); // Đánh dấu là custom mode
+            }
+          } else {
+            // Chế độ tổ hợp chung: gửi tất cả permissions để tổ hợp tự do
+            const allPMPermissions = getAllPMCustomPermissions();
+            if (allPMPermissions.length > 0) {
+              params.set('brandCategories', allPMPermissions.join(','));
+              params.set('pmCustomMode', 'false'); // Đánh dấu là general mode
+            }
           }
         }
       }
@@ -1517,7 +1527,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
       
-      // Override existing date filters when showing hidden orders
+      // ✅ SỬA: Chỉ set hiddenOrdersDateRange, KHÔNG ghi đè dateRange hiện tại
+      // Backend sẽ xử lý cả dateRange và hiddenOrdersDateRange
       params.set("hiddenOrdersDateRange", JSON.stringify({ start: startDateStr, end: endDateStr }));
     }
 
