@@ -365,7 +365,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // Helper: lấy tất cả permissions từ các PM custom roles
   const getAllPMCustomPermissions = (): string[] => {
     const pmPermissions = getPMPermissions();
-    console.log('🔍 [Frontend PM Debug] getPMPermissions() returned:', pmPermissions);
     const filtered = pmPermissions.filter(p => 
       typeof p === 'string' && (p.toLowerCase().startsWith('pm_') || p.toLowerCase().startsWith('cat_') || p.toLowerCase().startsWith('brand_'))
     );
@@ -380,8 +379,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       return p; // Giữ nguyên nếu đã có pm_
     });
     
-    console.log('🔍 [Frontend PM Debug] Filtered PM permissions:', filtered);
-    console.log('🔍 [Frontend PM Debug] Converted PM permissions:', converted);
     return converted;
   };
 
@@ -393,8 +390,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
     );
     
-    console.log('🔍 [Frontend PM Debug] User roles:', userRoles.map((r: any) => r.name));
-    console.log('🔍 [Frontend PM Debug] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
     
     // Nếu có role pm_username_n thì là custom mode
     return pmCustomRoles.length > 0;
@@ -509,10 +504,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
       
       // ✅ PM có quyền riêng (pm_permissions): thêm brands và categories riêng biệt
-      console.log('🔍 [Frontend PM] isPMWithPermissionRole:', isPMWithPermissionRole);
-      console.log('🔍 [Frontend PM] isPMCustomMode():', isPMCustomMode());
-      console.log('🔍 [Frontend PM] Selected brands:', effBrandsCsv);
-      console.log('🔍 [Frontend PM] Selected categories:', effCategoriesCsv);
       
       if (isPMWithPermissionRole) {
         // ✅ SỬA: Gửi brands và categories riêng biệt để backend xử lý tổ hợp
@@ -531,14 +522,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           // Kiểm tra chế độ PM
           if (isPMCustomMode()) {
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
-            console.log('🔍 [Frontend PM] Using PM Custom Mode');
             
             // Lấy thông tin từng role từ API (đã có permissions từ database)
             const pmCustomRoles = userRolesWithPermissions.filter((role: any) => 
               role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
             );
             
-            console.log('🎯 [Frontend PM] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
             
             // Tạo object chứa thông tin từng role từ database
             const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
@@ -561,9 +550,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               const roleName = role.name;
               
               // ✅ SỬA: Lấy permissions thực tế từ database cho từng role
-              console.log(`🔍 [Frontend PM] Role ${roleName} full object:`, role);
-              console.log(`🔍 [Frontend PM] Role ${roleName} rolePermissions:`, role.rolePermissions);
-              console.log(`🔍 [Frontend PM] Role ${roleName} rolePermissions type:`, typeof role.rolePermissions);
               
               // ✅ SỬA: Lấy permissions thực tế của role này từ database
               // Mỗi role đã có permissions riêng trong bảng roles_permissions
@@ -576,11 +562,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                   .map((rp: any) => rp.permission.name);
               }
               
-              console.log(`🔍 [Frontend PM] Role ${roleName} permissions list:`, rolePermissionsList);
-              
               // ✅ SỬA: Chỉ lấy permissions thực tế từ database, không có fallback
               if (!rolePermissionsList || rolePermissionsList.length === 0) {
-                console.log(`⚠️ [Frontend PM] Role ${roleName} has no permissions from database, using empty array`);
                 rolePermissionsList = []; // Chỉ lấy từ database, không fallback
               }
               
@@ -602,32 +585,24 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                 categories: roleCategories 
               };
               
-              console.log(`🔑 [Frontend PM] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
             });
             
             // Gửi thông tin từng role
             params.set('pmCustomMode', 'true');
             params.set('rolePermissions', JSON.stringify(rolePermissions));
-            console.log('📤 [Frontend PM] Sending rolePermissions:', rolePermissions);
             
           } else {
             // Chế độ tổ hợp chung: gửi tất cả permissions
-            console.log('🔍 [Frontend PM] Using PM General Mode');
             const allPMPermissions = getAllPMCustomPermissions();
-            console.log('📋 [Frontend PM] All PM permissions:', allPMPermissions);
             if (allPMPermissions.length > 0) {
               params.set('brandCategories', allPMPermissions.join(','));
             }
             params.set('pmCustomMode', 'false');
-            console.log('📤 [Frontend PM] Sending pmCustomMode=false with permissions:', allPMPermissions);
           }
         }
       } else {
-        console.log('❌ [Frontend PM] Not PM with permission role, skipping pmCustomMode');
       }
       
-      // Debug: in ra tất cả params trước khi gửi
-      console.log('🔍 [Frontend PM] Final params:', Object.fromEntries(params.entries()));
       
       if (effWarning) params.set('warningLevel', effWarning);
       if (typeof effQty === 'number') params.set('quantity', String(effQty));
@@ -791,7 +766,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       try {
         const response = await getUserRolesWithPermissions();
         setUserRolesWithPermissions(response.roles || []);
-        console.log('🔍 [Frontend PM] Loaded user roles with permissions:', response.roles);
       } catch (error) {
         console.error('❌ [Frontend PM] Error loading user roles with permissions:', error);
       }
@@ -832,14 +806,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           // ✅ PM có quyền riêng: tạo 2 dropdown riêng biệt (Danh mục + Thương hiệu)
           // Đơn giản: lấy tất cả unique brands và categories từ permissions
           const allPMPermissions = getAllPMCustomPermissions();
-          console.log('🔍 [Frontend PM Filter] All PM permissions for filter:', allPMPermissions);
           
           // Tách brands và categories từ permissions
           const pmBrands = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
           const pmCategories = allPMPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
           
-          console.log('🔍 [Frontend PM Filter] PM Brands:', pmBrands);
-          console.log('🔍 [Frontend PM Filter] PM Categories:', pmCategories);
           
           // Tạo filter options cho brands (loại bỏ trùng lặp)
           const uniqueBrands = new Set(pmBrands);
@@ -858,7 +829,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           // Không cần brandCategories combinations nữa, để trống
           brandCategories = [];
           
-          console.log('🔍 [Frontend PM Filter] Final filter options (SEPARATE DROPDOWNS):', { brands, categories, brandCategories });
         }
         
         setFilterOptions({ 
@@ -1540,14 +1510,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
          // Kiểm tra chế độ PM
          if (isPMCustomMode()) {
           // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
-          console.log('🔍 [Frontend PM Export] Using PM Custom Mode');
           
           // Lấy thông tin từng role từ API (đã có permissions từ database)
           const pmCustomRoles = userRolesWithPermissions.filter((role: any) => 
             role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
           );
           
-          console.log('🎯 [Frontend PM Export] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
           
           // Tạo object chứa thông tin từng role từ database
           const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
@@ -1570,8 +1538,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
              const roleName = role.name;
              
              // ✅ SỬA: Lấy permissions thực tế từ database cho từng role
-             console.log(`🔍 [Frontend PM Export] Role ${roleName} full object:`, role);
-             console.log(`🔍 [Frontend PM Export] Role ${roleName} rolePermissions:`, role.rolePermissions);
              
              // ✅ SỬA: Lấy permissions thực tế của role này từ database
              // Mỗi role đã có permissions riêng trong bảng roles_permissions
@@ -1584,11 +1550,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                  .map((rp: any) => rp.permission.name);
              }
              
-             console.log(`🔍 [Frontend PM Export] Role ${roleName} permissions list:`, rolePermissionsList);
-             
              // ✅ SỬA: Chỉ lấy permissions thực tế từ database, không có fallback
              if (!rolePermissionsList || rolePermissionsList.length === 0) {
-               console.log(`⚠️ [Frontend PM Export] Role ${roleName} has no permissions from database, using empty array`);
                rolePermissionsList = []; // Chỉ lấy từ database, không fallback
              }
              
@@ -1610,24 +1573,19 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                categories: roleCategories 
              };
              
-             console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
            });
           
           // Gửi thông tin từng role
           params.set('pmCustomMode', 'true');
           params.set('rolePermissions', JSON.stringify(rolePermissions));
-          console.log('📤 [Frontend PM Export] Sending rolePermissions:', rolePermissions);
           
         } else {
           // Chế độ tổ hợp chung: gửi tất cả permissions
-          console.log('🔍 [Frontend PM Export] Using PM General Mode');
           const allPMPermissions = getAllPMCustomPermissions();
-          console.log('📋 [Frontend PM Export] All PM permissions:', allPMPermissions);
           if (allPMPermissions.length > 0) {
             params.set('brandCategories', allPMPermissions.join(','));
           }
           params.set('pmCustomMode', 'false');
-          console.log('📤 [Frontend PM Export] Sending pmCustomMode=false with permissions:', allPMPermissions);
         }
       }
     }
