@@ -513,29 +513,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       console.log('🔍 [Frontend PM] Selected categories:', effCategoriesCsv);
       
       if (isPMWithPermissionRole) {
-        // ✅ SỬA: Logic tổ hợp bắt buộc brands + categories
-        if (effBrandsCsv && effCategoriesCsv) {
-          // Nếu có cả brands và categories: tạo tổ hợp bắt buộc
-          const brandsArray = effBrandsCsv.split(',').filter(Boolean);
-          const categoriesArray = effCategoriesCsv.split(',').filter(Boolean);
-          
-          // Tạo tất cả tổ hợp có thể: mỗi brand phải kết hợp với mỗi category
-          const brandCategoryCombinations: string[] = [];
-          brandsArray.forEach(brand => {
-            categoriesArray.forEach(category => {
-              brandCategoryCombinations.push(`pm_brand_${brand}_pm_cat_${category}`);
-            });
-          });
-          
-          if (brandCategoryCombinations.length > 0) {
-            params.set('brandCategories', brandCategoryCombinations.join(','));
-            console.log('🔗 [Frontend PM] Brand-Category combinations:', brandCategoryCombinations);
-          }
-        } else if (effBrandsCsv && !effCategoriesCsv) {
-          // Chỉ có brands: gửi brands riêng
+        // ✅ SỬA: Gửi brands và categories riêng biệt để backend xử lý tổ hợp
+        if (effBrandsCsv) {
           params.set('brands', effBrandsCsv);
-        } else if (!effBrandsCsv && effCategoriesCsv) {
-          // Chỉ có categories: gửi categories riêng
+        }
+        if (effCategoriesCsv) {
           params.set('categories', effCategoriesCsv);
         }
         
@@ -726,12 +708,13 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // Also wait for filters to be restored from localStorage
       if (!filtersRestored) return;
       
-      // ✅ Debounce fetch để tránh multiple calls
+      // ✅ Debounce fetch để tránh multiple calls - tăng thời gian debounce
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
       
       if (isFetchingRef.current) return; // Skip nếu đang fetch
+      if (isRestoringRef.current) return; // Skip nếu đang restore filters
       
       fetchTimeoutRef.current = setTimeout(() => {
         isFetchingRef.current = true;
@@ -739,7 +722,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           .finally(() => {
             isFetchingRef.current = false;
           });
-      }, 100);
+      }, 300); // Tăng từ 100ms lên 300ms
     }
     
     // Cleanup timeout
@@ -766,9 +749,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     filtersLoaded,
     filtersRestored,
     minQuantity,
-    conversationTypesSelected, // ✅ SỬA: Include conversation types in fetch effect
+    conversationTypesSelected,
     showHiddenOrders,
     hiddenOrdersDays,
+    // ✅ SỬA: Thêm isPMWithPermissionRole để tránh fetch khi role thay đổi
+    isPMWithPermissionRole,
+    isRestoring, // Thêm để tránh fetch khi đang restore
   ]);
 
   // removed duplicate sync effect — pageSize/dateRangeState/departments/employees/warningLevel are handled
@@ -868,7 +854,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         // reset loaded flag and then load filter options
         setFiltersLoaded(false);
         load();
-      }, 50);
+      }, 100); // Tăng từ 50ms lên 100ms
     }
     
     // Cleanup timeout
@@ -1501,30 +1487,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       const effBrandsCsv = brandsSelected.length > 0 ? brandsSelected.join(',') : '';
       const effCategoriesCsv = categoriesSelected.length > 0 ? categoriesSelected.join(',') : '';
       
-      if (effBrandsCsv && effCategoriesCsv) {
-        // Nếu có cả brands và categories: tạo tổ hợp bắt buộc
-        const brandsArray = effBrandsCsv.split(',').filter(Boolean);
-        const categoriesArray = effCategoriesCsv.split(',').filter(Boolean);
-        
-        // Tạo tất cả tổ hợp có thể: mỗi brand phải kết hợp với mỗi category
-        const brandCategoryCombinations: string[] = [];
-        brandsArray.forEach(brand => {
-          categoriesArray.forEach(category => {
-            brandCategoryCombinations.push(`pm_brand_${brand}_pm_cat_${category}`);
-          });
-        });
-        
-        if (brandCategoryCombinations.length > 0) {
-          params.set('brandCategories', brandCategoryCombinations.join(','));
-          console.log('🔗 [Frontend PM Export] Brand-Category combinations:', brandCategoryCombinations);
-        }
-      } else if (effBrandsCsv && !effCategoriesCsv) {
-        // Chỉ có brands: gửi brands riêng
+      // ✅ SỬA: Gửi brands và categories riêng biệt để backend xử lý tổ hợp
+      if (effBrandsCsv) {
         params.set('brands', effBrandsCsv);
-      } else if (!effBrandsCsv && effCategoriesCsv) {
-        // Chỉ có categories: gửi categories riêng
+      }
+      if (effCategoriesCsv) {
         params.set('categories', effCategoriesCsv);
-      } else if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
+      }
+      
+      if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
         // Sử dụng brandCategories đã chọn trực tiếp
         params.set('brandCategories', brandCategoriesSelected.join(','));
       } else {
