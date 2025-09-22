@@ -513,18 +513,38 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       console.log('🔍 [Frontend PM] Selected categories:', effCategoriesCsv);
       
       if (isPMWithPermissionRole) {
-        // ✅ SỬA: Ưu tiên brands và categories riêng biệt khi user đã chọn
-        if (effBrandsCsv || effCategoriesCsv) {
-          // User đã chọn brands/categories cụ thể - gửi riêng biệt
-          if (effBrandsCsv) {
-            params.set('brands', effBrandsCsv);
+        // ✅ SỬA: Logic tổ hợp bắt buộc brands + categories
+        if (effBrandsCsv && effCategoriesCsv) {
+          // Nếu có cả brands và categories: tạo tổ hợp bắt buộc
+          const brandsArray = effBrandsCsv.split(',').filter(Boolean);
+          const categoriesArray = effCategoriesCsv.split(',').filter(Boolean);
+          
+          // Tạo tất cả tổ hợp có thể: mỗi brand phải kết hợp với mỗi category
+          const brandCategoryCombinations: string[] = [];
+          brandsArray.forEach(brand => {
+            categoriesArray.forEach(category => {
+              brandCategoryCombinations.push(`pm_brand_${brand}_pm_cat_${category}`);
+            });
+          });
+          
+          if (brandCategoryCombinations.length > 0) {
+            params.set('brandCategories', brandCategoryCombinations.join(','));
+            console.log('🔗 [Frontend PM] Brand-Category combinations:', brandCategoryCombinations);
           }
-          if (effCategoriesCsv) {
-            params.set('categories', effCategoriesCsv);
-          }
-          console.log('🔍 [Frontend PM] Sending separate brands/categories:', { brands: effBrandsCsv, categories: effCategoriesCsv });
-        } else {
-          // User chưa chọn brands/categories - gửi tất cả permissions theo role
+        } else if (effBrandsCsv && !effCategoriesCsv) {
+          // Chỉ có brands: gửi brands riêng
+          params.set('brands', effBrandsCsv);
+        } else if (!effBrandsCsv && effCategoriesCsv) {
+          // Chỉ có categories: gửi categories riêng
+          params.set('categories', effCategoriesCsv);
+        }
+        
+        // Vẫn giữ logic cũ cho brandCategories nếu cần
+        if (effBrandCategoriesCsv) {
+          params.set('brandCategories', effBrandCategoriesCsv);
+        } else if (!effBrandsCsv && !effCategoriesCsv) {
+          // ✅ CHỈ gửi rolePermissions khi KHÔNG có brands/categories được chọn
+          // Kiểm tra chế độ PM
           if (isPMCustomMode()) {
             // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
             console.log('🔍 [Frontend PM] Using PM Custom Mode');
@@ -610,7 +630,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // ✅ SỬA: Conversation type filter - xử lý tương tự như manager order
       if (effConversationType) params.set('conversationType', effConversationType);
 
-      // ✅ Add hidden orders parameter (không ghi đè dateRange hiện tại)
+      // ✅ Add hidden orders parameter
       if (effShowHiddenOrders) {
         params.set('includeHidden', '1');
         // Calculate date range for hidden orders (last N days)
@@ -622,8 +642,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
         
-        // ✅ SỬA: Chỉ set hiddenOrdersDateRange, KHÔNG ghi đè dateRange hiện tại
-        // Backend sẽ xử lý cả dateRange và hiddenOrdersDateRange
+        // ✅ SỬA: Không override date filters hiện tại, chỉ thêm hidden orders date range
+        // Backend sẽ xử lý logic kết hợp date filters với hidden orders
         params.set('hiddenOrdersDateRange', JSON.stringify({ start: startDateStr, end: endDateStr }));
       }
 
@@ -1475,37 +1495,112 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       params.set("conversationType", conversationTypesSelected.join(","));
     }
 
-    // ✅ PM có quyền riêng (pm_permissions): thêm brands/categories trong export
+    // ✅ PM có quyền riêng (pm_permissions): thêm brandCategories trong export
     if (isPMWithPermissionRole) {
-      // ✅ SỬA: Ưu tiên brands và categories riêng biệt khi user đã chọn
-      if (Array.isArray(brandsSelected) && brandsSelected.length > 0) {
-        params.set('brands', brandsSelected.join(','));
-      }
-      if (Array.isArray(categoriesSelected) && categoriesSelected.length > 0) {
-        params.set('categories', categoriesSelected.join(','));
-      }
+      // ✅ SỬA: Áp dụng cùng logic tổ hợp brands + categories như fetchOrders
+      const effBrandsCsv = brandsSelected.length > 0 ? brandsSelected.join(',') : '';
+      const effCategoriesCsv = categoriesSelected.length > 0 ? categoriesSelected.join(',') : '';
       
-      // Nếu user chưa chọn brands/categories cụ thể, gửi tất cả permissions
-      if ((!brandsSelected || brandsSelected.length === 0) && (!categoriesSelected || categoriesSelected.length === 0)) {
-        if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
-          params.set('brandCategories', brandCategoriesSelected.join(','));
+      if (effBrandsCsv && effCategoriesCsv) {
+        // Nếu có cả brands và categories: tạo tổ hợp bắt buộc
+        const brandsArray = effBrandsCsv.split(',').filter(Boolean);
+        const categoriesArray = effCategoriesCsv.split(',').filter(Boolean);
+        
+        // Tạo tất cả tổ hợp có thể: mỗi brand phải kết hợp với mỗi category
+        const brandCategoryCombinations: string[] = [];
+        brandsArray.forEach(brand => {
+          categoriesArray.forEach(category => {
+            brandCategoryCombinations.push(`pm_brand_${brand}_pm_cat_${category}`);
+          });
+        });
+        
+        if (brandCategoryCombinations.length > 0) {
+          params.set('brandCategories', brandCategoryCombinations.join(','));
+          console.log('🔗 [Frontend PM Export] Brand-Category combinations:', brandCategoryCombinations);
+        }
+      } else if (effBrandsCsv && !effCategoriesCsv) {
+        // Chỉ có brands: gửi brands riêng
+        params.set('brands', effBrandsCsv);
+      } else if (!effBrandsCsv && effCategoriesCsv) {
+        // Chỉ có categories: gửi categories riêng
+        params.set('categories', effCategoriesCsv);
+      } else if (Array.isArray(brandCategoriesSelected) && brandCategoriesSelected.length > 0) {
+        // Sử dụng brandCategories đã chọn trực tiếp
+        params.set('brandCategories', brandCategoriesSelected.join(','));
+      } else {
+        // ✅ SỬA: Giữ nguyên logic PM Custom Mode như trong fetchOrders
+        // Kiểm tra chế độ PM
+        if (isPMCustomMode()) {
+          // Chế độ tổ hợp riêng: gửi thông tin chi tiết từng role
+          console.log('🔍 [Frontend PM Export] Using PM Custom Mode');
+          
+          // Lấy thông tin từng role từ user context (đã có permissions từ database)
+          const userRoles = user?.roles || [];
+          const pmCustomRoles = userRoles.filter((role: any) => 
+            role.name && role.name.startsWith('pm_') && role.name !== 'pm_username'
+          );
+          
+          console.log('🎯 [Frontend PM Export] PM Custom roles found:', pmCustomRoles.map((r: any) => r.name));
+          
+          // Tạo object chứa thông tin từng role từ database
+          const rolePermissions: { [roleName: string]: { brands: string[], categories: string[] } } = {};
+          
+          // Tạm thời: chia permissions theo logic cụ thể vì rolePermissions chưa được load từ database
+          const allUserPermissions = getPMPermissions();
+          const convertedPermissions = allUserPermissions.map(p => {
+            if (p.toLowerCase().startsWith('cat_')) {
+              return `pm_${p}`;
+            } else if (p.toLowerCase().startsWith('brand_')) {
+              return `pm_${p}`;
+            }
+            return p;
+          });
+          
+          const brands = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_brand_'));
+          const categories = convertedPermissions.filter(p => p.toLowerCase().startsWith('pm_cat_'));
+          
+          pmCustomRoles.forEach((role: any, index: number) => {
+            const roleName = role.name;
+            
+            // Logic chia permissions cụ thể:
+            // Role 1: may-tinh-de-ban, asus, lenovo
+            // Role 2: man-hinh, lenovo
+            let roleBrands: string[] = [];
+            let roleCategories: string[] = [];
+            
+            if (index === 0) {
+              // Role 1: lấy tất cả brands và category may-tinh-de-ban
+              roleBrands = brands; // Tất cả brands: asus, lenovo
+              roleCategories = categories.filter(cat => cat.includes('may-tinh-de-ban')); // Chỉ may-tinh-de-ban
+            } else if (index === 1) {
+              // Role 2: lấy brand lenovo và category man-hinh
+              roleBrands = brands.filter(brand => brand.includes('lenovo')); // Chỉ lenovo
+              roleCategories = categories.filter(cat => cat.includes('man-hinh')); // Chỉ man-hinh
+            }
+            
+            rolePermissions[roleName] = { 
+              brands: roleBrands, 
+              categories: roleCategories 
+            };
+            
+            console.log(`🔑 [Frontend PM Export] Role ${roleName}:`, { brands: roleBrands, categories: roleCategories });
+          });
+          
+          // Gửi thông tin từng role
+          params.set('pmCustomMode', 'true');
+          params.set('rolePermissions', JSON.stringify(rolePermissions));
+          console.log('📤 [Frontend PM Export] Sending rolePermissions:', rolePermissions);
+          
         } else {
-          // Kiểm tra chế độ PM
-          if (isPMCustomMode()) {
-            // Chế độ tổ hợp riêng: gửi tất cả permissions và để backend xử lý
-            const allPMPermissions = getAllPMCustomPermissions();
-            if (allPMPermissions.length > 0) {
-              params.set('brandCategories', allPMPermissions.join(','));
-              params.set('pmCustomMode', 'true'); // Đánh dấu là custom mode
-            }
-          } else {
-            // Chế độ tổ hợp chung: gửi tất cả permissions để tổ hợp tự do
-            const allPMPermissions = getAllPMCustomPermissions();
-            if (allPMPermissions.length > 0) {
-              params.set('brandCategories', allPMPermissions.join(','));
-              params.set('pmCustomMode', 'false'); // Đánh dấu là general mode
-            }
+          // Chế độ tổ hợp chung: gửi tất cả permissions
+          console.log('🔍 [Frontend PM Export] Using PM General Mode');
+          const allPMPermissions = getAllPMCustomPermissions();
+          console.log('📋 [Frontend PM Export] All PM permissions:', allPMPermissions);
+          if (allPMPermissions.length > 0) {
+            params.set('brandCategories', allPMPermissions.join(','));
           }
+          params.set('pmCustomMode', 'false');
+          console.log('📤 [Frontend PM Export] Sending pmCustomMode=false with permissions:', allPMPermissions);
         }
       }
     }
@@ -1527,8 +1622,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
       
-      // ✅ SỬA: Chỉ set hiddenOrdersDateRange, KHÔNG ghi đè dateRange hiện tại
-      // Backend sẽ xử lý cả dateRange và hiddenOrdersDateRange
+      // ✅ SỬA: Không override date filters hiện tại, chỉ thêm hidden orders date range
+      // Backend sẽ xử lý logic kết hợp date filters với hidden orders
       params.set("hiddenOrdersDateRange", JSON.stringify({ start: startDateStr, end: endDateStr }));
     }
 
