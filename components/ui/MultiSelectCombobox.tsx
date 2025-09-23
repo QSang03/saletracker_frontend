@@ -73,7 +73,7 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
           ? placeholder
           : options
       .filter((opt) => normalizedValue.includes(opt.value))
-              .map((opt) => opt.label)
+              .map((opt) => String(opt.label))
               .join(", ")}
         <span className="ml-2">&#9662;</span>
       </Button>
@@ -83,9 +83,9 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
           <Command>
             <CommandInput placeholder={placeholder} />
             <CommandList>
-              {options.map((opt) => (
+              {options.map((opt, index) => (
                 <CommandItem
-                  key={opt.value}
+                  key={`${String(opt.value)}-${index}`}
                   onSelect={() => handleSelect(opt.value)}
                   className={normalizedValue.includes(opt.value) ? "bg-blue-100" : ""}
                 >
@@ -95,7 +95,7 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
                     readOnly
                     className="mr-2"
                   />
-                  {opt.label}
+                  {String(opt.label)}
                 </CommandItem>
               ))}
             </CommandList>

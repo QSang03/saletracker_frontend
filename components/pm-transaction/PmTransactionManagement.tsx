@@ -113,6 +113,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     categories?: any[];
     brandCategories?: any[];
   }>({ departments: [], products: [], brands: [], categories: [], brandCategories: [] });
+  
+  // State để lưu dữ liệu cho role view
+  const [allCategoriesForView, setAllCategoriesForView] = useState<{ value: string; label: string }[]>([]);
+  const [allBrandsForView, setAllBrandsForView] = useState<{ value: string; label: string }[]>([]);
   // Toggle: admin or PM may include hidden items when exporting
   const [includeHiddenExport, setIncludeHiddenExport] = useState(false);
   // Toggle: show hidden orders from last N days
@@ -252,12 +256,26 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     };
   };
 
-  const applyPmFilters = (f: PmFilters, skipSave?: boolean) => {
+  const applyPmFilters = async (f: PmFilters, skipSave?: boolean) => {
     // Prevent loops and flickers during restore
     isRestoringRef.current = true;
     setIsRestoring(true);
     
     try {
+      // For view role, fetch data first if needed
+      if (isViewRole && (f.brands || f.categories)) {
+        const needsBrands = f.brands && allBrandsForView.length === 0;
+        const needsCategories = f.categories && allCategoriesForView.length === 0;
+        
+        if (needsBrands || needsCategories) {
+          const fetchPromises = [];
+          if (needsBrands) fetchPromises.push(fetchAllBrands());
+          if (needsCategories) fetchPromises.push(fetchAllCategories());
+          
+          await Promise.all(fetchPromises);
+        }
+      }
+      
       // Use setTimeout to avoid calling flushSync from lifecycle methods
       setTimeout(() => {
         flushSync(() => {
@@ -363,6 +381,144 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
 
   // Helper: lấy tất cả permissions từ các PM custom roles
+  
+  // API functions cho role view
+  const fetchAllCategories = async () => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const token = getAccessToken();
+      const response = await fetch(`${baseUrl}/categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch categories');
+      }
+      
+      const data = await response.json();
+      const categories = data.map((cat: any) => ({
+        value: String(cat.slug || cat.catName || cat.name || cat.id),
+        label: String(cat.catName || cat.name || cat.slug || cat.id)
+      }));
+      
+      // Đảm bảo unique values
+      const uniqueCategories = categories.filter((cat: any, index: number, self: any[]) => 
+        index === self.findIndex((c: any) => c.value === cat.value)
+      );
+      
+      // Lưu vào state để sử dụng trong handleFilterChange
+      setAllCategoriesForView(uniqueCategories);
+      
+      return uniqueCategories;
+    } catch (error) {
+      console.error('Error fetching all categories:', error);
+      return [];
+    }
+  };
+
+  const fetchAllBrands = async () => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const token = getAccessToken();
+      const response = await fetch(`${baseUrl}/brands`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch brands');
+      }
+      
+      const data = await response.json();
+      const brands = data.map((brand: any) => ({
+        value: String(brand.slug || brand.name || brand.brandName || brand.id),
+        label: String(brand.name || brand.brandName || brand.slug || brand.id)
+      }));
+      
+      // Đảm bảo unique values
+      const uniqueBrands = brands.filter((brand: any, index: number, self: any[]) => 
+        index === self.findIndex((b: any) => b.value === brand.value)
+      );
+      
+      // Lưu vào state để sử dụng trong handleFilterChange
+      setAllBrandsForView(uniqueBrands);
+      
+      return uniqueBrands;
+    } catch (error) {
+      console.error('Error fetching all brands:', error);
+      return [];
+    }
+  };
+
+  const fetchAllEmployees = async () => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const token = getAccessToken();
+      const response = await fetch(`${baseUrl}/users?limit=1000`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch employees');
+      }
+      
+      const data = await response.json();
+      const employees = data.data
+        .filter((user: any) => {
+          // Lọc bỏ user có role "view"
+          const userRoles = user.roles || [];
+          return !userRoles.some((role: any) => 
+            role.name?.toLowerCase() === 'view' || 
+            role.roleName?.toLowerCase() === 'view'
+          );
+        })
+        .map((user: any) => ({
+          value: String(user.id),
+          label: String(`${user.fullName || user.full_name || user.username} (${user.employee_code || user.id})`)
+        }));
+      
+      // Đảm bảo unique values
+      const uniqueEmployees = employees.filter((emp: any, index: number, self: any[]) => 
+        index === self.findIndex((e: any) => e.value === emp.value)
+      );
+      
+      return uniqueEmployees;
+    } catch (error) {
+      console.error('Error fetching all employees:', error);
+      return [];
+    }
+  };
+
+  const fetchAllDepartments = async () => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const token = getAccessToken();
+      const response = await fetch(`${baseUrl}/departments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch departments');
+      }
+      
+      const result = await response.json();
+      // API departments trả về { data: [...], total: number, page: number, pageSize: number }
+      const data = result.data || result;
+      const departments = data.map((dept: any) => ({
+        value: String(dept.id),
+        label: String(dept.name || dept.department_name || dept.id)
+      }));
+      
+      // Đảm bảo unique values
+      const uniqueDepartments = departments.filter((dept: any, index: number, self: any[]) => 
+        index === self.findIndex((d: any) => d.value === dept.value)
+      );
+      
+      return uniqueDepartments;
+    } catch (error) {
+      console.error('Error fetching all departments:', error);
+      return [];
+    }
+  };
   const getAllPMCustomPermissions = (): string[] => {
     const pmPermissions = getPMPermissions();
     const filtered = pmPermissions.filter(p => 
@@ -456,8 +612,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       });
     });
     
-    return Array.from(map.values());
-  }, [filterOptions.departments, departmentsSelected, isAdmin, pmDepartments, isAnalysisUser, isPMWithPermissionRole, isPMWithDepartmentRole]);
+    const result = Array.from(map.values());
+    return result;
+  }, [filterOptions.departments, departmentsSelected, isAdmin, pmDepartments, isAnalysisUser, isPMWithPermissionRole, isPMWithDepartmentRole, isViewRole]);
 
   // removed: moved pmDepartments/hasSpecificPMRole above to avoid temporal dead zone
 
@@ -600,7 +757,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             params.set('pmCustomMode', 'false');
           }
         }
-      } else {
+      } else if (isViewRole) {
+        // ✅ Role "view": xử lý brands và categories riêng biệt
+        if (effBrandsCsv) {
+          params.set('brands', effBrandsCsv);
+        }
+        if (effCategoriesCsv) {
+          params.set('categories', effCategoriesCsv);
+        }
       }
       
       
@@ -796,6 +960,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         if (!res.ok) return;
         const json = await res.json();
         const departments = json.departments || [];
+        console.log("Debug departments:", departments);
         
         // ✅ PM có quyền riêng (pm_permissions): tạo brandCategories gộp từ permissions
         let brands: any[] = [];
@@ -879,10 +1044,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     // Wait for filter options to be loaded before applying stored filters
     if (!filtersLoaded) return;
     
-    const stored = getPmFiltersFromStorage();
-    if (stored) {
-      // prefer stored filters and do not reset
-      applyPmFilters(stored, true);
+    const loadStoredFilters = async () => {
+      const stored = getPmFiltersFromStorage();
+      if (stored) {
+        // prefer stored filters and do not reset
+        await applyPmFilters(stored, true);
       window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
       setFiltersRestored(true); // Mark that filters have been restored
     } else {
@@ -892,18 +1058,21 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
         // Không lưu vào localStorage khi không có stored filters
       }
-      setFiltersRestored(true); // Mark that initialization is complete
-    }
+        setFiltersRestored(true); // Mark that initialization is complete
+      }
+    };
+    
+    loadStoredFilters();
   }, [filtersLoaded]); // Add filtersLoaded as dependency
 
   // Handle browser back/forward to restore filters like Order management
   useEffect(() => {
-    const onPopState = (event: PopStateEvent) => {
+    const onPopState = async (event: PopStateEvent) => {
       // Prefer stored filters from localStorage to avoid accidental resets
       const stored = getPmFiltersFromStorage();
       if (stored) {
         setIsInCustomerSearchMode(false);
-        applyPmFilters(stored);
+        await applyPmFilters(stored);
         window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
         return;
       }
@@ -915,13 +1084,13 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
       if (prev) {
         setIsInCustomerSearchMode(false);
-        applyPmFilters(prev);
+        await applyPmFilters(prev);
         savePmFiltersToStorage(prev);
         const newState = { pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() };
         window.history.replaceState(newState, "", window.location.href);
       } else if (filters) {
         setIsInCustomerSearchMode(!!hs.isCustomerSearch);
-        applyPmFilters(filters);
+        await applyPmFilters(filters);
         savePmFiltersToStorage(filters);
       }
     };
@@ -963,7 +1132,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     if (isRestoringRef.current) return; // Skip during restore to avoid clearing restored employees
     if (!filtersLoaded) return; // Skip until filters are loaded
     
-    const allowed = new Set(availableEmployees.map((e) => String(e.value)));
+    // ✅ SỬA: Sử dụng đúng danh sách employees cho từng role
+    let allowedEmployees: { value: string | number; label: string }[] = [];
+    if (isViewRole) {
+      // Role "view": không filter employees theo departments, cho phép tất cả
+      // Vì role "view" có thể xem tất cả employees từ API /users
+      allowedEmployees = employeesSelected.map(id => ({ value: id, label: String(id) }));
+    } else {
+      // Role khác: sử dụng availableEmployees (từ departments)
+      allowedEmployees = availableEmployees;
+    }
+    
+    const allowed = new Set(allowedEmployees.map((e) => String(e.value)));
     const filtered = employeesSelected.filter((v) => allowed.has(String(v)));
     // Only update when actually changed to avoid render loops
     const isSame =
@@ -971,13 +1151,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       filtered.every((v, i) => String(v) === String(employeesSelected[i]));
     if (!isSame) {
       console.log("[PM] Filtering employees after department change:", { 
-        available: availableEmployees.length, 
+        available: allowedEmployees.length, 
         selected: employeesSelected.length, 
-        filtered: filtered.length 
+        filtered: filtered.length,
+        isViewRole
       });
       setEmployeesSelected(filtered);
     }
-  }, [availableEmployees, employeesSelected, filtersLoaded]);
+  }, [availableEmployees, employeesSelected, filtersLoaded, isViewRole]);
 
   // Update filters and save to localStorage (similar to useOrders pattern)
   const updatePmFiltersAndStorage = useCallback((newFilters: Partial<PmFilters>) => {
@@ -1023,6 +1204,27 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     filtersLoaded,
     isRestoring,
   ]);
+
+  // Fetch lại dữ liệu cho view role khi restore filters
+  useEffect(() => {
+    if (isViewRole && isRestoring && filtersLoaded) {
+      // Fetch lại dữ liệu để có thể restore filters đúng
+      const fetchDataForRestore = async () => {
+        try {
+          await Promise.all([
+            fetchAllCategories(),
+            fetchAllBrands(),
+            fetchAllEmployees(),
+            fetchAllDepartments()
+          ]);
+        } catch (error) {
+          console.error('Error fetching data for restore:', error);
+        }
+      };
+      
+      fetchDataForRestore();
+    }
+  }, [isViewRole, isRestoring, filtersLoaded]);
 
   const handleFilterChange = (f: PaginatedFilters) => {
     try {
@@ -1071,8 +1273,63 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
 
       // ✅ Brands và Categories (từ 2 dropdown riêng biệt)
+      // Convert IDs to names for backend
       const brandsArr = f.brands && f.brands.length > 0 ? [...(f.brands as (string|number)[])] : [];
       const categoriesArr = f.categories && f.categories.length > 0 ? [...(f.categories as (string|number)[])] : [];
+      
+      // Convert brand IDs to names
+      let brandNames = '';
+      if (brandsArr.length > 0) {
+        if (isViewRole) {
+          // For view role, we have all brands in allBrandsForView
+          // If allBrandsForView is empty (after F5), skip conversion and use IDs directly
+          if (allBrandsForView.length > 0) {
+            const brandSlugsList = brandsArr.map(id => {
+              const brand = allBrandsForView.find(b => b.value === id.toString());
+              return brand ? brand.value : id.toString(); // Use value (slug) not label (name)
+            }).filter(Boolean);
+            brandNames = brandSlugsList.join(',');
+          } else {
+            // Fallback: skip brands filter if data not loaded yet
+            // This prevents sending invalid data to backend
+            brandNames = '';
+          }
+        } else {
+          // For other roles, use filterOptions.brands from props
+          const brandNamesList = brandsArr.map(id => {
+            const brand = filterOptions.brands?.find((b: any) => b === id.toString());
+            return brand || id.toString();
+          }).filter(Boolean);
+          brandNames = brandNamesList.join(',');
+        }
+      }
+      
+      // Convert category IDs to names
+      let categoryNames = '';
+      if (categoriesArr.length > 0) {
+        if (isViewRole) {
+          // For view role, we have all categories in allCategoriesForView
+          // If allCategoriesForView is empty (after F5), skip conversion and use IDs directly
+          if (allCategoriesForView.length > 0) {
+            const categorySlugsList = categoriesArr.map(id => {
+              const category = allCategoriesForView.find(c => c.value === id.toString());
+              return category ? category.value : id.toString(); // Use value (slug) not label (name)
+            }).filter(Boolean);
+            categoryNames = categorySlugsList.join(',');
+          } else {
+            // Fallback: skip categories filter if data not loaded yet
+            // This prevents sending invalid data to backend
+            categoryNames = '';
+          }
+        } else {
+          // For other roles, use filterOptions.categories from props
+          const categoryNamesList = categoriesArr.map(id => {
+            const category = filterOptions.categories?.find((c: any) => c.value === id.toString());
+            return category ? category.label : id.toString();
+          }).filter(Boolean);
+          categoryNames = categoryNamesList.join(',');
+        }
+      }
 
       // Construct new PmFilters snapshot
       const newSnapshot: PmFilters = {
@@ -1084,14 +1341,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         dateRange: dateRangeVal,
         departments: departmentsArr.join(','),
         employees: employeesArr.join(','),
-        brands: brandsArr.join(','),
-        categories: categoriesArr.join(','),
+        brands: brandNames,
+        categories: categoryNames,
         warningLevel: warningLevelCsv,
         quantity: quantityVal,
         conversationType: conversationTypeCsv,
         showHiddenOrders,
         hiddenOrdersDays,
       };
+      
 
       // Use setTimeout to avoid calling flushSync from lifecycle methods
       setTimeout(() => {
@@ -1590,6 +1848,19 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
     }
 
+    // ✅ Role "view": xử lý brands và categories riêng biệt trong export
+    if (isViewRole) {
+      const effBrandsCsv = brandsSelected.length > 0 ? brandsSelected.join(',') : '';
+      const effCategoriesCsv = categoriesSelected.length > 0 ? categoriesSelected.join(',') : '';
+      
+      if (effBrandsCsv) {
+        params.set('brands', effBrandsCsv);
+      }
+      if (effCategoriesCsv) {
+        params.set('categories', effCategoriesCsv);
+      }
+    }
+
     // Admin, PM, or view role can include hidden items when exporting all
     if ((isAdmin || isPM || isViewRole) && includeHiddenExport) {
       params.set("includeHidden", "1");
@@ -1882,10 +2153,15 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           <PaginatedTable
             enableSearch={true}
             enableStatusFilter={true}
-            enableEmployeeFilter={!isAnalysisUser && isPMWithDepartmentRole}
-            enableDepartmentFilter={!isAnalysisUser && isPMWithDepartmentRole}
+            enableEmployeeFilter={!isAnalysisUser && (isPMWithDepartmentRole || isViewRole)}
+            enableDepartmentFilter={!isAnalysisUser && (isPMWithDepartmentRole || isViewRole)}
             enableCategoriesFilter={isPMWithPermissionRole}
             enableBrandsFilter={isPMWithPermissionRole}
+            // Thêm props cho role view
+            enableCategoriesFilterForViewRole={isViewRole}
+            enableBrandsFilterForViewRole={isViewRole}
+            enableEmployeeFilterForViewRole={isViewRole}
+            enableDepartmentFilterForViewRole={isViewRole}
             enableDateRangeFilter={true}
             enableSingleDateFilter={true}
             enableWarningLevelFilter={true}
@@ -1899,6 +2175,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             onFilterChange={handleFilterChange}
             availableCategories={filterOptions.categories}
             availableBrands={filterOptions.brands}
+            // Thêm API functions cho role view
+            onFetchAllCategories={isViewRole ? fetchAllCategories : undefined}
+            onFetchAllBrands={isViewRole ? fetchAllBrands : undefined}
+            onFetchAllEmployees={isViewRole ? fetchAllEmployees : undefined}
+            onFetchAllDepartments={isViewRole ? fetchAllDepartments : undefined}
             onDepartmentChange={(vals) => {
               // immediate handler when user changes departments in the toolbar
               // eslint-disable-next-line no-console
@@ -1993,7 +2274,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               }
             }}
             onResetFilter={handleResetFilter}
-            onClearSearch={() => {
+            onClearSearch={async () => {
               try {
                 // Only restore previous state if we're in customer search mode
                 if (isInCustomerSearchMode) {
@@ -2025,7 +2306,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                   const prev = previousPmFiltersRef.current;
                   if (prev) {
                     // restore previous snapshot (which should be the filters before customer-search)
-                    applyPmFilters(prev);
+                    await applyPmFilters(prev);
                     try {
                       savePmFiltersToStorage(prev);
                     } catch (e) {
@@ -2038,7 +2319,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                     try {
                       const cleared = getCurrentPmFilters();
                       cleared.search = "";
-                      applyPmFilters(cleared);
+                      await applyPmFilters(cleared);
                       try {
                         savePmFiltersToStorage(cleared);
                       } catch (e) {

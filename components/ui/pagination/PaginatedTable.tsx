@@ -46,6 +46,11 @@ interface PaginatedTableProps {
   enableCategoriesFilter?: boolean;
   enableBrandsFilter?: boolean;
   enableBrandCategoryFilter?: boolean; // Bộ lọc gộp brand và category
+  // Thêm props để kiểm soát hiển thị bộ lọc dựa trên role
+  enableCategoriesFilterForViewRole?: boolean;
+  enableBrandsFilterForViewRole?: boolean;
+  enableEmployeeFilterForViewRole?: boolean;
+  enableDepartmentFilterForViewRole?: boolean;
   availableEmployees?: Option[];
   enableDateRangeFilter?: boolean;
   enableSingleDateFilter?: boolean;
@@ -108,6 +113,11 @@ interface PaginatedTableProps {
   preserveFiltersOnEmpty?: boolean;
   // Thêm flag để biết khi đang restore state
   isRestoring?: boolean;
+  // Thêm props để gọi API lấy tất cả danh mục/thương hiệu cho role view
+  onFetchAllCategories?: () => Promise<{ value: string; label: string }[]>;
+  onFetchAllBrands?: () => Promise<{ value: string; label: string }[]>;
+  onFetchAllEmployees?: () => Promise<{ value: string; label: string }[]>;
+  onFetchAllDepartments?: () => Promise<{ value: string; label: string }[]>;
   filterClassNames?: {
     search?: string;
     departments?: string;
@@ -191,6 +201,11 @@ export default function PaginatedTable({
   enableCategoriesFilter,
   enableBrandsFilter,
   enableBrandCategoryFilter,
+  // Thêm props cho role view
+  enableCategoriesFilterForViewRole,
+  enableBrandsFilterForViewRole,
+  enableEmployeeFilterForViewRole,
+  enableDepartmentFilterForViewRole,
   enableGoToPage = false,
   enableConversationTypeFilter,
   availableZaloLinkStatuses = [
@@ -252,11 +267,26 @@ export default function PaginatedTable({
   controlsOnly = false,
   hidePager = false,
   toggles = [],
+  // Thêm props cho API calls
+  onFetchAllCategories,
+  onFetchAllBrands,
+  onFetchAllEmployees,
+  onFetchAllDepartments,
 }: PaginatedTableProps) {
   const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
   const lastFiltersRef = useRef<string>("");
   const previousTotalRef = useRef<number>(0);
+
+  // State để lưu tất cả danh mục và thương hiệu cho role view
+  const [allCategoriesForView, setAllCategoriesForView] = useState<{ value: string; label: string }[]>([]);
+  const [allBrandsForView, setAllBrandsForView] = useState<{ value: string; label: string }[]>([]);
+  const [allEmployeesForView, setAllEmployeesForView] = useState<{ value: string; label: string }[]>([]);
+  const [allDepartmentsForView, setAllDepartmentsForView] = useState<{ value: string; label: string }[]>([]);
+  const [isLoadingCategoriesForView, setIsLoadingCategoriesForView] = useState(false);
+  const [isLoadingBrandsForView, setIsLoadingBrandsForView] = useState(false);
+  const [isLoadingEmployeesForView, setIsLoadingEmployeesForView] = useState(false);
+  const [isLoadingDepartmentsForView, setIsLoadingDepartmentsForView] = useState(false);
 
   const departmentOptions = useMemo(() => {
     if (!availableDepartments || availableDepartments.length === 0) {
@@ -989,6 +1019,87 @@ export default function PaginatedTable({
     };
   }, []);
 
+  // Fetch dữ liệu khi component mount hoặc khi cần restore filters
+  useEffect(() => {
+    if (enableCategoriesFilterForViewRole && onFetchAllCategories && !isLoadingCategoriesForView) {
+      // Fetch nếu chưa có dữ liệu hoặc đang restore filters
+      if (allCategoriesForView.length === 0 || isRestoring) {
+        setIsLoadingCategoriesForView(true);
+        onFetchAllCategories()
+          .then((categories) => {
+            setAllCategoriesForView(categories);
+          })
+          .catch((error) => {
+            console.error("Error fetching all categories for view role:", error);
+            setAllCategoriesForView([]);
+          })
+          .finally(() => {
+            setIsLoadingCategoriesForView(false);
+          });
+      }
+    }
+  }, [enableCategoriesFilterForViewRole, onFetchAllCategories, isRestoring]);
+
+  useEffect(() => {
+    if (enableBrandsFilterForViewRole && onFetchAllBrands && !isLoadingBrandsForView) {
+      // Fetch nếu chưa có dữ liệu hoặc đang restore filters
+      if (allBrandsForView.length === 0 || isRestoring) {
+        setIsLoadingBrandsForView(true);
+        onFetchAllBrands()
+          .then((brands) => {
+            setAllBrandsForView(brands);
+          })
+          .catch((error) => {
+            console.error("Error fetching all brands for view role:", error);
+            setAllBrandsForView([]);
+          })
+          .finally(() => {
+            setIsLoadingBrandsForView(false);
+          });
+      }
+    }
+  }, [enableBrandsFilterForViewRole, onFetchAllBrands, isRestoring]);
+
+  useEffect(() => {
+    if (enableEmployeeFilterForViewRole && onFetchAllEmployees && !isLoadingEmployeesForView) {
+      // Fetch nếu chưa có dữ liệu hoặc đang restore filters
+      if (allEmployeesForView.length === 0 || isRestoring) {
+        setIsLoadingEmployeesForView(true);
+        onFetchAllEmployees()
+          .then((employees) => {
+            setAllEmployeesForView(employees);
+          })
+          .catch((error) => {
+            console.error("Error fetching all employees for view role:", error);
+            setAllEmployeesForView([]);
+          })
+          .finally(() => {
+            setIsLoadingEmployeesForView(false);
+          });
+      }
+    }
+  }, [enableEmployeeFilterForViewRole, onFetchAllEmployees, isRestoring]);
+
+  useEffect(() => {
+    if (enableDepartmentFilterForViewRole && onFetchAllDepartments && !isLoadingDepartmentsForView) {
+      // Fetch nếu chưa có dữ liệu hoặc đang restore filters
+      if (allDepartmentsForView.length === 0 || isRestoring) {
+        setIsLoadingDepartmentsForView(true);
+        onFetchAllDepartments()
+          .then((departments) => {
+            setAllDepartmentsForView(departments);
+          })
+          .catch((error) => {
+            console.error("Error fetching all departments for view role:", error);
+            setAllDepartmentsForView([]);
+          })
+          .finally(() => {
+            setIsLoadingDepartmentsForView(false);
+          });
+      }
+    }
+  }, [enableDepartmentFilterForViewRole, onFetchAllDepartments, isRestoring]);
+
   const handleEmployeesChange = useCallback(
     (vals: (string | number)[]) => {
       updateFilter("employees", vals);
@@ -1331,12 +1442,17 @@ export default function PaginatedTable({
               </div>
             </div>
           )}
-          {enableEmployeeFilter && (
+          {((enableEmployeeFilter && availableEmployees.length > 0) || 
+            enableEmployeeFilterForViewRole) && (
             <MultiSelectCombobox
               className={`min-w-0 w-full`}
-              placeholder="Nhân viên"
+              placeholder={isLoadingEmployeesForView ? "Đang tải nhân viên..." : "Nhân viên"}
               value={filters.employees}
-              options={employeeOptions}
+              options={(() => {
+                return enableEmployeeFilterForViewRole ? 
+                  allEmployeesForView : 
+                  employeeOptions;
+              })()}
               onChange={handleEmployeesChange}
             />
           )}
@@ -1362,12 +1478,16 @@ export default function PaginatedTable({
               }}
             />
           )}
-          {enableDepartmentFilter && (
+          {((enableDepartmentFilter && availableDepartments.length > 0) || 
+            enableDepartmentFilterForViewRole) && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.departments ?? ""}`}
-              placeholder="Phòng ban"
+              placeholder={isLoadingDepartmentsForView ? "Đang tải phòng ban..." : "Phòng ban"}
               value={filters.departments.map((d) => d.toString())}
-              options={departmentOptions}
+              options={enableDepartmentFilterForViewRole ? 
+                allDepartmentsForView : 
+                departmentOptions
+              }
               onChange={handleDepartmentsChange}
             />
           )}
@@ -1407,21 +1527,29 @@ export default function PaginatedTable({
               onChange={handleZaloLinkStatusesChange}
             />
           )}
-          {enableCategoriesFilter && availableCategories.length > 0 && (
+          {((enableCategoriesFilter && availableCategories.length > 0) || 
+            enableCategoriesFilterForViewRole) && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.categories ?? ""}`}
-              placeholder="Danh mục"
+              placeholder={isLoadingCategoriesForView ? "Đang tải danh mục..." : "Danh mục"}
               value={filters.categories}
-              options={categoryOptions}
+              options={enableCategoriesFilterForViewRole ? 
+                allCategoriesForView : 
+                categoryOptions
+              }
               onChange={handleCategoriesChange}
             />
           )}
-          {enableBrandsFilter && availableBrands.length > 0 && (
+          {((enableBrandsFilter && availableBrands.length > 0) || 
+            enableBrandsFilterForViewRole) && (
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.brands ?? ""}`}
-              placeholder="Thương hiệu"
+              placeholder={isLoadingBrandsForView ? "Đang tải thương hiệu..." : "Thương hiệu"}
               value={filters.brands}
-              options={brandOptions}
+              options={enableBrandsFilterForViewRole ? 
+                allBrandsForView : 
+                brandOptions
+              }
               onChange={handleBrandsChange}
             />
           )}
