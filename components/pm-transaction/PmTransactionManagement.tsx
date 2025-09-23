@@ -1027,15 +1027,38 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   useEffect(() => {
     if (typeof window === "undefined") return;
     
-    // Wait for filter options to be loaded before applying stored filters
-    if (!filtersLoaded) return;
-    
     const stored = getPmFiltersFromStorage();
     if (stored) {
-      // prefer stored filters and do not reset
-      applyPmFilters(stored, true);
-      window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-      setFiltersRestored(true); // Mark that filters have been restored
+      // For view role, fetch data first before applying filters
+      if (isViewRole) {
+        const fetchDataForRestore = async () => {
+          try {
+            await Promise.all([
+              fetchAllCategories(),
+              fetchAllBrands(),
+              fetchAllEmployees(),
+              fetchAllDepartments()
+            ]);
+            // After fetching data, apply the stored filters
+            applyPmFilters(stored, true);
+            window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+            setFiltersRestored(true);
+          } catch (error) {
+            console.error('Error fetching data for restore:', error);
+            // Fallback: apply filters anyway
+            applyPmFilters(stored, true);
+            window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+            setFiltersRestored(true);
+          }
+        };
+        
+        fetchDataForRestore();
+      } else {
+        // For other roles, apply filters directly
+        applyPmFilters(stored, true);
+        window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+        setFiltersRestored(true);
+      }
     } else {
       const state = window.history.state as any;
       if (!state || !state.pmFilters) {
@@ -1045,7 +1068,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       }
       setFiltersRestored(true); // Mark that initialization is complete
     }
-  }, [filtersLoaded]); // Add filtersLoaded as dependency
+  }, [isViewRole]); // Run when isViewRole changes
 
   // Handle browser back/forward to restore filters like Order management
   useEffect(() => {
@@ -1187,26 +1210,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     isRestoring,
   ]);
 
-  // Fetch lại dữ liệu cho view role khi restore filters
-  useEffect(() => {
-    if (isViewRole && isRestoring && filtersLoaded) {
-      // Fetch lại dữ liệu để có thể restore filters đúng
-      const fetchDataForRestore = async () => {
-        try {
-          await Promise.all([
-            fetchAllCategories(),
-            fetchAllBrands(),
-            fetchAllEmployees(),
-            fetchAllDepartments()
-          ]);
-        } catch (error) {
-          console.error('Error fetching data for restore:', error);
-        }
-      };
-      
-      fetchDataForRestore();
-    }
-  }, [isViewRole, isRestoring, filtersLoaded]);
 
   const handleFilterChange = (f: PaginatedFilters) => {
     try {
