@@ -219,7 +219,9 @@ export function CustomerListDialog({
     const prev = prevIsSearchingRef.current;
     // Only act when transitioning from search -> non-search
     if (prev === true && isSearching === false) {
+      // ✅ Reset về trang 1 khi thoát khỏi search mode
       setPage?.(1);
+      // ✅ Fetch lại trang 1 với filters hiện tại
       fetchPage?.(1);
     }
     prevIsSearchingRef.current = isSearching;
@@ -234,7 +236,8 @@ export function CustomerListDialog({
         if (filters) {
           setFilters?.(filters);
         } else {
-          fetchPage?.(page);
+          // ✅ Fetch trang 1 thay vì page hiện tại để tránh conflict
+          fetchPage?.(1);
         }
       } else if (filters) {
         // Filters thay đổi khi modal đã mở
@@ -244,7 +247,7 @@ export function CustomerListDialog({
       // Reset guard khi đóng modal
       fetchedOnOpenRef.current = false;
     }
-  }, [open, filters, fetchPage, setFilters, page]);
+  }, [open, filters, fetchPage, setFilters]); // ✅ Bỏ page khỏi dependencies để tránh loop
 
   // Reset animated total when total changes
   useEffect(() => {
@@ -296,9 +299,11 @@ export function CustomerListDialog({
   };
 
   const handlePageChange = (newPage: number) => {
-    if (!setPage || isSearching) return;
+    if (isSearching) return;
     
-    setPage(newPage);
+    // ✅ Đảm bảo setPage được gọi trước fetchPage
+    setPage?.(newPage);
+    // ✅ Gọi fetchPage với page mới và đảm bảo không bị debounce
     fetchPage?.(newPage);
   };
 
@@ -336,7 +341,7 @@ export function CustomerListDialog({
                 </div>
                 <div>
                   <DialogTitle className="text-2xl font-bold text-white mb-1 tracking-tight">
-                    Customer Hub
+                    Khách hàng
                   </DialogTitle>
                   <p className="text-blue-100 text-base font-medium">
                     🚀 Quản lý khách hàng thông minh & hiện đại
