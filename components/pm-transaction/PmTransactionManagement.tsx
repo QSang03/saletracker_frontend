@@ -256,26 +256,12 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     };
   };
 
-  const applyPmFilters = async (f: PmFilters, skipSave?: boolean) => {
+  const applyPmFilters = (f: PmFilters, skipSave?: boolean) => {
     // Prevent loops and flickers during restore
     isRestoringRef.current = true;
     setIsRestoring(true);
     
     try {
-      // For view role, fetch data first if needed
-      if (isViewRole && (f.brands || f.categories)) {
-        const needsBrands = f.brands && allBrandsForView.length === 0;
-        const needsCategories = f.categories && allCategoriesForView.length === 0;
-        
-        if (needsBrands || needsCategories) {
-          const fetchPromises = [];
-          if (needsBrands) fetchPromises.push(fetchAllBrands());
-          if (needsCategories) fetchPromises.push(fetchAllCategories());
-          
-          await Promise.all(fetchPromises);
-        }
-      }
-      
       // Use setTimeout to avoid calling flushSync from lifecycle methods
       setTimeout(() => {
         flushSync(() => {
@@ -1044,11 +1030,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     // Wait for filter options to be loaded before applying stored filters
     if (!filtersLoaded) return;
     
-    const loadStoredFilters = async () => {
-      const stored = getPmFiltersFromStorage();
-      if (stored) {
-        // prefer stored filters and do not reset
-        await applyPmFilters(stored, true);
+    const stored = getPmFiltersFromStorage();
+    if (stored) {
+      // prefer stored filters and do not reset
+      applyPmFilters(stored, true);
       window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
       setFiltersRestored(true); // Mark that filters have been restored
     } else {
@@ -1058,21 +1043,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
         // Không lưu vào localStorage khi không có stored filters
       }
-        setFiltersRestored(true); // Mark that initialization is complete
-      }
-    };
-    
-    loadStoredFilters();
+      setFiltersRestored(true); // Mark that initialization is complete
+    }
   }, [filtersLoaded]); // Add filtersLoaded as dependency
 
   // Handle browser back/forward to restore filters like Order management
   useEffect(() => {
-    const onPopState = async (event: PopStateEvent) => {
+    const onPopState = (event: PopStateEvent) => {
       // Prefer stored filters from localStorage to avoid accidental resets
       const stored = getPmFiltersFromStorage();
       if (stored) {
         setIsInCustomerSearchMode(false);
-        await applyPmFilters(stored);
+        applyPmFilters(stored);
         window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
         return;
       }
@@ -1084,13 +1066,13 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
       if (prev) {
         setIsInCustomerSearchMode(false);
-        await applyPmFilters(prev);
+        applyPmFilters(prev);
         savePmFiltersToStorage(prev);
         const newState = { pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() };
         window.history.replaceState(newState, "", window.location.href);
       } else if (filters) {
         setIsInCustomerSearchMode(!!hs.isCustomerSearch);
-        await applyPmFilters(filters);
+        applyPmFilters(filters);
         savePmFiltersToStorage(filters);
       }
     };
@@ -1282,18 +1264,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       if (brandsArr.length > 0) {
         if (isViewRole) {
           // For view role, we have all brands in allBrandsForView
-          // If allBrandsForView is empty (after F5), skip conversion and use IDs directly
-          if (allBrandsForView.length > 0) {
-            const brandSlugsList = brandsArr.map(id => {
-              const brand = allBrandsForView.find(b => b.value === id.toString());
-              return brand ? brand.value : id.toString(); // Use value (slug) not label (name)
-            }).filter(Boolean);
-            brandNames = brandSlugsList.join(',');
-          } else {
-            // Fallback: skip brands filter if data not loaded yet
-            // This prevents sending invalid data to backend
-            brandNames = '';
-          }
+          const brandSlugsList = brandsArr.map(id => {
+            const brand = allBrandsForView.find(b => b.value === id.toString());
+            return brand ? brand.value : id.toString(); // Use value (slug) not label (name)
+          }).filter(Boolean);
+          brandNames = brandSlugsList.join(',');
         } else {
           // For other roles, use filterOptions.brands from props
           const brandNamesList = brandsArr.map(id => {
@@ -1309,18 +1284,11 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       if (categoriesArr.length > 0) {
         if (isViewRole) {
           // For view role, we have all categories in allCategoriesForView
-          // If allCategoriesForView is empty (after F5), skip conversion and use IDs directly
-          if (allCategoriesForView.length > 0) {
-            const categorySlugsList = categoriesArr.map(id => {
-              const category = allCategoriesForView.find(c => c.value === id.toString());
-              return category ? category.value : id.toString(); // Use value (slug) not label (name)
-            }).filter(Boolean);
-            categoryNames = categorySlugsList.join(',');
-          } else {
-            // Fallback: skip categories filter if data not loaded yet
-            // This prevents sending invalid data to backend
-            categoryNames = '';
-          }
+          const categorySlugsList = categoriesArr.map(id => {
+            const category = allCategoriesForView.find(c => c.value === id.toString());
+            return category ? category.value : id.toString(); // Use value (slug) not label (name)
+          }).filter(Boolean);
+          categoryNames = categorySlugsList.join(',');
         } else {
           // For other roles, use filterOptions.categories from props
           const categoryNamesList = categoriesArr.map(id => {
@@ -2274,7 +2242,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               }
             }}
             onResetFilter={handleResetFilter}
-            onClearSearch={async () => {
+            onClearSearch={() => {
               try {
                 // Only restore previous state if we're in customer search mode
                 if (isInCustomerSearchMode) {
@@ -2306,7 +2274,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                   const prev = previousPmFiltersRef.current;
                   if (prev) {
                     // restore previous snapshot (which should be the filters before customer-search)
-                    await applyPmFilters(prev);
+                    applyPmFilters(prev);
                     try {
                       savePmFiltersToStorage(prev);
                     } catch (e) {
@@ -2319,7 +2287,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                     try {
                       const cleared = getCurrentPmFilters();
                       cleared.search = "";
-                      await applyPmFilters(cleared);
+                      applyPmFilters(cleared);
                       try {
                         savePmFiltersToStorage(cleared);
                       } catch (e) {
