@@ -185,6 +185,9 @@ export const useAnalysisBlock = () => {
         if (errorMessage.includes("admin")) {
           throw new Error("Chỉ admin mới có quyền sử dụng tính năng này");
         }
+        if (errorMessage.includes("Đã tồn tại analysis block")) {
+          throw new Error("Khách hàng này đã bị chặn phân tích. Không thể chặn lại.");
+        }
         throw new Error(errorMessage);
       }
     },
@@ -203,6 +206,28 @@ export const useAnalysisBlock = () => {
       }
     },
     []
+  );
+
+  // Check if contact is blocked (any type) - for frontend validation
+  const checkContactBlocked = useCallback(
+    async (zaloContactId: string) => {
+      try {
+        // Check if contact exists in current analysis blocks list
+        const existingBlock = analysisBlocks.find(block => block.zaloContactId === zaloContactId);
+        if (existingBlock) {
+          return {
+            isBlocked: true,
+            blockType: existingBlock.blockType,
+            reason: existingBlock.reason
+          };
+        }
+        return { isBlocked: false };
+      } catch (err: any) {
+        console.error("Error checking if contact is blocked:", err);
+        return { isBlocked: false };
+      }
+    },
+    [analysisBlocks]
   );
 
   // Get blocked contacts for current user
@@ -236,9 +261,11 @@ export const useAnalysisBlock = () => {
         return response.data;
       } catch (err: any) {
         console.error("Error bulk adding analysis blocks:", err);
-        throw new Error(
-          err.response?.data?.message || "Lỗi khi thêm hàng loạt analysis blocks"
-        );
+        const errorMessage = err.response?.data?.message || "Lỗi khi thêm hàng loạt analysis blocks";
+        if (errorMessage.includes("Đã tồn tại analysis block")) {
+          throw new Error("Một số khách hàng đã bị chặn phân tích. Vui lòng kiểm tra lại danh sách.");
+        }
+        throw new Error(errorMessage);
       }
     },
     []
@@ -297,6 +324,7 @@ export const useAnalysisBlock = () => {
     updateAnalysisBlock,
     deleteAnalysisBlock,
     checkAnalysisBlock,
+    checkContactBlocked,
     getMyBlockedContacts,
     bulkAddAnalysisBlocks,
     refetch: fetchAnalysisBlocks,

@@ -136,7 +136,7 @@ function ManagerOrderContent() {
   } = useOrders();
 
   // Analysis block hook
-  const { addAnalysisBlock } = useAnalysisBlock();
+  const { addAnalysisBlock, checkContactBlocked } = useAnalysisBlock();
 
   // ✅ Helper functions để lưu và khôi phục vị trí
   const saveCurrentPosition = useCallback(() => {
@@ -812,9 +812,8 @@ function ManagerOrderContent() {
         refetch();
       } catch (err: any) {
         console.error("Error adding analysis block:", err);
-        const errorMessage = err.message || "Lỗi khi chặn phân tích!";
-        setAlert({ type: "error", message: errorMessage });
-        throw err; // Re-throw để modal không đóng
+        // Không hiển thị alert ở đây - lỗi sẽ được hiển thị trong modal
+        throw err; // Re-throw để modal có thể catch và hiển thị lỗi
       }
     },
     [addAnalysisBlock, refetch, saveCurrentPosition]
@@ -1494,6 +1493,7 @@ function ManagerOrderContent() {
               onEditCustomerName={handleEditCustomerName}
               onAddToBlacklist={handleAddToBlacklist}
               onAnalysisBlock={handleAnalysisBlock}
+              checkContactBlocked={checkContactBlocked}
               onBulkDelete={handleBulkDelete}
               onBulkExtend={handleBulkExtend}
               onBulkNotes={handleBulkNotes}

@@ -79,8 +79,10 @@ export default function AnalysisBlockTable({
         await onEdit(id, data);
         setIsEditModalOpen(false);
         setEditingItem(null);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error updating analysis block:", error);
+        // Error handling is done in parent component via onEdit prop
+        throw error; // Re-throw để parent component có thể xử lý
       } finally {
         setActionLoading(false);
       }
@@ -107,8 +109,10 @@ export default function AnalysisBlockTable({
       await onDelete(deletingItem.id);
       setIsDeleteDialogOpen(false);
       setDeletingItem(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting analysis block item:", error);
+      // Error handling is done in parent component via onDelete prop
+      throw error; // Re-throw để parent component có thể xử lý
     } finally {
       setActionLoading(false);
     }

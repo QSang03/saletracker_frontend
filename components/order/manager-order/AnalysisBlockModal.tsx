@@ -37,6 +37,7 @@ interface AnalysisBlockModalProps {
     blockType: 'analysis' | 'reporting' | 'stats';
   }) => Promise<void>;
   loading?: boolean;
+  checkContactBlocked?: (zaloContactId: string) => Promise<{ isBlocked: boolean; blockType?: string; reason?: string }>;
 }
 
 const AnalysisBlockModal: React.FC<AnalysisBlockModalProps> = ({
@@ -45,12 +46,28 @@ const AnalysisBlockModal: React.FC<AnalysisBlockModalProps> = ({
   onClose,
   onConfirm,
   loading = false,
+  checkContactBlocked,
 }) => {
   const [blockType, setBlockType] = useState<'analysis' | 'reporting' | 'stats'>('analysis');
   const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
 
   const handleConfirm = async () => {
     try {
+      setError(null); // Clear previous error
+      setIsChecking(true);
+      
+      // Check if contact is already blocked before sending request
+      if (checkContactBlocked && customerId) {
+        const checkResult = await checkContactBlocked(customerId);
+        if (checkResult.isBlocked) {
+          setError(`Khách hàng này đã bị chặn phân tích (${checkResult.blockType}). Không thể chặn lại.`);
+          setIsChecking(false);
+          return;
+        }
+      }
+      
       await onConfirm({
         reason: reason.trim() || undefined,
         blockType,
@@ -58,15 +75,34 @@ const AnalysisBlockModal: React.FC<AnalysisBlockModalProps> = ({
       // Reset form and close modal only after successful confirmation
       setReason('');
       setBlockType('analysis');
-    } catch (error) {
-      // Don't close modal if there's an error
+      setError(null);
+    } catch (error: any) {
+      // Don't close modal if there's an error - chỉ hiển thị lỗi trong modal
       console.error('Error confirming analysis block:', error);
+      
+      // Xử lý các loại lỗi khác nhau
+      let errorMessage = 'Có lỗi xảy ra khi chặn phân tích';
+      
+      if (error.message?.includes('Đã tồn tại analysis block')) {
+        errorMessage = 'Khách hàng này đã bị chặn phân tích. Không thể chặn lại.';
+      } else if (error.message?.includes('admin')) {
+        errorMessage = 'Chỉ admin mới có quyền sử dụng tính năng này';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      
+      // Không throw error ra ngoài để tránh hiển thị ở nơi khác
+    } finally {
+      setIsChecking(false);
     }
   };
 
   const handleClose = () => {
     setReason('');
     setBlockType('analysis');
+    setError(null);
     onClose();
   };
 
@@ -273,6 +309,27 @@ const AnalysisBlockModal: React.FC<AnalysisBlockModalProps> = ({
                   </div>
                 )}
 
+                {/* Error message */}
+                {error && (
+                  <div className="relative group animate-pulse">
+                    <div className="absolute inset-0 bg-gradient-to-r from-red-200 to-pink-200 rounded-2xl blur opacity-30"></div>
+                    <div className="relative flex items-center gap-3 p-4 bg-gradient-to-br from-red-50 to-pink-50 border-2 border-red-300 rounded-2xl shadow-inner">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-30"></div>
+                        <AlertTriangle className="relative w-6 h-6 text-red-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-red-800 mb-1">
+                          ❌ Lỗi khi chặn phân tích
+                        </div>
+                        <span className="text-sm text-red-700">
+                          {error}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Block Type Selection */}
                 <div className="space-y-4">
                   <Label className="flex items-center gap-2 text-base font-bold text-gray-700">
@@ -375,7 +432,7 @@ const AnalysisBlockModal: React.FC<AnalysisBlockModalProps> = ({
                 {/* Analysis Block Button */}
                 <Button
                   onClick={handleConfirm}
-                  disabled={loading || !customerId}
+                  disabled={loading || isChecking || !customerId}
                   className="group relative overflow-hidden flex items-center gap-3 px-6 py-3 text-base font-bold bg-gradient-to-r from-orange-500 via-amber-600 to-yellow-600 hover:from-orange-600 hover:via-amber-700 hover:to-yellow-700 border-0 shadow-2xl hover:shadow-orange-500/50 transform hover:scale-110 hover:-translate-y-1 transition-all duration-500 ease-out rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none min-w-[180px] justify-center"
                 >
                   {/* Shimmer effect */}
@@ -383,10 +440,12 @@ const AnalysisBlockModal: React.FC<AnalysisBlockModalProps> = ({
 
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-400/50 to-amber-500/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
 
-                  {loading ? (
+                  {loading || isChecking ? (
                     <>
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span className="relative z-10">Đang xử lý...</span>
+                      <span className="relative z-10">
+                        {isChecking ? 'Đang kiểm tra...' : 'Đang xử lý...'}
+                      </span>
                     </>
                   ) : (
                     <>

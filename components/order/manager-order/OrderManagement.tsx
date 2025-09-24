@@ -87,6 +87,7 @@ interface OrderManagementProps {
   onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
   onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
   onAnalysisBlock?: (orderDetail: OrderDetail, data: { reason?: string; blockType: 'analysis' | 'reporting' | 'stats' }) => Promise<void>;
+  checkContactBlocked?: (zaloContactId: string) => Promise<{ isBlocked: boolean; blockType?: string; reason?: string }>;
   onBulkHide?: (orderDetails: OrderDetail[], reason: string) => void;
   onHide?: (orderDetail: OrderDetail, reason: string) => void;
   onSearch?: (searchTerm: string) => void;
@@ -244,6 +245,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onBulkNotes,
   onAddToBlacklist,
   onAnalysisBlock,
+  checkContactBlocked,
   onBulkHide,
   onHide,
   onSearch,
@@ -916,9 +918,11 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         await onAnalysisBlock(analysisBlockDetail, data);
         withSkipClear(() => setIsAnalysisBlockModalOpen(false));
         setAnalysisBlockDetail(null);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error in analysis block confirmation:', error);
-        // Don't close modal on error
+        // Không re-throw error để tránh hiển thị ở nơi khác
+        // Error sẽ được xử lý trong AnalysisBlockModal
+        throw error; // Vẫn throw để modal có thể catch và hiển thị
       }
     }
   };
@@ -3472,6 +3476,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         onClose={handleAnalysisBlockCancel}
         onConfirm={handleAnalysisBlockConfirm}
         loading={loading}
+        checkContactBlocked={checkContactBlocked}
       />
 
       {/* Product Detail Modal */}
