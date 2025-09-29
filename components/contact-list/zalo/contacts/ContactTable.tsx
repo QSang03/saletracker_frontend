@@ -3,12 +3,15 @@ import React from "react";
 import { AutoReplyContact, ContactRole } from "@/types/auto-reply";
 import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
 import { useSalePersonas } from "@/hooks/contact-list/useSalePersonas";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { useTutorial } from "@/contexts/TutorialContext";
 import AllowedProductsModal from "./modals/AllowedProductsModal";
 import ContactKeywordsModal from "./modals/ContactKeywordsModal";
 import ContactProfileModal from "./modals/ContactProfileModal";
 import LogsDrawer from "./modals/LogsDrawer";
 import RenameContactModal from "./RenameContactModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import ContactTableTutorial from "./ContactTableTutorial";
 import {
   ServerResponseAlert,
   type AlertType,
@@ -48,7 +51,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
-import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { api } from "@/lib/api";
 import {
   Users,
@@ -96,8 +98,12 @@ export const ContactTable: React.FC<Props> = ({
   fetchContacts,
   } = useContactsPaginated();
   const { currentUser } = useCurrentUser();
+  const { isTutorialActive } = useTutorial();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
-  const controlsDisabled = zaloDisabled || !globalAutoReplyEnabled;
+  const controlsDisabled = (zaloDisabled || !globalAutoReplyEnabled) && !isTutorialActive;
+  
+  // Check if current user is admin
+  const isAdmin = currentUser?.roles?.some(role => role.name === 'admin') || false;
 
   // Personas for selection per contact
   const { personas, loading: personasLoading, fetchPersonas } = useSalePersonas(true);
@@ -148,6 +154,178 @@ export const ContactTable: React.FC<Props> = ({
     type: AlertType;
     message: string;
   } | null>(null);
+
+  // Bulk operations states
+  const [selectedContacts, setSelectedContacts] = React.useState<Set<number>>(new Set());
+  const [bulkOperation, setBulkOperation] = React.useState<string>("");
+  const [showBulkActions, setShowBulkActions] = React.useState(false);
+
+  // Bulk operations functions
+  const toggleContactSelection = (contactId: number) => {
+    setSelectedContacts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(contactId)) {
+        newSet.delete(contactId);
+      } else {
+        newSet.add(contactId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllContacts = () => {
+    setSelectedContacts(new Set(contacts.map(c => c.contactId)));
+  };
+
+  const selectAllValidContacts = () => {
+    // Only select contacts that have persona assigned
+    const validContactIds = contacts
+      .filter(c => c.assignedPersona)
+      .map(c => c.contactId);
+    setSelectedContacts(new Set(validContactIds));
+  };
+
+  const clearSelection = () => {
+    setSelectedContacts(new Set());
+  };
+
+  const handleExportData = async () => {
+    try {
+      const selectedContactsData = contacts.filter(c => selectedContacts.has(c.contactId));
+      
+      // Prepare data for export
+      const exportData = selectedContactsData.map((contact, index) => ({
+        'STT': index + 1,
+        'Tên liên hệ': contact.name || '',
+        'ID': contact.contactId || '',
+        'Zalo ID': `'${contact.zaloContactId || ''}`, // Force as text with leading quote
+        'Vai trò': contact.role === 'customer' ? 'Khách hàng' : (contact.role || ''),
+        'Persona': contact.assignedPersona?.name || 'Chưa chọn',
+        'Auto-Reply': contact.autoReplyOn ? 'Bật' : 'Tắt',
+        'Thời gian bật': contact.autoReplyEnabledAt ? new Date(contact.autoReplyEnabledAt).toLocaleString('vi-VN') : 'Chưa có',
+        'Thời gian tắt': contact.autoReplyDisabledAt ? new Date(contact.autoReplyDisabledAt).toLocaleString('vi-VN') : 'Chưa có',
+        'Tin nhắn cuối': contact.lastMessage ? parseLastMessage(contact.lastMessage).substring(0, 50) : 'Chưa có',
+        'Người sở hữu': contact.user?.username || 'N/A'
+      }));
+
+      // Create CSV content with proper escaping
+      const headers = Object.keys(exportData[0] || {});
+      const csvContent = [
+        headers.map(header => `"${header}"`).join(','),
+        ...exportData.map(row => 
+          headers.map(header => {
+            const value = row[header as keyof typeof row];
+            const stringValue = String(value || '');
+            
+            // Special handling for Zalo ID to preserve leading quote
+            if (header === 'Zalo ID' && stringValue.startsWith("'")) {
+              return stringValue; // Keep as-is with leading quote
+            }
+            
+            // For other fields, wrap in quotes and escape internal quotes
+            return `"${stringValue.replace(/"/g, '""')}"`;
+          }).join(',')
+        )
+      ].join('\n');
+
+      // Create and download file with UTF-8 BOM for proper Vietnamese encoding
+      const BOM = '\uFEFF';
+      const csvWithBOM = BOM + csvContent;
+      const blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `contacts_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setAlert({
+        type: "success",
+        message: `Đã xuất dữ liệu ${selectedContacts.size} liên hệ thành công`
+      });
+      clearSelection();
+    } catch (error: any) {
+      console.error("Error exporting data:", error);
+      setAlert({
+        type: "error",
+        message: "Lỗi khi xuất dữ liệu"
+      });
+    }
+  };
+
+  const handleBulkOperation = async (operation: string) => {
+    if (selectedContacts.size === 0) return;
+    
+    try {
+      const contactIds = Array.from(selectedContacts);
+      let enabled = false;
+      
+      if (operation.includes("Bật")) {
+        enabled = true;
+        
+        // Check if any selected contacts don't have persona assigned
+        const selectedContactsData = contacts.filter(c => selectedContacts.has(c.contactId));
+        const contactsWithoutPersona = selectedContactsData.filter(c => !c.assignedPersona);
+        
+        if (contactsWithoutPersona.length > 0) {
+          const contactNames = contactsWithoutPersona.map(c => c.name).join(", ");
+          setAlert({
+            type: "error",
+            message: `Không thể bật auto-reply cho ${contactsWithoutPersona.length} liên hệ chưa có persona: ${contactNames}. Vui lòng chọn persona trước.`
+          });
+          return;
+        }
+      } else if (operation.includes("Tắt")) {
+        enabled = false;
+      } else if (operation.includes("Xuất dữ liệu")) {
+        // Export selected contacts to Excel
+        await handleExportData();
+        return;
+      } else {
+        // For other operations, just show success message
+        setAlert({
+          type: "success",
+          message: `Đã thực hiện ${operation} cho ${selectedContacts.size} liên hệ`
+        });
+        clearSelection();
+        return;
+      }
+      
+      // Call API to toggle auto-reply for selected contacts
+      await api.patch("/auto-reply/contacts/auto-reply-bulk", {
+        contactIds,
+        enabled: enabled
+      }, {
+        params: {
+          userId: currentUser?.id
+        }
+      });
+      
+      // Refresh contacts list
+      await fetchContacts();
+      
+      setAlert({
+        type: "success",
+        message: `Đã ${enabled ? 'bật' : 'tắt'} auto-reply cho ${selectedContacts.size} liên hệ`
+      });
+      clearSelection();
+    } catch (error: any) {
+      console.error("Error in bulk operation:", error);
+      console.error("Error details:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          "Lỗi khi thực hiện thao tác hàng loạt";
+      
+      setAlert({
+        type: "error",
+        message: errorMessage
+      });
+    }
+  };
 
   // Function to parse and extract text from lastMessage JSON - FIXED TYPE
   const parseLastMessage = (lastMessage: string | null | undefined): string => {
@@ -349,7 +527,7 @@ export const ContactTable: React.FC<Props> = ({
 
   return (
     <TooltipProvider>
-      <div className="relative">
+      <div className="relative tutorial-container">
         {/* Decorative Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-purple-500/3 to-pink-500/3 rounded-2xl blur-lg"></div>
 
@@ -396,20 +574,33 @@ export const ContactTable: React.FC<Props> = ({
             /* Table Content - Only show when has data */
             <div className="overflow-x-auto">
               <div className="p-3">
-                <PaginatedTable
-                  enableSearch
-                  enablePageSize
-                  page={page}
-                  total={total}
-                  pageSize={pageSize}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                  onFilterChange={(f) => setSearch(f.search || "")}
-                  loading={loading}
-                >
-                  <Table>
+                <div className="filter-controls">
+                  <PaginatedTable
+                    enableSearch
+                    enablePageSize
+                    page={page}
+                    total={total}
+                    pageSize={pageSize}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                    onFilterChange={(f) => setSearch(f.search || "")}
+                    loading={loading}
+                  >
+                  <Table className="contact-table">
                     <TableHeader className="bg-gray-50/60 sticky top-0 z-10">
                       <TableRow className="border-b border-gray-200/50">
+                        {/* Checkbox Column */}
+                        <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-3 w-12">
+                          <div className="flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedContacts.size === contacts.length && contacts.length > 0}
+                              onChange={selectAllContacts}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </div>
+                        </TableHead>
+
                         {/* STT Column - Only Icon */}
                         <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-3 w-16">
                           <div className="flex items-center justify-center">
@@ -423,6 +614,14 @@ export const ContactTable: React.FC<Props> = ({
                             Tên liên hệ
                           </div>
                         </TableHead>
+                        {isAdmin && (
+                          <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <Building className="w-3 h-3" />
+                              Người sở hữu
+                            </div>
+                          </TableHead>
+                        )}
                         <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
                           <div className="flex items-center justify-center gap-2">
                             <UserPlus className="w-3 h-3" />
@@ -439,6 +638,12 @@ export const ContactTable: React.FC<Props> = ({
                           <div className="flex items-center justify-center gap-2">
                             <Activity className="w-3 h-3" />
                             Auto-Reply
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <Clock className="w-3 h-3" />
+                            Thời gian
                           </div>
                         </TableHead>
                         <TableHead className="font-semibold text-gray-700 text-xs h-12 px-4">
@@ -464,6 +669,16 @@ export const ContactTable: React.FC<Props> = ({
                             key={c.contactId}
                             className={getRowClassName(index)}
                           >
+                            {/* Checkbox Cell */}
+                            <TableCell className="text-center px-3 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedContacts.has(c.contactId)}
+                                onChange={() => toggleContactSelection(c.contactId)}
+                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                              />
+                            </TableCell>
+
                             {/* STT Cell */}
                             <TableCell className="text-center px-3 py-3">
                               <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
@@ -490,6 +705,27 @@ export const ContactTable: React.FC<Props> = ({
                                 </div>
                               </div>
                             </TableCell>
+                            
+                            {/* User column - only for admin */}
+                            {isAdmin && (
+                              <TableCell className="text-center px-4 py-3">
+                                <div className="flex items-center justify-center gap-2">
+                                  <div className="w-6 h-6 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center">
+                                    <span className="text-white font-semibold text-xs">
+                                      {c.user?.username?.charAt(0).toUpperCase() || 'U'}
+                                    </span>
+                                  </div>
+                                  <div className="text-left">
+                                    <div className="font-medium text-gray-900 text-xs">
+                                      {c.user?.username || 'Unknown'}
+                                    </div>
+                                    <div className="text-gray-500 text-xs">
+                                      ID: {c.user?.id || 'N/A'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            )}
 
                             <TableCell className="text-center px-4 py-3">
                               <Select
@@ -549,7 +785,7 @@ export const ContactTable: React.FC<Props> = ({
                                     val === "none" ? null : Number(val)
                                   )
                                 }
-                disabled={isRestrictedRole(c.role) || zaloDisabled}
+                disabled={isRestrictedRole(c.role) || (zaloDisabled && !isTutorialActive)}
                               >
                                 <SelectTrigger className="w-[180px] mx-auto h-8 rounded-lg border hover:border-purple-300 transition-colors duration-300">
                                   <SelectValue placeholder="Chọn persona">
@@ -589,11 +825,11 @@ export const ContactTable: React.FC<Props> = ({
                                       )}
                                       <Switch
                                         checked={c.autoReplyOn}
-                                        disabled={
-                                          controlsDisabled ||
-                                          !c.assignedPersona?.personaId ||
-                                          isRestrictedRole(c.role)
-                                        }
+                                      disabled={
+                                        (controlsDisabled && !isTutorialActive) ||
+                                        (!c.assignedPersona?.personaId && !isTutorialActive) ||
+                                        isRestrictedRole(c.role)
+                                      }
                                         onCheckedChange={(v) =>
                                           handleToggleAutoReply(
                                             c.contactId,
@@ -626,6 +862,48 @@ export const ContactTable: React.FC<Props> = ({
                                     )}
                                   </TooltipContent>
                                 </Tooltip>
+                              </div>
+                            </TableCell>
+
+                            {/* Thời gian bật/tắt Auto-Reply */}
+                            <TableCell className="text-center px-4 py-3">
+                              <div className="flex flex-col items-center gap-1">
+                                {c.autoReplyOn ? (
+                                  <div className="flex items-center gap-1 text-green-600">
+                                    <Clock className="w-3 h-3" />
+                                    <span className="text-xs font-medium">Bật</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-gray-500">
+                                    <Clock className="w-3 h-3" />
+                                    <span className="text-xs font-medium">Tắt</span>
+                                  </div>
+                                )}
+                                <div className="text-xs text-gray-500">
+                                  {c.autoReplyOn && c.autoReplyEnabledAt ? (
+                                    <div>
+                                      {new Date(c.autoReplyEnabledAt).toLocaleDateString('vi-VN', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </div>
+                                  ) : c.autoReplyDisabledAt ? (
+                                    <div>
+                                      {new Date(c.autoReplyDisabledAt).toLocaleDateString('vi-VN', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="text-gray-400">Chưa có</div>
+                                  )}
+                                </div>
                               </div>
                             </TableCell>
 
@@ -700,7 +978,7 @@ export const ContactTable: React.FC<Props> = ({
                             </TableCell>
 
                             {/* Dropdown Actions */}
-                            <TableCell className="px-4 py-3">
+                            <TableCell className="px-4 py-3 ht">
                               <div className="flex justify-center">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -713,10 +991,10 @@ export const ContactTable: React.FC<Props> = ({
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent
                                     align="end"
-                                    className="w-56 rounded-xl shadow-xl border-0 bg-white/95 backdrop-blur-sm"
+                                    className="w-56 rounded-xl shadow-xl border-0 bg-white/95 backdrop-blur-sm modal-tabs"
                                   >
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled || isRestrictedRole(c.role)}
+                                      disabled={(zaloDisabled && !isTutorialActive) || isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForProducts(c.contactId)
                                       }
@@ -736,7 +1014,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </DropdownMenuItem>
 
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled || isRestrictedRole(c.role)}
+                                      disabled={(zaloDisabled && !isTutorialActive) || isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForKeywords(c.contactId)
                                       }
@@ -756,7 +1034,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </DropdownMenuItem>
 
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled || isRestrictedRole(c.role)}
+                                      disabled={(zaloDisabled && !isTutorialActive) || isRestrictedRole(c.role)}
                                       onClick={() =>
                                         setContactIdForProfile(c.contactId)
                                       }
@@ -798,7 +1076,7 @@ export const ContactTable: React.FC<Props> = ({
                                     <div className="h-px bg-gray-200 my-1"></div>
 
                                     <DropdownMenuItem
-                                      disabled={zaloDisabled}
+                                      disabled={zaloDisabled && !isTutorialActive}
                                       onClick={() =>
                                         setContactForRename({
                                           id: c.contactId,
@@ -828,11 +1106,73 @@ export const ContactTable: React.FC<Props> = ({
                       })}
                     </TableBody>
                   </Table>
-                </PaginatedTable>
+                  </PaginatedTable>
+                </div>
               </div>
             </div>
           )}
         </div>
+
+        {/* Bulk Actions Bar */}
+        {selectedContacts.size > 0 && (
+          <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 bulk-actions">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-gray-700">
+                  Đã chọn {selectedContacts.size} liên hệ
+                </span>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectAllValidContacts}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                >
+                  Chọn tất cả hợp lệ
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBulkOperation("Bật auto-reply")}
+                  className="text-green-600 border-green-300 hover:bg-green-50"
+                  disabled={Array.from(selectedContacts).some(id => {
+                    const contact = contacts.find(c => c.contactId === id);
+                    return !contact?.assignedPersona;
+                  })}
+                >
+                  Bật auto-reply
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBulkOperation("Tắt auto-reply")}
+                  className="text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  Tắt auto-reply
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleBulkOperation("Xuất dữ liệu")}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                >
+                  Xuất dữ liệu
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearSelection}
+                  className="text-gray-600 border-gray-300 hover:bg-gray-50"
+                >
+                  Bỏ chọn
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modals */}
         {contactIdForProducts !== null && (
@@ -945,9 +1285,12 @@ export const ContactTable: React.FC<Props> = ({
             onClose={() => setAlert(null)}
           />
         )}
-      </div>
-    </TooltipProvider>
-  );
-};
+        </div>
+
+        {/* Tutorial Component */}
+        <ContactTableTutorial />
+      </TooltipProvider>
+    );
+  };
 
 export default ContactTable;

@@ -51,6 +51,7 @@ export default function ContactProfileModal({
   const [validationErrors, setValidationErrors] = useState<{
     [key: string]: string;
   }>({});
+  const [showTonePresets, setShowTonePresets] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -138,6 +139,45 @@ export default function ContactProfileModal({
     if (validationErrors[field]) {
       setValidationErrors((prev) => ({ ...prev, [field]: "" }));
     }
+  };
+
+  // Tone presets data
+  const tonePresets = [
+    {
+      key: "vip",
+      name: "VIP",
+      description: "Khách hàng VIP, ưu tiên dịch vụ cao cấp",
+      hint: "rất lịch sự; tối đa 2 lựa chọn chất lượng cao; hạn chế hỏi nhiều; ưu tiên premium & dịch vụ; gợi ý giữ hàng/đặt cọc nhẹ; không nói chuyện mặc cả."
+    },
+    {
+      key: "đàm-phán",
+      name: "Đàm phán",
+      description: "Khách hàng thích mặc cả, đàm phán giá",
+      hint: "nêu giá và chênh lệch ngắn gọn; so sánh 2 mẫu sát nhau; mở câu 'để em xin hỗ trợ thêm cho mình' nhưng không hứa trước; hỏi 'mức mong muốn khoảng bao nhiêu?'; chừa đường chốt."
+    },
+    {
+      key: "kỹ-thuật",
+      name: "Kỹ thuật",
+      description: "Khách hàng quan tâm đến thông số kỹ thuật",
+      hint: "giọng trung tính; thông số cô đọng (3–5 key specs); không emoji; kèm lý do chọn theo case-use; tránh mỹ từ."
+    },
+    {
+      key: "bận-rộn",
+      name: "Bận rộn",
+      description: "Khách hàng không có nhiều thời gian",
+      hint: "1 lựa chọn 'đáng mua nhất' + 1 phương án dự phòng; bullet 2–4 dòng; CTA chốt nhanh; không hỏi lan man."
+    },
+    {
+      key: "chốt-nhanh",
+      name: "Chốt nhanh",
+      description: "Khách hàng sẵn sàng mua ngay",
+      hint: "giả định khách sẵn sàng mua; ưu tiên tồn kho sẵn; hỏi thẳng thông tin nhận hàng/TT; đề nghị giữ hàng hoặc đặt cọc ngay."
+    }
+  ];
+
+  const applyTonePreset = (preset: typeof tonePresets[0]) => {
+    setForm((prev) => ({ ...prev, toneHints: preset.hint }));
+    setShowTonePresets(false);
   };
 
   if (!open) return null;
@@ -328,16 +368,29 @@ export default function ContactProfileModal({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
               >
-                <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                  <MessageSquare className="w-4 h-4" />
-                  Gợi ý giọng điệu
-                  <div className="relative group">
-                    <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                      Hướng dẫn AI cách giao tiếp với khách hàng này
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Gợi ý giọng điệu
+                    <div className="relative group">
+                      <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        Hướng dẫn AI cách giao tiếp với khách hàng này
+                      </div>
                     </div>
-                  </div>
-                </Label>
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTonePresets(true)}
+                    disabled={zaloDisabled}
+                    className="text-xs px-3 py-1 h-7"
+                  >
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    Presets
+                  </Button>
+                </div>
                 <Textarea
                   disabled={zaloDisabled}
                   className={cn(
@@ -515,6 +568,104 @@ export default function ContactProfileModal({
           </div>
         </div>
       </div>
+
+      {/* Tone Presets Modal */}
+      {showTonePresets && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1001] p-4">
+          <div className="relative !max-w-2xl w-full !max-h-[80vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl rounded-xl">
+            {/* Header */}
+            <div className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                    <Sparkles className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-gray-800">
+                      Preset Giọng điệu
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Chọn preset phù hợp với loại khách hàng
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTonePresets(false)}
+                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-4">
+                {tonePresets.map((preset, index) => (
+                  <motion.div
+                    key={preset.key}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-md transition-all duration-300 cursor-pointer group"
+                    onClick={() => applyTonePreset(preset)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge
+                            variant="secondary"
+                            className="bg-purple-100 text-purple-700 border-purple-200"
+                          >
+                            {preset.name}
+                          </Badge>
+                          <span className="text-sm text-gray-600">
+                            {preset.description}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded border font-mono">
+                          {preset.hint}
+                        </div>
+                      </div>
+                      <div className="ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                          <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Usage Instructions */}
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="text-sm font-medium text-blue-700 mb-2 flex items-center gap-2">
+                  <Info className="w-4 h-4" />
+                  Hướng dẫn sử dụng
+                </div>
+                <div className="text-xs text-blue-600 space-y-1">
+                  <div>• <strong>Kết hợp:</strong> Có thể kết hợp 2 preset, ví dụ: "kỹ-thuật, bận-rộn"</div>
+                  <div>• <strong>Tùy chỉnh:</strong> Sau khi chọn preset, bạn có thể chỉnh sửa thêm</div>
+                  <div>• <strong>Lưu ý:</strong> AI sẽ điều chỉnh cách giao tiếp theo gợi ý này</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 bg-white border-t border-gray-200 p-4">
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTonePresets(false)}
+                  className="bg-white hover:bg-gray-50 border-gray-300"
+                >
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

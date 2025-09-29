@@ -1390,10 +1390,10 @@ export default function PaginatedTable({
         controlsOnly ? "" : "h-full min-h-[500px]"
       }`}
     >
-      <div className="mb-4">
+      <div className="mb-4 tutorial-filter-controls tutorial-filter-section">
         <div className="grid grid-cols-6 gap-3">
           {enableSearch && (
-            <div className="min-w-0 w-full">
+            <div className="min-w-0 w-full tutorial-search-input">
               <div>
                 <Input
                   className={`min-w-0 w-full ${filterClassNames.search ?? ""}`}
@@ -1529,9 +1529,10 @@ export default function PaginatedTable({
           )}
           {((enableCategoriesFilter && availableCategories.length > 0) || 
             enableCategoriesFilterForViewRole) && (
-            <MultiSelectCombobox
-              className={`min-w-0 w-full ${filterClassNames.categories ?? ""}`}
-              placeholder={isLoadingCategoriesForView ? "Đang tải danh mục..." : "Danh mục"}
+            <div className="min-w-0 w-full tutorial-category-dropdown">
+              <MultiSelectCombobox
+                className={`min-w-0 w-full ${filterClassNames.categories ?? ""}`}
+                placeholder={isLoadingCategoriesForView ? "Đang tải danh mục..." : "Danh mục"}
               value={filters.categories}
               options={enableCategoriesFilterForViewRole ? 
                 allCategoriesForView : 
@@ -1539,6 +1540,7 @@ export default function PaginatedTable({
               }
               onChange={handleCategoriesChange}
             />
+            </div>
           )}
           {((enableBrandsFilter && availableBrands.length > 0) || 
             enableBrandsFilterForViewRole) && (
@@ -1757,7 +1759,7 @@ export default function PaginatedTable({
           )}
           {/* Số dòng/trang nằm ngang hàng filter */}
           {enablePageSize && (
-            <div className="flex gap-2 min-w-0 w-full">
+            <div className="flex gap-2 min-w-0 w-full tutorial-page-size">
               <select
                 className="min-w-0 w-3/5 border rounded px-2 py-1 text-sm bg-white"
                 value={currentPageSize}
@@ -1808,7 +1810,7 @@ export default function PaginatedTable({
             </div>
           )}
           {/* Nút Xuất và Xoá filter chia đôi 1 cột */}
-          <div className="flex gap-2 min-w-0 w-full">
+          <div className="flex gap-2 min-w-0 w-full tutorial-clear-filter">
             {canExport && getExportData && (
               <Button
                 variant="export"

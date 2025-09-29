@@ -332,7 +332,7 @@ export default function KeywordsAccordionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="!max-w-[65vw] h-[80vh] flex flex-col">
+      <DialogContent className="!max-w-[65vw] h-[80vh] flex flex-col tutorial-keywords-accordion-dialog">
         {/* Header */}
         <DialogHeader className="flex-shrink-0 pb-3 pr-5">
           <DialogTitle className="flex items-center justify-between">
@@ -401,7 +401,7 @@ export default function KeywordsAccordionDialog({
         <div className="flex-1 overflow-hidden flex gap-4">
           {/* Keywords Sidebar */}
           <div className="w-72 flex-shrink-0 bg-slate-50 rounded-lg border overflow-y-auto">
-            <div className="p-3 space-y-1">
+            <div className="p-3 space-y-1 tutorial-keywords-list-sidebar">
               {filteredKeywords.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
                   <Key className="w-8 h-8 mx-auto mb-2 opacity-50" />

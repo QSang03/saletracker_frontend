@@ -30,6 +30,7 @@ import { ChangePasswordModal } from "@/components/auth/ChangePasswordModal";
 import { SocketPortal } from "@/components/socket/SocketPortal";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { ViewRoleGuard } from "@/components/common/ViewRoleGuard";
+import { TutorialProvider } from "@/contexts/TutorialContext";
 
 export default function DashboardLayout({
   children,
@@ -160,9 +161,10 @@ export default function DashboardLayout({
   };
 
   return (
-    <SidebarProvider>
-      <SocketPortal />
-      {currentUser && (
+    <TutorialProvider>
+      <SidebarProvider>
+        <SocketPortal />
+        {currentUser && (
         <LoginSocket
           userId={currentUser.id}
           onBlocked={() => {
@@ -238,6 +240,7 @@ export default function DashboardLayout({
           </div>
         </SidebarInset>
         <ZaloLinkStatusChecker />
-    </SidebarProvider>
+      </SidebarProvider>
+    </TutorialProvider>
   );
 }

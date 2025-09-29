@@ -102,10 +102,62 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const [loading, setLoading] = useState(true);
   const [totalItems, setTotalItems] = useState(0);
   const [exportLoading, setExportLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState(() => {
+    // ✅ Restore search term từ localStorage ngay khi component mount (giống useOrders)
+    if (typeof window === "undefined") return "";
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.search || "";
+      }
+    } catch (e) {
+      // ignore
+    }
+    return "";
+  });
+  const [statusFilter, setStatusFilter] = useState(() => {
+    // ✅ Restore status filter từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return "all";
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.status && parsed.status.length > 0 ? parsed.status : "all";
+      }
+    } catch (e) {
+      // ignore
+    }
+    return "all";
+  });
+  const [dateFilter, setDateFilter] = useState(() => {
+    // ✅ Restore date filter từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return "all";
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.date || "all";
+      }
+    } catch (e) {
+      // ignore
+    }
+    return "all";
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    // ✅ Restore current page từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return 1;
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.page || 1;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 1;
+  });
   const [totalPages, setTotalPages] = useState(1);
   const [dateRangeState, setDateRangeState] = useState<{
     start?: string;
@@ -626,25 +678,14 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   useEffect(() => {
     if (typeof window === "undefined") return;
     
-    // Wait for filter options to be loaded before applying stored filters
-    if (!filtersLoaded) return;
-    
-    const stored = getPmFiltersFromStorage();
-    if (stored) {
-      // prefer stored filters and do not reset
-      applyPmFilters(stored, true);
-      window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-      setFiltersRestored(true); // Mark that filters have been restored
-    } else {
-      const state = window.history.state as any;
-      if (!state || !state.pmFilters) {
-        const pmFilters = getCurrentPmFilters();
-        window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-        // Không lưu vào localStorage khi không có stored filters
-      }
-      setFiltersRestored(true); // Mark that initialization is complete
+    // ✅ Chỉ cần set history state, filters đã được restore trong useState initializer
+    const state = window.history.state as any;
+    if (!state || !state.pmFilters) {
+      const pmFilters = getCurrentPmFilters();
+      window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
     }
-  }, [filtersLoaded]);
+    setFiltersRestored(true); // Mark that initialization is complete
+  }, []); // ✅ Chạy ngay khi component mount
 
   // Handle browser back/forward to restore filters like Order management
   useEffect(() => {
@@ -734,11 +775,19 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
     const updatedFilters = { ...currentFilters, search: customerName.trim(), page: 1 };
     savePmFiltersToStorage(updatedFilters);
     
-    // ✅ Trigger fetch data ngay lập tức để search realtime
+    // ✅ Trigger fetch data ngay lập tức để search realtime - sử dụng exact match
+    const exactSearchTerm = `"${customerName.trim()}"`;
+    
+    // ✅ Force fetch ngay lập tức để bypass debounce - sử dụng clearTimeout để bypass debounce
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+      fetchTimeoutRef.current = null;
+    }
+    
     fetchOrders({
       page: 1,
       pageSize: pageSize,
-      search: customerName.trim(),
+      search: exactSearchTerm,
       status: statusFilter === 'all' ? '' : statusFilter,
       date: dateFilter === 'all' || dateFilter === 'custom' ? '' : dateFilter,
       dateRange: dateRangeState?.start && dateRangeState?.end ? dateRangeState as { start: string; end: string } : undefined,

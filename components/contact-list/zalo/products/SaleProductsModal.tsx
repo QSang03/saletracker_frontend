@@ -43,6 +43,8 @@ import {
   Save,
   Zap,
   Crown,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
@@ -95,6 +97,12 @@ export default function SaleProductsModal({
   );
   const [applyAllContacts, setApplyAllContacts] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStatus, setImportStatus] = useState("");
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [alert, setAlert] = useState<{
     type: AlertType;
@@ -201,6 +209,7 @@ export default function SaleProductsModal({
   const save = async () => {
     if (zaloDisabled) return;
     try {
+      setSaving(true);
       const selectedProductIds = Array.from(selectedProducts);
       const userId = currentUser?.id;
       if (!userId) throw new Error("Thiếu userId");
@@ -304,30 +313,127 @@ export default function SaleProductsModal({
       const msg =
         err?.response?.data?.message || err?.message || "Lỗi khi lưu cấu hình";
       setAlert({ type: "error", message: String(msg) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const validateFile = (file: File): string[] => {
+    const errors: string[] = [];
+    
+    // Kiểm tra loại file
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      errors.push("Chỉ chấp nhận file Excel (.xlsx, .xls)");
+    }
+    
+    // Kiểm tra kích thước file (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      errors.push("Kích thước file không được vượt quá 10MB");
+    }
+    
+    return errors;
+  };
+
+  const onPreview = async (file: File) => {
+    try {
+      setImporting(true);
+      setImportStatus("Đang xem trước dữ liệu...");
+      
+      const form = new FormData();
+      form.append("file", file);
+      
+      const response = await api.post("auto-reply/products/preview", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      
+      setPreviewData(response.data.data || []);
+      setShowPreview(true);
+      setValidationErrors(response.data.errors || []);
+      
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Lỗi khi xem trước dữ liệu";
+      setAlert({ type: "error", message: String(msg) });
+    } finally {
+      setImporting(false);
+      setImportStatus("");
     }
   };
 
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Validate file trước khi import
+    const errors = validateFile(file);
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      setAlert({ type: "error", message: errors.join(", ") });
+      e.target.value = "";
+      return;
+    }
+    
+    // Show preview first
+    await onPreview(file);
+    e.target.value = "";
+  };
+
+  const onConfirmImport = async () => {
+    if (!previewData.length) return;
+    
     try {
       setImporting(true);
+      setImportProgress(0);
+      setImportStatus("Đang chuẩn bị file...");
+      setValidationErrors([]);
+      
+      // Re-upload file for import
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (!fileInput?.files?.[0]) {
+        setAlert({ type: "error", message: "Không tìm thấy file để import" });
+        return;
+      }
+      
       const form = new FormData();
-      form.append("file", file);
-      await api.post("auto-reply/products/import", form, {
+      form.append("file", fileInput.files[0]);
+      
+      setImportProgress(20);
+      setImportStatus("Đang gửi file lên server...");
+      
+      const response = await api.post("auto-reply/products/import", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
+      
+      setImportProgress(60);
+      setImportStatus("Đang xử lý dữ liệu...");
+      
       await fetchProducts();
-      setAlert({ type: "success", message: "Đã nhập Excel sản phẩm" });
-      e.target.value = "";
+      
+      setImportProgress(100);
+      setImportStatus("Hoàn thành!");
+      
+      // Hiển thị kết quả import
+      const result = response.data;
+      const message = `Đã nhập thành công: ${result.created} sản phẩm mới, ${result.updated} sản phẩm cập nhật`;
+      setAlert({ type: "success", message });
+      
+      setShowPreview(false);
+      setPreviewData([]);
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ||
         err?.message ||
         "Lỗi khi nhập Excel sản phẩm";
       setAlert({ type: "error", message: String(msg) });
+      setImportStatus("Lỗi: " + msg);
     } finally {
       setImporting(false);
+      setTimeout(() => {
+        setImportProgress(0);
+        setImportStatus("");
+      }, 2000);
     }
   };
 
@@ -339,7 +445,7 @@ export default function SaleProductsModal({
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-purple-500/3 to-pink-500/3 pointer-events-none"></div>
 
           {/* Fixed Header - Compact */}
-          <DialogHeader className="relative pb-3 flex-shrink-0">
+          <DialogHeader className="relative pb-3 flex-shrink-0 tutorial-products-modal-header">
             <div className="flex items-center gap-3 mb-2">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl blur-sm opacity-40 animate-pulse"></div>
@@ -368,7 +474,7 @@ export default function SaleProductsModal({
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-500/8 to-red-500/8 rounded-2xl blur-lg group-hover:blur-xl transition-all duration-500"></div>
                   <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl overflow-hidden">
                     {/* Header - Compact */}
-                    <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3">
+                    <div className="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-3 tutorial-products-header">
                       <div className="flex items-center gap-2">
                         <ShoppingCart className="w-4 h-4 text-white" />
                         <span className="font-semibold text-white text-sm">
@@ -380,16 +486,81 @@ export default function SaleProductsModal({
                               {total} sản phẩm
                             </span>
                           </div>
-                          <label className="relative inline-flex items-center px-2 py-1 rounded-full bg-white/90 text-orange-600 text-xs font-semibold shadow cursor-pointer hover:shadow-md transition-all">
-                            <input
-                              type="file"
-                              accept=".xlsx,.xls"
-                              className="sr-only"
-                              onChange={onImport}
-                              disabled={importing || zaloDisabled}
-                            />
-                            <span>{importing ? "Nhập..." : "Excel"}</span>
-                          </label>
+                          <div className="flex gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <label className="relative inline-flex items-center px-2 py-1 rounded-full bg-white/90 text-orange-600 text-xs font-semibold shadow cursor-pointer hover:shadow-md transition-all hover:bg-orange-50 tutorial-excel-button">
+                                  <input
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    className="sr-only"
+                                    onChange={onImport}
+                                    disabled={importing || zaloDisabled}
+                                  />
+                                  <span>{importing ? "⏳ Nhập..." : "📊 Excel"}</span>
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Nhập sản phẩm từ file Excel</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => {
+                                    const link = document.createElement('a');
+                                    link.href = '/templates/products-template.xlsx';
+                                    link.download = 'products-template.xlsx';
+                                    link.click();
+                                  }}
+                                  className="inline-flex items-center px-2 py-1 rounded-full bg-white/90 text-blue-600 text-xs font-semibold shadow cursor-pointer hover:shadow-md transition-all hover:bg-blue-50 tutorial-template-button"
+                                  disabled={importing || zaloDisabled}
+                                >
+                                  <span>📥 Mẫu</span>
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Tải file mẫu Excel</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          
+                          {/* Import Progress */}
+                          {importing && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-orange-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-sm font-medium text-gray-700">{importStatus}</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${importProgress}%` }}
+                                ></div>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1 text-center">
+                                {importProgress}% hoàn thành
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Validation Errors */}
+                          {validationErrors.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-red-50 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-red-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="w-4 h-4 text-red-500">⚠️</div>
+                                <span className="text-sm font-medium text-red-700">Lỗi validation</span>
+                              </div>
+                              <div className="space-y-1">
+                                {validationErrors.map((error, index) => (
+                                  <div key={index} className="text-xs text-red-600">
+                                    • {error}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -416,17 +587,25 @@ export default function SaleProductsModal({
                               setBrandFilters(f.brands.map(String));
                           }}
                         >
-                          <Table>
+                          <div className="tutorial-products-table-wrapper max-h-80 overflow-hidden">
+                            <Table className="tutorial-products-table">
                             <TableHeader className="bg-gray-50/60 sticky top-0 z-10">
                               <TableRow className="border-b border-gray-200/50">
                                 <TableHead className="text-center w-12 h-10">
                                   {/* 🎯 Select All Checkbox cho Products */}
-                                  <Checkbox
-                                    checked={allProductsSelected}
-                                    onCheckedChange={toggleAllProducts}
-                                    disabled={zaloDisabled}
-                                    className="data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500 w-3 h-3"
-                                  />
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Checkbox
+                                        checked={allProductsSelected}
+                                        onCheckedChange={toggleAllProducts}
+                                        disabled={zaloDisabled}
+                                        className="data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500 w-4 h-4"
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{allProductsSelected ? "Bỏ chọn tất cả" : "Chọn tất cả sản phẩm"}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </TableHead>
                                 <TableHead className="font-semibold text-gray-700 text-xs h-10">
                                   <div className="flex items-center gap-1">
@@ -527,6 +706,7 @@ export default function SaleProductsModal({
                                 ))}
                             </TableBody>
                           </Table>
+                          </div>
                         </PaginatedTable>
                       </div>
                     </div>
@@ -536,7 +716,7 @@ export default function SaleProductsModal({
                 {/* Contacts Section */}
                 <div className="relative group">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/8 to-purple-500/8 rounded-2xl blur-lg group-hover:blur-xl transition-all duration-500"></div>
-                  <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl overflow-hidden">
+                  <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl overflow-hidden tutorial-apply-section">
                     {/* Header - Compact */}
                     <div className="bg-gradient-to-r from-blue-500 to-purple-500 px-4 py-3">
                       <div className="flex items-center justify-between">
@@ -587,12 +767,19 @@ export default function SaleProductsModal({
                                 <TableRow className="border-b border-gray-200/50">
                                   <TableHead className="text-center w-12 h-10">
                                     {/* 🎯 Select All Checkbox cho Contacts (current page) */}
-                                    <Checkbox
-                                      checked={allContactsSelected}
-                                      onCheckedChange={toggleAllContacts}
-                                      disabled={zaloDisabled}
-                                      className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-3 h-3"
-                                    />
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Checkbox
+                                          checked={allContactsSelected}
+                                          onCheckedChange={toggleAllContacts}
+                                          disabled={zaloDisabled}
+                                          className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-4 h-4"
+                                        />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>{allContactsSelected ? "Bỏ chọn tất cả" : "Chọn tất cả khách hàng"}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   <TableHead className="font-semibold text-gray-700 text-xs h-10">
                                     Tên liên hệ
@@ -673,24 +860,40 @@ export default function SaleProductsModal({
               {/* Floating Stats - Compact */}
               <div className="flex justify-center gap-3 my-4">
                 <div className="bg-white/85 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60">
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-xs bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
                     <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                     <span className="text-gray-600">Đã chọn</span>
                     <span className="font-bold text-orange-600">
                       {selectedProducts.size}
                     </span>
                     <span className="text-gray-600">sản phẩm</span>
+                    {selectedProducts.size > 0 && (
+                      <button
+                        onClick={() => setSelectedProducts(new Set())}
+                        className="text-orange-500 hover:text-orange-600 text-xs underline"
+                      >
+                        Bỏ chọn
+                      </button>
+                    )}
                   </div>
                 </div>
                 {!applyAllContacts && (
                   <div className="bg-white/85 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60">
-                    <div className="flex items-center gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-xs bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                       <span className="text-gray-600">Đã chọn</span>
                       <span className="font-bold text-blue-600">
                         {selectedContacts.size}
                       </span>
                       <span className="text-gray-600">liên hệ</span>
+                      {selectedContacts.size > 0 && (
+                        <button
+                          onClick={() => setSelectedContacts(new Set())}
+                          className="text-blue-500 hover:text-blue-600 text-xs underline"
+                        >
+                          Bỏ chọn
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -712,13 +915,17 @@ export default function SaleProductsModal({
                 </span>
               </Button>
               <Button
-                disabled={zaloDisabled}
+                disabled={saving || zaloDisabled}
                 onClick={() => setConfirmOpen(true)}
-                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 group px-6 py-2 h-10 text-xs rounded-lg"
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 group px-6 py-2 h-10 text-xs rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="flex items-center gap-2">
-                  <Save className="w-3 h-3 mr-2 group-hover:scale-110 transition-transform duration-300" />
-                  Lưu cấu hình
+                  {saving ? (
+                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Save className="w-3 h-3 mr-2 group-hover:scale-110 transition-transform duration-300" />
+                  )}
+                  {saving ? "Đang lưu..." : "Lưu cấu hình"}
                 </span>
               </Button>
             </div>
@@ -745,6 +952,166 @@ export default function SaleProductsModal({
               message={alert.message}
               onClose={() => setAlert(null)}
             />
+          )}
+
+          {/* Preview Modal */}
+          {showPreview && (
+            <Dialog open={showPreview} onOpenChange={setShowPreview}>
+              <DialogContent className="!max-w-6xl !max-h-[90vh] !h-[90vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl">
+                {/* Header */}
+                <DialogHeader className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
+                  <DialogTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg">
+                        <Package className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-800">Xem trước dữ liệu</h2>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {previewData.length} sản phẩm được tìm thấy
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                        {previewData.filter(item => item.isValid !== false).length} hợp lệ
+                      </div>
+                      {validationErrors.length > 0 && (
+                        <div className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                          {validationErrors.length} lỗi
+                        </div>
+                      )}
+                    </div>
+                  </DialogTitle>
+                </DialogHeader>
+                
+                {/* Content */}
+                <div className="flex-1 flex flex-col overflow-hidden p-6">
+                  {/* Validation Errors */}
+                  {validationErrors.length > 0 && (
+                    <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle className="w-5 h-5 text-red-500" />
+                        <span className="font-medium text-red-700">Lỗi validation</span>
+                      </div>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {validationErrors.map((error, index) => (
+                          <div key={index} className="text-sm text-red-600 flex items-start gap-2">
+                            <span className="text-red-400 mt-0.5">•</span>
+                            <span>{error}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview Table */}
+                  <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden bg-white">
+                    <div className="h-full overflow-y-auto">
+                      <Table>
+                        <TableHeader className="bg-gray-50 sticky top-0 z-10">
+                          <TableRow>
+                            <TableHead className="w-16 text-center font-semibold">Dòng</TableHead>
+                            <TableHead className="w-32 font-semibold">Mã SP</TableHead>
+                            <TableHead className="min-w-80 font-semibold">Tên SP</TableHead>
+                            <TableHead className="w-24 font-semibold">Thương hiệu</TableHead>
+                            <TableHead className="w-24 font-semibold">Nhóm hàng</TableHead>
+                            <TableHead className="w-20 text-center font-semibold">Trạng thái</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {previewData.map((item, index) => (
+                            <TableRow 
+                              key={index} 
+                              className={`hover:bg-gray-50 transition-colors ${
+                                item.isValid === false ? "bg-red-50" : ""
+                              }`}
+                            >
+                              <TableCell className="text-center font-mono text-sm text-gray-600">
+                                {item.row}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                <div className="max-w-32 truncate" title={item.code || item.MaHH}>
+                                  {item.code || item.MaHH}
+                                </div>
+                              </TableCell>
+                              <TableCell className="max-w-80">
+                                <div 
+                                  className="truncate font-medium" 
+                                  title={item.name || item.TenHH}
+                                >
+                                  {item.name || item.TenHH}
+                                </div>
+                              </TableCell>
+                              <TableCell className="max-w-24 truncate text-gray-600">
+                                {item.brand || item.NhanHang}
+                              </TableCell>
+                              <TableCell className="max-w-24 truncate text-gray-600">
+                                {item.cate || item.NhomHang}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {item.isValid !== false ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                                    <Check className="w-3 h-3" />
+                                    Hợp lệ
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">
+                                    <X className="w-3 h-3" />
+                                    Lỗi
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <DialogFooter className="flex-shrink-0 bg-gray-50 border-t border-gray-200 p-6">
+                  <div className="flex items-center justify-between w-full">
+                    <div className="text-sm text-gray-500">
+                      Tổng: {previewData.length} sản phẩm • 
+                      Hợp lệ: {previewData.filter(item => item.isValid !== false).length} • 
+                      Lỗi: {previewData.filter(item => item.isValid === false).length}
+                    </div>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowPreview(false);
+                          setPreviewData([]);
+                          setValidationErrors([]);
+                        }}
+                        className="px-6"
+                      >
+                        Hủy
+                      </Button>
+                      <Button
+                        onClick={onConfirmImport}
+                        disabled={importing || validationErrors.length > 0}
+                        className="bg-green-600 hover:bg-green-700 text-white px-6"
+                      >
+                        {importing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Đang import...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4 mr-2" />
+                            Xác nhận import
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
 
           {/* Decorative Elements - Smaller */}

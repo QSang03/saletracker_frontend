@@ -91,6 +91,7 @@ interface UseOrdersReturn {
 
   // Actions
   refetch: () => Promise<void>;
+  forceFetch: () => Promise<void>; // ✅ Thêm forceFetch để bypass debounce
   resetFilters: () => void;
   getFilterOptions: () => Promise<{ departments: any[]; products: any[] }>;
 
@@ -1047,6 +1048,35 @@ export const useOrders = (options?: {
       setIsFetching(false);
     }
   }, [filters, fetchOrdersInternal, isFetching]);
+
+  // ✅ Force fetch function để bypass debounce - dùng cho double-click customer name
+  const forceFetch = useCallback(async () => {
+    // Clear any existing timeout để bypass debounce
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+      fetchTimeoutRef.current = null;
+    }
+
+    // Abort any existing fetch
+    if (fetchAbortControllerRef.current) {
+      fetchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    fetchAbortControllerRef.current = new AbortController();
+
+    setIsFetching(true);
+    try {
+      await fetchOrdersInternal(filters);
+    } catch (error) {
+      if (error instanceof Error && error.name !== "AbortError") {
+        console.error("❌ Force fetch failed:", error);
+      }
+    } finally {
+      setIsFetching(false);
+      fetchAbortControllerRef.current = null;
+    }
+  }, [filters, fetchOrdersInternal]);
 
   const getFilterOptions = useCallback(async (): Promise<{
     departments: any[];
@@ -2239,6 +2269,7 @@ export const useOrders = (options?: {
 
     // Actions
     refetch,
+    forceFetch, // ✅ Thêm forceFetch để bypass debounce
     resetFilters, // ✅ Đã update để clear localStorage
     getFilterOptions,
     setSortOptions,

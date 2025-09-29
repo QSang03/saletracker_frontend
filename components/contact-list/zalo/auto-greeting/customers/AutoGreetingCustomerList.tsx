@@ -90,7 +90,6 @@ const AutoGreetingCustomerList: React.FC<
     );
   };
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [recentlyImportedIds, setRecentlyImportedIds] = useState<Set<string>>(
@@ -114,6 +113,10 @@ const AutoGreetingCustomerList: React.FC<
   const [refreshKey, setRefreshKey] = useState(0);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
+  
+  // Backend pagination states
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   // Edit customer states
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -188,103 +191,31 @@ const AutoGreetingCustomerList: React.FC<
     loadSystemConfig();
   }, []);
 
-  // Filter customers based on search term, status, and date
+  // Load customers when filters change
   useEffect(() => {
-    let filtered = customers;
-
-    // Search filter
-    if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter((customer) => {
-        return (
-          customer.id.toLowerCase().includes(searchLower) ||
-          customer.zaloDisplayName.toLowerCase().includes(searchLower) ||
-          (canViewOwnerInfo() && customer.userDisplayName && 
-            customer.userDisplayName.toLowerCase().includes(searchLower)) ||
-          (customer.salutation &&
-            customer.salutation.toLowerCase().includes(searchLower)) ||
-          (customer.greetingMessage &&
-            customer.greetingMessage.toLowerCase().includes(searchLower)) ||
-          customer.userId.toString().includes(searchLower) ||
-          (customer.conversationType &&
-            customer.conversationType.toLowerCase().includes(searchLower)) ||
-          (customer.customerStatus &&
-            customer.customerStatus.toLowerCase().includes(searchLower))
-        );
-      });
-    }
-
-    // Status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(
-        (customer) => customer.customerStatus === statusFilter
-      );
-    }
-
-    // Conversation type filter
-    if (conversationTypeFilter !== "all") {
-      filtered = filtered.filter(
-        (customer) => customer.conversationType === conversationTypeFilter
-      );
-    }
-
-    // Date filter
-    if (dateFilter) {
-      const filterDate = new Date(dateFilter);
-      filtered = filtered.filter((customer) => {
-        if (customer.lastMessageDate) {
-          const messageDate = new Date(customer.lastMessageDate);
-          return messageDate.toDateString() === filterDate.toDateString();
-        }
-        return false;
-      });
-    }
-
-    // Sắp xếp: những customer vừa import lên đầu
-    filtered.sort((a, b) => {
-      const aIsRecentlyImported = recentlyImportedIds.has(a.id);
-      const bIsRecentlyImported = recentlyImportedIds.has(b.id);
-
-      if (aIsRecentlyImported && !bIsRecentlyImported) return -1;
-      if (!aIsRecentlyImported && bIsRecentlyImported) return 1;
-      return 0;
-    });
-
-    setFilteredCustomers(filtered);
-    setCurrentPage(1);
-  }, [
-    customers,
-    searchTerm,
-    statusFilter,
-    conversationTypeFilter,
-    dateFilter,
-    recentlyImportedIds,
-  ]);
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentCustomers = filteredCustomers.slice(startIndex, endIndex);
+    loadCustomers();
+  }, [searchTerm, statusFilter, conversationTypeFilter, dateFilter, currentPage, itemsPerPage]);
 
   // Bulk selection logic
-  const selectedCustomers = filteredCustomers.filter((customer) =>
+  const selectedCustomers = customers.filter((customer) =>
     selectedCustomerIds.has(customer.id)
   );
   const isAllSelected =
-    currentCustomers.length > 0 &&
-    currentCustomers.every((customer) => selectedCustomerIds.has(customer.id));
+    customers.length > 0 &&
+    customers.every((customer) => selectedCustomerIds.has(customer.id));
   const isPartiallySelected =
-    currentCustomers.some((customer) => selectedCustomerIds.has(customer.id)) &&
+    customers.some((customer) => selectedCustomerIds.has(customer.id)) &&
     !isAllSelected;
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    setSelectedCustomerIds(new Set());
   };
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage);
     setCurrentPage(1);
+    setSelectedCustomerIds(new Set());
   };
 
   const clearFilters = () => {
@@ -293,6 +224,7 @@ const AutoGreetingCustomerList: React.FC<
     setConversationTypeFilter("all");
     setDateFilter("");
     setCurrentPage(1);
+    setSelectedCustomerIds(new Set());
     localStorage.removeItem("auto-greeting-filters");
   };
 
@@ -300,8 +232,17 @@ const AutoGreetingCustomerList: React.FC<
     setLoading(true);
     try {
       const token = getAccessToken();
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+        ...(searchTerm && { search: searchTerm }),
+        ...(statusFilter !== "all" && { statusFilter }),
+        ...(conversationTypeFilter !== "all" && { conversationTypeFilter }),
+        ...(dateFilter && { dateFilter }),
+      });
+
       const response = await fetch(
-        `/api/auto-greeting/customers?t=${Date.now()}`,
+        `/api/auto-greeting/customers?${params.toString()}&t=${Date.now()}`,
         {
           headers: {
             ...(token && { Authorization: `Bearer ${token}` }),
@@ -315,10 +256,20 @@ const AutoGreetingCustomerList: React.FC<
 
       const data = await response.json();
 
-      setCustomers(Array.isArray(data) ? data : []);
+      if (data.data && Array.isArray(data.data)) {
+        setCustomers(data.data);
+        setTotalItems(data.total || 0);
+        setTotalPages(data.totalPages || 0);
+      } else {
+        setCustomers([]);
+        setTotalItems(0);
+        setTotalPages(0);
+      }
     } catch (error) {
       console.error("Failed to fetch customers:", error);
       setCustomers([]);
+      setTotalItems(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -443,11 +394,11 @@ const AutoGreetingCustomerList: React.FC<
   const handleSelectAll = () => {
     if (isAllSelected) {
       const newSelected = new Set(selectedCustomerIds);
-      currentCustomers.forEach((customer) => newSelected.delete(customer.id));
+      customers.forEach((customer) => newSelected.delete(customer.id));
       setSelectedCustomerIds(newSelected);
     } else {
       const newSelected = new Set(selectedCustomerIds);
-      currentCustomers.forEach((customer) => newSelected.add(customer.id));
+      customers.forEach((customer) => newSelected.add(customer.id));
       setSelectedCustomerIds(newSelected);
     }
   };
@@ -586,6 +537,10 @@ const AutoGreetingCustomerList: React.FC<
       setTimeout(() => {
         setRecentlyImportedIds(new Set());
       }, 30000);
+
+      // Reset selection và về trang đầu
+      setSelectedCustomerIds(new Set());
+      setCurrentPage(1);
 
       // Fetch lại data để hiển thị danh sách mới nhất
       await loadCustomers();
@@ -880,9 +835,9 @@ const AutoGreetingCustomerList: React.FC<
       ? [...baseHeaders, ownerHeader, ...remainingHeaders]
       : [...baseHeaders, ...remainingHeaders];
 
-    const data = currentCustomers.map((customer, index) => {
+    const data = customers.map((customer, index) => {
       const baseData = [
-        startIndex + index + 1,
+        ((currentPage - 1) * itemsPerPage) + index + 1,
         customer.id,
         customer.zaloDisplayName,
         customer.salutation || "",
@@ -1075,7 +1030,7 @@ const AutoGreetingCustomerList: React.FC<
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="p-4 border-b">
           <span className="text-sm text-gray-600">
-            Tổng số dòng: {filteredCustomers.length}
+            Tổng số dòng: {totalItems}
           </span>
         </div>
 
@@ -1145,7 +1100,7 @@ const AutoGreetingCustomerList: React.FC<
                     </div>
                   </td>
                 </tr>
-              ) : currentCustomers.length === 0 ? (
+              ) : customers.length === 0 ? (
                 <tr>
                   <td
                     colSpan={11}
@@ -1159,7 +1114,7 @@ const AutoGreetingCustomerList: React.FC<
                   </td>
                 </tr>
               ) : (
-                currentCustomers.map((customer, index) => {
+                customers.map((customer, index) => {
                   return (
                     <tr
                       key={customer.id}
@@ -1373,9 +1328,9 @@ const AutoGreetingCustomerList: React.FC<
           <div className="p-4 border-t bg-gray-50">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                Hiển thị {startIndex + 1} -{" "}
-                {Math.min(endIndex, filteredCustomers.length)} trong{" "}
-                {filteredCustomers.length} kết quả
+                Hiển thị {((currentPage - 1) * itemsPerPage) + 1} -{" "}
+                {Math.min(currentPage * itemsPerPage, totalItems)} trong{" "}
+                {totalItems} kết quả
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -1456,7 +1411,7 @@ const AutoGreetingCustomerList: React.FC<
                 • Ngày: {new Date(dateFilter).toLocaleDateString("vi-VN")}
               </div>
             )}
-            <div>• Tổng số khách hàng: {filteredCustomers.length}</div>
+            <div>• Tổng số khách hàng: {totalItems}</div>
           </div>
         }
       />

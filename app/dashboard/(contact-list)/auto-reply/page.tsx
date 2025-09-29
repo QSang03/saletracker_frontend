@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import ContactTable from "@/components/contact-list/zalo/contacts/ContactTable";
 import PersonasManagerModal from "@/components/contact-list/zalo/persona/PersonasManagerModal";
 import { useAutoReplySettings } from "@/hooks/contact-list/useAutoReplySettings";
+import { useTutorial } from "@/contexts/TutorialContext";
 import SaleProductsModal from "@/components/contact-list/zalo/products/SaleProductsModal";
 import KeywordsModal from "@/components/contact-list/zalo/keywords/KeywordsModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -31,6 +32,7 @@ import {
 
 export default function AutoReplyPage() {
   const { currentUser } = useCurrentUser();
+  const { isTutorialActive } = useTutorial();
   const [saleProductsOpen, setSaleProductsOpen] = useState(false);
   const [keywordsOpen, setKeywordsOpen] = useState(false);
   const [personasManagerOpen, setPersonasManagerOpen] = useState(false);
@@ -158,14 +160,14 @@ export default function AutoReplyPage() {
               </div>
 
               {/* All Controls in Same Row */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 auto-reply-header-controls">
                 {/* Action Buttons */}
                 <div className="flex gap-3">
                   <Button
                     variant="outline"
-                    disabled={zaloDisabled}
+                    disabled={zaloDisabled && !isTutorialActive}
                     onClick={() => setSaleProductsOpen(true)}
-                    className="group hover:shadow-md transition-all duration-300 border-orange-200 hover:border-orange-300 hover:bg-orange-50 h-10"
+                    className="group hover:shadow-md transition-all duration-300 border-orange-200 hover:border-orange-300 hover:bg-orange-50 h-10 tutorial-products-button"
                   >
                     <span className="flex items-center gap-2">
                       <Package className="w-4 h-4 mr-2 text-orange-500 group-hover:scale-110 transition-transform duration-300" />
@@ -175,9 +177,9 @@ export default function AutoReplyPage() {
 
                   <Button
                     variant="outline"
-                    disabled={zaloDisabled}
+                    disabled={zaloDisabled && !isTutorialActive}
                     onClick={() => setKeywordsOpen(true)}
-                    className="group hover:shadow-md transition-all duration-300 border-yellow-200 hover:border-yellow-300 hover:bg-yellow-50 h-10"
+                    className="group hover:shadow-md transition-all duration-300 border-yellow-200 hover:border-yellow-300 hover:bg-yellow-50 h-10 tutorial-keywords-button"
                   >
                     <span className="flex items-center gap-2">
                       <Key className="w-4 h-4 mr-2 text-yellow-500 group-hover:rotate-12 transition-transform duration-300" />
@@ -187,9 +189,9 @@ export default function AutoReplyPage() {
 
                   <Button
                     variant="outline"
-                    disabled={zaloDisabled}
+                    disabled={zaloDisabled && !isTutorialActive}
                     onClick={() => setPersonasManagerOpen(true)}
-                    className="group hover:shadow-md transition-all duration-300 border-purple-200 hover:border-purple-300 hover:bg-purple-50 h-10"
+                    className="group hover:shadow-md transition-all duration-300 border-purple-200 hover:border-purple-300 hover:bg-purple-50 h-10 tutorial-personas-button"
                   >
                     <span className="flex items-center gap-2">
                       <User className="w-4 h-4 mr-2 text-purple-500 group-hover:scale-110 transition-transform duration-300" />

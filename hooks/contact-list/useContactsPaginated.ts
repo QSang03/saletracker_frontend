@@ -4,6 +4,7 @@ import type { AutoReplyContact, ContactRole } from "@/types/auto-reply";
 import { useWebSocketContext } from "@/contexts/WebSocketContext";
 import { getAccessToken, getUserFromToken } from "@/lib/auth";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useCurrentUser } from "@/contexts/CurrentUserContext";
 
 export function useContactsPaginated() {
   const [items, setItems] = useState<AutoReplyContact[]>([]);
@@ -19,6 +20,7 @@ export function useContactsPaginated() {
   const [error, setError] = useState<string | null>(null);
   const { subscribe, unsubscribe, isConnected } = useWebSocketContext();
   const debouncedSearch = useDebounce(search, 300);
+  const { currentUser } = useCurrentUser();
 
   const userId = useMemo(() => {
     const token = getAccessToken();
@@ -26,6 +28,11 @@ export function useContactsPaginated() {
     const u = getUserFromToken(token);
     return u?.id ? Number(u.id) : undefined;
   }, []);
+
+  // Check if current user is admin
+  const isAdmin = useMemo(() => {
+    return currentUser?.roles?.some(role => role.name === 'admin') || false;
+  }, [currentUser]);
 
   const fetchContacts = useCallback(async () => {
     setLoading(true);
@@ -40,8 +47,8 @@ export function useContactsPaginated() {
         params: {
           page,
           limit: pageSize,
-      search: debouncedSearch || undefined,
-          mine: "1",
+          search: debouncedSearch || undefined,
+          mine: isAdmin ? undefined : "1", // Admin sees all, others see only their own
           userId,
         },
       });
@@ -52,7 +59,7 @@ export function useContactsPaginated() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, debouncedSearch, userId]);
+  }, [page, pageSize, debouncedSearch, userId, isAdmin]);
 
   useEffect(() => {
     fetchContacts();

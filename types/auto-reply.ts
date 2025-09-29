@@ -39,6 +39,12 @@ export interface AutoReplyContact {
   autoReplyOn: boolean;
   lastMessage?: string | null;
   assignedPersona?: SalesPersona | null;
+  autoReplyEnabledAt?: string | null;
+  autoReplyDisabledAt?: string | null;
+  user?: {
+    id: number;
+    username: string;
+  };
 }
 
 export interface AutoReplyCustomerProfile {

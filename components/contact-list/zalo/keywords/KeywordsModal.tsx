@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
 import { ContactRole } from "@/types/auto-reply";
 import { useKeywordRoutes } from "@/hooks/contact-list/useKeywordRoutes";
+import { useTutorial } from "@/contexts/TutorialContext";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +94,7 @@ export default function KeywordsModal({
   const isRestrictedRole = (role: ContactRole) =>
     role === ContactRole.SUPPLIER || role === ContactRole.INTERNAL;
   const { currentUser } = useCurrentUser();
+  const { isTutorialActive } = useTutorial();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
 
   const [keyword, setKeyword] = useState("");
@@ -125,12 +127,46 @@ export default function KeywordsModal({
 
   // Auto switch to contacts tab when global is turned off
   useEffect(() => {
+    // Check if tutorial is active
+    const tutorialOverlay = document.querySelector('[data-tutorial-active="true"]');
+    const isTutorialActive = !!tutorialOverlay;
+    
+    console.log('KeywordsModal useEffect - applyAllContacts:', applyAllContacts, 'activeTab:', activeTab, 'isTutorialActive:', isTutorialActive);
+    
+    // If tutorial is active, let tutorial handle all logic
+    if (isTutorialActive) {
+      console.log('Tutorial is active - skipping automatic tab switching');
+      return;
+    }
+    
+    // Only auto-switch if tutorial is NOT active
     if (!applyAllContacts && activeTab === "create") {
+      console.log('Auto-switching to contacts tab (tutorial not active)');
       setActiveTab("contacts");
     } else if (applyAllContacts && activeTab === "contacts") {
+      console.log('Auto-switching to create tab (tutorial not active)');
       setActiveTab("create");
     }
-  }, [applyAllContacts]);
+  }, [applyAllContacts, activeTab]);
+
+  // Listen for tutorial tab change requests
+  useEffect(() => {
+    const handleTutorialTabChange = (event: CustomEvent) => {
+      const { tab } = event.detail;
+      console.log('Received tutorial tab change request:', tab, 'currentActiveTab:', activeTab);
+      if (tab === 'create' || tab === 'contacts') {
+        console.log('Setting activeTab to:', tab);
+        setActiveTab(tab);
+      }
+    };
+
+    console.log('Setting up tutorial-tab-change event listener');
+    window.addEventListener('tutorial-tab-change', handleTutorialTabChange as EventListener);
+    return () => {
+      console.log('Removing tutorial-tab-change event listener');
+      window.removeEventListener('tutorial-tab-change', handleTutorialTabChange as EventListener);
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     if (open) {
@@ -163,7 +199,7 @@ export default function KeywordsModal({
   const performSave = async () => {
     try {
       setIsLoading(true);
-      if (zaloDisabled) return;
+      if (zaloDisabled && !isTutorialActive) return;
       if (!keyword.trim()) return;
 
       if (applyAllContacts) {
@@ -314,10 +350,10 @@ export default function KeywordsModal({
 
   const handleToggleContact = useCallback(
     (contactId: number) => {
-      if (zaloDisabled || isLoading) return;
+      if ((zaloDisabled && !isTutorialActive) || isLoading) return;
       setSelectedContacts((prev) => toggle(prev, contactId));
     },
-    [zaloDisabled, isLoading]
+    [zaloDisabled, isTutorialActive, isLoading]
   );
 
   const handleRefreshData = useCallback(async () => {
@@ -334,7 +370,7 @@ export default function KeywordsModal({
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
         <DialogContent className="!max-w-[70vw] h-[85vh] flex flex-col bg-white/95 backdrop-blur-sm border shadow-2xl">
           {/* Simplified Header */}
-          <DialogHeader className="relative pb-4 flex-shrink-0">
+          <DialogHeader className="relative pb-4 flex-shrink-0" data-radix-dialog-header>
             <div className="flex items-center gap-4 pr-12">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-md opacity-20 animate-pulse"></div>
@@ -343,7 +379,7 @@ export default function KeywordsModal({
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <DialogTitle className="text-xl font-bold text-slate-800 mb-2">
+                <DialogTitle className="text-xl font-bold text-slate-800 mb-2 tutorial-keywords-modal-header">
                   Quản lý Keywords
                 </DialogTitle>
                 <p className="text-slate-600 text-sm leading-relaxed">
@@ -355,7 +391,7 @@ export default function KeywordsModal({
               <div className="absolute right-4 top-4">
                 <Button
                   onClick={() => setOpenAccordionModal(true)}
-                  className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-9 text-sm"
+                  className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-9 text-sm tutorial-keywords-manage-button"
                 >
                   <span className="flex items-center gap-2">
                     <Database className="w-4 h-4 mr-1" />
@@ -380,10 +416,10 @@ export default function KeywordsModal({
               className="h-full flex flex-col"
             >
               {/* Tabs List */}
-              <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100 p-1 rounded-lg">
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-100 p-1 rounded-lg tutorial-keywords-tabs">
                 <TabsTrigger
                   value="create"
-                  className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200 text-sm"
+                  className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200 text-sm tutorial-keywords-create-tab"
                 >
                   <PlusCircle className="w-4 h-4" />
                   <span className="font-medium">Tạo Keywords</span>
@@ -391,7 +427,7 @@ export default function KeywordsModal({
                 <TabsTrigger
                   value="contacts"
                   disabled={applyAllContacts}
-                  className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed tutorial-keywords-contacts-tab"
                 >
                   <Users className="w-4 h-4" />
                   <span className="font-medium">Chọn khách hàng</span>
@@ -419,24 +455,24 @@ export default function KeywordsModal({
                         Tạo keyword mới
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="space-y-1">
+                    <CardContent className="space-y-3 tutorial-keywords-form-section">
+                      <div className="space-y-1 tutorial-keywords-input-field">
                         <label className="text-xs font-medium text-slate-700">
                           Từ khóa
                         </label>
-                        <div className="relative">
+                        <div className="relative tutorial-keywords-input-container">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400" />
                           <Input
-                            disabled={zaloDisabled || isLoading}
+                            disabled={(zaloDisabled && !isTutorialActive) || isLoading}
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
                             placeholder="VD: iphone, laptop, túi xách..."
-                            className="pl-9 h-9 bg-white border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm"
+                            className="pl-9 h-9 bg-white border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm tutorial-keywords-input tutorial-keywords-keyword-input"
                           />
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-50 to-blue-50/50 rounded-lg border border-slate-200 transition-all duration-200 hover:shadow-sm">
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-slate-50 to-blue-50/50 rounded-lg border border-slate-200 transition-all duration-200 hover:shadow-sm tutorial-keywords-apply-all">
                         <div className="flex items-center gap-2">
                           <div
                             className={`p-1 rounded-lg shadow-sm transition-all duration-200 ${
@@ -465,10 +501,10 @@ export default function KeywordsModal({
                           </div>
                         </div>
                         <Switch
-                          disabled={zaloDisabled || isLoading}
+                          disabled={(zaloDisabled && !isTutorialActive) || isLoading}
                           checked={applyAllContacts}
                           onCheckedChange={setApplyAllContacts}
-                          className="data-[state=checked]:bg-green-500 transition-all duration-200"
+                          className="tutorial-keywords-apply-all-switch data-[state=checked]:bg-green-500 transition-all duration-200"
                         />
                       </div>
 
@@ -488,7 +524,7 @@ export default function KeywordsModal({
               {/* Tab Content - Chọn khách hàng */}
               <TabsContent
                 value="contacts"
-                className="flex-1 overflow-y-auto mt-0"
+                className="flex-1 overflow-y-auto mt-0 tutorial-keywords-contacts-content"
               >
                 <Card className="h-full shadow-sm border-slate-200 bg-white">
                   <CardHeader className="pb-3">
@@ -549,11 +585,11 @@ export default function KeywordsModal({
                             size="sm"
                             onClick={handleSelectAllContacts}
                             disabled={
-                              zaloDisabled ||
+                              (zaloDisabled && !isTutorialActive) ||
                               isLoading ||
                               availableContacts.length === 0
                             }
-                            className="h-7 text-xs px-2 hover:bg-blue-100 text-blue-700 font-medium"
+                            className="h-7 text-xs px-2 hover:bg-blue-100 text-blue-700 font-medium tutorial-keywords-select-all-button"
                           >
                             <span className="flex items-center gap-2">
                               <CheckCircle className="w-3 h-3 mr-1" />
@@ -570,11 +606,11 @@ export default function KeywordsModal({
                             size="sm"
                             onClick={() => setSelectedContacts(new Set())}
                             disabled={
-                              zaloDisabled ||
+                              (zaloDisabled && !isTutorialActive) ||
                               isLoading ||
                               selectedContacts.size === 0
                             }
-                            className="h-7 text-xs px-2 hover:bg-red-50 text-red-600 font-medium"
+                            className="h-7 text-xs px-2 hover:bg-red-50 text-red-600 font-medium tutorial-keywords-clear-selection-button"
                           >
                             <span className="flex items-center gap-2">
                               <X className="w-3 h-3 mr-1" />
@@ -585,7 +621,7 @@ export default function KeywordsModal({
                       </div>
 
                       {/* Contacts Table - FIXED */}
-                      <div className="flex-1 border border-slate-200 rounded-lg bg-white overflow-hidden">
+                      <div className="flex-1 border border-slate-200 rounded-lg bg-white overflow-hidden tutorial-keywords-contacts-table-container">
                         {contactsLoading ? (
                           <div className="flex flex-col items-center justify-center h-full p-8">
                             <div className="relative">
@@ -618,7 +654,7 @@ export default function KeywordsModal({
                                     <TableHead className="w-10 h-10">
                                       <Checkbox
                                         disabled={
-                                          zaloDisabled ||
+                                          (zaloDisabled && !isTutorialActive) ||
                                           isLoading ||
                                           availableContacts.length === 0
                                         }
@@ -676,7 +712,7 @@ export default function KeywordsModal({
                                       return (
                                         <TableRow
                                           key={contact.contactId}
-                                          className={`cursor-pointer transition-all duration-200 hover:bg-slate-50 ${
+                                          className={`cursor-pointer transition-all duration-200 hover:bg-slate-50 tutorial-keywords-contact-row ${
                                             isSelected
                                               ? "bg-blue-50 border-l-4 border-l-blue-500"
                                               : ""
@@ -690,7 +726,7 @@ export default function KeywordsModal({
                                           <TableCell className="py-2">
                                             <Checkbox
                                               disabled={
-                                                zaloDisabled || isLoading
+                                                (zaloDisabled && !isTutorialActive) || isLoading
                                               }
                                               checked={isSelected}
                                               onCheckedChange={() =>
@@ -701,7 +737,7 @@ export default function KeywordsModal({
                                               onClick={(e) =>
                                                 e.stopPropagation()
                                               }
-                                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-4 h-4"
+                                              className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500 w-4 h-4 tutorial-keywords-contact-checkbox"
                                             />
                                           </TableCell>
                                           <TableCell className="py-2">
@@ -809,7 +845,7 @@ export default function KeywordsModal({
 
                 <Button
                   disabled={
-                    zaloDisabled ||
+                    (zaloDisabled && !isTutorialActive) ||
                     !keyword.trim() ||
                     isLoading ||
                     (!applyAllContacts && selectedContacts.size === 0)
@@ -869,7 +905,7 @@ export default function KeywordsModal({
             setRenameState={setRenameState}
             setConfirmState={setConfirmState}
             contactMap={contactMap}
-            zaloDisabled={zaloDisabled}
+            zaloDisabled={zaloDisabled && !isTutorialActive}
             isLoading={isLoading}
             updateRoute={updateRoute}
             deleteRoute={deleteRoute}

@@ -20,7 +20,8 @@ import {
   Zap,
   Heart,
   Smile,
-  AlertCircle
+  AlertCircle,
+  Target
 } from 'lucide-react';
 
 interface Props {
@@ -33,13 +34,53 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
   const { currentUser } = useCurrentUser();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
 
-  const [form, setForm] = useState<Pick<SalesPersona, 'name' | 'personaPrompt'>>({ name: '', personaPrompt: '' });
+  const [form, setForm] = useState<Pick<SalesPersona, 'name' | 'personaPrompt'> & {
+    role: string;
+    style: string;
+    toolFirst: string;
+    discovery: string;
+    offering: string;
+    extras: string;
+    cta: string;
+  }>({ 
+    name: '', 
+    personaPrompt: '',
+    role: '',
+    style: '',
+    toolFirst: '',
+    discovery: '',
+    offering: '',
+    extras: '',
+    cta: ''
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { if (open) fetchPersona(); }, [open, fetchPersona]);
   useEffect(() => {
-    if (persona) setForm({ name: persona.name, personaPrompt: persona.personaPrompt });
+    if (persona) {
+      // Parse personaPrompt to extract structured data
+      const prompt = persona.personaPrompt || '';
+      const roleMatch = prompt.match(/\[ROLE\][\s\S]*?\[STYLE\]/);
+      const styleMatch = prompt.match(/\[STYLE\][\s\S]*?\[TOOL-FIRST\]/);
+      const toolFirstMatch = prompt.match(/\[TOOL-FIRST\][\s\S]*?\[DISCOVERY/);
+      const discoveryMatch = prompt.match(/\[DISCOVERY\][\s\S]*?\[OFFERING\]/);
+      const offeringMatch = prompt.match(/\[OFFERING\][\s\S]*?\[EXTRAS\]/);
+      const extrasMatch = prompt.match(/\[EXTRAS\][\s\S]*?\[CTA\]/);
+      const ctaMatch = prompt.match(/\[CTA\][\s\S]*$/);
+
+      setForm({ 
+        name: persona.name, 
+        personaPrompt: persona.personaPrompt,
+        role: roleMatch ? roleMatch[0].replace(/\[ROLE\]\s*/, '').replace(/\s*\[STYLE\]/, '').trim() : '',
+        style: styleMatch ? styleMatch[0].replace(/\[STYLE\]\s*/, '').replace(/\s*\[TOOL-FIRST\]/, '').trim() : '',
+        toolFirst: toolFirstMatch ? toolFirstMatch[0].replace(/\[TOOL-FIRST\]\s*/, '').replace(/\s*\[DISCOVERY/, '').trim() : 'Giá/stock/compat đều từ tool. Thiếu info → hỏi 1 câu về thiết bị mục tiêu.',
+        discovery: discoveryMatch ? discoveryMatch[0].replace(/\[DISCOVERY\]\s*/, '').replace(/\s*\[OFFERING\]/, '').trim() : '',
+        offering: offeringMatch ? offeringMatch[0].replace(/\[OFFERING\]\s*/, '').replace(/\s*\[EXTRAS\]/, '').trim() : '',
+        extras: extrasMatch ? extrasMatch[0].replace(/\[EXTRAS\]\s*/, '').replace(/\s*\[CTA\]/, '').trim() : '',
+        cta: ctaMatch ? ctaMatch[0].replace(/\[CTA\]\s*/, '').trim() : ''
+      });
+    }
   }, [persona]);
 
   const handleSave = async () => {
@@ -48,13 +89,40 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
       setError('Tên tối thiểu 2 ký tự');
       return;
     }
-    if (form.personaPrompt.length > 20000) {
+    
+    // Build structured personaPrompt from form fields
+    const structuredPrompt = `[ROLE]
+${form.role}
+
+[STYLE]
+${form.style}
+
+[TOOL-FIRST]
+${form.toolFirst}
+
+[DISCOVERY]
+${form.discovery}
+
+[OFFERING]
+${form.offering}
+
+[EXTRAS]
+${form.extras}
+
+[CTA]
+${form.cta}`;
+
+    if (structuredPrompt.length > 20000) {
       setError('Persona Prompt quá dài');
       return;
     }
+    
     try {
       setSaving(true);
-      await upsertPersona(form);
+      await upsertPersona({ 
+        name: form.name, 
+        personaPrompt: structuredPrompt 
+      });
       onClose();
     } catch (e: any) {
       setError(e?.message || 'Lưu thất bại');
@@ -65,11 +133,11 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="!max-w-4xl max-h-[90vh] overflow-hidden bg-gradient-to-br from-purple-50/95 via-white/95 to-pink-50/95 backdrop-blur-xl border-0 shadow-2xl">
+      <DialogContent className="!max-w-4xl max-h-[90vh] overflow-hidden bg-gradient-to-br from-purple-50/95 via-white/95 to-pink-50/95 backdrop-blur-xl border-0 shadow-2xl tutorial-persona-modal">
         {/* Decorative Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-pink-500/5 to-blue-500/5 pointer-events-none"></div>
         
-        <DialogHeader className="relative">
+        <DialogHeader className="relative tutorial-persona-modal-header">
           <div className="flex items-center gap-4 mb-6">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl blur-sm opacity-50 animate-pulse"></div>
@@ -130,7 +198,7 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
                     value={form.name}
                     onChange={e => setForm(v => ({ ...v, name: e.target.value }))}
                     placeholder="VD: Thạch - Giọng điệu nhiệt tình"
-                    className="h-12 bg-white/50 border-purple-200 focus:border-purple-400 focus:ring-purple-400 rounded-2xl text-base transition-all duration-300 pl-12"
+                    className="h-12 bg-white/50 border-purple-200 focus:border-purple-400 focus:ring-purple-400 rounded-2xl text-base transition-all duration-300 pl-12 tutorial-persona-name-input"
                   />
                   <Smile className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400" />
                 </div>
@@ -143,37 +211,129 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
               </div>
             </div>
 
-            {/* Persona Prompt Field */}
+            {/* ROLE Field */}
             <div className="relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-xl group-focus-within:blur-2xl transition-all duration-500"></div>
               <div className="relative bg-white/80 backdrop-blur-sm border border-white/50 rounded-3xl p-6 shadow-xl">
                 <Label className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
-                  <MessageCircle className="w-5 h-5 text-blue-500" />
-                  Persona Prompt (mô tả tính cách)
+                  <User className="w-5 h-5 text-blue-500" />
+                  [ROLE] - Vai trò của AI
                 </Label>
                 <div className="relative">
                   <Textarea
                     disabled={zaloDisabled}
-                    value={form.personaPrompt}
-                    onChange={e => setForm(v => ({ ...v, personaPrompt: e.target.value }))}
-                    rows={10}
-                    placeholder="Viết mô tả cách chào hỏi, phong cách, ưu tiên đề xuất, cách xử lý từ chối..."
+                    value={form.role}
+                    onChange={e => setForm(v => ({ ...v, role: e.target.value }))}
+                    rows={2}
+                    placeholder="VD: Em là tư vấn Phụ kiện của {store_name}. Giao tiếp nhanh, gọn."
                     className="bg-white/50 border-blue-200 focus:border-blue-400 focus:ring-blue-400 rounded-2xl text-base resize-none transition-all duration-300 leading-relaxed"
                   />
                 </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <div className="flex items-center gap-2">
-                      <span>Độ dài:</span>
-                      <span className={`font-medium ${form.personaPrompt.length > 20000 ? 'text-red-500' : 'text-blue-500'}`}>
-                        {form.personaPrompt.length}/20000 ký tự
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Heart className="w-4 h-4" />
-                    <span>Hãy thể hiện cá tính riêng</span>
-                  </div>
+              </div>
+            </div>
+
+            {/* STYLE Field */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-teal-500/10 rounded-3xl blur-xl group-focus-within:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-white/80 backdrop-blur-sm border border-white/50 rounded-3xl p-6 shadow-xl">
+                <Label className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                  <Sparkles className="w-5 h-5 text-green-500" />
+                  [STYLE] - Phong cách giao tiếp
+                </Label>
+                <div className="relative">
+                  <Textarea
+                    disabled={zaloDisabled}
+                    value={form.style}
+                    onChange={e => setForm(v => ({ ...v, style: e.target.value }))}
+                    rows={2}
+                    placeholder="VD: Bullet ngắn. 0–1 emoji tối đa. Có CTA rõ."
+                    className="bg-white/50 border-green-200 focus:border-green-400 focus:ring-green-400 rounded-2xl text-base resize-none transition-all duration-300 leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+
+
+            {/* DISCOVERY Field */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-3xl blur-xl group-focus-within:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-white/80 backdrop-blur-sm border border-white/50 rounded-3xl p-6 shadow-xl">
+                <Label className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                  <MessageCircle className="w-5 h-5 text-purple-500" />
+                  [DISCOVERY] - Câu hỏi khám phá nhu cầu
+                </Label>
+                <div className="relative">
+                  <Textarea
+                    disabled={zaloDisabled}
+                    value={form.discovery}
+                    onChange={e => setForm(v => ({ ...v, discovery: e.target.value }))}
+                    rows={2}
+                    placeholder="VD: Anh/chị dùng cho thiết bị/model nào và ngân sách khoảng bao nhiêu?"
+                    className="bg-white/50 border-purple-200 focus:border-purple-400 focus:ring-purple-400 rounded-2xl text-base resize-none transition-all duration-300 leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* OFFERING Field */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-blue-500/10 rounded-3xl blur-xl group-focus-within:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-white/80 backdrop-blur-sm border border-white/50 rounded-3xl p-6 shadow-xl">
+                <Label className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                  <Target className="w-5 h-5 text-indigo-500" />
+                  [OFFERING] - Cách đề xuất sản phẩm
+                </Label>
+                <div className="relative">
+                  <Textarea
+                    disabled={zaloDisabled}
+                    value={form.offering}
+                    onChange={e => setForm(v => ({ ...v, offering: e.target.value }))}
+                    rows={4}
+                    placeholder="VD: 2–3 gợi ý theo nhu cầu: Tên + điểm khác biệt 1 dòng (độ bền/độ trễ/chuẩn kết nối/kích thước) + Giá (VAT) + ETA. Nhắc tương thích (cổng, kích thước, profile). Có combo sẵn nếu phù hợp."
+                    className="bg-white/50 border-indigo-200 focus:border-indigo-400 focus:ring-indigo-400 rounded-2xl text-base resize-none transition-all duration-300 leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* EXTRAS Field */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 rounded-3xl blur-xl group-focus-within:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-white/80 backdrop-blur-sm border border-white/50 rounded-3xl p-6 shadow-xl">
+                <Label className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                  <Heart className="w-5 h-5 text-yellow-500" />
+                  [EXTRAS] - Đề xuất combo/bổ sung
+                </Label>
+                <div className="relative">
+                  <Textarea
+                    disabled={zaloDisabled}
+                    value={form.extras}
+                    onChange={e => setForm(v => ({ ...v, extras: e.target.value }))}
+                    rows={2}
+                    placeholder="VD: Đề xuất combo (mouse+pad, ssd+box, tản+nhiệt) khi hợp lý; không spam."
+                    className="bg-white/50 border-yellow-200 focus:border-yellow-400 focus:ring-yellow-400 rounded-2xl text-base resize-none transition-all duration-300 leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* CTA Field */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 to-pink-500/10 rounded-3xl blur-xl group-focus-within:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-white/80 backdrop-blur-sm border border-white/50 rounded-3xl p-6 shadow-xl">
+                <Label className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                  <Zap className="w-5 h-5 text-red-500" />
+                  [CTA] - Call to action kết thúc
+                </Label>
+                <div className="relative">
+                  <Textarea
+                    disabled={zaloDisabled}
+                    value={form.cta}
+                    onChange={e => setForm(v => ({ ...v, cta: e.target.value }))}
+                    rows={2}
+                    placeholder="VD: Mình lấy {A} hay thử {B} ạ? Em chốt đơn giúp nhé?"
+                    className="bg-white/50 border-red-200 focus:border-red-400 focus:ring-red-400 rounded-2xl text-base resize-none transition-all duration-300 leading-relaxed"
+                  />
                 </div>
               </div>
             </div>
@@ -187,19 +347,27 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-emerald-700">
                 <div className="flex items-start gap-2">
                   <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <span>Mô tả cách chào hỏi và giọng điệu</span>
+                  <span><strong>[ROLE]:</strong> Định nghĩa vai trò và lĩnh vực chuyên môn</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <span>Định nghĩa phong cách giao tiếp</span>
+                  <span><strong>[STYLE]:</strong> Phong cách giao tiếp, emoji, format tin nhắn</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <span>Ưu tiên và chiến lược bán hàng</span>
+                  <span><strong>[DISCOVERY]:</strong> Câu hỏi khám phá nhu cầu khách hàng</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
-                  <span>Cách xử lý phản đối khách hàng</span>
+                  <span><strong>[OFFERING]:</strong> Cách đề xuất sản phẩm và thông tin cần thiết</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <span><strong>[EXTRAS]:</strong> Đề xuất combo và sản phẩm bổ sung</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <span><strong>[CTA]:</strong> Call-to-action để chốt đơn hàng</span>
                 </div>
               </div>
             </div>
@@ -216,10 +384,10 @@ const PersonaModal: React.FC<Props> = ({ open, onClose }) => {
               <X className="w-4 h-4 mr-2" />
               Đóng
             </Button>
-            <Button 
-              disabled={zaloDisabled || saving} 
+            <Button
+              disabled={zaloDisabled || saving}
               onClick={handleSave}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 group px-8 h-12 rounded-2xl"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 group px-8 h-12 rounded-2xl tutorial-persona-save-button"
             >
               {saving ? (
                 <>

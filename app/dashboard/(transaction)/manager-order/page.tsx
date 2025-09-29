@@ -113,6 +113,7 @@ function ManagerOrderContent() {
     setSortField,
     setSortDirection,
     refetch,
+    forceFetch, // ✅ Thêm forceFetch để bypass debounce
     resetFilters,
     getFilterOptions,
     updateOrderDetail,
@@ -1008,19 +1009,15 @@ function ManagerOrderContent() {
         page: 1,
       };
 
-      // ✅ Sử dụng flushSync để đảm bảo state được cập nhật ngay lập tức - giống PmTransactionManagement
+      // ✅ Sử dụng flushSync để đảm bảo state được cập nhật ngay lập tức
       flushSync(() => {
         setFilters(newFilters);
       });
 
-      // ✅ Trigger fetch data ngay lập tức - giống PmTransactionManagement
-      try {
-        await refetch();
-      } catch (error) {
-        console.error("Error refetching after search:", error);
-      }
+      // ✅ Force fetch data ngay lập tức - sử dụng forceFetch để bypass debounce
+      forceFetch();
     },
-    [setFilters, filters, refetch]
+    [setFilters, filters, forceFetch]
   );
 
   // ✅ Handle restore previous state

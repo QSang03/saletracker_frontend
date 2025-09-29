@@ -16,6 +16,8 @@ import { useSalePersonas } from "@/hooks/contact-list/useSalePersonas";
 import type { SalesPersona } from "@/types/auto-reply";
 import { api } from "@/lib/api";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
+import { useTutorial } from "@/contexts/TutorialContext";
+import { personaTemplates, getTemplatesByCategory, getCategories, type PersonaTemplate } from "@/data/persona-templates";
 import {
   Plus,
   Pencil,
@@ -85,10 +87,28 @@ const presetTemplates = (templatesData as any[]).map((t) => ({
 export default function PersonasManagerModal({ open, onClose }: Props) {
   const { personas, fetchPersonas, setPersonas } = useSalePersonas(false);
   const { currentUser } = useCurrentUser();
+  const { isTutorialActive } = useTutorial();
   const [editing, setEditing] = useState<SalesPersona | null>(null);
-  const [form, setForm] = useState<{ name: string; personaPrompt: string }>({
+  const [form, setForm] = useState<{ 
+    name: string; 
+    personaPrompt: string;
+    role: string;
+    style: string;
+    toolFirst: string;
+    discovery: string;
+    offering: string;
+    extras: string;
+    cta: string;
+  }>({
     name: "",
     personaPrompt: "",
+    role: "",
+    style: "",
+    toolFirst: "",
+    discovery: "",
+    offering: "",
+    extras: "",
+    cta: "",
   });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<SalesPersona | null>(null);
@@ -103,16 +123,73 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [wordCount, setWordCount] = useState(0);
   const [activeTab, setActiveTab] = useState("library");
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedTemplateCategory, setSelectedTemplateCategory] = useState<string>("All");
+
+  // Function to handle tutorial tab changes
+  const handleTutorialTabChange = (tab: string) => {
+    console.log('PersonasManagerModal - Tutorial tab change:', tab);
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     if (open) fetchPersonas();
   }, [open, fetchPersonas]);
 
+  // Listen for tutorial tab change events
+  useEffect(() => {
+    const handleTutorialTabChangeEvent = (event: CustomEvent) => {
+      const { tab } = event.detail;
+      if (tab === 'library' || tab === 'form' || tab === 'templates' || tab === 'create') {
+        // Map 'create' to 'form' for the tab value
+        const mappedTab = tab === 'create' ? 'form' : tab;
+        handleTutorialTabChange(mappedTab);
+      }
+    };
+
+    window.addEventListener('tutorial-tab-change', handleTutorialTabChangeEvent as EventListener);
+    return () => {
+      window.removeEventListener('tutorial-tab-change', handleTutorialTabChangeEvent as EventListener);
+    };
+  }, []);
+
   useEffect(() => {
     if (!editing) {
-      setForm({ name: "", personaPrompt: "" });
+      setForm({ 
+        name: "", 
+        personaPrompt: "",
+        role: "",
+        style: "",
+        toolFirst: "",
+        discovery: "",
+        offering: "",
+        extras: "",
+        cta: ""
+      });
       setError("");
       setSelectedTemplate(null);
+    } else {
+      // Parse personaPrompt to extract structured data
+      const prompt = editing.personaPrompt || '';
+      const roleMatch = prompt.match(/\[ROLE\][\s\S]*?\[STYLE\]/);
+      const styleMatch = prompt.match(/\[STYLE\][\s\S]*?\[TOOL-FIRST\]/);
+      const toolFirstMatch = prompt.match(/\[TOOL-FIRST\][\s\S]*?\[DISCOVERY/);
+      const discoveryMatch = prompt.match(/\[DISCOVERY\][\s\S]*?\[OFFERING\]/);
+      const offeringMatch = prompt.match(/\[OFFERING\][\s\S]*?\[EXTRAS\]/);
+      const extrasMatch = prompt.match(/\[EXTRAS\][\s\S]*?\[CTA\]/);
+      const ctaMatch = prompt.match(/\[CTA\][\s\S]*$/);
+
+      setForm({ 
+        name: editing.name, 
+        personaPrompt: editing.personaPrompt,
+        role: roleMatch ? roleMatch[0].replace(/\[ROLE\]\s*/, '').replace(/\s*\[STYLE\]/, '').trim() : '',
+        style: styleMatch ? styleMatch[0].replace(/\[STYLE\]\s*/, '').replace(/\s*\[TOOL-FIRST\]/, '').trim() : '',
+        toolFirst: toolFirstMatch ? toolFirstMatch[0].replace(/\[TOOL-FIRST\]\s*/, '').replace(/\s*\[DISCOVERY/, '').trim() : 'Giá/stock/compat đều từ tool. Thiếu info → hỏi 1 câu về thiết bị mục tiêu.',
+        discovery: discoveryMatch ? discoveryMatch[0].replace(/\[DISCOVERY\]\s*/, '').replace(/\s*\[OFFERING\]/, '').trim() : '',
+        offering: offeringMatch ? offeringMatch[0].replace(/\[OFFERING\]\s*/, '').replace(/\s*\[EXTRAS\]/, '').trim() : '',
+        extras: extrasMatch ? extrasMatch[0].replace(/\[EXTRAS\]\s*/, '').replace(/\s*\[CTA\]/, '').trim() : '',
+        cta: ctaMatch ? ctaMatch[0].replace(/\[CTA\]\s*/, '').trim() : ''
+      });
     }
   }, [editing]);
 
@@ -134,7 +211,17 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
   const startAdd = () => {
   setEditing(null);
   setIsCreating(true);
-  setForm({ name: "", personaPrompt: "" });
+  setForm({ 
+    name: "", 
+    personaPrompt: "",
+    role: "",
+    style: "",
+    toolFirst: "",
+    discovery: "",
+    offering: "",
+    extras: "",
+    cta: ""
+  });
     setError("");
     setSelectedTemplate(null);
     setActiveTab("form");
@@ -143,7 +230,27 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
   const startEdit = (p: SalesPersona) => {
   setEditing(p);
   setIsCreating(false);
-    setForm({ name: p.name, personaPrompt: p.personaPrompt });
+    // Parse personaPrompt to extract structured data
+    const prompt = p.personaPrompt || '';
+    const roleMatch = prompt.match(/\[ROLE\][\s\S]*?\[STYLE\]/);
+    const styleMatch = prompt.match(/\[STYLE\][\s\S]*?\[TOOL-FIRST\]/);
+    const toolFirstMatch = prompt.match(/\[TOOL-FIRST\][\s\S]*?\[DISCOVERY/);
+    const discoveryMatch = prompt.match(/\[DISCOVERY\][\s\S]*?\[OFFERING\]/);
+    const offeringMatch = prompt.match(/\[OFFERING\][\s\S]*?\[EXTRAS\]/);
+    const extrasMatch = prompt.match(/\[EXTRAS\][\s\S]*?\[CTA\]/);
+    const ctaMatch = prompt.match(/\[CTA\][\s\S]*$/);
+
+    setForm({ 
+      name: p.name, 
+      personaPrompt: p.personaPrompt,
+      role: roleMatch ? roleMatch[0].replace(/\[ROLE\]\s*/, '').replace(/\s*\[STYLE\]/, '').trim() : '',
+      style: styleMatch ? styleMatch[0].replace(/\[STYLE\]\s*/, '').replace(/\s*\[TOOL-FIRST\]/, '').trim() : '',
+      toolFirst: toolFirstMatch ? toolFirstMatch[0].replace(/\[TOOL-FIRST\]\s*/, '').replace(/\s*\[DISCOVERY/, '').trim() : '',
+      discovery: discoveryMatch ? discoveryMatch[0].replace(/\[DISCOVERY\]\s*/, '').replace(/\s*\[OFFERING\]/, '').trim() : '',
+      offering: offeringMatch ? offeringMatch[0].replace(/\[OFFERING\]\s*/, '').replace(/\s*\[EXTRAS\]/, '').trim() : '',
+      extras: extrasMatch ? extrasMatch[0].replace(/\[EXTRAS\]\s*/, '').replace(/\s*\[CTA\]/, '').trim() : '',
+      cta: ctaMatch ? ctaMatch[0].replace(/\[CTA\]\s*/, '').trim() : ''
+    });
     setError("");
     setSelectedTemplate(null);
     setActiveTab("form");
@@ -156,7 +263,28 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
   // Put modal into "create" mode so Save button becomes active
   setEditing(null);
   setIsCreating(true);
-  setForm({ name: template.name, personaPrompt: template.prompt });
+  
+  // Parse template prompt to extract structured data
+  const prompt = template.prompt || '';
+  const roleMatch = prompt.match(/\[ROLE\][\s\S]*?\[STYLE\]/);
+  const styleMatch = prompt.match(/\[STYLE\][\s\S]*?\[TOOL-FIRST\]/);
+  const toolFirstMatch = prompt.match(/\[TOOL-FIRST\][\s\S]*?\[DISCOVERY/);
+  const discoveryMatch = prompt.match(/\[DISCOVERY\][\s\S]*?\[OFFERING\]/);
+  const offeringMatch = prompt.match(/\[OFFERING\][\s\S]*?\[EXTRAS\]/);
+  const extrasMatch = prompt.match(/\[EXTRAS\][\s\S]*?\[CTA\]/);
+  const ctaMatch = prompt.match(/\[CTA\][\s\S]*$/);
+
+  setForm({ 
+    name: template.name, 
+    personaPrompt: template.prompt,
+    role: roleMatch ? roleMatch[0].replace(/\[ROLE\]\s*/, '').replace(/\s*\[STYLE\]/, '').trim() : '',
+    style: styleMatch ? styleMatch[0].replace(/\[STYLE\]\s*/, '').replace(/\s*\[TOOL-FIRST\]/, '').trim() : '',
+    toolFirst: toolFirstMatch ? toolFirstMatch[0].replace(/\[TOOL-FIRST\]\s*/, '').replace(/\s*\[DISCOVERY/, '').trim() : '',
+    discovery: discoveryMatch ? discoveryMatch[0].replace(/\[DISCOVERY\]\s*/, '').replace(/\s*\[OFFERING\]/, '').trim() : '',
+    offering: offeringMatch ? offeringMatch[0].replace(/\[OFFERING\]\s*/, '').replace(/\s*\[EXTRAS\]/, '').trim() : '',
+    extras: extrasMatch ? extrasMatch[0].replace(/\[EXTRAS\]\s*/, '').replace(/\s*\[CTA\]/, '').trim() : '',
+    cta: ctaMatch ? ctaMatch[0].replace(/\[CTA\]\s*/, '').trim() : ''
+  });
     setSelectedTemplate(index);
     setError("");
     setActiveTab("form");
@@ -175,13 +303,30 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
       setServerAlert({ type: "error", message: msg });
       return;
     }
-    if (!form.personaPrompt.trim()) {
-      const msg = "Vui lòng nhập mô tả tính cách";
-      setError(msg);
-      setServerAlert({ type: "error", message: msg });
-      return;
-    }
-    if (form.personaPrompt.length > MAX_PROMPT_LENGTH) {
+    
+    // Build structured personaPrompt from form fields
+    const structuredPrompt = `[ROLE]
+${form.role}
+
+[STYLE]
+${form.style}
+
+[TOOL-FIRST]
+${form.toolFirst}
+
+[DISCOVERY]
+${form.discovery}
+
+[OFFERING]
+${form.offering}
+
+[EXTRAS]
+${form.extras}
+
+[CTA]
+${form.cta}`;
+
+    if (structuredPrompt.length > MAX_PROMPT_LENGTH) {
       const msg = `Mô tả không được vượt quá ${MAX_PROMPT_LENGTH} ký tự`;
       setError(msg);
       setServerAlert({ type: "error", message: msg });
@@ -195,7 +340,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
       if (editing && editing.personaId) {
         const { data } = await api.patch<SalesPersona>(
           `auto-reply/personas/${editing.personaId}`,
-          { ...form, userId: currentUser.id }
+          { name: form.name, personaPrompt: structuredPrompt, userId: currentUser.id }
         );
         setPersonas((prev) =>
           prev.map((p) => (p.personaId === data.personaId ? data : p))
@@ -208,7 +353,8 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
           } catch (e) {}
       } else {
         const { data } = await api.post<SalesPersona>(`auto-reply/personas`, {
-          ...form,
+          name: form.name,
+          personaPrompt: structuredPrompt,
           userId: currentUser.id,
         });
         setPersonas((prev) => [data, ...prev]);
@@ -236,6 +382,32 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleUseTemplate = (template: PersonaTemplate) => {
+    // Parse template prompt to extract structured data
+    const prompt = template.prompt || '';
+    const roleMatch = prompt.match(/\[ROLE\][\s\S]*?\[STYLE\]/);
+    const styleMatch = prompt.match(/\[STYLE\][\s\S]*?\[TOOL-FIRST\]/);
+    const toolFirstMatch = prompt.match(/\[TOOL-FIRST\][\s\S]*?\[DISCOVERY/);
+    const discoveryMatch = prompt.match(/\[DISCOVERY\][\s\S]*?\[OFFERING\]/);
+    const offeringMatch = prompt.match(/\[OFFERING\][\s\S]*?\[EXTRAS\]/);
+    const extrasMatch = prompt.match(/\[EXTRAS\][\s\S]*?\[CTA\]/);
+    const ctaMatch = prompt.match(/\[CTA\][\s\S]*$/);
+
+    setForm({
+      name: template.name,
+      personaPrompt: template.prompt,
+      role: roleMatch ? roleMatch[0].replace(/\[ROLE\]\s*/, '').replace(/\s*\[STYLE\]/, '').trim() : '',
+      style: styleMatch ? styleMatch[0].replace(/\[STYLE\]\s*/, '').replace(/\s*\[TOOL-FIRST\]/, '').trim() : '',
+      toolFirst: toolFirstMatch ? toolFirstMatch[0].replace(/\[TOOL-FIRST\]\s*/, '').replace(/\s*\[DISCOVERY/, '').trim() : '',
+      discovery: discoveryMatch ? discoveryMatch[0].replace(/\[DISCOVERY\]\s*/, '').replace(/\s*\[OFFERING\]/, '').trim() : '',
+      offering: offeringMatch ? offeringMatch[0].replace(/\[OFFERING\]\s*/, '').replace(/\s*\[EXTRAS\]/, '').trim() : '',
+      extras: extrasMatch ? extrasMatch[0].replace(/\[EXTRAS\]\s*/, '').replace(/\s*\[CTA\]/, '').trim() : '',
+      cta: ctaMatch ? ctaMatch[0].replace(/\[CTA\]\s*/, '').trim() : ''
+    });
+    setShowTemplates(false);
+    setActiveTab("form");
   };
 
   const confirmDelete = (p: SalesPersona) => {
@@ -276,7 +448,17 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
   // they were in edit/create mode or typed manually without `editing` state.
   const handleCancel = () => {
     setEditing(null);
-    setForm({ name: "", personaPrompt: "" });
+    setForm({ 
+      name: "", 
+      personaPrompt: "",
+      role: "",
+      style: "",
+      toolFirst: "",
+      discovery: "",
+      offering: "",
+      extras: "",
+      cta: ""
+    });
     setError("");
     setSelectedTemplate(null);
     setActiveTab("library");
@@ -285,7 +467,28 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
   const duplicatePersona = (p: SalesPersona) => {
   setEditing(null);
   setIsCreating(true);
-  setForm({ name: `${p.name} (Bản sao)`, personaPrompt: p.personaPrompt });
+  
+  // Parse personaPrompt to extract structured data
+  const prompt = p.personaPrompt || '';
+  const roleMatch = prompt.match(/\[ROLE\][\s\S]*?\[STYLE\]/);
+  const styleMatch = prompt.match(/\[STYLE\][\s\S]*?\[TOOL-FIRST\]/);
+  const toolFirstMatch = prompt.match(/\[TOOL-FIRST\][\s\S]*?\[DISCOVERY/);
+  const discoveryMatch = prompt.match(/\[DISCOVERY[^]]*\][\s\S]*?\[OFFERING\]/);
+  const offeringMatch = prompt.match(/\[OFFERING\][\s\S]*?\[EXTRAS\]/);
+  const extrasMatch = prompt.match(/\[EXTRAS\][\s\S]*?\[CTA\]/);
+  const ctaMatch = prompt.match(/\[CTA\][\s\S]*$/);
+
+  setForm({ 
+    name: `${p.name} (Bản sao)`, 
+    personaPrompt: p.personaPrompt,
+    role: roleMatch ? roleMatch[0].replace(/\[ROLE\]\s*/, '').replace(/\s*\[STYLE\]/, '').trim() : '',
+    style: styleMatch ? styleMatch[0].replace(/\[STYLE\]\s*/, '').replace(/\s*\[TOOL-FIRST\]/, '').trim() : '',
+    toolFirst: toolFirstMatch ? toolFirstMatch[0].replace(/\[TOOL-FIRST\]\s*/, '').replace(/\s*\[DISCOVERY/, '').trim() : '',
+    discovery: discoveryMatch ? discoveryMatch[0].replace(/\[DISCOVERY[^]]*\]\s*/, '').replace(/\s*\[OFFERING\]/, '').trim() : '',
+    offering: offeringMatch ? offeringMatch[0].replace(/\[OFFERING\]\s*/, '').replace(/\s*\[EXTRAS\]/, '').trim() : '',
+    extras: extrasMatch ? extrasMatch[0].replace(/\[EXTRAS\]\s*/, '').replace(/\s*\[CTA\]/, '').trim() : '',
+    cta: ctaMatch ? ctaMatch[0].replace(/\[CTA\]\s*/, '').trim() : ''
+  });
   setActiveTab("form");
   };
 
@@ -308,7 +511,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
         {/* ✅ FIXED: Modal với background trắng đồng bộ */}
         <DialogContent className="!max-w-7xl !max-h-[95vh] !h-[95vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl">
           {/* ✅ FIXED: Header với background trắng */}
-          <DialogHeader className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
+          <DialogHeader className="flex-shrink-0 bg-white border-b border-gray-200 p-6 tutorial-personas-modal-header" data-radix-dialog-header>
             <DialogTitle className="flex items-center justify-between">
               <motion.div
                 className="flex items-center gap-4"
@@ -355,24 +558,26 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
             onValueChange={setActiveTab}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <TabsList className="flex-shrink-0 grid w-full grid-cols-3 bg-white border-b border-gray-200 h-14">
+            <TabsList className="flex-shrink-0 grid w-full grid-cols-3 bg-white border-b border-gray-200 h-14 tutorial-personas-tabs">
               <TabsTrigger
                 value="library"
-                className="flex items-center gap-2 px-4 py-3 text-sm font-semibold data-[state=active]:bg-purple-100 data-[state=active]:text-purple-700 data-[state=active]:border-purple-300 hover:bg-gray-50 transition-all duration-200 h-full"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-semibold data-[state=active]:bg-purple-100 data-[state=active]:text-purple-700 data-[state=active]:border-purple-300 hover:bg-gray-50 transition-all duration-200 h-full tutorial-personas-library-tab"
               >
+                <div className="flex items-center">
                 <Library className="w-4 h-4" />
-                Thư viện Personas
+                Thư viện Personas 
+                </div>
               </TabsTrigger>
               <TabsTrigger
                 value="form"
-                className="flex items-center gap-2 px-4 py-3 text-sm font-semibold data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700 data-[state=active]:border-blue-300 hover:bg-gray-50 transition-all duration-200 h-full"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-semibold data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700 data-[state=active]:border-blue-300 hover:bg-gray-50 transition-all duration-200 h-full tutorial-personas-form-tab"
               >
                 <Edit3 className="w-4 h-4" />
                 {editing?.personaId ? "Chỉnh sửa" : "Tạo Persona"}
               </TabsTrigger>
               <TabsTrigger
                 value="templates"
-                className="flex items-center gap-2 px-4 py-3 text-sm font-semibold data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700 data-[state=active]:border-emerald-300 hover:bg-gray-50 transition-all duration-200 h-full"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-semibold data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700 data-[state=active]:border-emerald-300 hover:bg-gray-50 transition-all duration-200 h-full tutorial-personas-templates-tab"
               >
                 <Palette className="w-4 h-4" />
                 Templates Chi tiết
@@ -406,7 +611,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
                     <Button
                       size="sm"
                       onClick={startAdd}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl transition-all duration-300 gap-2"
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl transition-all duration-300 gap-2 tutorial-personas-create-button"
                     >
                       <span className="flex items-center gap-2">
                         <Plus className="w-4 h-4" />
@@ -423,7 +628,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
                     placeholder="Tìm kiếm personas..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-11 bg-white border-gray-300 focus:border-purple-400 transition-all duration-300"
+                    className="pl-11 bg-white border-gray-300 focus:border-purple-400 transition-all duration-300 tutorial-personas-search-input"
                   />
                   {searchTerm && (
                     <Button
@@ -438,7 +643,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
                 </div>
 
                 {/* ✅ Personas List */}
-                <div className="flex-1 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 min-h-0 p-3">
+                <div className="flex-1 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 min-h-0 p-3 tutorial-personas-list-section">
                   <AnimatePresence>
                     {filteredPersonas.length === 0 ? (
                       <motion.div
@@ -479,7 +684,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ delay: index * 0.05 }}
                           className={cn(
-                            "group relative bg-white rounded-xl p-4 transition-all duration-300 cursor-pointer hover:shadow-xl hover:scale-[1.02] border",
+                            "group relative bg-white rounded-xl p-4 transition-all duration-300 cursor-pointer hover:shadow-xl hover:scale-[1.02] border tutorial-personas-item",
                             editing?.personaId === p.personaId
                               ? "ring-2 ring-purple-400 shadow-xl bg-purple-50 border-purple-200"
                               : "hover:bg-gray-50 border-gray-200"
@@ -570,7 +775,7 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
 
             {/* ✅ TAB 2: TẠO/SỬA PERSONA */}
             <TabsContent value="form" className="flex-1 overflow-hidden p-6">
-              <div className="h-full bg-white rounded-2xl border border-gray-200 shadow-lg p-6 flex flex-col">
+              <div className="h-full bg-white rounded-2xl border border-gray-200 shadow-lg p-6 flex flex-col tutorial-personas-form-section">
                 <motion.div
                   className="flex items-center gap-4 mb-6 flex-shrink-0"
                   initial={{ opacity: 0 }}
@@ -648,70 +853,179 @@ export default function PersonasManagerModal({ open, onClose }: Props) {
                       Tên persona
                       <span className="text-red-500">*</span>
                     </Label>
-                    <Input
-                      value={form.name}
-                      onChange={(e) =>
-                        setForm((v) => ({ ...v, name: e.target.value }))
-                      }
-                      placeholder="VD: 🔥 Nhiệt tình & Năng động, 🧠 Chuyên gia Tư vấn..."
-                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 text-base px-4 py-3"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        value={form.name}
+                        onChange={(e) =>
+                          setForm((v) => ({ ...v, name: e.target.value }))
+                        }
+                        placeholder="VD: 🔥 Nhiệt tình & Năng động, 🧠 Chuyên gia Tư vấn..."
+                        className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 text-base px-4 py-3 flex-1 tutorial-personas-name-input"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowTemplates(true)}
+                        className="px-4 py-3 border-2 border-purple-300 hover:border-purple-400 hover:bg-purple-50 transition-all duration-300"
+                      >
+                        <div className="flex items-center">
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Templates
+                        </div>
+                      </Button>
+                    </div>
                   </motion.div>
 
-                  {/* ✅ FIXED: Prompt Field với background rõ ràng */}
+                  {/* ROLE Field */}
                   <motion.div
-                    className="flex-1 flex flex-col"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.7 }}
                   >
-                    <div className="flex justify-between items-center mb-2">
-                      <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                        <Brain className="w-4 h-4" />
-                        Mô tả tính cách
-                        <span className="text-red-500">*</span>
-                      </Label>
-                      <div className="flex items-center gap-4 text-xs">
-                        <div
-                          className={cn(
-                            "px-3 py-1 rounded-full transition-colors",
-                            form.personaPrompt.length > MAX_PROMPT_LENGTH
-                              ? "bg-red-100 text-red-600 border border-red-300"
-                              : form.personaPrompt.length >
-                                MAX_PROMPT_LENGTH * 0.8
-                              ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                              : "bg-gray-100 text-gray-600 border border-gray-300"
-                          )}
-                        >
-                          {form.personaPrompt.length}/{MAX_PROMPT_LENGTH} ký tự
-                        </div>
-                        <div className="px-3 py-1 rounded-full bg-blue-100 text-blue-600 border border-blue-300">
-                          {wordCount} từ
-                        </div>
-                      </div>
-                    </div>
+                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <User className="w-4 h-4" />
+                      [ROLE] - Vai trò của AI
+                      <span className="text-red-500">*</span>
+                    </Label>
                     <Textarea
-                      ref={textareaRef}
-                      value={form.personaPrompt}
+                      value={form.role}
                       onChange={(e) =>
                         setForm((v) => ({
                           ...v,
-                          personaPrompt: e.target.value,
+                          role: e.target.value,
                         }))
                       }
-                      placeholder="Mô tả chi tiết về tính cách AI:
-
-🎯 Phong cách giao tiếp: Thân thiện, chuyên nghiệp, nhiệt tình...
-💬 Cách chào hỏi và kết thúc cuộc trò chuyện  
-🎨 Sử dụng emoji và ngôn ngữ như thế nào
-🔍 Cách hiểu và phản hồi với khách hàng
-🛍️ Phương pháp gợi ý và tư vấn sản phẩm
-⚡ Xử lý tình huống khó khăn như thế nào
-
-Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thiện. Luôn chào khách lịch sự với emoji phù hợp 😊, lắng nghe kỹ nhu cầu trước khi tư vấn, và đưa ra những gợi ý sản phẩm chính xác nhất...'"
-                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed min-h-[400px] px-4 py-3"
-                      rows={18}
+                      placeholder="VD: Em là tư vấn Phụ kiện của {store_name}. Giao tiếp nhanh, gọn."
+                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3 tutorial-personas-role-textarea"
+                      rows={2}
                     />
+                  </motion.div>
+
+                  {/* STYLE Field */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                  >
+                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <Sparkles className="w-4 h-4" />
+                      [STYLE] - Phong cách giao tiếp
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      value={form.style}
+                      onChange={(e) =>
+                        setForm((v) => ({
+                          ...v,
+                          style: e.target.value,
+                        }))
+                      }
+                      placeholder="VD: Bullet ngắn. 0–1 emoji tối đa. Có CTA rõ."
+                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3 tutorial-personas-style-textarea"
+                      rows={2}
+                    />
+                  </motion.div>
+
+
+                  {/* DISCOVERY Field */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.0 }}
+                  >
+                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <MessageCircle className="w-4 h-4" />
+                      [DISCOVERY] - Câu hỏi khám phá nhu cầu
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      value={form.discovery}
+                      onChange={(e) =>
+                        setForm((v) => ({
+                          ...v,
+                          discovery: e.target.value,
+                        }))
+                      }
+                      placeholder="VD: Anh/chị dùng cho thiết bị/model nào và ngân sách khoảng bao nhiêu?"
+                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3 tutorial-personas-discovery-textarea"
+                      rows={2}
+                    />
+                  </motion.div>
+
+                  {/* OFFERING Field */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.1 }}
+                  >
+                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <Target className="w-4 h-4" />
+                      [OFFERING] - Cách đề xuất sản phẩm
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      value={form.offering}
+                      onChange={(e) =>
+                        setForm((v) => ({
+                          ...v,
+                          offering: e.target.value,
+                        }))
+                      }
+                      placeholder="VD: 2–3 gợi ý theo nhu cầu: Tên + điểm khác biệt 1 dòng (độ bền/độ trễ/chuẩn kết nối/kích thước) + Giá (VAT) + ETA. Nhắc tương thích (cổng, kích thước, profile). Có combo sẵn nếu phù hợp."
+                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3 tutorial-personas-offering-textarea"
+                      rows={4}
+                    />
+                  </motion.div>
+
+                  {/* EXTRAS Field */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.2 }}
+                  >
+                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <Heart className="w-4 h-4" />
+                      [EXTRAS] - Đề xuất combo/bổ sung
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      value={form.extras}
+                      onChange={(e) =>
+                        setForm((v) => ({
+                          ...v,
+                          extras: e.target.value,
+                        }))
+                      }
+                      placeholder="VD: Đề xuất combo (mouse+pad, ssd+box, tản+nhiệt) khi hợp lý; không spam."
+                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3 tutorial-personas-extras-textarea"
+                      rows={2}
+                    />
+                  </motion.div>
+
+                  {/* CTA Field */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.3 }}
+                  >
+                    <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <Zap className="w-4 h-4" />
+                      [CTA] - Call to action kết thúc
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      value={form.cta}
+                      onChange={(e) =>
+                        setForm((v) => ({
+                          ...v,
+                          cta: e.target.value,
+                        }))
+                      }
+                      placeholder="VD: Mình lấy {A} hay thử {B} ạ? Em chốt đơn giúp nhé?"
+                      className="bg-white border-2 border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3 tutorial-personas-cta-textarea"
+                      rows={2}
+                    />
+                  </motion.div>
 
                     {/* ✅ Enhanced Writing Tips */}
                     <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -721,28 +1035,25 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
                       </div>
                       <div className="text-xs text-blue-600 space-y-1">
                         <div>
-                          • <strong>Phong cách giao tiếp:</strong> Mô tả rõ
-                          giọng điệu, cách sử dụng emoji
+                          • <strong>[ROLE]:</strong> Định nghĩa vai trò và lĩnh vực chuyên môn
                         </div>
                         <div>
-                          • <strong>Cách tiếp cận khách:</strong> Thân thiện,
-                          chuyên nghiệp hay sáng tạo
+                          • <strong>[STYLE]:</strong> Phong cách giao tiếp, emoji, format tin nhắn
                         </div>
                         <div>
-                          • <strong>Quy trình tư vấn:</strong> Cách hiểu nhu cầu
-                          và đề xuất sản phẩm
+                          • <strong>[DISCOVERY]:</strong> Câu hỏi khám phá nhu cầu khách hàng
                         </div>
                         <div>
-                          • <strong>Xử lý tình huống:</strong> Phản ứng với
-                          khiếu nại, từ chối, hoặc khó khăn
+                          • <strong>[OFFERING]:</strong> Cách đề xuất sản phẩm và thông tin cần thiết
                         </div>
                         <div>
-                          • <strong>Cá tính riêng:</strong> Điều gì làm persona
-                          này độc đáo và đáng nhớ
+                          • <strong>[EXTRAS]:</strong> Đề xuất combo và sản phẩm bổ sung
+                        </div>
+                        <div>
+                          • <strong>[CTA]:</strong> Call-to-action để chốt đơn hàng
                         </div>
                       </div>
                     </div>
-                  </motion.div>
 
                   {/* ✅ Enhanced Action Buttons */}
                   <motion.div
@@ -755,7 +1066,7 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
                       variant="outline"
                       onClick={handleCancel}
                       disabled={saving}
-                      className="bg-white hover:bg-gray-50 border-gray-300"
+                      className="bg-white hover:bg-gray-50 border-gray-300 tutorial-personas-cancel-button"
                     >
                       <span className="flex items-center gap-2">
                         <X className="w-4 h-4 mr-2" />
@@ -767,9 +1078,14 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
                       disabled={
                         saving ||
                         !form.name.trim() ||
-                        !form.personaPrompt.trim()
+                        !form.role.trim() ||
+                        !form.style.trim() ||
+                        !form.discovery.trim() ||
+                        !form.offering.trim() ||
+                        !form.extras.trim() ||
+                        !form.cta.trim()
                       }
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl transition-all duration-300 min-w-[120px]"
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl transition-all duration-300 min-w-[120px] tutorial-personas-save-button"
                     >
                       {saving ? (
                         <>
@@ -797,7 +1113,7 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
               value="templates"
               className="flex-1 overflow-hidden p-6"
             >
-              <div className="h-full bg-white rounded-2xl border border-gray-200 shadow-lg p-6 flex flex-col">
+              <div className="h-full bg-white rounded-2xl border border-gray-200 shadow-lg p-6 flex flex-col tutorial-personas-templates-container">
                 <motion.div
                   className="flex items-center gap-4 mb-6 flex-shrink-0"
                   initial={{ opacity: 0 }}
@@ -825,7 +1141,7 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
 
                 {/* ✅ FIXED: Templates với scroll tự do */}
                 <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 min-h-0 p-3">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6 tutorial-personas-templates-section">
                     {presetTemplates.map((template, index) => {
                       const Icon = template.icon;
                       return (
@@ -838,7 +1154,8 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
                             "group p-6 rounded-xl border-2 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.005]",
                             selectedTemplate === index
                               ? `bg-gradient-to-br ${template.color} text-white border-transparent shadow-2xl scale-[1.005]`
-                              : "bg-white hover:bg-gray-50 border-gray-200 hover:border-emerald-300"
+                              : "bg-white hover:bg-gray-50 border-gray-200 hover:border-emerald-300",
+                            index === 0 ? "tutorial-personas-first-template" : ""
                           )}
                           onClick={() => applyTemplate(template, index)}
                         >
@@ -986,6 +1303,85 @@ Ví dụ: 'Bạn là một nhân viên bán hàng chuyên nghiệp và thân thi
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Template Selection Modal */}
+      {showTemplates && (
+        <Dialog open={showTemplates} onOpenChange={setShowTemplates}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-500" />
+                Chọn Template Persona
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {/* Category Filter */}
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant={selectedTemplateCategory === "All" ? "default" : "outline"}
+                  onClick={() => setSelectedTemplateCategory("All")}
+                  className="text-xs"
+                >
+                  Tất cả
+                </Button>
+                {getCategories().map((category) => (
+                  <Button
+                    key={category}
+                    variant={selectedTemplateCategory === category ? "default" : "outline"}
+                    onClick={() => setSelectedTemplateCategory(category)}
+                    className="text-xs"
+                  >
+                    {category}
+                  </Button>
+                ))}
+              </div>
+
+              {/* Templates Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+                {(selectedTemplateCategory === "All" 
+                  ? personaTemplates 
+                  : getTemplatesByCategory(selectedTemplateCategory)
+                ).map((template) => (
+                  <div
+                    key={template.id}
+                    className="border rounded-lg p-4 hover:shadow-md transition-all duration-300 cursor-pointer group"
+                    onClick={() => handleUseTemplate(template)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 bg-gradient-to-r ${template.color} rounded-lg flex items-center justify-center text-white text-lg`}>
+                        {template.icon}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-800 group-hover:text-purple-600 transition-colors">
+                          {template.name}
+                        </h3>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {template.description}
+                        </p>
+                        <div className="mt-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {template.category}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowTemplates(false)}
+              >
+                Hủy
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* ✅ ConfirmDialog */}
       <ConfirmDialog
