@@ -780,36 +780,17 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const performCustomerSearch = (customerName: string) => {
     if (!customerName || !customerName.trim()) return;
     
-    setSearchTerm(customerName.trim());
+    // ✅ Chỉ update search term với exact match, không reset các filter khác
+    const exactSearchTerm = `"${customerName.trim()}"`;
+    setSearchTerm(exactSearchTerm);
     setCurrentPage(1);
     
-    // Lưu vào localStorage
+    // Lưu vào localStorage với exact search term
     const currentFilters = getCurrentPmFilters();
-    const updatedFilters = { ...currentFilters, search: customerName.trim(), page: 1 };
+    const updatedFilters = { ...currentFilters, search: exactSearchTerm, page: 1 };
     savePmFiltersToStorage(updatedFilters);
     
-    // ✅ Trigger fetch data ngay lập tức để search realtime - sử dụng exact match
-    const exactSearchTerm = `"${customerName.trim()}"`;
-    
-    // ✅ Force fetch ngay lập tức để bypass debounce - sử dụng clearTimeout để bypass debounce
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current);
-      fetchTimeoutRef.current = null;
-    }
-    
-    fetchOrders({
-      page: 1,
-      pageSize: pageSize,
-      search: exactSearchTerm,
-      status: statusFilter === 'all' ? '' : statusFilter,
-      date: dateFilter === 'all' || dateFilter === 'custom' ? '' : dateFilter,
-      dateRange: dateRangeState?.start && dateRangeState?.end ? dateRangeState as { start: string; end: string } : undefined,
-      departments: departmentsSelected.join(','),
-      employees: employeesSelected.join(','),
-      warningLevel: warningLevelFilter,
-      quantity: minQuantity,
-      conversationType: conversationTypesSelected.join(','),
-    });
+    // ✅ Không cần gọi fetchOrders ở đây nữa - useEffect sẽ tự động fetch khi searchTerm thay đổi
   };
 
   // Update filters and save to localStorage
