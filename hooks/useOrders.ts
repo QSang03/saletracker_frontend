@@ -91,7 +91,7 @@ interface UseOrdersReturn {
 
   // Actions
   refetch: () => Promise<void>;
-  forceFetch: () => Promise<void>; // ✅ Thêm forceFetch để bypass debounce
+  forceFetch: (overrideFilters?: OrderFilters) => Promise<void>; // ✅ Thêm forceFetch để bypass debounce
   resetFilters: () => void;
   getFilterOptions: () => Promise<{ departments: any[]; products: any[] }>;
 
@@ -1050,7 +1050,7 @@ export const useOrders = (options?: {
   }, [filters, fetchOrdersInternal, isFetching]);
 
   // ✅ Force fetch function để bypass debounce - dùng cho double-click customer name
-  const forceFetch = useCallback(async () => {
+  const forceFetch = useCallback(async (overrideFilters?: OrderFilters) => {
     // Clear any existing timeout để bypass debounce
     if (fetchTimeoutRef.current) {
       clearTimeout(fetchTimeoutRef.current);
@@ -1067,7 +1067,9 @@ export const useOrders = (options?: {
 
     setIsFetching(true);
     try {
-      await fetchOrdersInternal(filters);
+      // ✅ Sử dụng overrideFilters nếu có, nếu không thì dùng filters hiện tại
+      const filtersToUse = overrideFilters || filters;
+      await fetchOrdersInternal(filtersToUse);
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError") {
         console.error("❌ Force fetch failed:", error);

@@ -1014,8 +1014,8 @@ function ManagerOrderContent() {
         setFilters(newFilters);
       });
 
-      // ✅ Force fetch data ngay lập tức - sử dụng forceFetch để bypass debounce
-      forceFetch();
+      // ✅ Force fetch data ngay lập tức với filters mới - bypass debounce
+      forceFetch(newFilters);
     },
     [setFilters, filters, forceFetch]
   );

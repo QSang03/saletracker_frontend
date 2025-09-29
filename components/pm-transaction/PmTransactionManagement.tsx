@@ -900,6 +900,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // ✅ Tối ưu: Sử dụng ref để tránh fetch nhiều lần
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
+  const hasInitialFetchRef = useRef(false); // ✅ Flag để tránh fetch lần đầu khi restore
 
   useEffect(() => {
     // Nếu là PM, admin hoặc view role thì tải dữ liệu
@@ -917,6 +918,18 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       
       if (isFetchingRef.current) return; // Skip nếu đang fetch
       if (isRestoringRef.current) return; // Skip nếu đang restore filters
+      
+      // ✅ Tránh fetch lần đầu khi restore từ localStorage
+      if (!hasInitialFetchRef.current) {
+        hasInitialFetchRef.current = true;
+        // Fetch ngay lập tức cho lần đầu
+        isFetchingRef.current = true;
+        Promise.all([fetchOrders(), fetchStats()])
+          .finally(() => {
+            isFetchingRef.current = false;
+          });
+        return;
+      }
       
       fetchTimeoutRef.current = setTimeout(() => {
         isFetchingRef.current = true;
