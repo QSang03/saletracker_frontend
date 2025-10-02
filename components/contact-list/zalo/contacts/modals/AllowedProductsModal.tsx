@@ -64,6 +64,7 @@ export default function AllowedProductsModal({
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [onlyMyAllowed, setOnlyMyAllowed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [allMatchingSelected, setAllMatchingSelected] = useState(false);
   // No global cross-contact badges; each contact manages its own allowed list
   const { items, patchBulk, fetchAll } = useContactAllowedProducts(contactId);
   const { currentUser } = useCurrentUser();
@@ -111,8 +112,6 @@ export default function AllowedProductsModal({
       // Reset page on open
       setPage(1);
       initializedAllowedRef.current = false;
-      // Load allowed products for the contact (full list of allowed ids)
-      fetchAll();
       // Load meta for filters (brands, categories)
       (async () => {
         try {
@@ -127,18 +126,20 @@ export default function AllowedProductsModal({
         }
       })();
     }
-  }, [open, fetchAll]);
+  }, [open]);
 
   // Update selected items when allowed data changes (first time on open)
   useEffect(() => {
     if (!open) return;
-    if (!initializedAllowedRef.current) {
+    if (!initializedAllowedRef.current && items.length > 0) {
       const activeIds = new Set(
         items.filter((i) => i.active).map((i) => i.productId)
       );
       setSelected(activeIds);
+      // Store initial state for delta calculation
       initialAllowedRef.current = new Set(activeIds);
       initializedAllowedRef.current = true;
+      console.log('[DEBUG] Initial allowed products set:', Array.from(activeIds));
     }
   }, [items, open]);
 
@@ -174,13 +175,19 @@ export default function AllowedProductsModal({
             const activeIdsFromPage = items
               .filter((p: any) => (p as any).activeForContact)
               .map((p: any) => p.productId as number);
-            if (activeIdsFromPage.length > 0) {
-              setSelected((prev) => {
-                const next = new Set(prev);
-                for (const id of activeIdsFromPage) next.add(id);
-                return next;
+            
+            setSelected((prev) => {
+              const next = new Set(prev);
+              // Remove products from current page that are no longer active
+              items.forEach((p: any) => {
+                if (!(p as any).activeForContact) {
+                  next.delete(p.productId);
+                }
               });
-            }
+              // Add products from current page that are active
+              activeIdsFromPage.forEach(id => next.add(id));
+              return next;
+            });
           }
           // When showing only products allowed for my user, pre-select them for this contact
           if (onlyMyAllowed && items.length > 0) {
@@ -260,30 +267,34 @@ export default function AllowedProductsModal({
       newSet.has(id) ? newSet.delete(id) : newSet.add(id);
       return newSet;
     });
+    setAllMatchingSelected(false);
   };
 
-  const toggleAll = () => {
-    // 🎯 Only consider actual products, not placeholders
-    const actualProducts = products.filter((p) => p.productId > 0);
+  const toggleAll = async () => {
+    // Select/unselect all across ALL pages matching current filters
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    brandFilter.forEach((b) => params.append('brands', b));
+    cateFilter.forEach((c) => params.append('cates', c));
+    // Not restricting by onlyMyAllowed; selection is based on current query scope
+    const { data } = await api.get<number[]>(`auto-reply/products.ids?${params.toString()}`);
 
-    if (
-      actualProducts.length > 0 &&
-      actualProducts.every((p) => selected.has(p.productId))
-    ) {
-      // Unselect all items on current page (only actual products)
-      setSelected((prev) => {
-        const newSet = new Set(prev);
-        actualProducts.forEach((p) => newSet.delete(p.productId));
-        return newSet;
-      });
-    } else {
-      // Select all items on current page (only actual products)
-      setSelected((prev) => {
-        const newSet = new Set(prev);
-        actualProducts.forEach((p) => newSet.add(p.productId));
-        return newSet;
-      });
-    }
+    const allIds: number[] = (data || []).filter((id) => id > 0);
+    const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
+
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        // Unselect all
+        allIds.forEach((id) => next.delete(id));
+        setAllMatchingSelected(false);
+      } else {
+        // Select all
+        allIds.forEach((id) => next.add(id));
+        setAllMatchingSelected(true);
+      }
+      return next;
+    });
   };
 
   const performSave = async () => {
@@ -291,14 +302,26 @@ export default function AllowedProductsModal({
       if (zaloDisabled) return;
 
       setLoading(true);
-      const selectedIds = Array.from(selected).filter((id) => id > 0); // 🎯 Only actual product IDs
-      const before = initialAllowedRef.current;
+      // Always fetch latest allowed state from server to compute accurate deltas
+      const { data: latest } = await api.get<{ productId: number; contactId: number; active: boolean }[]>(`auto-reply/contacts/${contactId}/allowed-products`);
+      const before = new Set<number>((latest || []).filter((i) => i.active).map((i) => i.productId));
+      const selectedIds = Array.from(selected).filter((id: number) => id > 0); // 🎯 Only actual product IDs
       // Compute deltas
       const toEnable = selectedIds.filter((id) => !before.has(id));
       const toDisable = Array.from(before).filter((id) => !selected.has(id));
 
+      console.log('[DEBUG] Save operation:', {
+        selectedIds,
+        before: Array.from(before),
+        toEnable,
+        toDisable
+      });
+
       if (toEnable.length > 0) await patchBulk(toEnable, true);
       if (toDisable.length > 0) await patchBulk(toDisable, false);
+
+      // Update initial state to reflect current state after save
+      initialAllowedRef.current = new Set(selectedIds);
 
       setAlert({
         type: "success",
@@ -327,14 +350,18 @@ export default function AllowedProductsModal({
     setTotal(0);
     setPage(1);
     setPageSize(10);
+    setSelected(new Set());
     initializedAllowedRef.current = false;
+    initialAllowedRef.current = new Set();
     onClose();
   };
 
-  const selectedCount = selected.size;
+  const selectedCount = useMemo(() => {
+    if (allMatchingSelected) return total;
+    return Array.from(selected).filter((id) => id > 0).length;
+  }, [selected, allMatchingSelected, total]);
   const isSelectedOnPage = (p: ExtendedProduct) =>
-    p.productId > 0 &&
-    (selected.has(p.productId) || (p as any).activeForContact === true);
+    p.productId > 0 && selected.has(p.productId);
 
   // 🎯 Only consider actual products for "all selected" check
   const actualProducts = products.filter((p) => p.productId > 0);
@@ -567,9 +594,12 @@ export default function AllowedProductsModal({
                                 ? "bg-orange-100 hover:bg-orange-200/60"
                                 : ""
                             }`}
-                            onClick={() =>
-                              !zaloDisabled && toggleProduct(product.productId)
-                            }
+                            onClick={(e) => {
+                              // Only toggle if not clicking on checkbox
+                              if (!(e.target as HTMLElement).closest('[role="checkbox"]')) {
+                                !zaloDisabled && toggleProduct(product.productId);
+                              }
+                            }}
                             onDoubleClick={(e) => {
                               smoothScrollToElement(
                                 e.currentTarget as HTMLElement

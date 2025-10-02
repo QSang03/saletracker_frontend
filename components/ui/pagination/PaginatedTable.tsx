@@ -559,8 +559,8 @@ export default function PaginatedTable({
       (filters.quantity === undefined) && // Thêm quantity check
       (filters.conversationType?.length || 0) === 0 && // ✅ SỬA: Conversation type check
       filters.employees.length === 0 &&
-      !filters.dateRange.from &&
-      !filters.dateRange.to &&
+      !filters.dateRange?.from &&
+      !filters.dateRange?.to &&
       !filters.singleDate
     );
   }, []);
@@ -618,133 +618,53 @@ export default function PaginatedTable({
     }
   }, []);
 
-  // ✅ IMPROVED: Selective sync logic based on user modifications
+  // ✅ IMPROVED: Selective sync logic based on user modifications (only when NOT restoring)
   useEffect(() => {
-    if (memoizedInitialFilters && isInitializedRef.current) {
+    if (memoizedInitialFilters && isInitializedRef.current && !isRestoring) {
       setFilters((prev) => {
-        // ✅ Force sync nếu đang restore hoặc user chưa tương tác
-        if (!hasUserInteracted || isRestoring) {
-          // Sync tất cả nếu user chưa tương tác hoặc đang restore
-          const newFilters = {
-            search:
-              memoizedInitialFilters.search !== undefined
-                ? memoizedInitialFilters.search
-                : prev.search,
-            departments:
-              memoizedInitialFilters.departments !== undefined
-                ? memoizedInitialFilters.departments
-                : prev.departments,
-            roles:
-              memoizedInitialFilters.roles !== undefined
-                ? memoizedInitialFilters.roles
-                : prev.roles,
-            statuses:
-              memoizedInitialFilters.statuses !== undefined
-                ? memoizedInitialFilters.statuses
-                : prev.statuses,
-            managers:
-              memoizedInitialFilters.managers !== undefined
-                ? memoizedInitialFilters.managers
-                : prev.managers,
-            zaloLinkStatuses:
-              memoizedInitialFilters.zaloLinkStatuses !== undefined
-                ? memoizedInitialFilters.zaloLinkStatuses
-                : prev.zaloLinkStatuses,
-            categories:
-              memoizedInitialFilters.categories !== undefined
-                ? memoizedInitialFilters.categories
-                : prev.categories,
-            brands:
-              memoizedInitialFilters.brands !== undefined
-                ? memoizedInitialFilters.brands
-                : prev.brands,
-            brandCategories:
-              memoizedInitialFilters.brandCategories !== undefined
-                ? memoizedInitialFilters.brandCategories
-                : prev.brandCategories,
-            warningLevels:
-              memoizedInitialFilters.warningLevels !== undefined
-                ? memoizedInitialFilters.warningLevels
-                : prev.warningLevels,
-            quantity:
-              memoizedInitialFilters.quantity !== undefined
-                ? memoizedInitialFilters.quantity
-                : prev.quantity,
-            conversationType:
-              memoizedInitialFilters.conversationType !== undefined
-                ? memoizedInitialFilters.conversationType
-                : prev.conversationType,
-            productCode:
-              memoizedInitialFilters.productCode !== undefined
-                ? memoizedInitialFilters.productCode
-                : prev.productCode,
-            dateRange:
-              memoizedInitialFilters.dateRange !== undefined
-                ? memoizedInitialFilters.dateRange
-                : prev.dateRange,
-            singleDate:
-              memoizedInitialFilters.singleDate !== undefined
-                ? memoizedInitialFilters.singleDate
-                : prev.singleDate,
-            employees:
-              memoizedInitialFilters.employees !== undefined
-                ? memoizedInitialFilters.employees
-                : prev.employees,
-            sort:
-              memoizedInitialFilters.sort !== undefined
-                ? memoizedInitialFilters.sort
-                : prev.sort,
-          };
+        // Chỉ sync những field chưa bị user modify khi không đang restore
+        const newFilters = { ...prev };
+        let hasChanges = false;
 
-          // Only update if actually different
-          const isEqual = JSON.stringify(prev) === JSON.stringify(newFilters);
-          return isEqual ? prev : newFilters;
-        } else {
-          // Chỉ sync những field chưa bị user modify
-          const newFilters = { ...prev };
-          let hasChanges = false;
+        const fieldsToCheck = [
+          "search",
+          "departments",
+          "roles",
+          "statuses",
+          "managers",
+          "zaloLinkStatuses",
+          "categories",
+          "brands",
+          "brandCategories",
+          "warningLevels",
+          "quantity",
+          "conversationType",
+          "productCode",
+          "dateRange",
+          "singleDate",
+          "employees",
+          "sort",
+        ] as (keyof Filters)[];
 
-          const fieldsToCheck = [
-            "search",
-            "departments",
-            "roles",
-            "statuses",
-            "managers",
-            "zaloLinkStatuses",
-            "categories",
-            "brands",
-            "brandCategories",
-            "warningLevels",
-            "quantity",
-            "conversationType", // ✅ SỬA: Include conversation type in sync
-            "productCode", // ✅ SỬA: Include product code in sync
-            "dateRange",
-            "singleDate",
-            "employees",
-            "sort",
-          ] as (keyof Filters)[];
+        fieldsToCheck.forEach((field) => {
+          if (
+            !userModifiedFieldsRef.current.has(field) &&
+            memoizedInitialFilters[field] !== undefined
+          ) {
+            const currentValue = prev[field];
+            const incomingValue = memoizedInitialFilters[field];
 
-          fieldsToCheck.forEach((field) => {
-            if (
-              !userModifiedFieldsRef.current.has(field) &&
-              memoizedInitialFilters[field] !== undefined
-            ) {
-              const currentValue = prev[field];
-              const incomingValue = memoizedInitialFilters[field];
+            // More precise comparison
+            const isDifferent =
+              JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
 
-              // More precise comparison
-              const isDifferent =
-                JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
-
-              if (isDifferent) {
-                (newFilters as any)[field] = incomingValue;
-                hasChanges = true;
-              }
-            } else if (userModifiedFieldsRef.current.has(field)) {
+            if (isDifferent) {
+              (newFilters as any)[field] = incomingValue;
+              hasChanges = true;
             }
-          });
-          return hasChanges ? newFilters : prev;
-        }
+          }
+        });
+        return hasChanges ? newFilters : prev;
       });
     }
   }, [memoizedInitialFilters, hasUserInteracted, isRestoring]);
@@ -1322,48 +1242,49 @@ export default function PaginatedTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPageSize, isRestoring]);
 
-  // If parent signals a restoring/resetting state, force clear internal filters UI immediately
+  // If parent signals a restoring/resetting state, use initialFilters instead of resetting
   useEffect(() => {
-    if (isRestoring) {
-      const reset: Filters = {
-        search: "",
-        departments: [],
-        roles: [],
-        statuses: [],
-        managers: [],
-        zaloLinkStatuses: [],
-        categories: [],
-        brands: [],
-        brandCategories: [],
-        warningLevels: [],
-        quantity: undefined,
-        conversationType: [], // ✅ SỬA: Reset conversation type
-        dateRange: { from: undefined, to: undefined },
-        singleDate: undefined,
-        employees: [],
-        sort: undefined,
+    if (isRestoring && memoizedInitialFilters) {
+      // Use initialFilters to restore the correct state instead of resetting
+      const restoredFilters: Filters = {
+        search: memoizedInitialFilters.search || "",
+        departments: memoizedInitialFilters.departments || [],
+        roles: memoizedInitialFilters.roles || [],
+        statuses: memoizedInitialFilters.statuses || [],
+        managers: memoizedInitialFilters.managers || [],
+        zaloLinkStatuses: memoizedInitialFilters.zaloLinkStatuses || [],
+        categories: memoizedInitialFilters.categories || [],
+        brands: memoizedInitialFilters.brands || [],
+        brandCategories: memoizedInitialFilters.brandCategories || [],
+        warningLevels: memoizedInitialFilters.warningLevels || [],
+        quantity: memoizedInitialFilters.quantity,
+        conversationType: memoizedInitialFilters.conversationType || [],
+        dateRange: memoizedInitialFilters.dateRange || { from: undefined, to: undefined },
+        singleDate: memoizedInitialFilters.singleDate,
+        employees: memoizedInitialFilters.employees || [],
+        sort: memoizedInitialFilters.sort,
       };
 
-      // Force update internal UI state
-      setFilters(reset);
+      // Force update internal UI state with restored filters
+      setFilters(restoredFilters);
       setHasUserInteracted(false);
 
       // Notify parent immediately so external state can sync as well
       if (onFilterChange) {
         try {
-          const json = JSON.stringify(reset);
+          const json = JSON.stringify(restoredFilters);
           if (lastFiltersRef.current !== json) {
             lastFiltersRef.current = json;
-            onFilterChange(reset);
+            onFilterChange(restoredFilters);
           }
         } catch (e) {
           // ignore
-          onFilterChange(reset);
+          onFilterChange(restoredFilters);
         }
       }
     }
     // Only trigger when isRestoring flips
-  }, [isRestoring, defaultQuantity, onFilterChange]);
+  }, [isRestoring, memoizedInitialFilters, onFilterChange]);
 
   // State cho input "đi tới trang"
   const [gotoPageInput, setGotoPageInput] = useState<string>("");
@@ -1661,23 +1582,23 @@ export default function PaginatedTable({
                     variant="outline"
                     className={cn(
                       "w-full justify-start text-left font-normal",
-                      !filters.dateRange.from && "text-muted-foreground"
+                      !filters.dateRange?.from && "text-muted-foreground"
                     )}
                   >
                     {/* <CalendarDays className="mr-2 h-4 w-4" /> */}
-                    {filters.dateRange.from ? (
-                      filters.dateRange.to ? (
+                    {filters.dateRange?.from ? (
+                      filters.dateRange?.to ? (
                         <>
-                          {format(filters.dateRange.from, "dd/MM/yyyy", {
+                          {format(filters.dateRange?.from, "dd/MM/yyyy", {
                             locale: vi,
                           })}{" "}
                           -{" "}
-                          {format(filters.dateRange.to, "dd/MM/yyyy", {
+                          {format(filters.dateRange?.to, "dd/MM/yyyy", {
                             locale: vi,
                           })}
                         </>
                       ) : (
-                        format(filters.dateRange.from, "dd/MM/yyyy", {
+                        format(filters.dateRange?.from, "dd/MM/yyyy", {
                           locale: vi,
                         })
                       )
@@ -1690,20 +1611,20 @@ export default function PaginatedTable({
                   <Calendar
                     initialFocus
                     mode="range"
-                    defaultMonth={filters.dateRange.from}
+                    defaultMonth={filters.dateRange?.from}
                     selected={filters.dateRange}
                     disabled={(date) => {
                       // ✅ THÊM: Disable các ngày không được phép chọn
-                      if (!filters.dateRange.from) {
+                      if (!filters.dateRange?.from) {
                         // Nếu chưa chọn ngày bắt đầu, chỉ disable các ngày quá cũ (hơn 14 ngày trước)
                         const fourteenDaysAgo = new Date();
                         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
                         return date < fourteenDaysAgo || date > new Date();
                       } else {
                         // Nếu đã chọn ngày bắt đầu, disable các ngày ngoài khoảng 14 ngày
-                        const maxDate = new Date(filters.dateRange.from);
+                        const maxDate = new Date(filters.dateRange?.from);
                         maxDate.setDate(maxDate.getDate() + 14);
-                        const minDate = new Date(filters.dateRange.from);
+                        const minDate = new Date(filters.dateRange?.from);
                         minDate.setDate(minDate.getDate() - 14);
                         
                         return date < minDate || date > maxDate || date > new Date();

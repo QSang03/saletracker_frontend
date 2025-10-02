@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { getUserRolesWithPermissions } from "@/lib/api";
+import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +84,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // ✅ Customer search navigation states (giống manager order)
+  const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const isRestoringRef = useRef(false);
+  const [previousFilters, setPreviousFilters] = useState<any>(null);
+  
   const [searchTerm, setSearchTerm] = useState(() => {
     // ✅ Restore search term từ localStorage ngay khi component mount (giống useOrders)
     if (typeof window === "undefined") return "";
@@ -144,17 +153,69 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const [dateRangeState, setDateRangeState] = useState<{
     start?: string;
     end?: string;
-  } | null>(null);
+  } | null>(() => {
+    // ✅ Restore date range từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.dateRange || null;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  });
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState<string | null>(null);
   const [employeesSelected, setEmployeesSelected] = useState<
     (string | number)[]
   >([]);
-  const [warningLevelFilter, setWarningLevelFilter] = useState("");
-  const [minQuantity, setMinQuantity] = useState<number | undefined>(undefined);
+  const [warningLevelFilter, setWarningLevelFilter] = useState(() => {
+    // ✅ Restore warning level filter từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return "";
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.warningLevel || "";
+      }
+    } catch (e) {
+      // ignore
+    }
+    return "";
+  });
+  const [minQuantity, setMinQuantity] = useState<number | undefined>(() => {
+    // ✅ Restore min quantity từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return undefined;
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.quantity ? Number(parsed.quantity) : undefined;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return undefined;
+  });
   const [conversationTypesSelected, setConversationTypesSelected] = useState<
     string[]
-  >([]);
+  >(() => {
+    // ✅ Restore conversation types từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.conversationType ? parsed.conversationType.split(',').filter(Boolean) : [];
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  });
   const [showModal, setShowModal] = useState(false);
   const [modalOrder, setModalOrder] = useState<Order | null>(null);
   const [modalMessages, setModalMessages] = useState<any[]>([]);
@@ -189,10 +250,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const [filtersLoaded, setFiltersLoaded] = useState(false);
   const filtersLoadingRef = useRef(false);
   // Back/restore state
-  const [isRestoring, setIsRestoring] = useState(false);
-  const isRestoringRef = useRef(false);
   const [userRolesWithPermissions, setUserRolesWithPermissions] = useState<any[]>([]);
-  const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
   const [filtersRestored, setFiltersRestored] = useState(false);
   const previousPmFiltersRef = useRef<PmFilters | null>(null);
 
@@ -1095,63 +1153,241 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   useEffect(() => {
     if (typeof window === "undefined") return;
     
-    // ✅ Chỉ cần set history state, filters đã được restore trong useState initializer
     const state = window.history.state as any;
-    if (!state || !state.pmFilters) {
-      const pmFilters = getCurrentPmFilters();
-      window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+    
+    // ✅ Khi F5, history state bị mất → restore từ localStorage
+    if (!state || (!state.pmFilters && !state.filters)) {
+      const stored = getPmFiltersFromStorage();
+      
+      if (stored) {
+        console.log('🔄 [PM Init] Restoring from localStorage on F5:', stored);
+        
+        // ✅ CRITICAL: Apply filters vào state TRƯỚC KHI set filtersRestored
+        applyPmFilters(stored, true); // skipSave = true để tránh loop
+        
+        // Replace history state với filters từ localStorage
+        window.history.replaceState({ 
+          filters: stored,
+          pmFilters: stored, 
+          isCustomerSearch: false, 
+          timestamp: Date.now() 
+        }, "", window.location.pathname);
+      } else {
+        console.log('🔄 [PM Init] No stored filters, using current state');
+        const current = getCurrentPmFilters();
+        window.history.replaceState({ 
+          filters: current,
+          pmFilters: current, 
+          isCustomerSearch: false, 
+          timestamp: Date.now() 
+        }, "", window.location.pathname);
+      }
+    } else {
+      console.log('🔄 [PM Init] History state exists:', state.pmFilters);
     }
-    setFiltersRestored(true); // Mark that initialization is complete
+    
+    // ✅ Delay để đảm bảo applyPmFilters đã hoàn tất
+    setTimeout(() => {
+      setFiltersRestored(true); // Mark that initialization is complete
+    }, 150);
   }, []); // ✅ Chạy ngay khi component mount
 
-  // Handle browser back/forward to restore filters like Order management
+  // ✅ Handle browser back/forward to restore filters (giống manager order)
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
-      // Prefer stored filters from localStorage to avoid accidental resets
-      const stored = getPmFiltersFromStorage();
-      if (stored) {
-        setIsInCustomerSearchMode(false);
-        applyPmFilters(stored);
-        window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-        return;
-      }
+      // Block during restore
+      isRestoringRef.current = true;
+      setIsRestoring(true);
 
       const hs = (event.state || {}) as any;
-      if (!hs) return;
-      const prev = hs.previousFilters as PmFilters | undefined;
-      const filters = (hs.pmFilters as PmFilters) || undefined;
 
-      if (prev) {
-        setIsInCustomerSearchMode(false);
-        applyPmFilters(prev);
-        savePmFiltersToStorage(prev);
-        const newState = { pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() };
-        window.history.replaceState(newState, "", window.location.href);
-      } else if (filters) {
-        setIsInCustomerSearchMode(!!hs.isCustomerSearch);
-        applyPmFilters(filters);
-        savePmFiltersToStorage(filters);
+      const applySnapshot = (snap: PmFilters, isCustomerSearchFlag: boolean, hasPrev: boolean) => {
+        flushSync(() => {
+          setPageSize(snap.pageSize ?? 10);
+          setCurrentPage(snap.page ?? 1);
+          setSearchTerm(snap.search || "");
+          setStatusFilter(snap.status && snap.status.length > 0 ? snap.status : "all");
+          if (snap.dateRange && snap.dateRange.start && snap.dateRange.end) {
+            setDateRangeState({ start: snap.dateRange.start, end: snap.dateRange.end });
+          } else {
+            setDateRangeState(null);
+          }
+          if (snap.date && snap.date.length > 0) {
+            setDateFilter(snap.date);
+          } else {
+            setDateFilter("all");
+          }
+          setDepartmentsSelected(snap.departments ? snap.departments.split(',').filter(Boolean) : []);
+          setEmployeesSelected(snap.employees ? snap.employees.split(',').filter(Boolean) : []);
+          setBrandsSelected(snap.brands ? snap.brands.split(',').filter(Boolean) : []);
+          setCategoriesSelected(snap.categories ? snap.categories.split(',').filter(Boolean) : []);
+          setBrandCategoriesSelected(snap.brandCategories ? snap.brandCategories.split(',').filter(Boolean) : []);
+          setWarningLevelFilter(snap.warningLevel || "");
+          setMinQuantity(typeof snap.quantity === 'number' ? snap.quantity : undefined);
+          setConversationTypesSelected(snap.conversationType ? snap.conversationType.split(',').filter(Boolean) : []);
+          setShowHiddenOrders(snap.showHiddenOrders || false);
+          setHiddenOrdersDays(snap.hiddenOrdersDays || 7);
+          // Customer-search flags
+          if (isCustomerSearchFlag) {
+            setIsInCustomerSearchMode(true);
+            setCanGoBack(!!hasPrev);
+          } else {
+            setIsInCustomerSearchMode(false);
+            setCanGoBack(false);
+          }
+        });
+        try { savePmFiltersToStorage(snap); } catch {}
+      };
+
+      if (hs && hs.isReset === true && (hs.pmFilters || hs.filters)) {
+        // Reset state branch
+        const f = (hs.pmFilters || hs.filters) as PmFilters;
+        applySnapshot(f, false, false);
+
+        // Build URL and replace as non-reset
+        const params = new URLSearchParams();
+        params.set('page', String(f.page));
+        params.set('pageSize', String(f.pageSize));
+        if (f.search?.trim()) params.set('search', f.search.trim());
+        if (f.status) params.set('status', f.status);
+        if (f.date) params.set('date', f.date);
+        if (f.dateRange) params.set('dateRange', JSON.stringify(f.dateRange));
+        // PM filters không dùng 'employee' đơn lẻ
+        if (f.employees) params.set('employees', f.employees);
+        if (f.departments) params.set('departments', f.departments);
+        if (f.brands) params.set('brands', f.brands);
+        if (f.categories) params.set('categories', f.categories);
+        if (f.brandCategories) params.set('brandCategories', f.brandCategories);
+        if (f.warningLevel) params.set('warningLevel', f.warningLevel);
+        if (typeof f.quantity === 'number') params.set('quantity', String(f.quantity));
+        if (f.conversationType) params.set('conversationType', f.conversationType);
+        const newUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+        window.history.replaceState({ pmFilters: f, page: f.page, pageSize: f.pageSize, timestamp: Date.now(), isReset: false }, '', newUrl);
+      } else if (hs && hs.previousFilters) {
+        // Back from customer search → apply previousFilters immediately
+        const prev = hs.previousFilters as PmFilters;
+        applySnapshot(prev, false, false);
+
+        // Replace URL to previous snapshot
+        const params = new URLSearchParams();
+        params.set('page', String(prev.page));
+        params.set('pageSize', String(prev.pageSize));
+        if (prev.search?.trim()) params.set('search', prev.search.trim());
+        if (prev.status) params.set('status', prev.status);
+        if (prev.date) params.set('date', prev.date);
+        if (prev.dateRange) params.set('dateRange', JSON.stringify(prev.dateRange));
+        // PM filters không dùng 'employee' đơn lẻ
+        if (prev.employees) params.set('employees', prev.employees);
+        if (prev.departments) params.set('departments', prev.departments);
+        if (prev.brands) params.set('brands', prev.brands);
+        if (prev.categories) params.set('categories', prev.categories);
+        if (prev.brandCategories) params.set('brandCategories', prev.brandCategories);
+        if (prev.warningLevel) params.set('warningLevel', prev.warningLevel);
+        if (typeof prev.quantity === 'number') params.set('quantity', String(prev.quantity));
+        if (prev.conversationType) params.set('conversationType', prev.conversationType);
+        const newUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+        window.history.replaceState({ pmFilters: prev, page: prev.page, pageSize: prev.pageSize, timestamp: Date.now() }, '', newUrl);
+      } else if (hs && (hs.pmFilters || hs.filters)) {
+        // Generic filters branch
+        const snap = (hs.pmFilters || hs.filters) as PmFilters;
+        const hasPrev = !!hs.previousFilters;
+        applySnapshot(snap, !!hs.isCustomerSearch, hasPrev);
       }
+
+      setTimeout(() => {
+        isRestoringRef.current = false;
+        setIsRestoring(false);
+        // Post-restore fetch giống manager order
+        try {
+          fetchOrders((hs.previousFilters as PmFilters) || (hs.pmFilters as PmFilters) || (hs.filters as PmFilters));
+        } catch {}
+      }, 200);
     };
+    
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // ✅ Restore previous state function (giống manager order) - di chuyển lên trước để tránh hoisting issue
+  const restorePreviousState = useCallback(async () => {
+    if (previousFilters) {
+      // ✅ Prevent any interference
+      setIsRestoring(true);
+
+      // ✅ Update state atomic
+      setSearchTerm(previousFilters.search || "");
+      setStatusFilter(previousFilters.status || "all");
+      setDateFilter(previousFilters.date || "all");
+      setDepartmentsSelected(previousFilters.departments ? previousFilters.departments.split(',').filter(Boolean) : []);
+      setEmployeesSelected(previousFilters.employees ? previousFilters.employees.split(',').filter(Boolean) : []);
+      setCurrentPage(previousFilters.page || 1);
+      setIsInCustomerSearchMode(false);
+      setCanGoBack(false);
+
+      // ✅ Save to storage
+      savePmFiltersToStorage(previousFilters);
+
+      // ✅ Clean up
+      setPreviousFilters(null);
+
+      // ✅ Delay để đảm bảo state đã stable
+      setTimeout(() => {
+        setIsRestoring(false);
+      }, 200);
+    } else {
+      console.warn("⚠️ No previous filters to restore");
+      if (window.history.length > 1) {
+        window.history.back();
+      }
+    }
+  }, [previousFilters]);
+
+  // ✅ Handle restore previous (giống manager order) - di chuyển lên trước để tránh hoisting issue
+  const handleRestorePrevious = useCallback(async () => {
+    await restorePreviousState();
+  }, [restorePreviousState]);
+
+  
+
   const performCustomerSearch = (customerName: string) => {
     if (!customerName || !customerName.trim()) return;
     
-    // ✅ Chỉ update search term với exact match, không reset các filter khác
-    const exactSearchTerm = `"${customerName.trim()}"`;
-    setSearchTerm(exactSearchTerm);
-    setCurrentPage(1);
-    
-    // Lưu vào localStorage với exact search term
+    // ✅ Snapshot current filters to previousFilters (giống manager order)
     const currentFilters = getCurrentPmFilters();
-    const updatedFilters = { ...currentFilters, search: exactSearchTerm, page: 1 };
-    savePmFiltersToStorage(updatedFilters);
-    
-    // ✅ Không cần gọi fetchOrders ở đây nữa - useEffect sẽ tự động fetch khi searchTerm thay đổi
+    setPreviousFilters(currentFilters);
+
+    // ✅ Trước khi push customer search state, replace current state với previousFilters info
+    try {
+      const currentState: any = window.history.state || {};
+      window.history.replaceState(
+        {
+          ...currentState,
+          previousFilters: currentFilters,
+          isCustomerSearch: false,
+        },
+        "",
+        window.location.href
+      );
+    } catch {}
+
+    // Set flags giống manager order
+    flushSync(() => {
+      setIsInCustomerSearchMode(true);
+      setCanGoBack(true);
+    });
+
+    // Build exact search and push state mới
+    const exactSearchTerm = `"${customerName.trim()}"`;
+    const searchFilters: Partial<PmFilters> = {
+      ...currentFilters,
+      search: exactSearchTerm,
+      page: 1,
+    };
+
+    // ✅ Push entry mới với flag isCustomerSearch và previousFilters
+    updatePmFiltersAndUrl(searchFilters, false, true, currentFilters, false);
   };
+
 
   // When departments change, remove any selected employees that no longer belong to the available set
   useEffect(() => {
@@ -1187,6 +1423,71 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     }
   }, [availableEmployees, employeesSelected, filtersLoaded, isViewRole]);
 
+  // Helper: build query string from PM filters
+  const buildPmQueryString = (f: PmFilters): string => {
+    const params = new URLSearchParams();
+    params.set('page', String(f.page));
+    params.set('pageSize', String(f.pageSize));
+    if (f.search && f.search.trim()) params.set('search', f.search.trim());
+    if (f.status) params.set('status', f.status);
+    if (f.date) params.set('date', f.date);
+    if (f.dateRange) params.set('dateRange', JSON.stringify(f.dateRange));
+    if (f.departments) params.set('departments', f.departments);
+    if (f.employees) params.set('employees', f.employees);
+    if (f.brands) params.set('brands', f.brands);
+    if (f.categories) params.set('categories', f.categories);
+    if (f.brandCategories) params.set('brandCategories', f.brandCategories);
+    if (f.warningLevel) params.set('warningLevel', f.warningLevel);
+    if (typeof f.quantity === 'number') params.set('quantity', String(f.quantity));
+    if (f.conversationType) params.set('conversationType', f.conversationType);
+    if (f.showHiddenOrders) params.set('includeHidden', '1');
+    if (typeof f.hiddenOrdersDays === 'number') params.set('hiddenOrdersDays', String(f.hiddenOrdersDays));
+    return params.toString();
+  };
+
+  // Parse filters from current URL as fallback when history.state is missing
+  // removed URL fallback to match manager-order behavior exactly
+
+  // ✅ Update filters + URL + History (mirror manager order)
+  const updatePmFiltersAndUrl = useCallback((
+    newFilters: Partial<PmFilters>,
+    skipHistory = false,
+    isCustomerSearch = false,
+    previousFilters?: PmFilters,
+    isReset = false
+  ) => {
+    if (isRestoringRef.current) return;
+
+    const current = getCurrentPmFilters();
+    const updated: PmFilters = { ...current, ...newFilters } as PmFilters;
+
+    try {
+      savePmFiltersToStorage(updated);
+    } catch {}
+
+    const query = buildPmQueryString(updated);
+    const newUrl = window.location.pathname + (query ? `?${query}` : '');
+
+    const historyState = {
+      filters: updated,
+      pmFilters: updated,
+      page: updated.page,
+      pageSize: updated.pageSize,
+      timestamp: Date.now(),
+      isCustomerSearch,
+      previousFilters: previousFilters || undefined,
+      isReset,
+    };
+
+    if (isReset) {
+      window.history.pushState(historyState, '', newUrl);
+    } else if (skipHistory) {
+      window.history.replaceState(historyState, '', newUrl);
+    } else {
+      window.history.pushState(historyState, '', newUrl);
+    }
+  }, [getCurrentPmFilters]);
+
   // Update filters and save to localStorage (similar to useOrders pattern)
   const updatePmFiltersAndStorage = useCallback((newFilters: Partial<PmFilters>) => {
     if (isRestoringRef.current) return; // Skip during restore
@@ -1204,6 +1505,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   useEffect(() => {
     if (isRestoringRef.current) return; // Skip saving during restore to avoid loops
     if (!filtersLoaded) return; // Skip saving until filters are loaded
+    if (!filtersRestored) return; // ✅ Skip saving until initial restoration is complete
     if (isRestoring) return; // Skip saving during restore state
     
     try {
@@ -1229,6 +1531,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     showHiddenOrders,
     hiddenOrdersDays,
     filtersLoaded,
+    filtersRestored, // ✅ Thêm dependency để effect chạy lại khi restoration complete
     isRestoring,
   ]);
 
@@ -1363,8 +1666,9 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         });
       }, 0);
 
-    // Persist snapshot immediately (overwrite any previous)
-    savePmFiltersToStorage(newSnapshot);
+    // ✅ Persist snapshot AND push to history (giống manager order)
+    // Chỉ attach previousFilters khi bắt đầu customer search (đã làm trong performCustomerSearch)
+    updatePmFiltersAndUrl(newSnapshot, false, false, undefined, false);
 
     // Rely on the consolidated effect to fetch data when state changes.
     // This prevents duplicate fetches (one from handler + one from effect).
@@ -2097,8 +2401,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                 onCheckedChange={(checked) => {
                   setShowHiddenOrders(checked);
                   setCurrentPage(1);
-                  // Save to localStorage immediately
-                  updatePmFiltersAndStorage({
+                  // ✅ Push to history (thay vì chỉ lưu localStorage)
+                  updatePmFiltersAndUrl({
                     showHiddenOrders: checked,
                     page: 1
                   });
@@ -2119,8 +2423,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                       const days = parseInt(value, 10);
                       setHiddenOrdersDays(days);
                       setCurrentPage(1);
-                      // Save to localStorage immediately
-                      updatePmFiltersAndStorage({
+                      // ✅ Push to history (thay vì chỉ lưu localStorage)
+                      updatePmFiltersAndUrl({
                         hiddenOrdersDays: days,
                         page: 1
                       });
@@ -2142,6 +2446,20 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             {/* include hidden option moved into Export modal */}
           </div>
         </CardHeader>
+        
+        {/* ✅ Customer Search Indicator (giống manager order) */}
+        {isInCustomerSearchMode && searchTerm && (
+          <CustomerSearchIndicator
+            customerName={searchTerm}
+            onRestorePrevious={handleRestorePrevious}
+            onClearSearch={() => {
+              // Clear search and exit customer search mode
+              setSearchTerm("");
+              handleRestorePrevious(); // Or just restore to previous state
+            }}
+          />
+        )}
+        
         <CardContent className="p-6 space-y-4">
           <PaginatedTable
             enableSearch={true}
@@ -2163,8 +2481,33 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             page={currentPage}
             total={totalItems}
             pageSize={pageSize}
-            onPageChange={(p) => setCurrentPage(p)}
-            onPageSizeChange={(s) => setPageSize(s)}
+            // ✅ Add isRestoring and initialFilters props (giống manager order)
+            isRestoring={isRestoring}
+            initialFilters={{
+              search: searchTerm,
+              statuses: statusFilter === "all" ? [] : [statusFilter],
+              employees: employeesSelected,
+              departments: departmentsSelected,
+              dateRange: dateRangeState ? {
+                from: dateRangeState.start ? new Date(dateRangeState.start) : undefined,
+                to: dateRangeState.end ? new Date(dateRangeState.end) : undefined,
+              } : undefined,
+              singleDate: dateFilter === "all" ? undefined : dateFilter,
+              warningLevels: warningLevelFilter ? warningLevelFilter.split(',').filter(Boolean) : [],
+              quantity: minQuantity,
+              conversationType: conversationTypesSelected,
+            }}
+            onPageChange={(p) => {
+              setCurrentPage(p);
+              // ✅ Push to history khi đổi trang
+              updatePmFiltersAndUrl({ page: p });
+            }}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setCurrentPage(1);
+              // ✅ Push to history khi đổi page size
+              updatePmFiltersAndUrl({ pageSize: s, page: 1 });
+            }}
             onFilterChange={handleFilterChange}
             availableCategories={filterOptions.categories}
             availableBrands={filterOptions.brands}
@@ -2175,70 +2518,58 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             onFetchAllDepartments={isViewRole ? fetchAllDepartments : undefined}
             onDepartmentChange={(vals) => {
               // immediate handler when user changes departments in the toolbar
-              // eslint-disable-next-line no-console
               setDepartmentsSelected(vals as (string | number)[]);
               setCurrentPage(1);
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
+              // Only persist snapshot; onFilterChange will push history
+              updatePmFiltersAndStorage({
+                departments: vals.length > 0 ? vals.join(',') : ''
+              });
             }}
             onEmployeeChange={(vals) => {
               // immediate handler when user changes employees in the toolbar
-              // eslint-disable-next-line no-console
               setEmployeesSelected(vals as (string | number)[]);
               setCurrentPage(1);
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
+              // Only persist snapshot; onFilterChange will push history
+              updatePmFiltersAndStorage({
+                employees: vals.length > 0 ? vals.join(',') : ''
+              });
             }}
             onBrandsChange={(vals) => {
               // immediate handler when user changes brands in the toolbar
               setBrandsSelected(vals as (string | number)[]);
               setCurrentPage(1);
-              
-              // Lưu vào localStorage
+              // Only persist snapshot; onFilterChange will push history
               updatePmFiltersAndStorage({
                 brands: vals.length > 0 ? vals.join(',') : ''
               });
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
             onCategoriesChange={(vals) => {
               // immediate handler when user changes categories in the toolbar
               setCategoriesSelected(vals as (string | number)[]);
               setCurrentPage(1);
-              
-              // Lưu vào localStorage
+              // Only persist snapshot; onFilterChange will push history
               updatePmFiltersAndStorage({
                 categories: vals.length > 0 ? vals.join(',') : ''
               });
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
             onBrandCategoryChange={(vals: (string | number)[]) => {
               // immediate handler when user changes brand categories in the toolbar
               setBrandCategoriesSelected(vals as (string | number)[]);
               setCurrentPage(1);
-              
-              // Lưu vào localStorage
+              // Only persist snapshot; onFilterChange will push history
               updatePmFiltersAndStorage({
                 brandCategories: vals.length > 0 ? vals.join(',') : ''
               });
             }}
             onWarningLevelChange={(vals) => {
               // immediate handler when user changes warning levels in the toolbar
-              // eslint-disable-next-line no-console
-              
-              // PaginatedTable có thể truyền values trực tiếp, không cần map
               const warningLevels = (vals as (string | number)[]).map(w => String(w));
-              
               setWarningLevelFilter(warningLevels.join(","));
               setCurrentPage(1);
-              
-              // Lưu vào localStorage
+              // Only persist snapshot; onFilterChange will push history
               updatePmFiltersAndStorage({
                 warningLevel: warningLevels.join(",")
               });
-              
-              // do not call fetchOrders() here; consolidated effect will react to state changes
             }}
             onDateRangeChange={(dateRange) => {
               if (dateRange && dateRange.from && dateRange.to) {
@@ -2248,19 +2579,16 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                 const to = dateRange.to instanceof Date 
                   ? dateRange.to.toLocaleDateString("en-CA")
                   : new Date(dateRange.to).toLocaleDateString("en-CA");
-                
                 setDateRangeState({ start: from, end: to });
                 setCurrentPage(1);
-                
-                // Immediately save to localStorage with both date and dateRange
+                // Only persist snapshot; onFilterChange will push history
                 updatePmFiltersAndStorage({
                   dateRange: { start: from, end: to }
                 });
               } else {
                 setDateRangeState(null);
                 setCurrentPage(1);
-                
-                // Clear dateRange from localStorage
+                // Only persist snapshot; onFilterChange will push history
                 updatePmFiltersAndStorage({
                   dateRange: undefined
                 });
@@ -2385,86 +2713,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             availableBrandCategories={filterOptions.brandCategories || []}
             singleDateLabel="Ngày tạo"
             dateRangeLabel="Khoảng thời gian"
-                         isRestoring={isRestoring}
-             initialFilters={useMemo(() => {
-               return {
-                 search: searchTerm,
-                 // Hiển thị departments đã chọn từ localStorage
-                 departments: departmentsSelected,
-                 // Hiển thị brand categories đã chọn từ localStorage
-                 brandCategories: brandCategoriesSelected,
-                 statuses:
-                   statusFilter && statusFilter !== "all"
-                     ? statusFilter.split(",")
-                     : [],
-                 // Store raw warning level values (match option.value); MultiSelectCombobox will map to labels
-                 warningLevels: warningLevelFilter
-                   ? warningLevelFilter.split(",").filter((w) => w)
-                   : [],
-                 dateRange: dateRangeState
-                   ? (() => {
-                       try {
-                         const fromDate = new Date(dateRangeState.start || "");
-                         const toDate = new Date(dateRangeState.end || "");
-                         
-                         // Kiểm tra xem các ngày có hợp lệ không
-                         if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-                           return {
-                             from: fromDate,
-                             to: toDate,
-                           };
-                         } else {
-                           console.warn("[PM] Invalid dateRange in initialFilters:", dateRangeState);
-                           return { from: undefined, to: undefined };
-                         }
-                       } catch (error) {
-                         console.warn("[PM] Error parsing dateRange in initialFilters:", error);
-                         return { from: undefined, to: undefined };
-                       }
-                     })()
-                   : { from: undefined, to: undefined },
-                 singleDate:
-                   dateFilter && dateFilter !== "all"
-                     ? (() => {
-                         try {
-                           const date = new Date(dateFilter);
-                           if (!isNaN(date.getTime())) {
-                             return date;
-                           } else {
-                             console.warn("[PM] Invalid singleDate in initialFilters:", dateFilter);
-                             return undefined;
-                           }
-                         } catch (error) {
-                           console.warn("[PM] Error parsing singleDate in initialFilters:", error);
-                           return undefined;
-                         }
-                       })()
-                     : undefined,
-                 // Hiển thị employees đã chọn từ localStorage
-                 employees: employeesSelected,
-                 // Hiển thị brands đã chọn từ localStorage
-                 brands: brandsSelected,
-                 // Hiển thị categories đã chọn từ localStorage
-                 categories: categoriesSelected,
-                 quantity: minQuantity,
-                 // ✅ SỬA: Conversation type từ array thành string array
-                 conversationType: conversationTypesSelected,
-               };
-             }, [
-               searchTerm,
-               statusFilter,
-               warningLevelFilter,
-               departmentsSelected,
-               employeesSelected,
-               brandsSelected,
-               categoriesSelected,
-               minQuantity,
-               dateRangeState,
-               dateFilter,
-               conversationTypesSelected, // ✅ SỬA: Include conversation types in initialFilters dependencies
-               showHiddenOrders,
-               hiddenOrdersDays,
-             ])}
              enableQuantityFilter={true}
              enableConversationTypeFilter={true}
              defaultQuantity={3}

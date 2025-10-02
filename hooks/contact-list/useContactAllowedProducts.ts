@@ -23,12 +23,18 @@ export function useContactAllowedProducts(contactId: number) {
   const patchBulk = useCallback(async (productIds: number[], active: boolean) => {
   await api.patch(`auto-reply/contacts/${contactId}/allowed-products`, { productIds, active });
     setItems(prev => {
-      const map = new Map(prev.map(i => [i.productId, i]));
-      productIds.forEach(pid => {
-        const cur = map.get(pid);
-        if (cur) cur.active = active; else map.set(pid, { productId: pid, contactId, active });
-      });
-      return Array.from(map.values());
+      if (active) {
+        // Enable: update or add items
+        const map = new Map(prev.map(i => [i.productId, i]));
+        productIds.forEach(pid => {
+          const cur = map.get(pid);
+          if (cur) cur.active = active; else map.set(pid, { productId: pid, contactId, active });
+        });
+        return Array.from(map.values());
+      } else {
+        // Disable: remove items from state
+        return prev.filter(item => !productIds.includes(item.productId));
+      }
     });
   }, [contactId]);
 

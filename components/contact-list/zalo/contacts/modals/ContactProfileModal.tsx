@@ -21,6 +21,10 @@ import {
   Lock,
   Sparkles,
   Bell,
+  Users,
+  Calendar,
+  Heart,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -42,9 +46,19 @@ export default function ContactProfileModal({
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
 
   const [form, setForm] = useState({
+    // Các trường cũ (giữ nguyên để tương thích)
     notes: "",
     toneHints: "",
     aovThreshold: "",
+    
+    // Các trường mới cho thông tin chi tiết khách hàng
+    customerInfo: {
+      gender: "",
+      age: "",
+      preferences: "",
+      budget: "",
+      purchaseHistory: "",
+    }
   });
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -52,6 +66,118 @@ export default function ContactProfileModal({
     [key: string]: string;
   }>({});
   const [showTonePresets, setShowTonePresets] = useState(false);
+
+  // Helper function to parse customer info from existing profile data
+  const parseCustomerInfoFromProfile = (profile: any) => {
+    const customerInfo = {
+      gender: "",
+      age: "",
+      preferences: "",
+      budget: "",
+      purchaseHistory: "",
+    };
+
+    if (profile.notes) {
+      const notes = profile.notes;
+      
+      // Check if notes contain structured customer info section
+      const customerInfoMatch = notes.match(/--- Thông tin chi tiết ---\n([\s\S]*)/);
+      
+      if (customerInfoMatch) {
+        // Extract from structured section
+        const customerInfoText = customerInfoMatch[1];
+        
+        // Extract gender
+        const genderMatch = customerInfoText.match(/giới tính[:\s]*([^\n]+)/i);
+        if (genderMatch) {
+          customerInfo.gender = genderMatch[1].trim();
+        }
+        
+        // Extract age
+        const ageMatch = customerInfoText.match(/tuổi[:\s]*(\d+)/i);
+        if (ageMatch) {
+          customerInfo.age = ageMatch[1];
+        }
+        
+        // Extract preferences
+        const prefMatch = customerInfoText.match(/sở thích[:\s]*([^\n]+)/i);
+        if (prefMatch) {
+          customerInfo.preferences = prefMatch[1].trim();
+        }
+        
+        // Extract budget
+        const budgetMatch = customerInfoText.match(/ngân sách[:\s]*([^\n]+)/i);
+        if (budgetMatch) {
+          customerInfo.budget = budgetMatch[1].trim();
+        }
+        
+        // Extract purchase history
+        const historyMatch = customerInfoText.match(/lịch sử mua hàng[:\s]*([^\n]+)/i);
+        if (historyMatch) {
+          customerInfo.purchaseHistory = historyMatch[1].trim();
+        }
+      } else {
+        // Fallback: try to extract from unstructured notes (for backward compatibility)
+        const genderMatch = notes.match(/giới tính[:\s]*([^\n,]+)/i) || notes.match(/khách là (nam|nữ)/i);
+        if (genderMatch) {
+          customerInfo.gender = genderMatch[1] || genderMatch[2] || "";
+        }
+        
+        const ageMatch = notes.match(/tuổi[:\s]*(\d+)/i) || notes.match(/(\d+)\s*tuổi/i);
+        if (ageMatch) {
+          customerInfo.age = ageMatch[1];
+        }
+        
+        const prefMatch = notes.match(/sở thích[:\s]*([^\n,]+)/i) || notes.match(/quan tâm[:\s]*([^\n,]+)/i);
+        if (prefMatch) {
+          customerInfo.preferences = prefMatch[1];
+        }
+        
+        const budgetMatch = notes.match(/ngân sách[:\s]*([^\n,]+)/i) || notes.match(/budget[:\s]*([^\n,]+)/i);
+        if (budgetMatch) {
+          customerInfo.budget = budgetMatch[1];
+        }
+        
+        const historyMatch = notes.match(/lịch sử mua hàng[:\s]*([^\n,]+)/i);
+        if (historyMatch) {
+          customerInfo.purchaseHistory = historyMatch[1];
+        }
+      }
+    }
+
+    return customerInfo;
+  };
+
+  // Helper function to merge customer info into notes and toneHints
+  const mergeCustomerInfoToProfile = (customerInfo: any, existingNotes: string, existingToneHints: string) => {
+    let newNotes = existingNotes;
+    let newToneHints = existingToneHints;
+
+    // Build structured customer info section
+    const customerInfoSection = [];
+    
+    if (customerInfo.gender) customerInfoSection.push(`Giới tính: ${customerInfo.gender}`);
+    if (customerInfo.age) customerInfoSection.push(`Tuổi: ${customerInfo.age}`);
+    if (customerInfo.preferences) customerInfoSection.push(`Sở thích: ${customerInfo.preferences}`);
+    if (customerInfo.budget) customerInfoSection.push(`Ngân sách: ${customerInfo.budget}`);
+    if (customerInfo.purchaseHistory) customerInfoSection.push(`Lịch sử mua hàng: ${customerInfo.purchaseHistory}`);
+
+    // Combine customer info with existing notes
+    if (customerInfoSection.length > 0) {
+      const customerInfoText = customerInfoSection.join('\n');
+      
+      // If there are existing notes, append customer info
+      if (existingNotes && existingNotes.trim()) {
+        newNotes = `${existingNotes}\n\n--- Thông tin chi tiết ---\n${customerInfoText}`;
+      } else {
+        // If no existing notes, use customer info as notes
+        newNotes = customerInfoText;
+      }
+    }
+
+    // Keep existing tone hints
+    return { notes: newNotes, toneHints: newToneHints };
+  };
 
   useEffect(() => {
     if (open) {
@@ -63,10 +189,20 @@ export default function ContactProfileModal({
 
   useEffect(() => {
     if (profile) {
+      // Parse existing data from notes and toneHints to extract customer info
+      const parsedCustomerInfo = parseCustomerInfoFromProfile(profile);
+      
+      // Extract actual notes (without customer info section)
+      let actualNotes = profile.notes || "";
+      if (actualNotes.includes("--- Thông tin chi tiết ---")) {
+        actualNotes = actualNotes.split("--- Thông tin chi tiết ---")[0].trim();
+      }
+      
       setForm({
-        notes: profile.notes || "",
+        notes: actualNotes,
         toneHints: profile.toneHints || "",
         aovThreshold: profile.aovThreshold || "",
+        customerInfo: parsedCustomerInfo,
       });
     }
   }, [profile]);
@@ -115,9 +251,16 @@ export default function ContactProfileModal({
 
     setSaving(true);
     try {
+      // Merge customer info into notes and toneHints
+      const { notes: mergedNotes, toneHints: mergedToneHints } = mergeCustomerInfoToProfile(
+        form.customerInfo,
+        form.notes,
+        form.toneHints
+      );
+
       await saveProfile({
-        notes: form.notes,
-        toneHints: form.toneHints,
+        notes: mergedNotes,
+        toneHints: mergedToneHints,
         aovThreshold: form.aovThreshold === "" ? null : form.aovThreshold,
       } as any);
 
@@ -135,6 +278,20 @@ export default function ContactProfileModal({
 
   const handleInputChange = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    // Clear validation error when user starts typing
+    if (validationErrors[field]) {
+      setValidationErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  const handleCustomerInfoChange = (field: string, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      customerInfo: {
+        ...prev.customerInfo,
+        [field]: value,
+      },
+    }));
     // Clear validation error when user starts typing
     if (validationErrors[field]) {
       setValidationErrors((prev) => ({ ...prev, [field]: "" }));
@@ -329,6 +486,156 @@ export default function ContactProfileModal({
           {/* Form Fields */}
           {!loading && (
             <div className="space-y-6">
+              {/* Customer Information Section */}
+              <motion.div
+                className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                    <Users className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">Thông tin chi tiết khách hàng</h3>
+                    <p className="text-sm text-gray-600">Nhập thông tin cơ bản về khách hàng</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Gender */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
+                      <Users className="w-4 h-4" />
+                      Giới tính
+                      <div className="relative group">
+                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          Giới tính của khách hàng để AI điều chỉnh cách giao tiếp
+                        </div>
+                      </div>
+                    </Label>
+                    <select
+                      disabled={zaloDisabled}
+                      className={cn(
+                        "w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300 bg-white",
+                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                      )}
+                      value={form.customerInfo.gender}
+                      onChange={(e) => handleCustomerInfoChange("gender", e.target.value)}
+                    >
+                      <option value="">Chọn giới tính</option>
+                      <option value="Nam">Nam</option>
+                      <option value="Nữ">Nữ</option>
+                      <option value="Khác">Khác</option>
+                    </select>
+                  </div>
+
+                  {/* Age */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
+                      <Calendar className="w-4 h-4" />
+                      Tuổi
+                      <div className="relative group">
+                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          Tuổi của khách hàng để AI tư vấn sản phẩm phù hợp
+                        </div>
+                      </div>
+                    </Label>
+                    <Input
+                      disabled={zaloDisabled}
+                      type="number"
+                      min="1"
+                      max="120"
+                      className={cn(
+                        "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300",
+                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                      )}
+                      placeholder="Ví dụ: 25"
+                      value={form.customerInfo.age}
+                      onChange={(e) => handleCustomerInfoChange("age", e.target.value)}
+                    />
+                  </div>
+
+                  {/* Budget */}
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
+                      <ShoppingBag className="w-4 h-4" />
+                      Ngân sách
+                      <div className="relative group">
+                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          Mức ngân sách khách hàng có thể chi trả
+                        </div>
+                      </div>
+                    </Label>
+                    <Input
+                      disabled={zaloDisabled}
+                      className={cn(
+                        "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300",
+                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                      )}
+                      placeholder="Ví dụ: 1-5 triệu, 5-10 triệu"
+                      value={form.customerInfo.budget}
+                      onChange={(e) => handleCustomerInfoChange("budget", e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Preferences */}
+                <div className="mt-4">
+                  <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
+                    <Heart className="w-4 h-4" />
+                    Sở thích & Quan tâm
+                    <div className="relative group">
+                      <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        Sở thích và mối quan tâm của khách hàng về sản phẩm
+                      </div>
+                    </div>
+                  </Label>
+                  <Textarea
+                    disabled={zaloDisabled}
+                    className={cn(
+                      "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300 resize-none",
+                      zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                    )}
+                    rows={2}
+                    placeholder="Ví dụ: Quan tâm đến chất lượng, thích sản phẩm cao cấp, quan tâm đến giá cả..."
+                    value={form.customerInfo.preferences}
+                    onChange={(e) => handleCustomerInfoChange("preferences", e.target.value)}
+                  />
+                </div>
+
+                {/* Purchase History */}
+                <div className="mt-4">
+                  <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
+                    <ShoppingBag className="w-4 h-4" />
+                    Lịch sử mua hàng
+                    <div className="relative group">
+                      <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        Thông tin về các lần mua hàng trước đây của khách hàng
+                      </div>
+                    </div>
+                  </Label>
+                  <Textarea
+                    disabled={zaloDisabled}
+                    className={cn(
+                      "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300 resize-none",
+                      zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                    )}
+                    rows={2}
+                    placeholder="Ví dụ: Đã mua sản phẩm A, B vào tháng trước, thường mua vào cuối tháng..."
+                    value={form.customerInfo.purchaseHistory}
+                    onChange={(e) => handleCustomerInfoChange("purchaseHistory", e.target.value)}
+                  />
+                </div>
+
+              </motion.div>
+
               {/* Notes Field */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -387,9 +694,12 @@ export default function ContactProfileModal({
                     disabled={zaloDisabled}
                     className="text-xs px-3 py-1 h-7"
                   >
+                    <div className="flex items-center gap-2">
                     <Sparkles className="w-3 h-3 mr-1" />
                     Presets
+                  </div>
                   </Button>
+                  
                 </div>
                 <Textarea
                   disabled={zaloDisabled}
@@ -515,10 +825,22 @@ export default function ContactProfileModal({
         {/* Footer Actions */}
         <div className="flex-shrink-0 bg-white border-t border-gray-200 p-6">
           <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="text-xs text-gray-600 bg-gray-100 px-3 py-2 rounded-full">
                 🤖 AI sẽ tự động cảnh báo sale khi cần thiết
               </div>
+              
+              {/* Customer Info Badges */}
+              {Object.values(form.customerInfo).some(value => value && value.trim() !== "") && (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-purple-50 text-purple-600 border-purple-200"
+                >
+                  <Users className="w-3 h-3 mr-1" />
+                  Có thông tin chi tiết
+                </Badge>
+              )}
+              
               {form.notes && (
                 <Badge
                   variant="outline"
@@ -527,6 +849,17 @@ export default function ContactProfileModal({
                   Có ghi chú
                 </Badge>
               )}
+              
+              {form.toneHints && (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-green-50 text-green-600 border-green-200"
+                >
+                  <MessageSquare className="w-3 h-3 mr-1" />
+                  Có gợi ý giọng điệu
+                </Badge>
+              )}
+              
               {form.aovThreshold && (
                 <Badge
                   variant="outline"
@@ -544,9 +877,12 @@ export default function ContactProfileModal({
                 disabled={saving}
                 className="bg-white hover:bg-gray-50 border-gray-300"
               >
-                <X className="w-4 h-4 mr-2" />
-                Đóng
+                <div className="flex items-center gap-2">
+                  <X className="w-4 h-4 mr-2" />
+                  Đóng
+                </div>
               </Button>
+              
               <Button
                 onClick={save}
                 disabled={zaloDisabled || saving}
@@ -559,8 +895,10 @@ export default function ContactProfileModal({
                   </>
                 ) : (
                   <>
+                  <div className="flex items-center gap-2">
                     <Save className="w-4 h-4 mr-2" />
                     Lưu thay đổi
+                  </div>
                   </>
                 )}
               </Button>

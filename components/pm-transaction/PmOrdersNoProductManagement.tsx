@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,6 +103,12 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const [loading, setLoading] = useState(true);
   const [totalItems, setTotalItems] = useState(0);
   const [exportLoading, setExportLoading] = useState(false);
+  
+  // ✅ Customer search navigation states (giống manager order)
+  const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [previousFilters, setPreviousFilters] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState(() => {
     // ✅ Restore search term từ localStorage ngay khi component mount (giống useOrders)
     if (typeof window === "undefined") return "";
@@ -162,13 +169,65 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const [dateRangeState, setDateRangeState] = useState<{
     start?: string;
     end?: string;
-  } | null>(null);
+  } | null>(() => {
+    // ✅ Restore date range từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.dateRange || null;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  });
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState<string | null>(null);
   const [employeesSelected, setEmployeesSelected] = useState<(string | number)[]>([]);
-  const [warningLevelFilter, setWarningLevelFilter] = useState("");
-  const [minQuantity, setMinQuantity] = useState<number | undefined>(undefined);
-  const [conversationTypesSelected, setConversationTypesSelected] = useState<string[]>([]);
+  const [warningLevelFilter, setWarningLevelFilter] = useState(() => {
+    // ✅ Restore warning level filter từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return "";
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.warningLevel || "";
+      }
+    } catch (e) {
+      // ignore
+    }
+    return "";
+  });
+  const [minQuantity, setMinQuantity] = useState<number | undefined>(() => {
+    // ✅ Restore min quantity từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return undefined;
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.quantity ? Number(parsed.quantity) : undefined;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return undefined;
+  });
+  const [conversationTypesSelected, setConversationTypesSelected] = useState<string[]>(() => {
+    // ✅ Restore conversation types từ localStorage ngay khi component mount
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("pmTransactionFilters");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.conversationType ? parsed.conversationType.split(',').filter(Boolean) : [];
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  });
   const [showModal, setShowModal] = useState(false);
   const [modalOrder, setModalOrder] = useState<OrderDetail | null>(null);
   const [modalMessages, setModalMessages] = useState<any[]>([]);
@@ -190,10 +249,8 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const filtersLoadingRef = useRef(false);
   
   // Back/restore state
-  const [isRestoring, setIsRestoring] = useState(false);
   const isRestoringRef = useRef(false);
   const [filtersRestored, setFiltersRestored] = useState(false);
-  const [isInCustomerSearchMode, setIsInCustomerSearchMode] = useState(false);
   const previousPmFiltersRef = useRef<PmFilters | null>(null);
 
   // Types
@@ -687,51 +744,103 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
     };
   }, [isPM, isAdmin, isViewRole]);
 
+  // ✅ Restore previous state function (giống manager order)
+  const restorePreviousState = useCallback(async () => {
+    if (previousFilters) {
+      // ✅ Prevent any interference
+      setIsRestoring(true);
+
+      // ✅ Update state atomic
+      setSearchTerm(previousFilters.search || "");
+      setStatusFilter(previousFilters.status || "all");
+      setDateFilter(previousFilters.date || "all");
+      setDepartmentsSelected(previousFilters.departments ? previousFilters.departments.split(',').filter(Boolean) : []);
+      setEmployeesSelected(previousFilters.employees ? previousFilters.employees.split(',').filter(Boolean) : []);
+      setCurrentPage(previousFilters.page || 1);
+      setIsInCustomerSearchMode(false);
+      setCanGoBack(false);
+
+      // ✅ Save to storage
+      savePmFiltersToStorage(previousFilters);
+
+      // ✅ Clean up
+      setPreviousFilters(null);
+
+      // ✅ Delay để đảm bảo state đã stable
+      setTimeout(() => {
+        setIsRestoring(false);
+      }, 200);
+    } else {
+      console.warn("⚠️ No previous filters to restore");
+      if (window.history.length > 1) {
+        window.history.back();
+      }
+    }
+  }, [previousFilters]);
+
+  // ✅ Handle restore previous (giống manager order)
+  const handleRestorePrevious = useCallback(async () => {
+    await restorePreviousState();
+  }, [restorePreviousState]);
+
   // Initialize history state on mount for consistent back behavior
   useEffect(() => {
     if (typeof window === "undefined") return;
     
-    // ✅ Chỉ cần set history state, filters đã được restore trong useState initializer
     const state = window.history.state as any;
+    
+    // ✅ Khi F5, history state bị mất → restore từ localStorage
     if (!state || !state.pmFilters) {
-      const pmFilters = getCurrentPmFilters();
-      window.history.replaceState({ pmFilters, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
+      const stored = getPmFiltersFromStorage();
+      
+      if (stored) {
+        console.log('🔄 [PM No-Product Init] Restoring from localStorage on F5:', stored);
+        
+        // ✅ CRITICAL: Apply filters vào state TRƯỚC KHI set filtersRestored
+        applyPmFilters(stored, true); // skipSave = true để tránh loop
+        
+        // Replace history state với filters từ localStorage
+        window.history.replaceState({ 
+          pmFilters: stored, 
+          isCustomerSearch: false, 
+          timestamp: Date.now() 
+        }, "", window.location.pathname);
+      } else {
+        console.log('🔄 [PM No-Product Init] No stored filters, using current state');
+        const current = getCurrentPmFilters();
+        window.history.replaceState({ 
+          pmFilters: current, 
+          isCustomerSearch: false, 
+          timestamp: Date.now() 
+        }, "", window.location.pathname);
+      }
+    } else {
+      console.log('🔄 [PM No-Product Init] History state exists:', state.pmFilters);
     }
-    setFiltersRestored(true); // Mark that initialization is complete
+    
+    // ✅ Delay để đảm bảo applyPmFilters đã hoàn tất
+    setTimeout(() => {
+      setFiltersRestored(true); // Mark that initialization is complete
+    }, 150);
   }, []); // ✅ Chạy ngay khi component mount
 
-  // Handle browser back/forward to restore filters like Order management
+  // ✅ Handle browser back/forward navigation for customer search (giống manager order)
   useEffect(() => {
-    const onPopState = (event: PopStateEvent) => {
-      // Prefer stored filters from localStorage to avoid accidental resets
-      const stored = getPmFiltersFromStorage();
-      if (stored) {
-        setIsInCustomerSearchMode(false);
-        applyPmFilters(stored);
-        window.history.replaceState({ pmFilters: stored, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-        return;
-      }
+    const handlePopState = (event: PopStateEvent) => {
+      if (isInCustomerSearchMode && canGoBack) {
+        // Prevent default browser back behavior
+        event.preventDefault();
 
-      const hs = (event.state || {}) as any;
-      if (!hs) return;
-      const prev = hs.previousFilters as PmFilters | undefined;
-      const filters = (hs.pmFilters as PmFilters) || undefined;
-
-      if (prev) {
-        setIsInCustomerSearchMode(false);
-        applyPmFilters(prev);
-        savePmFiltersToStorage(prev);
-        const newState = { pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() };
-        window.history.replaceState(newState, "", window.location.href);
-      } else if (filters) {
-        setIsInCustomerSearchMode(!!hs.isCustomerSearch);
-        applyPmFilters(filters);
-        savePmFiltersToStorage(filters);
+        // Restore previous state instead
+        handleRestorePrevious();
       }
     };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+
+    if (isInCustomerSearchMode) {
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
+    }
+  }, [isInCustomerSearchMode, canGoBack, handleRestorePrevious]);
 
   // Update filters and save to localStorage (similar to useOrders pattern)
   const updatePmFiltersAndStorage = useCallback((newFilters: Partial<PmFilters>) => {
@@ -750,6 +859,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   useEffect(() => {
     if (isRestoringRef.current) return; // Skip saving during restore to avoid loops
     if (!filtersLoaded) return; // Skip saving until filters are loaded
+    if (!filtersRestored) return; // ✅ Skip saving until initial restoration is complete
     if (isRestoring) return; // Skip saving during restore state
     
     try {
@@ -773,6 +883,7 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
     minQuantity,
     conversationTypesSelected,
     filtersLoaded,
+    filtersRestored, // ✅ Thêm dependency để effect chạy lại khi restoration complete
     isRestoring,
   ]);
 
@@ -780,13 +891,18 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
   const performCustomerSearch = (customerName: string) => {
     if (!customerName || !customerName.trim()) return;
     
+    // ✅ Lưu previous filters trước khi search (giống manager order)
+    const currentFilters = getCurrentPmFilters();
+    setPreviousFilters(currentFilters);
+    setCanGoBack(true);
+    
     // ✅ Chỉ update search term với exact match, không reset các filter khác
     const exactSearchTerm = `"${customerName.trim()}"`;
     setSearchTerm(exactSearchTerm);
     setCurrentPage(1);
+    setIsInCustomerSearchMode(true);
     
     // Lưu vào localStorage với exact search term
-    const currentFilters = getCurrentPmFilters();
     const updatedFilters = { ...currentFilters, search: exactSearchTerm, page: 1 };
     savePmFiltersToStorage(updatedFilters);
     
@@ -1276,9 +1392,9 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
           ? statusFilter.split(",")
           : [],
       // Store raw warning level values (match option.value); MultiSelectCombobox will map to labels
-      warningLevels: warningLevelFilter
-        ? warningLevelFilter.split(",").filter((w) => w)
-        : [],
+       warningLevels: warningLevelFilter
+         ? warningLevelFilter.split(",").filter((w: string) => w)
+         : [],
       dateRange: dateRangeState
         ? (() => {
             try {
@@ -1464,6 +1580,20 @@ export default function PmOrdersNoProductManagement({ isAnalysisUser = false }: 
             </Button>
           </div>
         </CardHeader>
+        
+        {/* ✅ Customer Search Indicator (giống manager order) */}
+        {isInCustomerSearchMode && searchTerm && (
+          <CustomerSearchIndicator
+            customerName={searchTerm}
+            onRestorePrevious={handleRestorePrevious}
+            onClearSearch={() => {
+              // Clear search and exit customer search mode
+              setSearchTerm("");
+              handleRestorePrevious(); // Or just restore to previous state
+            }}
+          />
+        )}
+        
         <CardContent className="p-6 space-y-4">
           {error && (
             <Alert className="mb-4">

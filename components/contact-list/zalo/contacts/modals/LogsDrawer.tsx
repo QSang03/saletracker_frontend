@@ -10,7 +10,9 @@ import {
   CheckIcon,
   SendIcon,
   BotIcon,
-  SparklesIcon
+  SparklesIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from 'lucide-react';
 
 export default function LogsDrawer({ 
@@ -26,10 +28,13 @@ export default function LogsDrawer({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [messagesVisible, setMessagesVisible] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   
   useEffect(() => { 
     if (open) {
       fetchConversation();
+      setCurrentPage(1); // Reset to first page when opening
       setTimeout(() => setMessagesVisible(true), 300);
     } else {
       setMessagesVisible(false);
@@ -72,6 +77,21 @@ export default function LogsDrawer({
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  // Calculate pagination
+  const totalMessages = messages?.length || 0;
+  const totalPages = Math.ceil(totalMessages / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const currentMessages = messages?.slice(startIndex, endIndex) || [];
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to top when changing page
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
     }
   };
 
@@ -207,7 +227,7 @@ export default function LogsDrawer({
                       Tin Nhắn
                     </h4>
                     <div className="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium">
-                      {messages?.length || 0}
+                      {totalMessages}
                     </div>
                   </div>
                 </div>
@@ -226,7 +246,7 @@ export default function LogsDrawer({
                   </div>
                 ) : (
                   <div className="space-y-3 overflow-hidden">
-                    {messages.map((m, index) => (
+                    {currentMessages.map((m, index) => (
                       <div 
                         key={`${m.msgId || index}`}
                         className="group w-full overflow-hidden"
@@ -277,7 +297,7 @@ export default function LogsDrawer({
                                 )}
                               </button>
                               <div className="text-xs bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-full font-medium">
-                                #{index + 1}
+                                #{startIndex + index + 1}
                               </div>
                             </div>
                           </div>
@@ -299,6 +319,70 @@ export default function LogsDrawer({
                     ))}
                   </div>
                 )}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+                      <span>
+                        Trang {currentPage} / {totalPages}
+                      </span>
+                      <span className="text-gray-400">•</span>
+                      <span>
+                        Hiển thị {startIndex + 1}-{Math.min(endIndex, totalMessages)} / {totalMessages} tin nhắn
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="flex items-center space-x-1 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeftIcon className="w-4 h-4" />
+                        <span>Trước</span>
+                      </button>
+                      
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                currentPage === pageNum
+                                  ? 'bg-blue-500 text-white'
+                                  : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="flex items-center space-x-1 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <span>Sau</span>
+                        <ChevronRightIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -316,7 +400,7 @@ export default function LogsDrawer({
             <div className="flex items-center space-x-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full">
               <SendIcon className="w-3 h-3 text-blue-600 dark:text-blue-400" />
               <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                {messages?.length || 0} tin nhắn
+                {totalMessages} tin nhắn
               </span>
             </div>
           </div>

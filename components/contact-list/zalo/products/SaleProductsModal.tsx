@@ -108,6 +108,20 @@ export default function SaleProductsModal({
     type: AlertType;
     message: string;
   } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewStats, setPreviewStats] = useState<{
+    total: number;
+    valid: number;
+    preview: number;
+  } | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
+
+  // Pagination logic for preview data
+  const totalPages = Math.ceil(previewData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPageData = previewData.slice(startIndex, endIndex);
 
   // Ensure preselect runs only once per modal open
   const preselectedRef = useRef(false);
@@ -176,7 +190,15 @@ export default function SaleProductsModal({
 
   // Reset preselect flag when modal closes
   useEffect(() => {
-  if (!open) preselectedRef.current = false;
+  if (!open) {
+    preselectedRef.current = false;
+    setSelectedFile(null);
+    setPreviewData([]);
+    setPreviewStats(null);
+    setShowPreview(false);
+    setValidationErrors([]);
+    setCurrentPage(1);
+  }
   }, [open]);
 
   // Preselect globally active products once per open
@@ -347,6 +369,11 @@ export default function SaleProductsModal({
       });
       
       setPreviewData(response.data.data || []);
+      setPreviewStats({
+        total: response.data.total || 0,
+        valid: response.data.valid || 0,
+        preview: response.data.preview || 0
+      });
       setShowPreview(true);
       setValidationErrors(response.data.errors || []);
       
@@ -372,8 +399,12 @@ export default function SaleProductsModal({
       setValidationErrors(errors);
       setAlert({ type: "error", message: errors.join(", ") });
       e.target.value = "";
+      setSelectedFile(null);
       return;
     }
+    
+    // Store the file for later use
+    setSelectedFile(file);
     
     // Show preview first
     await onPreview(file);
@@ -389,15 +420,14 @@ export default function SaleProductsModal({
       setImportStatus("Đang chuẩn bị file...");
       setValidationErrors([]);
       
-      // Re-upload file for import
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      if (!fileInput?.files?.[0]) {
+      // Use the stored file for import
+      if (!selectedFile) {
         setAlert({ type: "error", message: "Không tìm thấy file để import" });
         return;
       }
       
       const form = new FormData();
-      form.append("file", fileInput.files[0]);
+      form.append("file", selectedFile);
       
       setImportProgress(20);
       setImportStatus("Đang gửi file lên server...");
@@ -421,6 +451,9 @@ export default function SaleProductsModal({
       
       setShowPreview(false);
       setPreviewData([]);
+      setPreviewStats(null);
+      setSelectedFile(null);
+      setCurrentPage(1);
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ||
@@ -968,7 +1001,7 @@ export default function SaleProductsModal({
                       <div>
                         <h2 className="text-2xl font-bold text-gray-800">Xem trước dữ liệu</h2>
                         <p className="text-sm text-gray-500 mt-1">
-                          {previewData.length} sản phẩm được tìm thấy
+                          Hiển thị {previewData.length} sản phẩm đầu tiên
                         </p>
                       </div>
                     </div>
@@ -1020,7 +1053,7 @@ export default function SaleProductsModal({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {previewData.map((item, index) => (
+                          {currentPageData.map((item, index) => (
                             <TableRow 
                               key={index} 
                               className={`hover:bg-gray-50 transition-colors ${
@@ -1028,7 +1061,7 @@ export default function SaleProductsModal({
                               }`}
                             >
                               <TableCell className="text-center font-mono text-sm text-gray-600">
-                                {item.row}
+                                {startIndex + index + 1}
                               </TableCell>
                               <TableCell className="font-mono text-sm">
                                 <div className="max-w-32 truncate" title={item.code || item.MaHH}>
@@ -1072,19 +1105,60 @@ export default function SaleProductsModal({
 
                 {/* Footer */}
                 <DialogFooter className="flex-shrink-0 bg-gray-50 border-t border-gray-200 p-6">
-                  <div className="flex items-center justify-between w-full">
+                  <div className="flex flex-col gap-4 w-full">
+                    {/* Statistics */}
                     <div className="text-sm text-gray-500">
-                      Tổng: {previewData.length} sản phẩm • 
-                      Hợp lệ: {previewData.filter(item => item.isValid !== false).length} • 
-                      Lỗi: {previewData.filter(item => item.isValid === false).length}
+                      {previewStats ? (
+                        <>
+                          Tổng file: {previewStats.total} sản phẩm • 
+                          Hợp lệ: {previewStats.valid} • 
+                          Lỗi: {previewStats.total - previewStats.valid}
+                        </>
+                      ) : (
+                        <>
+                          Tổng: {previewData.length} sản phẩm • 
+                          Hợp lệ: {previewData.filter(item => item.isValid !== false).length} • 
+                          Lỗi: {previewData.filter(item => item.isValid === false).length}
+                        </>
+                      )}
                     </div>
-                    <div className="flex gap-3">
+                    
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          Trước
+                        </Button>
+                        <span className="text-sm text-gray-600">
+                          Trang {currentPage} / {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Sau
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Action buttons */}
+                    <div className="flex gap-3 justify-end">
                       <Button
                         variant="outline"
                         onClick={() => {
                           setShowPreview(false);
                           setPreviewData([]);
+                          setPreviewStats(null);
                           setValidationErrors([]);
+                          setSelectedFile(null);
+                          setCurrentPage(1);
                         }}
                         className="px-6"
                       >
@@ -1101,9 +1175,10 @@ export default function SaleProductsModal({
                             Đang import...
                           </>
                         ) : (
-                          <>
+                          <><div className="flex items-center gap-2">
                             <Check className="w-4 h-4 mr-2" />
                             Xác nhận import
+                            </div>
                           </>
                         )}
                       </Button>
