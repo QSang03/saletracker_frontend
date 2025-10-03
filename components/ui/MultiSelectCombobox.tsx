@@ -33,6 +33,8 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
     : typeof value === 'string'
       ? value.split(',').map(v => v.trim()).filter(Boolean)
       : [];
+  
+  
   const [open, setOpen] = React.useState(false);
   const comboboxRef = React.useRef<HTMLDivElement>(null);
 
@@ -71,10 +73,15 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
       >
     {normalizedValue.length === 0
           ? placeholder
-          : options
-      .filter((opt) => normalizedValue.includes(opt.value))
-              .map((opt) => String(opt.label))
-              .join(", ")}
+          : (() => {
+              // ✅ Sửa: Tìm matching options và hiển thị labels
+              const matchingOptions = options.filter((opt) => 
+                normalizedValue.some(val => String(val) === String(opt.value))
+              );
+              return matchingOptions.length > 0
+                ? matchingOptions.map((opt) => String(opt.label)).join(", ")
+                : `${normalizedValue.length} mục đã chọn`;
+            })()}
         <span className="ml-2">&#9662;</span>
       </Button>
 
@@ -106,7 +113,7 @@ export const MultiSelectCombobox = React.memo(function MultiSelectCombobox({
   {normalizedValue.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {options
-    .filter((opt) => normalizedValue.includes(opt.value))
+    .filter((opt) => normalizedValue.some(val => String(val) === String(opt.value)))
             .map((opt) => (
               <span
                 key={opt.value}

@@ -1311,18 +1311,31 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   // ✅ Restore previous state function (giống manager order) - di chuyển lên trước để tránh hoisting issue
   const restorePreviousState = useCallback(async () => {
     if (previousFilters) {
+      console.log('🔄 [PM] Restoring previous state:', previousFilters);
+      
       // ✅ Prevent any interference
       setIsRestoring(true);
 
-      // ✅ Update state atomic
-      setSearchTerm(previousFilters.search || "");
-      setStatusFilter(previousFilters.status || "all");
-      setDateFilter(previousFilters.date || "all");
-      setDepartmentsSelected(previousFilters.departments ? previousFilters.departments.split(',').filter(Boolean) : []);
-      setEmployeesSelected(previousFilters.employees ? previousFilters.employees.split(',').filter(Boolean) : []);
-      setCurrentPage(previousFilters.page || 1);
-      setIsInCustomerSearchMode(false);
-      setCanGoBack(false);
+      // ✅ Update state atomic với tất cả filters
+      flushSync(() => {
+        setSearchTerm(previousFilters.search || "");
+        setStatusFilter(previousFilters.status && previousFilters.status.length > 0 ? previousFilters.status : "all");
+        setDateFilter(previousFilters.date && previousFilters.date.length > 0 ? previousFilters.date : "all");
+        setDateRangeState(previousFilters.dateRange || null);
+        setDepartmentsSelected(previousFilters.departments ? previousFilters.departments.split(',').filter(Boolean) : []);
+        setEmployeesSelected(previousFilters.employees ? previousFilters.employees.split(',').filter(Boolean) : []);
+        setBrandsSelected(previousFilters.brands ? previousFilters.brands.split(',').filter(Boolean) : []);
+        setCategoriesSelected(previousFilters.categories ? previousFilters.categories.split(',').filter(Boolean) : []);
+        setBrandCategoriesSelected(previousFilters.brandCategories ? previousFilters.brandCategories.split(',').filter(Boolean) : []);
+        setWarningLevelFilter(previousFilters.warningLevel || "");
+        setMinQuantity(previousFilters.quantity);
+        setConversationTypesSelected(previousFilters.conversationType ? previousFilters.conversationType.split(',').filter(Boolean) : []);
+        setShowHiddenOrders(previousFilters.showHiddenOrders || false);
+        setHiddenOrdersDays(previousFilters.hiddenOrdersDays || 7);
+        setCurrentPage(previousFilters.page || 1);
+        setIsInCustomerSearchMode(false);
+        setCanGoBack(false);
+      });
 
       // ✅ Save to storage
       savePmFiltersToStorage(previousFilters);
@@ -1352,6 +1365,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
   const performCustomerSearch = (customerName: string) => {
     if (!customerName || !customerName.trim()) return;
     
+    console.log('🔍 [PM] performCustomerSearch called with:', customerName);
+    
     // ✅ Snapshot current filters to previousFilters (giống manager order)
     const currentFilters = getCurrentPmFilters();
     setPreviousFilters(currentFilters);
@@ -1370,12 +1385,6 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       );
     } catch {}
 
-    // Set flags giống manager order
-    flushSync(() => {
-      setIsInCustomerSearchMode(true);
-      setCanGoBack(true);
-    });
-
     // Build exact search and push state mới
     const exactSearchTerm = `"${customerName.trim()}"`;
     const searchFilters: Partial<PmFilters> = {
@@ -1383,6 +1392,14 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       search: exactSearchTerm,
       page: 1,
     };
+
+    // ✅ Update state ngay lập tức (giống manager order)
+    flushSync(() => {
+      setSearchTerm(exactSearchTerm);
+      setCurrentPage(1);
+      setIsInCustomerSearchMode(true);
+      setCanGoBack(true);
+    });
 
     // ✅ Push entry mới với flag isCustomerSearch và previousFilters
     updatePmFiltersAndUrl(searchFilters, false, true, currentFilters, false);
@@ -1507,6 +1524,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     if (!filtersLoaded) return; // Skip saving until filters are loaded
     if (!filtersRestored) return; // ✅ Skip saving until initial restoration is complete
     if (isRestoring) return; // Skip saving during restore state
+    if (isInCustomerSearchMode) return; // ✅ Skip saving during customer search mode
     
     try {
       const currentFilters = getCurrentPmFilters();
@@ -1533,6 +1551,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
     filtersLoaded,
     filtersRestored, // ✅ Thêm dependency để effect chạy lại khi restoration complete
     isRestoring,
+    isInCustomerSearchMode, // ✅ Thêm dependency để skip auto-save khi trong customer search mode
   ]);
 
 
@@ -1586,6 +1605,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // Convert IDs to names for backend
       const brandsArr = f.brands && f.brands.length > 0 ? [...(f.brands as (string|number)[])] : [];
       const categoriesArr = f.categories && f.categories.length > 0 ? [...(f.categories as (string|number)[])] : [];
+      const brandCategoriesArr = f.brandCategories && f.brandCategories.length > 0 ? [...(f.brandCategories as (string|number)[])] : [];
       
       // Convert brand IDs to names
       let brandNames = '';
@@ -1600,8 +1620,8 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         } else {
           // For other roles, use filterOptions.brands from props
           const brandNamesList = brandsArr.map(id => {
-            const brand = filterOptions.brands?.find((b: any) => b === id.toString());
-            return brand || id.toString();
+            const brand = filterOptions.brands?.find((b: any) => b.value === id.toString());
+            return brand ? brand.value : id.toString();
           }).filter(Boolean);
           brandNames = brandNamesList.join(',');
         }
@@ -1621,7 +1641,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           // For other roles, use filterOptions.categories from props
           const categoryNamesList = categoriesArr.map(id => {
             const category = filterOptions.categories?.find((c: any) => c.value === id.toString());
-            return category ? category.label : id.toString();
+            return category ? category.value : id.toString();
           }).filter(Boolean);
           categoryNames = categoryNamesList.join(',');
         }
@@ -1629,7 +1649,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
 
       // Construct new PmFilters snapshot
       const newSnapshot: PmFilters = {
-        page: 1,
+        page: 1, // ✅ SỬA: Reset về page 1 khi filter thay đổi
         pageSize,
         search: f.search || '',
         status: statusesCsv,
@@ -1639,6 +1659,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
         employees: employeesArr.join(','),
         brands: brandNames,
         categories: categoryNames,
+        brandCategories: brandCategoriesArr.join(','),
         warningLevel: warningLevelCsv,
         quantity: quantityVal,
         conversationType: conversationTypeCsv,
@@ -1650,6 +1671,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
       // Use setTimeout to avoid calling flushSync from lifecycle methods
       setTimeout(() => {
         flushSync(() => {
+          // ✅ SỬA: Reset về page 1 khi filter thay đổi
           setCurrentPage(1);
           setSearchTerm(newSnapshot.search || "");
           setStatusFilter(newSnapshot.status && newSnapshot.status.length > 0 ? newSnapshot.status : 'all');
@@ -1657,6 +1679,7 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
           setDepartmentsSelected(departmentsArr);
           setBrandsSelected(brandsArr);
           setCategoriesSelected(categoriesArr);
+          setBrandCategoriesSelected(brandCategoriesArr);
           setDateFilter(newSnapshot.date && newSnapshot.date.length > 0 ? newSnapshot.date : 'all');
           setDateRangeState(newSnapshot.dateRange ? { ...newSnapshot.dateRange } : null);
           setWarningLevelFilter(newSnapshot.warningLevel || '');
@@ -2483,22 +2506,41 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
             pageSize={pageSize}
             // ✅ Add isRestoring and initialFilters props (giống manager order)
             isRestoring={isRestoring}
-            initialFilters={{
-              search: searchTerm,
-              statuses: statusFilter === "all" ? [] : [statusFilter],
-              employees: employeesSelected,
+            initialFilters={useMemo(() => ({
+              search: searchTerm || "",
               departments: departmentsSelected,
-              dateRange: dateRangeState ? {
-                from: dateRangeState.start ? new Date(dateRangeState.start) : undefined,
-                to: dateRangeState.end ? new Date(dateRangeState.end) : undefined,
-              } : undefined,
-              singleDate: dateFilter === "all" ? undefined : dateFilter,
+              employees: employeesSelected,
+              statuses: statusFilter === "all" ? [] : statusFilter.split(',').filter(Boolean),
+              categories: categoriesSelected,
+              brands: brandsSelected,
+              brandCategories: brandCategoriesSelected,
               warningLevels: warningLevelFilter ? warningLevelFilter.split(',').filter(Boolean) : [],
               quantity: minQuantity,
               conversationType: conversationTypesSelected,
-            }}
+              dateRange: dateRangeState ? {
+                from: dateRangeState.start ? new Date(dateRangeState.start) : undefined,
+                to: dateRangeState.end ? new Date(dateRangeState.end) : undefined,
+              } : { from: undefined, to: undefined },
+              singleDate: dateFilter === "all" ? undefined : (dateFilter ? new Date(dateFilter) : undefined),
+            }), [
+              searchTerm,
+              departmentsSelected,
+              employeesSelected,
+              statusFilter,
+              categoriesSelected,
+              brandsSelected,
+              brandCategoriesSelected,
+              warningLevelFilter,
+              minQuantity,
+              conversationTypesSelected,
+              dateRangeState,
+              dateFilter,
+            ])}
             onPageChange={(p) => {
-              setCurrentPage(p);
+              // ✅ Update state đồng bộ trước khi push history
+              flushSync(() => {
+                setCurrentPage(p);
+              });
               // ✅ Push to history khi đổi trang
               updatePmFiltersAndUrl({ page: p });
             }}
@@ -2599,79 +2641,16 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
               try {
                 // Only restore previous state if we're in customer search mode
                 if (isInCustomerSearchMode) {
-                  // Force-clear storage first to avoid autosave races
-                  try {
-                    const stored = getPmFiltersFromStorage();
-                    if (stored) {
-                      stored.search = "";
-                      savePmFiltersToStorage(stored);
-                    } else {
-                      const snapshot = getCurrentPmFilters();
-                      snapshot.search = "";
-                      savePmFiltersToStorage(snapshot);
-                    }
-                  } catch (e) {
-                    // ignore storage errors
-                  }
-
-                  // Use setTimeout to avoid calling flushSync from lifecycle methods
-                  setTimeout(() => {
-                    flushSync(() => {
-                      setSearchTerm("");
-                      setCurrentPage(1);
-                      setIsInCustomerSearchMode(false);
-                    });
-                  }, 0);
-
-                  // If we have a previous snapshot, restore it; otherwise apply the cleared snapshot
-                  const prev = previousPmFiltersRef.current;
-                  if (prev) {
-                    // restore previous snapshot (which should be the filters before customer-search)
-                    applyPmFilters(prev);
-                    try {
-                      savePmFiltersToStorage(prev);
-                    } catch (e) {
-                      // ignore
-                    }
-                    window.history.replaceState({ pmFilters: prev, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-                    previousPmFiltersRef.current = null;
-                  } else {
-                    // No previous snapshot: apply current snapshot with search cleared to ensure backend sees cleared search
-                    try {
-                      const cleared = getCurrentPmFilters();
-                      cleared.search = "";
-                      applyPmFilters(cleared);
-                      try {
-                        savePmFiltersToStorage(cleared);
-                      } catch (e) {
-                        // ignore
-                      }
-                      window.history.replaceState({ pmFilters: cleared, isCustomerSearch: false, timestamp: Date.now() }, "", window.location.href);
-                      // Extra guard: some other effect may re-save an older snapshot; ensure we overwrite shortly after
-                      try {
-                        setTimeout(() => {
-                          try {
-                            const nowStored = getPmFiltersFromStorage() || getCurrentPmFilters();
-                            nowStored.search = "";
-                            savePmFiltersToStorage(nowStored);
-                          } catch (e) {
-                            // ignore
-                          }
-                        }, 120);
-                      } catch (e) {
-                        // ignore
-                      }
-                    } catch (e) {
-                      // ignore
-                    }
-                  }
+                  console.log('🔄 [PM] Clearing customer search, restoring previous state');
+                  // Use restorePreviousState function để đảm bảo consistency
+                  handleRestorePrevious();
                 } else {
                   // For normal search tag clearing, just clear the search term and let the filter change handle the rest
                   setSearchTerm("");
                   setCurrentPage(1);
                 }
               } catch (e) {
-                // swallow any errors
+                console.error('Error in onClearSearch:', e);
               }
             }}
             loading={loading}
@@ -2703,7 +2682,10 @@ export default function PmTransactionManagement({ isAnalysisUser = false }: PmTr
                     return matched.length > 0
                       ? matched
                       : Array.isArray(pmDepartments)
-                      ? pmDepartments
+                      ? pmDepartments.map((dept: any) => ({
+                          value: typeof dept === 'string' ? dept : String(dept),
+                          label: typeof dept === 'string' ? dept : String(dept)
+                        }))
                       : [];
                   })()
                 : []
