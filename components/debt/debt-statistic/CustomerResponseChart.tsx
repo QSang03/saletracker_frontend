@@ -292,7 +292,7 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                 <RBarChart 
                   data={filteredData} 
                   margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                  key={`customer-response-bar-${activeFilters.join('-')}`}
+                  key={`customer-response-bar-${chartType}`}
                 >
                 <defs>
                   {/* ✅ Chỉ tạo gradients cho active filters */}
@@ -396,7 +396,7 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                 <RLineChart 
                   data={filteredData} 
                   margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                  key={`customer-response-line-${activeFilters.join('-')}`}
+                  key={`customer-response-line-${chartType}`}
                 >
                 <defs>
                   {/* ✅ Chỉ tạo gradients cho active filters */}
@@ -471,7 +471,21 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                       name={responseStatusVi[k] || k} 
                       stroke={`url(#lineGradient-${validId})`}
                       strokeWidth={4}
-                      dot={false}
+                      dot={(props: any) => {
+                        const { cx, cy, payload } = props || {};
+                        return (
+                          <g onClick={() => onBarClick && onBarClick(k, payload, 0)} style={{ cursor: 'pointer' }}>
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={4}
+                              fill={getColorScheme(k, originalIndex).primary}
+                              opacity={0.7}
+                              style={{ transition: 'all 0.2s ease' }}
+                            />
+                          </g>
+                        );
+                      }}
                       activeDot={(props: any) => {
                         const { cx, cy, payload } = props || {};
                         return (
@@ -493,7 +507,7 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                       isAnimationActive={true}
                       animationDuration={2000}
                       animationEasing="ease-in-out"
-                      animationBegin={originalIndex * 300}
+                      animationBegin={idx * 300}
                       style={{ 
                         opacity: isHovered ? 1 : 0.9,
                         filter: isHovered ? `url(#activeDotGlow-${validId})` : 'none',
