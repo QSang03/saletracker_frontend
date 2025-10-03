@@ -380,7 +380,7 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                       isAnimationActive={true}
                       animationDuration={800}
                       animationEasing="ease-out"
-                      animationBegin={originalIndex * 150}
+                      animationBegin={idx * 150}
                       style={{ 
                         opacity: isHovered ? 1 : 0.9,
                         filter: isHovered ? `url(#glow-${validId})` : 'none',
