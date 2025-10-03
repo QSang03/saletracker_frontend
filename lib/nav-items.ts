@@ -56,7 +56,7 @@ const baseNavItems = [
       { title: "Quản lý bộ phận", url: "/dashboard/department", roles: ["admin", "view"] },
       { title: "Quản lý zalo", url: "/dashboard/zalo", roles: ["admin", "manager", "view"] },
       // { title: "Quản lý contact-list", url: "/dashboard/auto-reply", roles: ["admin"] },
-      { title: "Quản lý contact-list", url: "/dashboard/auto-reply" },
+      // { title: "Quản lý contact-list", url: "/dashboard/auto-reply" },
       { title: "Phân quyền", url: "/dashboard/roles", roles: ["admin"] },
     ],
   },
