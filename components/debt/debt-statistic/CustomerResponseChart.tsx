@@ -472,18 +472,16 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                       stroke={`url(#lineGradient-${validId})`}
                       strokeWidth={4}
                       dot={(props: any) => {
-                        const { cx, cy, payload } = props || {};
+                        const { cx, cy } = props || {};
                         return (
-                          <g onClick={() => onBarClick && onBarClick(k, payload, 0)} style={{ cursor: 'pointer' }}>
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={4}
-                              fill={getColorScheme(k, originalIndex).primary}
-                              opacity={0.7}
-                              style={{ transition: 'all 0.2s ease' }}
-                            />
-                          </g>
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={4}
+                            fill={getColorScheme(k, originalIndex).primary}
+                            opacity={0.7}
+                            style={{ transition: 'all 0.2s ease' }}
+                          />
                         );
                       }}
                       activeDot={(props: any) => {
