@@ -494,7 +494,7 @@ const CustomerResponseChart: React.FC<CustomerResponseChartProps> = ({
                               r={6}
                               stroke="#fff"
                               strokeWidth={3}
-                              fill={getColorScheme(k, originalIndex).primary}
+                              fill={getColorScheme(k, idx).primary}
                               filter={`url(#activeDotGlow-${validId})`}
                               style={{ opacity: 0.95 }}
                             />
