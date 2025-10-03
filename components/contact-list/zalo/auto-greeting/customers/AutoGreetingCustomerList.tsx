@@ -38,6 +38,7 @@ import CustomerHistoryModal from "@/components/contact-list/zalo/auto-greeting/C
 import DeleteCustomerModal from "@/components/contact-list/zalo/auto-greeting/DeleteCustomerModal";
 import ImportExcelModal from "@/components/contact-list/zalo/auto-greeting/ImportExcelModal";
 import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
+import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import SystemStatusBanner from "./SystemStatusBanner";
 import SearchAndFilterControls from "./SearchAndFilterControls";
 import ActionButtons from "./ActionButtons";
@@ -109,7 +110,6 @@ const AutoGreetingCustomerList: React.FC<
   const [dateFilter, setDateFilter] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [showExportModal, setShowExportModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(false);
@@ -117,6 +117,16 @@ const AutoGreetingCustomerList: React.FC<
   // Backend pagination states
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+
+  // PaginatedTable filter states
+  const [filters, setFilters] = useState({
+    page: 1,
+    pageSize: 10,
+    search: "",
+    statusFilter: "all",
+    conversationTypeFilter: "all",
+    dateFilter: "",
+  });
 
   // Edit customer states
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -146,13 +156,20 @@ const AutoGreetingCustomerList: React.FC<
     const savedFilters = localStorage.getItem("auto-greeting-filters");
     if (savedFilters) {
       try {
-        const filters = JSON.parse(savedFilters);
-        if (filters.searchTerm) setSearchTerm(filters.searchTerm);
-        if (filters.statusFilter) setStatusFilter(filters.statusFilter);
-        if (filters.conversationTypeFilter)
-          setConversationTypeFilter(filters.conversationTypeFilter);
-        if (filters.dateFilter) setDateFilter(filters.dateFilter);
-        if (filters.itemsPerPage) setItemsPerPage(filters.itemsPerPage);
+        const saved = JSON.parse(savedFilters);
+        setFilters(prev => ({
+          ...prev,
+          search: saved.searchTerm || "",
+          statusFilter: saved.statusFilter || "all",
+          conversationTypeFilter: saved.conversationTypeFilter || "all",
+          dateFilter: saved.dateFilter || "",
+          pageSize: saved.itemsPerPage || 10,
+        }));
+        setSearchTerm(saved.searchTerm || "");
+        setStatusFilter(saved.statusFilter || "all");
+        setConversationTypeFilter(saved.conversationTypeFilter || "all");
+        setDateFilter(saved.dateFilter || "");
+        setItemsPerPage(saved.itemsPerPage || 10);
       } catch (error) {
         console.error("Error loading filters from localStorage:", error);
         localStorage.removeItem("auto-greeting-filters");
@@ -162,29 +179,23 @@ const AutoGreetingCustomerList: React.FC<
 
   // Save filters to localStorage whenever they change
   useEffect(() => {
-    const filters: any = {};
+    const saveData: any = {};
 
-    if (searchTerm.trim()) filters.searchTerm = searchTerm;
-    if (statusFilter && statusFilter !== "all")
-      filters.statusFilter = statusFilter;
-    if (conversationTypeFilter && conversationTypeFilter !== "all")
-      filters.conversationTypeFilter = conversationTypeFilter;
-    if (dateFilter) filters.dateFilter = dateFilter;
-    if (itemsPerPage && itemsPerPage !== 10)
-      filters.itemsPerPage = itemsPerPage;
+    if (filters.search?.trim()) saveData.searchTerm = filters.search;
+    if (filters.statusFilter && filters.statusFilter !== "all")
+      saveData.statusFilter = filters.statusFilter;
+    if (filters.conversationTypeFilter && filters.conversationTypeFilter !== "all")
+      saveData.conversationTypeFilter = filters.conversationTypeFilter;
+    if (filters.dateFilter) saveData.dateFilter = filters.dateFilter;
+    if (filters.pageSize && filters.pageSize !== 10)
+      saveData.itemsPerPage = filters.pageSize;
 
-    if (Object.keys(filters).length > 0) {
-      localStorage.setItem("auto-greeting-filters", JSON.stringify(filters));
+    if (Object.keys(saveData).length > 0) {
+      localStorage.setItem("auto-greeting-filters", JSON.stringify(saveData));
     } else {
       localStorage.removeItem("auto-greeting-filters");
     }
-  }, [
-    searchTerm,
-    statusFilter,
-    conversationTypeFilter,
-    dateFilter,
-    itemsPerPage,
-  ]);
+  }, [filters]);
 
   useEffect(() => {
     loadCustomers();
@@ -194,7 +205,7 @@ const AutoGreetingCustomerList: React.FC<
   // Load customers when filters change
   useEffect(() => {
     loadCustomers();
-  }, [searchTerm, statusFilter, conversationTypeFilter, dateFilter, currentPage, itemsPerPage]);
+  }, [filters]);
 
   // Bulk selection logic
   const selectedCustomers = customers.filter((customer) =>
@@ -207,23 +218,51 @@ const AutoGreetingCustomerList: React.FC<
     customers.some((customer) => selectedCustomerIds.has(customer.id)) &&
     !isAllSelected;
 
+  // PaginatedTable handlers
+  const handleFilterChange = (newFilters: any) => {
+    setFilters(prev => ({
+      ...prev,
+      ...newFilters,
+    }));
+    setSelectedCustomerIds(new Set());
+  };
+
   const handlePageChange = (page: number) => {
+    setFilters(prev => ({
+      ...prev,
+      page,
+    }));
     setCurrentPage(page);
     setSelectedCustomerIds(new Set());
   };
 
-  const handleItemsPerPageChange = (newItemsPerPage: number) => {
-    setItemsPerPage(newItemsPerPage);
+  const handlePageSizeChange = (pageSize: number) => {
+    setFilters(prev => ({
+      ...prev,
+      pageSize,
+      page: 1,
+    }));
+    setItemsPerPage(pageSize);
     setCurrentPage(1);
     setSelectedCustomerIds(new Set());
   };
 
   const clearFilters = () => {
+    const defaultFilters = {
+      page: 1,
+      pageSize: 10,
+      search: "",
+      statusFilter: "all",
+      conversationTypeFilter: "all",
+      dateFilter: "",
+    };
+    setFilters(defaultFilters);
     setSearchTerm("");
     setStatusFilter("all");
     setConversationTypeFilter("all");
     setDateFilter("");
     setCurrentPage(1);
+    setItemsPerPage(10);
     setSelectedCustomerIds(new Set());
     localStorage.removeItem("auto-greeting-filters");
   };
@@ -233,12 +272,12 @@ const AutoGreetingCustomerList: React.FC<
     try {
       const token = getAccessToken();
       const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: itemsPerPage.toString(),
-        ...(searchTerm && { search: searchTerm }),
-        ...(statusFilter !== "all" && { statusFilter }),
-        ...(conversationTypeFilter !== "all" && { conversationTypeFilter }),
-        ...(dateFilter && { dateFilter }),
+        page: filters.page.toString(),
+        limit: filters.pageSize.toString(),
+        ...(filters.search && { search: filters.search }),
+        ...(filters.statusFilter !== "all" && { statusFilter: filters.statusFilter }),
+        ...(filters.conversationTypeFilter !== "all" && { conversationTypeFilter: filters.conversationTypeFilter }),
+        ...(filters.dateFilter && { dateFilter: filters.dateFilter }),
       });
 
       const response = await fetch(
@@ -259,7 +298,9 @@ const AutoGreetingCustomerList: React.FC<
       if (data.data && Array.isArray(data.data)) {
         setCustomers(data.data);
         setTotalItems(data.total || 0);
-        setTotalPages(data.totalPages || 0);
+        // Sử dụng totalPages từ backend, nếu không có thì tính từ total và pageSize
+        const totalPages = data.totalPages || Math.ceil((data.total || 0) / filters.pageSize);
+        setTotalPages(totalPages);
       } else {
         setCustomers([]);
         setTotalItems(0);
@@ -541,6 +582,7 @@ const AutoGreetingCustomerList: React.FC<
       // Reset selection và về trang đầu
       setSelectedCustomerIds(new Set());
       setCurrentPage(1);
+      setFilters(prev => ({ ...prev, page: 1 }));
 
       // Fetch lại data để hiển thị danh sách mới nhất
       await loadCustomers();
@@ -836,10 +878,10 @@ const AutoGreetingCustomerList: React.FC<
       : [...baseHeaders, ...remainingHeaders];
 
     const data = customers.map((customer, index) => {
-      const baseData = [
-        ((currentPage - 1) * itemsPerPage) + index + 1,
-        customer.id,
-        customer.zaloDisplayName,
+        const baseData = [
+          ((filters.page - 1) * filters.pageSize) + index + 1,
+          customer.id,
+          customer.zaloDisplayName,
         customer.salutation || "",
         customer.greetingMessage || "",
         customer.conversationType === "group"
@@ -897,10 +939,10 @@ const AutoGreetingCustomerList: React.FC<
             ...(token && { Authorization: `Bearer ${token}` }),
           },
           body: JSON.stringify({
-            searchTerm,
-            statusFilter,
-            conversationTypeFilter,
-            dateFilter,
+            searchTerm: filters.search,
+            statusFilter: filters.statusFilter,
+            conversationTypeFilter: filters.conversationTypeFilter,
+            dateFilter: filters.dateFilter,
           }),
         }
       );
@@ -993,20 +1035,6 @@ const AutoGreetingCustomerList: React.FC<
         onRefresh={loadSystemConfig}
       />
 
-      {/* Search and Filter Controls */}
-      <SearchAndFilterControls
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
-        conversationTypeFilter={conversationTypeFilter}
-        setConversationTypeFilter={setConversationTypeFilter}
-        dateFilter={dateFilter}
-        setDateFilter={setDateFilter}
-        itemsPerPage={itemsPerPage}
-        handleItemsPerPageChange={handleItemsPerPageChange}
-      />
-
       {/* Action Buttons */}
       <ActionButtons
         downloadingTemplate={downloadingTemplate}
@@ -1014,7 +1042,7 @@ const AutoGreetingCustomerList: React.FC<
         onDownloadTemplate={handleDownloadTemplate}
         onImportModalOpen={() => setImportModalOpen(true)}
         onReload={loadCustomers}
-        onExportModalOpen={() => setShowExportModal(true)}
+        onExportModalOpen={() => {}} // Not needed anymore with PaginatedTable
         onImportFromContacts={handleImportFromContacts}
         onClearFilters={clearFilters}
       />
@@ -1026,350 +1054,314 @@ const AutoGreetingCustomerList: React.FC<
         onBulkDelete={handleBulkDelete}
       />
 
-      {/* Data Table */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="p-4 border-b">
-          <span className="text-sm text-gray-600">
-            Tổng số dòng: {totalItems}
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b w-12">
-                  <Checkbox
-                    checked={isAllSelected}
-                    onCheckedChange={handleSelectAll}
-                    className="data-[state=indeterminate]:bg-blue-500 data-[state=indeterminate]:border-blue-500"
-                    ref={(el) => {
-                      if (el && el instanceof HTMLInputElement) {
-                        el.indeterminate = isPartiallySelected;
-                      }
-                    }}
-                  />
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  #
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Tên Zalo Khách
-                </th>
-                {canViewOwnerInfo() && (
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                    Người Sở Hữu
+      {/* PaginatedTable */}
+      <PaginatedTable
+        enableSearch={true}
+        enableStatusFilter={true}
+        enableConversationTypeFilter={true}
+        enableSingleDateFilter={true}
+        enablePageSize={true}
+        enableGoToPage={true}
+        availableStatuses={[
+          { value: "all", label: "Tất cả" },
+          { value: "urgent", label: "Cần báo gấp" },
+          { value: "reminder", label: "Cần nhắc nhở" },
+          { value: "normal", label: "Bình thường" },
+        ]}
+        page={filters.page}
+        total={totalItems}
+        pageSize={filters.pageSize}
+        onFilterChange={handleFilterChange}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+        onResetFilter={clearFilters}
+        loading={loading}
+        canExport={true}
+        getExportData={getExportData}
+        getExportAllData={getExportAllData}
+        singleDateLabel="Ngày tin nhắn cuối"
+        defaultPageSize={10}
+      >
+        {/* Data Table */}
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b w-12">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      className="data-[state=indeterminate]:bg-blue-500 data-[state=indeterminate]:border-blue-500"
+                      ref={(el) => {
+                        if (el && el instanceof HTMLInputElement) {
+                          el.indeterminate = isPartiallySelected;
+                        }
+                      }}
+                    />
                   </th>
-                )}
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Lời Chào
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Loại Hội Thoại
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Tin Nhắn Cuối
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Lần Cuối Gửi
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Số Ngày
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b whitespace-nowrap">
-                  Trạng Thái
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Kích Hoạt
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                  Thao Tác
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={11}
-                    className="px-4 py-8 text-center text-gray-500"
-                  >
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
-                      Đang tải dữ liệu...
-                    </div>
-                  </td>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    #
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Tên Zalo Khách
+                  </th>
+                  {canViewOwnerInfo() && (
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                      Người Sở Hữu
+                    </th>
+                  )}
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Lời Chào
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Loại Hội Thoại
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Tin Nhắn Cuối
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Lần Cuối Gửi
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Số Ngày
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b whitespace-nowrap">
+                    Trạng Thái
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Kích Hoạt
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
+                    Thao Tác
+                  </th>
                 </tr>
-              ) : customers.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={11}
-                    className="px-4 py-8 text-center text-gray-500"
-                  >
-                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <div>Chưa có khách hàng nào</div>
-                    <div className="text-sm mt-1">
-                      Hãy upload file Excel để thêm khách hàng
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                customers.map((customer, index) => {
-                  return (
-                    <tr
-                      key={customer.id}
-                      className={`${
-                        recentlyImportedIds.has(customer.id)
-                          ? "bg-green-50 border-l-4 border-l-green-400"
-                          : index % 2 === 0
-                          ? "bg-white"
-                          : "bg-gray-50"
-                      } transition-colors duration-300`}
+              </thead>
+              <tbody>
+                {customers.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={canViewOwnerInfo() ? 12 : 11}
+                      className="px-4 py-8 text-center text-gray-500"
                     >
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b w-12">
-                        <Checkbox
-                          checked={selectedCustomerIds.has(customer.id)}
-                          onCheckedChange={() =>
-                            handleSelectCustomer(customer.id)
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        {index + 1}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-800 border-b">
-                        {customer.zaloDisplayName}
-                        {customer.salutation ? ` (${customer.salutation})` : ""}
-                      </td>
-                      {canViewOwnerInfo() && (
-                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                          {customer.userDisplayName || `User ${customer.userId}`}
-                        </td>
-                      )}
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b max-w-xs">
-                        <div className="space-y-1">
-                          <div className="truncate">
-                            {getGreetingMessage(customer)}
-                          </div>
-                          {systemConfig?.allowCustomMessage && (
-                            <div className="flex items-center gap-1">
-                              {customer.greetingMessage ? (
-                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                                  Tùy chỉnh
-                                </span>
-                              ) : (
-                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                                  Mặc định
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {!systemConfig?.allowCustomMessage && (
-                            <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded-full">
-                              Hệ thống
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            customer.conversationType === "group"
-                              ? "bg-blue-100 text-blue-800"
-                              : customer.conversationType === "private"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {customer.conversationType === "group"
-                            ? "Nhóm"
-                            : customer.conversationType === "private"
-                            ? "Cá nhân"
-                            : "Chưa xác định"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        {customer.customerLastMessageDate
-                          ? (() => {
-                              try {
-                                const date = new Date(
-                                  customer.customerLastMessageDate
-                                );
-                                return isNaN(date.getTime())
-                                  ? "Invalid Date"
-                                  : date.toLocaleString("vi-VN");
-                              } catch (error) {
-                                return "Invalid Date";
-                              }
-                            })()
-                          : "Chưa có"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        {customer.lastMessageDate
-                          ? (() => {
-                              try {
-                                const date = new Date(customer.lastMessageDate);
-                                return isNaN(date.getTime())
-                                  ? "Invalid Date"
-                                  : date.toLocaleString("vi-VN");
-                              } catch (error) {
-                                return "Invalid Date";
-                              }
-                            })()
-                          : "Chưa gửi"}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        {customer.daysSinceLastMessage === null
-                          ? "Chưa có"
-                          : customer.daysSinceLastMessage}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
-                            customer.customerStatus === "urgent"
-                              ? "bg-red-200 text-red-900"
-                              : customer.customerStatus === "reminder"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : customer.customerStatus === "normal"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {customer.customerStatus === "urgent"
-                            ? "Cần báo gấp"
-                            : customer.customerStatus === "reminder"
-                            ? "Cần nhắc nhở"
-                            : customer.customerStatus === "normal"
-                            ? "Bình thường"
-                            : "Bình thường"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 border-b">
-                        <div className="flex items-center gap-3">
-                          {/* Toggle Switch */}
-                          <button
-                            key={`toggle-${customer.id}-${refreshKey}`}
-                            onClick={() =>
-                              handleToggleActive(customer.id, customer.isActive)
-                            }
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                              customer.isActive === 1
-                                ? "bg-green-500"
-                                : "bg-gray-300"
-                            }`}
-                            title={
-                              customer.isActive === 1
-                                ? "Vô hiệu hóa"
-                                : "Kích hoạt"
-                            }
-                          >
-                            <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                customer.isActive === 1
-                                  ? "translate-x-6"
-                                  : "translate-x-1"
-                              }`}
-                            />
-                          </button>
-
-                          {/* Status Text */}
-                          <span
-                            key={`status-${customer.id}-${refreshKey}`}
-                            className={`text-sm font-medium ${
-                              customer.isActive === 1
-                                ? "text-green-700"
-                                : "text-gray-500"
-                            }`}
-                          >
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 border-b">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditCustomer(customer)}
-                            className="border-blue-300 text-blue-600 hover:bg-blue-50"
-                            title="Chỉnh sửa thông tin"
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setOpenCustomerId(customer.id)}
-                            className="border-gray-300 text-gray-600 hover:bg-gray-50"
-                            title="Xem lịch sử tin nhắn"
-                          >
-                            <History className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteCustomer(customer)}
-                            className="border-red-300 text-red-600 hover:bg-red-50"
-                            title="Xóa khách hàng"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                Hiển thị {((currentPage - 1) * itemsPerPage) + 1} -{" "}
-                {Math.min(currentPage * itemsPerPage, totalItems)} trong{" "}
-                {totalItems} kết quả
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  Trước
-                </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    const page = i + 1;
+                      <Users className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                      <div>Chưa có khách hàng nào</div>
+                      <div className="text-sm mt-1">
+                        Hãy upload file Excel để thêm khách hàng
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  customers.map((customer, index) => {
                     return (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(page)}
-                        className="w-8 h-8 p-0"
+                      <tr
+                        key={customer.id}
+                        className={`${
+                          recentlyImportedIds.has(customer.id)
+                            ? "bg-green-50 border-l-4 border-l-green-400"
+                            : index % 2 === 0
+                            ? "bg-white"
+                            : "bg-gray-50"
+                        } transition-colors duration-300`}
                       >
-                        {page}
-                      </Button>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b w-12">
+                          <Checkbox
+                            checked={selectedCustomerIds.has(customer.id)}
+                            onCheckedChange={() =>
+                              handleSelectCustomer(customer.id)
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          {(filters.page - 1) * filters.pageSize + index + 1}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-800 border-b">
+                          {customer.zaloDisplayName}
+                          {customer.salutation ? ` (${customer.salutation})` : ""}
+                        </td>
+                        {canViewOwnerInfo() && (
+                          <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                            {customer.userDisplayName || `User ${customer.userId}`}
+                          </td>
+                        )}
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b max-w-xs">
+                          <div className="space-y-1">
+                            <div className="truncate">
+                              {getGreetingMessage(customer)}
+                            </div>
+                            {systemConfig?.allowCustomMessage && (
+                              <div className="flex items-center gap-1">
+                                {customer.greetingMessage ? (
+                                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                    Tùy chỉnh
+                                  </span>
+                                ) : (
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                    Mặc định
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {!systemConfig?.allowCustomMessage && (
+                              <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded-full">
+                                Hệ thống
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              customer.conversationType === "group"
+                                ? "bg-blue-100 text-blue-800"
+                                : customer.conversationType === "private"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {customer.conversationType === "group"
+                              ? "Nhóm"
+                              : customer.conversationType === "private"
+                              ? "Cá nhân"
+                              : "Chưa xác định"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          {customer.customerLastMessageDate
+                            ? (() => {
+                                try {
+                                  const date = new Date(
+                                    customer.customerLastMessageDate
+                                  );
+                                  return isNaN(date.getTime())
+                                    ? "Invalid Date"
+                                    : date.toLocaleString("vi-VN");
+                                } catch (error) {
+                                  return "Invalid Date";
+                                }
+                              })()
+                            : "Chưa có"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          {customer.lastMessageDate
+                            ? (() => {
+                                try {
+                                  const date = new Date(customer.lastMessageDate);
+                                  return isNaN(date.getTime())
+                                    ? "Invalid Date"
+                                    : date.toLocaleString("vi-VN");
+                                } catch (error) {
+                                  return "Invalid Date";
+                                }
+                              })()
+                            : "Chưa gửi"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          {customer.daysSinceLastMessage === null
+                            ? "Chưa có"
+                            : customer.daysSinceLastMessage}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                              customer.customerStatus === "urgent"
+                                ? "bg-red-200 text-red-900"
+                                : customer.customerStatus === "reminder"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : customer.customerStatus === "normal"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {customer.customerStatus === "urgent"
+                              ? "Cần báo gấp"
+                              : customer.customerStatus === "reminder"
+                              ? "Cần nhắc nhở"
+                              : customer.customerStatus === "normal"
+                              ? "Bình thường"
+                              : "Bình thường"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 border-b">
+                          <div className="flex items-center gap-3">
+                            {/* Toggle Switch */}
+                            <button
+                              key={`toggle-${customer.id}-${refreshKey}`}
+                              onClick={() =>
+                                handleToggleActive(customer.id, customer.isActive)
+                              }
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                                customer.isActive === 1
+                                  ? "bg-green-500"
+                                  : "bg-gray-300"
+                              }`}
+                              title={
+                                customer.isActive === 1
+                                  ? "Vô hiệu hóa"
+                                  : "Kích hoạt"
+                              }
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  customer.isActive === 1
+                                    ? "translate-x-6"
+                                    : "translate-x-1"
+                                }`}
+                              />
+                            </button>
+
+                            {/* Status Text */}
+                            <span
+                              key={`status-${customer.id}-${refreshKey}`}
+                              className={`text-sm font-medium ${
+                                customer.isActive === 1
+                                  ? "text-green-700"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 border-b">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditCustomer(customer)}
+                              className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                              title="Chỉnh sửa thông tin"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setOpenCustomerId(customer.id)}
+                              className="border-gray-300 text-gray-600 hover:bg-gray-50"
+                              title="Xem lịch sử tin nhắn"
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteCustomer(customer)}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              title="Xóa khách hàng"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
                     );
-                  })}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                >
-                  Sau
-                </Button>
-              </div>
-            </div>
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </div>
+      </PaginatedTable>
 
       {/* Modals */}
       <CustomerHistoryModal
@@ -1378,43 +1370,6 @@ const AutoGreetingCustomerList: React.FC<
         onClose={() => setOpenCustomerId(null)}
       />
 
-      <CSVExportPanel
-        open={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        defaultExportCount={itemsPerPage}
-        {...getExportData()}
-        fetchAllData={getExportAllData}
-        filtersDescription={
-          <div className="space-y-1">
-            <div>
-              <strong>Bộ lọc hiện tại:</strong>
-            </div>
-            {searchTerm && <div>• Tìm kiếm: "{searchTerm}"</div>}
-            {statusFilter !== "all" && (
-              <div>
-                • Trạng thái:{" "}
-                {statusFilter === "urgent"
-                  ? "Cần báo gấp"
-                  : statusFilter === "reminder"
-                  ? "Cần nhắc nhở"
-                  : "Bình thường"}
-              </div>
-            )}
-            {conversationTypeFilter !== "all" && (
-              <div>
-                • Loại hội thoại:{" "}
-                {conversationTypeFilter === "group" ? "Nhóm" : "Cá nhân"}
-              </div>
-            )}
-            {dateFilter && (
-              <div>
-                • Ngày: {new Date(dateFilter).toLocaleDateString("vi-VN")}
-              </div>
-            )}
-            <div>• Tổng số khách hàng: {totalItems}</div>
-          </div>
-        }
-      />
 
       <DeleteCustomerModal
         customer={customerToDelete}

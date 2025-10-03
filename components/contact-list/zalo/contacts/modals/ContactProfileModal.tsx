@@ -46,17 +46,15 @@ export default function ContactProfileModal({
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
 
   const [form, setForm] = useState({
-    // Các trường cũ (giữ nguyên để tương thích)
-    notes: "",
+    // Các trường cũ (giữ lại tone & threshold)
     toneHints: "",
     aovThreshold: "",
-    
+
     // Các trường mới cho thông tin chi tiết khách hàng
     customerInfo: {
       gender: "",
       age: "",
       preferences: "",
-      budget: "",
       purchaseHistory: "",
     }
   });
@@ -67,116 +65,48 @@ export default function ContactProfileModal({
   }>({});
   const [showTonePresets, setShowTonePresets] = useState(false);
 
-  // Helper function to parse customer info from existing profile data
+  // Helper function to parse customer info from existing profile data (backwards compatible)
   const parseCustomerInfoFromProfile = (profile: any) => {
     const customerInfo = {
       gender: "",
       age: "",
       preferences: "",
-      budget: "",
       purchaseHistory: "",
     };
 
-    if (profile.notes) {
-      const notes = profile.notes;
-      
-      // Check if notes contain structured customer info section
-      const customerInfoMatch = notes.match(/--- Thông tin chi tiết ---\n([\s\S]*)/);
-      
-      if (customerInfoMatch) {
-        // Extract from structured section
-        const customerInfoText = customerInfoMatch[1];
-        
-        // Extract gender
-        const genderMatch = customerInfoText.match(/giới tính[:\s]*([^\n]+)/i);
-        if (genderMatch) {
-          customerInfo.gender = genderMatch[1].trim();
-        }
-        
-        // Extract age
-        const ageMatch = customerInfoText.match(/tuổi[:\s]*(\d+)/i);
-        if (ageMatch) {
-          customerInfo.age = ageMatch[1];
-        }
-        
-        // Extract preferences
-        const prefMatch = customerInfoText.match(/sở thích[:\s]*([^\n]+)/i);
-        if (prefMatch) {
-          customerInfo.preferences = prefMatch[1].trim();
-        }
-        
-        // Extract budget
-        const budgetMatch = customerInfoText.match(/ngân sách[:\s]*([^\n]+)/i);
-        if (budgetMatch) {
-          customerInfo.budget = budgetMatch[1].trim();
-        }
-        
-        // Extract purchase history
-        const historyMatch = customerInfoText.match(/lịch sử mua hàng[:\s]*([^\n]+)/i);
-        if (historyMatch) {
-          customerInfo.purchaseHistory = historyMatch[1].trim();
-        }
-      } else {
-        // Fallback: try to extract from unstructured notes (for backward compatibility)
-        const genderMatch = notes.match(/giới tính[:\s]*([^\n,]+)/i) || notes.match(/khách là (nam|nữ)/i);
-        if (genderMatch) {
-          customerInfo.gender = genderMatch[1] || genderMatch[2] || "";
-        }
-        
-        const ageMatch = notes.match(/tuổi[:\s]*(\d+)/i) || notes.match(/(\d+)\s*tuổi/i);
-        if (ageMatch) {
-          customerInfo.age = ageMatch[1];
-        }
-        
-        const prefMatch = notes.match(/sở thích[:\s]*([^\n,]+)/i) || notes.match(/quan tâm[:\s]*([^\n,]+)/i);
-        if (prefMatch) {
-          customerInfo.preferences = prefMatch[1];
-        }
-        
-        const budgetMatch = notes.match(/ngân sách[:\s]*([^\n,]+)/i) || notes.match(/budget[:\s]*([^\n,]+)/i);
-        if (budgetMatch) {
-          customerInfo.budget = budgetMatch[1];
-        }
-        
-        const historyMatch = notes.match(/lịch sử mua hàng[:\s]*([^\n,]+)/i);
-        if (historyMatch) {
-          customerInfo.purchaseHistory = historyMatch[1];
-        }
-      }
+    // We still attempt to parse from notes if available (older records)
+    const notesSource = profile.notes || "";
+    if (notesSource) {
+      const customerInfoMatch = notesSource.match(/--- Thông tin chi tiết ---\n([\s\S]*)/);
+      const text = customerInfoMatch ? customerInfoMatch[1] : notesSource;
+
+      const genderMatch = text.match(/giới tính[:\s]*([^\n]+)/i) || text.match(/khách là (nam|nữ)/i);
+      if (genderMatch) customerInfo.gender = genderMatch[1] || genderMatch[2] || "";
+
+      const ageMatch = text.match(/tuổi[:\s]*(\d+)/i) || text.match(/(\d+)\s*tuổi/i);
+      if (ageMatch) customerInfo.age = ageMatch[1];
+
+      const prefMatch = text.match(/sở thích[:\s]*([^\n,]+)/i) || text.match(/quan tâm[:\s]*([^\n,]+)/i);
+      if (prefMatch) customerInfo.preferences = prefMatch[1];
+
+      const historyMatch = text.match(/lịch sử mua hàng[:\s]*([^\n,]+)/i);
+      if (historyMatch) customerInfo.purchaseHistory = historyMatch[1];
     }
 
     return customerInfo;
   };
 
-  // Helper function to merge customer info into notes and toneHints
-  const mergeCustomerInfoToProfile = (customerInfo: any, existingNotes: string, existingToneHints: string) => {
-    let newNotes = existingNotes;
-    let newToneHints = existingToneHints;
+  // Build a human-readable notes sentence from customerInfo
+  const buildNotesFromCustomerInfo = (customerInfo: any) => {
+    const parts: string[] = [];
+    if (customerInfo.gender) parts.push(`Giới tính: ${customerInfo.gender}`);
+    if (customerInfo.age) parts.push(`Tuổi: ${customerInfo.age}`);
+    if (customerInfo.preferences) parts.push(`Sở thích: ${customerInfo.preferences}`);
+    if (customerInfo.purchaseHistory) parts.push(`Lịch sử mua hàng: ${customerInfo.purchaseHistory}`);
 
-    // Build structured customer info section
-    const customerInfoSection = [];
-    
-    if (customerInfo.gender) customerInfoSection.push(`Giới tính: ${customerInfo.gender}`);
-    if (customerInfo.age) customerInfoSection.push(`Tuổi: ${customerInfo.age}`);
-    if (customerInfo.preferences) customerInfoSection.push(`Sở thích: ${customerInfo.preferences}`);
-    if (customerInfo.budget) customerInfoSection.push(`Ngân sách: ${customerInfo.budget}`);
-    if (customerInfo.purchaseHistory) customerInfoSection.push(`Lịch sử mua hàng: ${customerInfo.purchaseHistory}`);
-
-    // Combine customer info with existing notes
-    if (customerInfoSection.length > 0) {
-      const customerInfoText = customerInfoSection.join('\n');
-      
-      // If there are existing notes, append customer info
-      if (existingNotes && existingNotes.trim()) {
-        newNotes = `${existingNotes}\n\n--- Thông tin chi tiết ---\n${customerInfoText}`;
-      } else {
-        // If no existing notes, use customer info as notes
-        newNotes = customerInfoText;
-      }
-    }
-
-    // Keep existing tone hints
-    return { notes: newNotes, toneHints: newToneHints };
+    if (parts.length === 0) return "";
+    // Join into a short paragraph
+    return parts.join('. ') + '.';
   };
 
   useEffect(() => {
@@ -189,17 +119,9 @@ export default function ContactProfileModal({
 
   useEffect(() => {
     if (profile) {
-      // Parse existing data from notes and toneHints to extract customer info
+      // Parse existing data from profile to populate customerInfo
       const parsedCustomerInfo = parseCustomerInfoFromProfile(profile);
-      
-      // Extract actual notes (without customer info section)
-      let actualNotes = profile.notes || "";
-      if (actualNotes.includes("--- Thông tin chi tiết ---")) {
-        actualNotes = actualNotes.split("--- Thông tin chi tiết ---")[0].trim();
-      }
-      
       setForm({
-        notes: actualNotes,
         toneHints: profile.toneHints || "",
         aovThreshold: profile.aovThreshold || "",
         customerInfo: parsedCustomerInfo,
@@ -251,16 +173,12 @@ export default function ContactProfileModal({
 
     setSaving(true);
     try {
-      // Merge customer info into notes and toneHints
-      const { notes: mergedNotes, toneHints: mergedToneHints } = mergeCustomerInfoToProfile(
-        form.customerInfo,
-        form.notes,
-        form.toneHints
-      );
+      // Build notes from customerInfo and send to backend
+      const builtNotes = buildNotesFromCustomerInfo(form.customerInfo);
 
       await saveProfile({
-        notes: mergedNotes,
-        toneHints: mergedToneHints,
+        notes: builtNotes || null,
+        toneHints: form.toneHints,
         aovThreshold: form.aovThreshold === "" ? null : form.aovThreshold,
       } as any);
 
@@ -559,29 +477,7 @@ export default function ContactProfileModal({
                     />
                   </div>
 
-                  {/* Budget */}
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
-                      <ShoppingBag className="w-4 h-4" />
-                      Ngân sách
-                      <div className="relative group">
-                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          Mức ngân sách khách hàng có thể chi trả
-                        </div>
-                      </div>
-                    </Label>
-                    <Input
-                      disabled={zaloDisabled}
-                      className={cn(
-                        "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300",
-                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
-                      )}
-                      placeholder="Ví dụ: 1-5 triệu, 5-10 triệu"
-                      value={form.customerInfo.budget}
-                      onChange={(e) => handleCustomerInfoChange("budget", e.target.value)}
-                    />
-                  </div>
+                  {/* Budget field removed per request */}
                 </div>
 
                 {/* Preferences */}
@@ -636,38 +532,7 @@ export default function ContactProfileModal({
 
               </motion.div>
 
-              {/* Notes Field */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                  <FileText className="w-4 h-4" />
-                  Ghi chú
-                  <div className="relative group">
-                    <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                      Thông tin bổ sung về khách hàng
-                    </div>
-                  </div>
-                </Label>
-                <Textarea
-                  disabled={zaloDisabled}
-                  className={cn(
-                    "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300 resize-none text-base leading-relaxed px-4 py-3",
-                    zaloDisabled &&
-                      "bg-gray-50 text-gray-500 cursor-not-allowed"
-                  )}
-                  rows={4}
-                  placeholder="Nhập ghi chú về khách hàng, ví dụ: sở thích, lịch sử mua hàng, thông tin liên hệ..."
-                  value={form.notes}
-                  onChange={(e) => handleInputChange("notes", e.target.value)}
-                />
-                <div className="text-xs text-gray-500 mt-1">
-                  {form.notes.length}/500 ký tự
-                </div>
-              </motion.div>
+              {/* Notes moved: notes are built automatically from Customer Info on save */}
 
               {/* Tone Hints Field */}
               <motion.div
@@ -838,15 +703,6 @@ export default function ContactProfileModal({
                 >
                   <Users className="w-3 h-3 mr-1" />
                   Có thông tin chi tiết
-                </Badge>
-              )}
-              
-              {form.notes && (
-                <Badge
-                  variant="outline"
-                  className="text-xs bg-blue-50 text-blue-600 border-blue-200"
-                >
-                  Có ghi chú
                 </Badge>
               )}
               
