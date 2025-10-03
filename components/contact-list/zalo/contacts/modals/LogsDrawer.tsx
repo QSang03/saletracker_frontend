@@ -24,17 +24,25 @@ export default function LogsDrawer({
   onClose: () => void; 
   contactId: number | null; 
 }) {
-  const { conversation, messages, loading, fetchConversation, fetchMessages } = useLogs(contactId);
+  const { 
+    conversation, 
+    messages, 
+    page, 
+    pageSize, 
+    total, 
+    loading, 
+    fetchConversation, 
+    fetchMessages,
+    handlePageChange,
+    handlePageSizeChange
+  } = useLogs(contactId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [messagesVisible, setMessagesVisible] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
   
   useEffect(() => { 
     if (open) {
       fetchConversation();
-      setCurrentPage(1); // Reset to first page when opening
       setTimeout(() => setMessagesVisible(true), 300);
     } else {
       setMessagesVisible(false);
@@ -80,15 +88,13 @@ export default function LogsDrawer({
     }
   };
 
-  // Calculate pagination
-  const totalMessages = messages?.length || 0;
-  const totalPages = Math.ceil(totalMessages / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const currentMessages = messages?.slice(startIndex, endIndex) || [];
+  // Calculate pagination info
+  const totalPages = Math.ceil(total / pageSize);
+  const startIndex = total > 0 ? (page - 1) * pageSize + 1 : 0;
+  const endIndex = Math.min(page * pageSize, total);
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+  const onPageChange = (newPage: number) => {
+    handlePageChange(newPage);
     // Scroll to top when changing page
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
@@ -227,7 +233,7 @@ export default function LogsDrawer({
                       Tin Nhắn
                     </h4>
                     <div className="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium">
-                      {totalMessages}
+                      {total}
                     </div>
                   </div>
                 </div>
@@ -246,7 +252,7 @@ export default function LogsDrawer({
                   </div>
                 ) : (
                   <div className="space-y-3 overflow-hidden">
-                    {currentMessages.map((m, index) => (
+                    {messages.map((m, index) => (
                       <div 
                         key={`${m.msgId || index}`}
                         className="group w-full overflow-hidden"
@@ -321,65 +327,158 @@ export default function LogsDrawer({
                 )}
 
                 {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                      <span>
-                        Trang {currentPage} / {totalPages}
-                      </span>
-                      <span className="text-gray-400">•</span>
-                      <span>
-                        Hiển thị {startIndex + 1}-{Math.min(endIndex, totalMessages)} / {totalMessages} tin nhắn
-                      </span>
+                {total > 0 && (
+                  <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    {/* Page Size Selector */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Hiển thị:</span>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        >
+                          <option value={5}>5 tin nhắn/trang</option>
+                          <option value={10}>10 tin nhắn/trang</option>
+                          <option value={20}>20 tin nhắn/trang</option>
+                          <option value={50}>50 tin nhắn/trang</option>
+                        </select>
+                      </div>
                     </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="flex items-center space-x-1 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <ChevronLeftIcon className="w-4 h-4" />
-                        <span>Trước</span>
-                      </button>
+
+                    {/* Pagination Info and Controls */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm text-gray-600 dark:text-gray-400 min-w-0 flex-shrink">
+                        <span className="whitespace-nowrap">
+                          Trang {page} / {totalPages}
+                        </span>
+                        <span className="text-gray-400 hidden sm:inline">•</span>
+                        <span className="whitespace-nowrap">
+                          Hiển thị {startIndex}-{endIndex} / {total} tin nhắn
+                        </span>
+                      </div>
                       
-                      <div className="flex items-center space-x-1">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
+                      {totalPages > 1 && (
+                        <div className="flex items-center space-x-1 flex-shrink-0">
+                          <button
+                            onClick={() => onPageChange(page - 1)}
+                            disabled={page === 1}
+                            className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          >
+                            <ChevronLeftIcon className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="hidden sm:inline">Trước</span>
+                          </button>
                           
-                          return (
+                          <div className="flex items-center space-x-1">
+                            {/* Always show page 1 */}
                             <button
-                              key={pageNum}
-                              onClick={() => handlePageChange(pageNum)}
-                              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                currentPage === pageNum
+                              onClick={() => onPageChange(1)}
+                              className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                                page === 1
                                   ? 'bg-blue-500 text-white'
                                   : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                               }`}
                             >
-                              {pageNum}
+                              1
                             </button>
-                          );
-                        })}
-                      </div>
-                      
-                      <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="flex items-center space-x-1 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <span>Sau</span>
-                        <ChevronRightIcon className="w-4 h-4" />
-                      </button>
+
+                            {/* Show ellipsis and current page area */}
+                            {totalPages > 3 && (
+                              <>
+                                {page > 3 && (
+                                  <>
+                                    <span className="px-1 sm:px-2 text-gray-400 text-xs sm:text-sm">...</span>
+                                    {page > 4 && (
+                                      <button
+                                        onClick={() => onPageChange(page - 1)}
+                                        className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                      >
+                                        {page - 1}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                
+                                {/* Current page (if not 1 or last) */}
+                                {page > 1 && page < totalPages && (
+                                  <button
+                                    onClick={() => onPageChange(page)}
+                                    className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium bg-blue-500 text-white rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    {page}
+                                  </button>
+                                )}
+                                
+                                {/* Next page and ellipsis */}
+                                {page < totalPages - 2 && (
+                                  <>
+                                    {page < totalPages - 3 && (
+                                      <button
+                                        onClick={() => onPageChange(page + 1)}
+                                        className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                      >
+                                        {page + 1}
+                                      </button>
+                                    )}
+                                    <span className="px-1 sm:px-2 text-gray-400 text-xs sm:text-sm">...</span>
+                                  </>
+                                )}
+                              </>
+                            )}
+
+                            {/* Show page 2 if totalPages <= 3 */}
+                            {totalPages <= 3 && totalPages >= 2 && (
+                              <button
+                                onClick={() => onPageChange(2)}
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                                  page === 2
+                                    ? 'bg-blue-500 text-white'
+                                    : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                              >
+                                2
+                              </button>
+                            )}
+
+                            {/* Show page 3 if totalPages = 3 */}
+                            {totalPages === 3 && (
+                              <button
+                                onClick={() => onPageChange(3)}
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                                  page === 3
+                                    ? 'bg-blue-500 text-white'
+                                    : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                              >
+                                3
+                              </button>
+                            )}
+
+                            {/* Always show last page if more than 1 page */}
+                            {totalPages > 1 && (
+                              <button
+                                onClick={() => onPageChange(totalPages)}
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                                  page === totalPages
+                                    ? 'bg-blue-500 text-white'
+                                    : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                              >
+                                {totalPages}
+                              </button>
+                            )}
+                          </div>
+                          
+                          <button
+                            onClick={() => onPageChange(page + 1)}
+                            disabled={page === totalPages}
+                            className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                          >
+                            <span className="hidden sm:inline">Sau</span>
+                            <ChevronRightIcon className="w-3 h-3 sm:w-4 sm:h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -400,7 +499,7 @@ export default function LogsDrawer({
             <div className="flex items-center space-x-2 px-3 py-1 bg-blue-100 dark:bg-blue-900/30 rounded-full">
               <SendIcon className="w-3 h-3 text-blue-600 dark:text-blue-400" />
               <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                {totalMessages} tin nhắn
+                {total} tin nhắn
               </span>
             </div>
           </div>

@@ -580,9 +580,6 @@ export default function ContactProfileModal({
                     handleInputChange("toneHints", e.target.value)
                   }
                 />
-                <div className="text-xs text-gray-500 mt-1">
-                  {form.toneHints.length}/300 ký tự
-                </div>
               </motion.div>
 
               {/* Alert Threshold Field */}

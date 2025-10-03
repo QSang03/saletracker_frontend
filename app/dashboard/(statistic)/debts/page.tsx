@@ -167,6 +167,9 @@ const DebtStatisticsDashboard: React.FC = () => {
   const canAccessDebtStatistics = canReadDepartment('cong-no');
 
   const [chartType, setChartTypeState] = useState<'bar' | 'line'>("bar");
+  const [agingChartType, setAgingChartType] = useState<'bar' | 'line'>("bar");
+  const [payLaterChartType, setPayLaterChartType] = useState<'bar' | 'line'>("bar");
+  const [customerResponseChartType, setCustomerResponseChartType] = useState<'bar' | 'line'>("bar");
   const [timeRange, setTimeRangeState] = React.useState<"week" | "month" | "quarter">("week");
   
   // Initialize date range with stable values
@@ -1072,6 +1075,8 @@ const DebtStatisticsDashboard: React.FC = () => {
                 onBarClick={handleAgingDailyClick}
                 loading={loading}
                 labels={agingLabels}
+                chartType={agingChartType}
+                setChartType={setAgingChartType}
               />
             </TabsContent>
 
@@ -1082,6 +1087,8 @@ const DebtStatisticsDashboard: React.FC = () => {
                 onBarClick={handlePayLaterDailyClick}
                 loading={loading}
                 labels={payLaterLabels}
+                chartType={payLaterChartType}
+                setChartType={setPayLaterChartType}
               />
             </TabsContent>
 
@@ -1093,6 +1100,8 @@ const DebtStatisticsDashboard: React.FC = () => {
                 loading={loading}
                 labels={responseStatuses}
                 responseStatusVi={responseStatusVi}
+                chartType={customerResponseChartType}
+                setChartType={setCustomerResponseChartType}
               />
             </TabsContent>
           </Tabs>
