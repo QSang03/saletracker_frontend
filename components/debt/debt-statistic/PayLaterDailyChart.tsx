@@ -534,11 +534,6 @@ const PayLaterDailyChart: React.FC<PayLaterDailyChartProps> = ({
                       animationDuration={2000}
                       animationEasing="ease-in-out"
                       animationBegin={idx * 300}
-                      style={{ 
-                        opacity: isHovered ? 1 : 0.9,
-                        filter: isHovered ? `url(#activeDotGlow-${validId})` : 'none',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                      }}
                     />
                   );
                 })}
