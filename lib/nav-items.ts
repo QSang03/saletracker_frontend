@@ -56,7 +56,7 @@ const baseNavItems = [
       { title: "Quản lý bộ phận", url: "/dashboard/department", roles: ["admin", "view"] },
       { title: "Quản lý zalo", url: "/dashboard/zalo", roles: ["admin", "manager", "view"] },
       // { title: "Quản lý contact-list", url: "/dashboard/auto-reply", roles: ["admin"] },
-      // { title: "Quản lý contact-list", url: "/dashboard/auto-reply" },
+      { title: "Quản lý contact-list", url: "/dashboard/auto-reply" },
       { title: "Phân quyền", url: "/dashboard/roles", roles: ["admin"] },
     ],
   },
@@ -67,6 +67,7 @@ const baseNavItems = [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
       { title: "Lời chào tự động", url: "/dashboard/auto-greeting" },
       { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
+      { title: "Chat Zalo", url: "/dashboard/zalo-chat"},
     ],
   },
   {

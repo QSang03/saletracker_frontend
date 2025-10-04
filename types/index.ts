@@ -551,6 +551,35 @@ export interface CampaignContent {
   updated_at: string | Date;
 }
 
+// Order Inquiry Preset Types
+export interface OrderInquiryPreset {
+  id: number;
+  title: string;
+  content?: string;
+  user_id: number;
+  user?: User;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  deletedAt?: string | Date | null;
+}
+
+export interface CreateOrderInquiryPresetDto {
+  title: string;
+  content?: string;
+}
+
+export interface UpdateOrderInquiryPresetDto {
+  title?: string;
+  content?: string;
+}
+
+export interface FindOrderInquiryPresetDto {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  userId?: number;
+}
+
 // Campaign Customer Types
 export interface CampaignCustomer {
   id: string;

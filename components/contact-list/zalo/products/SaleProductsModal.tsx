@@ -473,7 +473,7 @@ export default function SaleProductsModal({
   return (
     <TooltipProvider>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="!max-w-[95vw] xl:!max-w-[90vw] 2xl:!max-w-[85vw] max-h-[92vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl">
+        <DialogContent className="!max-w-[98vw] xl:!max-w-[95vw] 2xl:!max-w-[90vw] max-h-[95vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl">
           {/* Decorative Background */}
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-purple-500/3 to-pink-500/3 pointer-events-none"></div>
 
@@ -598,8 +598,8 @@ export default function SaleProductsModal({
                       </div>
                     </div>
 
-                    {/* Content - Increased Height */}
-                    <div className="h-[42vh] overflow-auto">
+                    {/* Content - Full Height */}
+                    <div className="flex-1 min-h-0 overflow-auto">
                       <div className="p-2">
                         <PaginatedTable
                           enableSearch
@@ -613,14 +613,16 @@ export default function SaleProductsModal({
                           onPageChange={setPage}
                           onPageSizeChange={setPageSize}
                           onFilterChange={(f) => {
-                            setSearch(f.search || "");
+                            if (f.search !== undefined) {
+                              setSearch(f.search || "");
+                            }
                             if (Array.isArray(f.categories))
                               setCateFilters(f.categories.map(String));
                             if (Array.isArray(f.brands))
                               setBrandFilters(f.brands.map(String));
                           }}
                         >
-                          <div className="tutorial-products-table-wrapper max-h-80 overflow-hidden">
+                          <div className="tutorial-products-table-wrapper overflow-hidden">
                             <Table className="tutorial-products-table">
                             <TableHeader className="bg-gray-50/60 sticky top-0 z-10">
                               <TableRow className="border-b border-gray-200/50">
@@ -782,7 +784,7 @@ export default function SaleProductsModal({
 
                     {/* Content */}
                     {!applyAllContacts ? (
-                      <div className="h-[42vh] overflow-auto">
+                      <div className="flex-1 min-h-0 overflow-auto">
                         <div className="p-2">
                           <PaginatedTable
                             enableSearch
@@ -867,7 +869,7 @@ export default function SaleProductsModal({
                         </div>
                       </div>
                     ) : (
-                      <div className="h-[42vh] flex items-center justify-center p-4">
+                      <div className="flex-1 min-h-0 flex items-center justify-center p-4">
                         <div className="text-center">
                           <div className="mx-auto w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mb-3">
                             <Globe className="w-6 h-6 text-white" />

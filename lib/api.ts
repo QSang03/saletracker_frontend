@@ -1,5 +1,11 @@
 import axios from 'axios';
 import { getAccessToken } from './auth';
+import { 
+  OrderInquiryPreset, 
+  CreateOrderInquiryPresetDto, 
+  UpdateOrderInquiryPresetDto, 
+  FindOrderInquiryPresetDto 
+} from '@/types';
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -15,6 +21,45 @@ export const getUserRolesWithPermissions = async () => {
     console.error('Error fetching user roles with permissions:', error);
     throw error;
   }
+};
+
+// Order Inquiry Presets API functions
+export const orderInquiryPresetsApi = {
+  // Get all presets with filters
+  getAll: async (params?: FindOrderInquiryPresetDto) => {
+    const response = await api.get('/order-inquiry-presets', { params });
+    return response.data;
+  },
+
+  // Get current user's presets
+  getMyPresets: async () => {
+    const response = await api.get('/order-inquiry-presets/my-presets');
+    return response.data;
+  },
+
+  // Get single preset by ID
+  getById: async (id: number) => {
+    const response = await api.get(`/order-inquiry-presets/${id}`);
+    return response.data;
+  },
+
+  // Create new preset
+  create: async (data: CreateOrderInquiryPresetDto) => {
+    const response = await api.post('/order-inquiry-presets', data);
+    return response.data;
+  },
+
+  // Update preset
+  update: async (id: number, data: UpdateOrderInquiryPresetDto) => {
+    const response = await api.patch(`/order-inquiry-presets/${id}`, data);
+    return response.data;
+  },
+
+  // Delete preset
+  delete: async (id: number) => {
+    const response = await api.delete(`/order-inquiry-presets/${id}`);
+    return response.data;
+  },
 };
 
 api.interceptors.request.use(config => {

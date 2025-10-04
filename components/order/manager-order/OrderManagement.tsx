@@ -46,6 +46,7 @@ import {
   ChevronUp,
   ChevronDown,
   Sparkles,
+  MessageSquare,
   MessageCircle,
   Hash,
   User,
@@ -65,6 +66,7 @@ import BulkNotesModal from "./BulkNotesModal";
 import HideOrderDetailModal from "./HideOrderDetailModal";
 import BulkHideModal from "./BulkHideModal";
 import ViewNotesHistoryModal from "./ViewNotesHistoryModal";
+import SendInquiryModal from "./SendInquiryModal";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -87,6 +89,7 @@ interface OrderManagementProps {
   onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
   onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
   onAnalysisBlock?: (orderDetail: OrderDetail, data: { reason?: string; blockType: 'analysis' | 'reporting' | 'stats' }) => Promise<void>;
+  onSendInquiry?: (orderDetail: OrderDetail, message: string) => Promise<void>;
   checkContactBlocked?: (zaloContactId: string) => Promise<{ isBlocked: boolean; blockType?: string; reason?: string }>;
   onBulkHide?: (orderDetails: OrderDetail[], reason: string) => void;
   onHide?: (orderDetail: OrderDetail, reason: string) => void;
@@ -245,6 +248,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onBulkNotes,
   onAddToBlacklist,
   onAnalysisBlock,
+  onSendInquiry,
   checkContactBlocked,
   onBulkHide,
   onHide,
@@ -342,6 +346,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [analysisBlockDetail, setAnalysisBlockDetail] =
     useState<OrderDetail | null>(null);
   const [isAnalysisBlockModalOpen, setIsAnalysisBlockModalOpen] =
+    useState(false);
+
+  // Send Inquiry states
+  const [sendInquiryDetail, setSendInquiryDetail] =
+    useState<OrderDetail | null>(null);
+  const [isSendInquiryModalOpen, setIsSendInquiryModalOpen] =
+    useState(false);
+
+  // Inquiry Presets modal state
+  const [isInquiryPresetsModalOpen, setIsInquiryPresetsModalOpen] =
     useState(false);
 
   // Bulk selection states
@@ -569,11 +583,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       isEditCustomerNameModalOpen ||
       isAddToBlacklistModalOpen ||
       isAnalysisBlockModalOpen ||
+      isSendInquiryModalOpen ||
       isBulkDeleteModalOpen ||
       isBulkExtendModalOpen ||
       isBulkNotesModalOpen ||
       isBulkHideModalOpen ||
-      isNotesHistoryOpen
+      isNotesHistoryOpen ||
+      isInquiryPresetsModalOpen
     );
   }, [
     isEditModalOpen,
@@ -584,11 +600,13 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     isEditCustomerNameModalOpen,
     isAddToBlacklistModalOpen,
     isAnalysisBlockModalOpen,
+    isSendInquiryModalOpen,
     isBulkDeleteModalOpen,
     isBulkExtendModalOpen,
     isBulkNotesModalOpen,
     isBulkHideModalOpen,
     isNotesHistoryOpen,
+    isInquiryPresetsModalOpen,
   ]);
 
   // Handle select all/deselect all
@@ -930,6 +948,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleAnalysisBlockCancel = () => {
     withSkipClear(() => setIsAnalysisBlockModalOpen(false));
     setAnalysisBlockDetail(null);
+  };
+
+  // Send Inquiry handlers
+  const handleSendInquiryClick = (orderDetail: OrderDetail) => {
+    setFocusSafely(orderDetail.id);
+    setSendInquiryDetail(orderDetail);
+    setIsSendInquiryModalOpen(true);
+  };
+
+  const handleSendInquiry = async (orderDetail: OrderDetail, message: string) => {
+    if (onSendInquiry) {
+      await onSendInquiry(orderDetail, message);
+      withSkipClear(() => setIsSendInquiryModalOpen(false));
+      setSendInquiryDetail(null);
+    }
+  };
+
+  const handleSendInquiryCancel = () => {
+    withSkipClear(() => setIsSendInquiryModalOpen(false));
+    setSendInquiryDetail(null);
   };
 
   // Data được sort từ backend, không cần sort ở frontend nữa
@@ -1959,6 +1997,26 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         Chặn phân tích (Chỉ Admin)
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+
+                                  {/* Send Inquiry Button - Chỉ hiển thị cho chủ sở hữu */}
+                                  {owner && onSendInquiry && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          onClick={() => handleSendInquiryClick(orderDetail)}
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+                                          title="Gửi câu hỏi thăm dò"
+                                        >
+                                          <MessageSquare className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        Gửi câu hỏi thăm dò sản phẩm
                                       </TooltipContent>
                                     </Tooltip>
                                   )}
@@ -3740,6 +3798,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Send Inquiry Modal */}
+      <SendInquiryModal
+        orderDetail={sendInquiryDetail}
+        isOpen={isSendInquiryModalOpen}
+        onClose={handleSendInquiryCancel}
+        onSend={handleSendInquiry}
+      />
     </TooltipProvider>
   );
 };

@@ -52,6 +52,7 @@ export default function ContactProfileModal({
 
     // Các trường mới cho thông tin chi tiết khách hàng
     customerInfo: {
+      name: "",
       gender: "",
       age: "",
       preferences: "",
@@ -68,6 +69,7 @@ export default function ContactProfileModal({
   // Helper function to parse customer info from existing profile data (backwards compatible)
   const parseCustomerInfoFromProfile = (profile: any) => {
     const customerInfo = {
+      name: "",
       gender: "",
       age: "",
       preferences: "",
@@ -80,17 +82,31 @@ export default function ContactProfileModal({
       const customerInfoMatch = notesSource.match(/--- Thông tin chi tiết ---\n([\s\S]*)/);
       const text = customerInfoMatch ? customerInfoMatch[1] : notesSource;
 
-      const genderMatch = text.match(/giới tính[:\s]*([^\n]+)/i) || text.match(/khách là (nam|nữ)/i);
-      if (genderMatch) customerInfo.gender = genderMatch[1] || genderMatch[2] || "";
+      // Parse name more specifically - look for "Tên:" pattern first
+      // Try to match "Tên: [name]" followed by dot or end
+      const nameMatch = text.match(/tên[:\s]*([^.\n]+?)(?:\s*\.|$)/i) || 
+                       text.match(/tên[:\s]*([^.\n]+)/i);
+      if (nameMatch) {
+        customerInfo.name = nameMatch[1].trim();
+      }
+
+      const genderMatch = text.match(/giới tính[:\s]*([^\n.]+?)(?:\s*\.|$)/i) || 
+                         text.match(/giới tính[:\s]*([^\n]+)/i) || 
+                         text.match(/khách là (nam|nữ)/i);
+      if (genderMatch) customerInfo.gender = (genderMatch[1] || genderMatch[2] || "").trim();
 
       const ageMatch = text.match(/tuổi[:\s]*(\d+)/i) || text.match(/(\d+)\s*tuổi/i);
       if (ageMatch) customerInfo.age = ageMatch[1];
 
-      const prefMatch = text.match(/sở thích[:\s]*([^\n,]+)/i) || text.match(/quan tâm[:\s]*([^\n,]+)/i);
-      if (prefMatch) customerInfo.preferences = prefMatch[1];
+      const prefMatch = text.match(/sở thích[:\s]*([^\n.]+?)(?:\s*\.|$)/i) || 
+                       text.match(/quan tâm[:\s]*([^\n.]+?)(?:\s*\.|$)/i) ||
+                       text.match(/sở thích[:\s]*([^\n,]+)/i) || 
+                       text.match(/quan tâm[:\s]*([^\n,]+)/i);
+      if (prefMatch) customerInfo.preferences = prefMatch[1].trim();
 
-      const historyMatch = text.match(/lịch sử mua hàng[:\s]*([^\n,]+)/i);
-      if (historyMatch) customerInfo.purchaseHistory = historyMatch[1];
+      const historyMatch = text.match(/lịch sử mua hàng[:\s]*([^\n.]+?)(?:\s*\.|$)/i) ||
+                          text.match(/lịch sử mua hàng[:\s]*([^\n,]+)/i);
+      if (historyMatch) customerInfo.purchaseHistory = historyMatch[1].trim();
     }
 
     return customerInfo;
@@ -99,6 +115,7 @@ export default function ContactProfileModal({
   // Build a human-readable notes sentence from customerInfo
   const buildNotesFromCustomerInfo = (customerInfo: any) => {
     const parts: string[] = [];
+    if (customerInfo.name) parts.push(`Tên: ${customerInfo.name}`);
     if (customerInfo.gender) parts.push(`Giới tính: ${customerInfo.gender}`);
     if (customerInfo.age) parts.push(`Tuổi: ${customerInfo.age}`);
     if (customerInfo.preferences) parts.push(`Sở thích: ${customerInfo.preferences}`);
@@ -422,6 +439,30 @@ export default function ContactProfileModal({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Customer Name */}
+                  <div className="md:col-span-2">
+                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
+                      <User className="w-4 h-4" />
+                      Tên khách hàng
+                      <div className="relative group">
+                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          Tên của khách hàng để AI giao tiếp cá nhân hóa hơn
+                        </div>
+                      </div>
+                    </Label>
+                    <Input
+                      disabled={zaloDisabled}
+                      className={cn(
+                        "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300",
+                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                      )}
+                      placeholder="Ví dụ: Anh Minh, Chị Lan..."
+                      value={form.customerInfo.name}
+                      onChange={(e) => handleCustomerInfoChange("name", e.target.value)}
+                    />
+                  </div>
+
                   {/* Gender */}
                   <div>
                     <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">

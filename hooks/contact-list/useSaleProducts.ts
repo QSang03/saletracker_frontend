@@ -76,10 +76,10 @@ export function useSaleProducts() {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Reset to page 1 when search or filters change
+  // Reset to page 1 when search, filters, or pageSize change
   useEffect(() => {
     setPage(1);
-  }, [search, brandFilters, cateFilters]);
+  }, [search, brandFilters, cateFilters, pageSize]);
 
   const setPageSizeAndPersist = useCallback((sz: number) => {
     setPageSize(sz);

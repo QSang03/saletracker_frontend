@@ -24,11 +24,13 @@ import { useCustomerCount } from "@/hooks/useCustomerCount";
 import { CustomerListDialog } from "@/components/order/manager-order/CustomerListDialog";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
 import { CustomerSearchIndicator } from "@/components/order/manager-order/CustomerSearchIndicator";
+import InquiryPresetsModal from "@/components/order/manager-order/InquiryPresetsModal";
 import {
   ServerResponseAlert,
   type AlertType,
 } from "@/components/ui/loading/ServerResponseAlert";
 import { getAccessToken } from "@/lib/auth";
+import { MessageCircle } from "lucide-react";
 
 // Helper function để tính toán gia hạn động
 const calculateDynamicExtended = (
@@ -75,6 +77,10 @@ function ManagerOrderContent() {
     scrollPosition: number;
     currentPage: number;
   } | null>(null);
+
+  // Inquiry Presets modal state
+  const [isInquiryPresetsModalOpen, setIsInquiryPresetsModalOpen] =
+    useState(false);
 
   const [filterOptions, setFilterOptions] = useState<{
     departments: Array<{
@@ -860,6 +866,32 @@ function ManagerOrderContent() {
     [bulkHideOrderDetails, refetch, saveCurrentPosition]
   );
 
+  // ✅ Handle send inquiry
+  const handleSendInquiry = useCallback(
+    async (orderDetail: OrderDetail, message: string) => {
+      try {
+        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
+        saveCurrentPosition();
+
+        // TODO: Implement API call to send inquiry message
+        // await sendInquiryMessage(orderDetail.id, message);
+        
+        console.log('Sending inquiry:', { orderDetailId: orderDetail.id, message });
+        
+        setAlert({
+          type: "success",
+          message: "Đã gửi câu hỏi thăm dò thành công!",
+        });
+        refetch();
+      } catch (err) {
+        console.error("Error sending inquiry:", err);
+        setAlert({ type: "error", message: "Lỗi khi gửi câu hỏi thăm dò!" });
+        throw err; // Re-throw để modal có thể hiển thị lỗi
+      }
+    },
+    [refetch, saveCurrentPosition]
+  );
+
   const handleReload = useCallback(() => {
     refetch();
   }, [refetch]);
@@ -1172,7 +1204,7 @@ function ManagerOrderContent() {
         ? filters.departments.split(",").filter((d) => d)
         : [],
       roles: [],
-      statuses: filters.status 
+      statuses: filters.status
         ? filters.status.split(",").filter((s) => s.trim())
         : [],
       categories: filters.products
@@ -1333,6 +1365,16 @@ function ManagerOrderContent() {
             >
               🔄 Làm mới
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsInquiryPresetsModalOpen(true)}
+              className="text-sm flex items-center gap-2 hover:bg-blue-50"
+            >
+              <span className="flex items-center gap-1">
+                <MessageCircle className="h-4 w-4" />
+                Preset câu hỏi
+              </span>
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
@@ -1490,6 +1532,7 @@ function ManagerOrderContent() {
               onEditCustomerName={handleEditCustomerName}
               onAddToBlacklist={handleAddToBlacklist}
               onAnalysisBlock={handleAnalysisBlock}
+              onSendInquiry={handleSendInquiry}
               checkContactBlocked={checkContactBlocked}
               onBulkDelete={handleBulkDelete}
               onBulkExtend={handleBulkExtend}
@@ -1602,6 +1645,12 @@ function ManagerOrderContent() {
           // Trigger customer search and pass the exact base filters so performCustomerSearch sees same state
           performCustomerSearch(payload.customerName, mergedBase);
         }}
+      />
+
+      {/* Inquiry Presets Modal */}
+      <InquiryPresetsModal
+        isOpen={isInquiryPresetsModalOpen}
+        onClose={() => setIsInquiryPresetsModalOpen(false)}
       />
     </div>
   );
