@@ -165,6 +165,8 @@ interface PaginatedTableProps {
     disabled?: boolean;
     onChange: (checked: boolean) => void;
   }>;
+  // Enable full width filters (for modal use)
+  fullWidthFilters?: boolean;
 }
 
 export type Filters = {
@@ -267,6 +269,7 @@ export default function PaginatedTable({
   controlsOnly = false,
   hidePager = false,
   toggles = [],
+  fullWidthFilters = false,
   // Thêm props cho API calls
   onFetchAllCategories,
   onFetchAllBrands,
@@ -1312,7 +1315,7 @@ export default function PaginatedTable({
       }`}
     >
       <div className="mb-4 tutorial-filter-controls tutorial-filter-section">
-        <div className="grid grid-cols-6 gap-3">
+        <div className={`grid gap-3 ${fullWidthFilters ? 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3' : 'grid-cols-6'}`}>
           {enableSearch && (
             <div className="min-w-0 w-full tutorial-search-input">
               <div>
@@ -1731,7 +1734,7 @@ export default function PaginatedTable({
             </div>
           )}
           {/* Nút Xuất và Xoá filter chia đôi 1 cột */}
-          <div className="flex gap-2 min-w-0 w-full tutorial-clear-filter">
+          <div className={`flex gap-2 min-w-0 w-full tutorial-clear-filter ${fullWidthFilters ? 'col-span-1 xl:col-span-2 2xl:col-span-3' : ''}`}>
             {canExport && getExportData && (
               <Button
                 variant="export"
@@ -1767,7 +1770,7 @@ export default function PaginatedTable({
         </div>
         {/* Right-aligned compact toggles with tooltip */}
         {toggles && toggles.length > 0 && (
-          <div className="col-span-6 mt-2 flex items-center justify-end gap-4">
+          <div className={`${fullWidthFilters ? 'col-span-1 xl:col-span-2 2xl:col-span-3' : 'col-span-6'} mt-2 flex items-center justify-end gap-4`}>
             {toggles.map((tg) => (
               <div key={tg.id} className="flex items-center gap-2">
                 {tg.tooltip ? (

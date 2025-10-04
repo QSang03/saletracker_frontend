@@ -29,6 +29,9 @@ export interface AutoReplyProduct {
   attrs?: { title: string; description: string }[];
   stock: number;
   priceTiers?: AutoReplyProductPriceTier[];
+  // New fields from backend
+  minPrice?: number | null;
+  minQuantity?: number | null;
 }
 
 export interface AutoReplyContact {

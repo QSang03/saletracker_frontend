@@ -473,7 +473,7 @@ export default function SaleProductsModal({
   return (
     <TooltipProvider>
       <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-        <DialogContent className="!max-w-[95vw] xl:!max-w-[90vw] 2xl:!max-w-[85vw] max-h-[92vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl">
+        <DialogContent className="!max-w-[98vw] xl:!max-w-[95vw] 2xl:!max-w-[90vw] h-[98vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl">
           {/* Decorative Background */}
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-purple-500/3 to-pink-500/3 pointer-events-none"></div>
 
@@ -501,9 +501,9 @@ export default function SaleProductsModal({
           <div className="flex-1 overflow-hidden min-h-0">
             <div className="h-full overflow-y-auto pr-2">
               {/* Two Column Grid */}
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 relative">
+              <div className="grid grid-cols-1 xl:grid-cols-10 gap-4 relative">
                 {/* Products Section */}
-                <div className="relative group">
+                <div className="relative group xl:col-span-7">
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-500/8 to-red-500/8 rounded-2xl blur-lg group-hover:blur-xl transition-all duration-500"></div>
                   <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl overflow-hidden">
                     {/* Header - Compact */}
@@ -599,7 +599,7 @@ export default function SaleProductsModal({
                     </div>
 
                     {/* Content - Increased Height */}
-                    <div className="h-[42vh] overflow-auto">
+                    <div className="h-[65vh] overflow-auto">
                       <div className="p-2">
                         <PaginatedTable
                           enableSearch
@@ -612,6 +612,7 @@ export default function SaleProductsModal({
                           pageSize={pageSize}
                           onPageChange={setPage}
                           onPageSizeChange={setPageSize}
+                          fullWidthFilters
                           onFilterChange={(f) => {
                             if (f.search !== undefined) {
                               setSearch(f.search || "");
@@ -654,7 +655,25 @@ export default function SaleProductsModal({
                                 <TableHead className="font-semibold text-gray-700 text-xs h-10">
                                   <div className="flex items-center gap-1">
                                     <Crown className="w-3 h-3" />
-                                    Brand
+                                    Thương hiệu
+                                  </div>
+                                </TableHead>
+                                <TableHead className="font-semibold text-gray-700 text-xs h-10">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-orange-600">📂</span>
+                                    Danh mục
+                                  </div>
+                                </TableHead>
+                                <TableHead className="font-semibold text-gray-700 text-xs h-10">
+                                  <div className="flex items-center gap-1">
+                                    <Tags className="w-3 h-3" />
+                                    Số lượng
+                                  </div>
+                                </TableHead>
+                                <TableHead className="font-semibold text-gray-700 text-xs h-10">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-green-600">₫</span>
+                                    Giá
                                   </div>
                                 </TableHead>
                               </TableRow>
@@ -724,6 +743,25 @@ export default function SaleProductsModal({
                                         {p.brand || "N/A"}
                                       </div>
                                     </TableCell>
+                                    <TableCell className="text-xs py-2">
+                                      <div className="bg-orange-100 text-orange-700 rounded px-1.5 py-0.5 inline-block font-medium">
+                                        {p.cate || "N/A"}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs py-2">
+                                      <div className="bg-blue-100 text-blue-700 rounded px-1.5 py-0.5 inline-block font-medium">
+                                        {new Intl.NumberFormat('vi-VN').format(p.stock || 0)}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs py-2">
+                                      {p.minPrice ? (
+                                        <div className="bg-green-100 text-green-700 rounded px-1.5 py-0.5 inline-block font-medium">
+                                          {new Intl.NumberFormat('vi-VN').format(p.minPrice)} ₫
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400">Chưa có giá</span>
+                                      )}
+                                    </TableCell>
                                   </TableRow>
                                 );
                               })}
@@ -736,7 +774,7 @@ export default function SaleProductsModal({
                                     key={`prod-filler-${idx}`}
                                     className="h-12"
                                   >
-                                    <TableCell colSpan={4} className="p-0" />
+                                    <TableCell colSpan={7} className="p-0" />
                                   </TableRow>
                                 ))}
                             </TableBody>
@@ -749,7 +787,7 @@ export default function SaleProductsModal({
                 </div>
 
                 {/* Contacts Section */}
-                <div className="relative group">
+                <div className="relative group xl:col-span-3">
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/8 to-purple-500/8 rounded-2xl blur-lg group-hover:blur-xl transition-all duration-500"></div>
                   <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl shadow-xl overflow-hidden tutorial-apply-section">
                     {/* Header - Compact */}
@@ -784,7 +822,7 @@ export default function SaleProductsModal({
 
                     {/* Content */}
                     {!applyAllContacts ? (
-                      <div className="h-[42vh] overflow-auto">
+                      <div className="h-[65vh] overflow-auto">
                         <div className="p-2">
                           <PaginatedTable
                             enableSearch
@@ -869,7 +907,7 @@ export default function SaleProductsModal({
                         </div>
                       </div>
                     ) : (
-                      <div className="h-[42vh] flex items-center justify-center p-4">
+                      <div className="h-[65vh] flex items-center justify-center p-4">
                         <div className="text-center">
                           <div className="mx-auto w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mb-3">
                             <Globe className="w-6 h-6 text-white" />
@@ -892,8 +930,14 @@ export default function SaleProductsModal({
                 </div>
               </div>
 
-              {/* Floating Stats - Compact */}
-              <div className="flex justify-center gap-3 my-4">
+            </div>
+          </div>
+
+          {/* Fixed Footer - Compact */}
+          <DialogFooter className="relative pt-3 flex-shrink-0 border-t border-gray-200/50 bg-white/50 backdrop-blur-sm">
+            <div className="flex gap-3 w-full justify-center items-center">
+              {/* Selected Stats */}
+              <div className="flex gap-3 items-center">
                 <div className="bg-white/85 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60">
                   <div className="flex items-center gap-2 text-xs bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
                     <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
@@ -933,12 +977,9 @@ export default function SaleProductsModal({
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Fixed Footer - Compact */}
-          <DialogFooter className="relative pt-3 flex-shrink-0 border-t border-gray-200/50 bg-white/50 backdrop-blur-sm">
-            <div className="flex gap-3 w-full justify-end">
+              
+              {/* Action Buttons */}
+              <div className="flex gap-3">
               <Button
                 variant="outline"
                 onClick={onClose}
@@ -963,6 +1004,7 @@ export default function SaleProductsModal({
                   {saving ? "Đang lưu..." : "Lưu cấu hình"}
                 </span>
               </Button>
+              </div>
             </div>
           </DialogFooter>
 
