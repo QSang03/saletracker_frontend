@@ -140,8 +140,18 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-bold">Z</span>
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+            {user?.avatarZalo ? (
+              <img 
+                src={user.avatarZalo} 
+                alt={user.username || 'User'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            )}
           </div>
           <div>
             <div className="font-medium text-gray-900">Zalo - NKC</div>
@@ -221,33 +231,84 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                      <div className="font-medium text-gray-900 truncate text-sm">
                        {c.conversation_name}
                      </div>
-                     {c.unread_count > 0 && (
-                       <div className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
-                         {c.unread_count}
-                       </div>
-                     )}
                    </div>
                    
                    <div className="text-xs text-gray-500 truncate">
                      {c.last_message?.sender_name && (
                        <span className="font-medium">{c.last_message.sender_name}: </span>
                      )}
-                     {c.last_message?.content ? 
-                       (typeof c.last_message.content === 'string' ? 
-                         JSON.parse(c.last_message.content)?.text || c.last_message.content : 
-                         c.last_message.content
-                       ) : 
-                       'Chưa có tin nhắn'
-                     }
+                     {(() => {
+                       if (!c.last_message?.content) return 'Chưa có tin nhắn';
+                       
+                       // Check if it's an image message
+                       if (c.last_message.content_type === 'IMAGE' && typeof c.last_message.content === 'string') {
+                         try {
+                           const parsed = JSON.parse(c.last_message.content);
+                           if (parsed.imageUrl) {
+                             return (
+                               <div className="flex items-center gap-1">
+                                 <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                 </svg>
+                                 <span>Hình ảnh</span>
+                               </div>
+                             );
+                           }
+                         } catch {}
+                       }
+                       
+                       // Default text content
+                       if (typeof c.last_message.content === 'string') {
+                         try {
+                           const parsed = JSON.parse(c.last_message.content);
+                           return parsed?.text || c.last_message.content;
+                         } catch {
+                           return c.last_message.content;
+                         }
+                       }
+                       
+                       // Nếu content là object, convert thành string
+                       if (typeof c.last_message.content === 'object' && c.last_message.content !== null) {
+                         return JSON.stringify(c.last_message.content, null, 2);
+                       }
+                       
+                       return c.last_message.content;
+                     })()}
                    </div>
                  </div>
 
-                 {/* Time */}
-                 <div className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                   {new Date(c.last_message_timestamp).toLocaleTimeString('vi-VN', { 
-                     hour: '2-digit', 
-                     minute: '2-digit' 
-                   })}
+                 {/* Time and Unread Badge */}
+                 <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-2">
+                   <div className="text-xs text-gray-400">
+                     {(() => {
+                       const messageDate = new Date(c.last_message_timestamp);
+                       const now = new Date();
+                       const isToday = messageDate.toDateString() === now.toDateString();
+                       
+                       if (isToday) {
+                         const diffInMinutes = Math.floor((now.getTime() - messageDate.getTime()) / (1000 * 60));
+                         
+                         if (diffInMinutes < 1) {
+                           return 'Vài giây';
+                         } else if (diffInMinutes < 60) {
+                           return `${diffInMinutes} phút`;
+                         } else {
+                           const diffInHours = Math.floor(diffInMinutes / 60);
+                           return `${diffInHours} giờ`;
+                         }
+                       } else {
+                         return messageDate.toLocaleString('vi-VN', { 
+                           day: '2-digit',
+                           month: '2-digit'
+                         });
+                       }
+                     })()}
+                   </div>
+                   {c.unread_count > 0 && (
+                     <div className="bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[16px] h-4 flex items-center justify-center text-[10px]">
+                       {c.unread_count}
+                     </div>
+                   )}
                  </div>
                </div>
              </button>

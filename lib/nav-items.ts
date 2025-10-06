@@ -66,8 +66,8 @@ const baseNavItems = [
     items: [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
       { title: "Lời chào tự động", url: "/dashboard/auto-greeting" },
-      { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
-      { title: "Chat Zalo", url: "/dashboard/zalo-chat"},
+      // { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
+      { title: "Zalo NKC", url: "/zalo-chat"},
     ],
   },
   {

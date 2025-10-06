@@ -37,7 +37,7 @@ export default function ZaloChatLayout() {
   }
 
   return (
-    <div className="h-[calc(100vh-80px)] w-full grid" style={{ gridTemplateColumns: '280px 1fr 0px' }}>
+    <div className="h-screen w-screen grid" style={{ gridTemplateColumns: '380px 1fr 0px' }}>
       <div className="border-r border-border overflow-hidden">
         <ChatSidebar 
           userId={userId} 

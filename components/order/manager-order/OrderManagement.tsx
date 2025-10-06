@@ -67,6 +67,7 @@ import HideOrderDetailModal from "./HideOrderDetailModal";
 import BulkHideModal from "./BulkHideModal";
 import ViewNotesHistoryModal from "./ViewNotesHistoryModal";
 import SendInquiryModal from "./SendInquiryModal";
+import { SendHistoryView } from "./SendHistoryView";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
@@ -88,9 +89,14 @@ interface OrderManagementProps {
   onBulkExtend?: (orderDetails: OrderDetail[]) => void;
   onBulkNotes?: (orderDetails: OrderDetail[], notes: string) => void;
   onAddToBlacklist?: (orderDetail: OrderDetail, reason?: string) => void;
-  onAnalysisBlock?: (orderDetail: OrderDetail, data: { reason?: string; blockType: 'analysis' | 'reporting' | 'stats' }) => Promise<void>;
+  onAnalysisBlock?: (
+    orderDetail: OrderDetail,
+    data: { reason?: string; blockType: "analysis" | "reporting" | "stats" }
+  ) => Promise<void>;
   onSendInquiry?: (orderDetail: OrderDetail, message: string) => Promise<void>;
-  checkContactBlocked?: (zaloContactId: string) => Promise<{ isBlocked: boolean; blockType?: string; reason?: string }>;
+  checkContactBlocked?: (
+    zaloContactId: string
+  ) => Promise<{ isBlocked: boolean; blockType?: string; reason?: string }>;
   onBulkHide?: (orderDetails: OrderDetail[], reason: string) => void;
   onHide?: (orderDetail: OrderDetail, reason: string) => void;
   onSearch?: (searchTerm: string) => void;
@@ -313,13 +319,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isHideModalOpen, setIsHideModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  
+
   // Modal xóa mã sản phẩm
-  const [deletingProductCodeDetail, setDeletingProductCodeDetail] = useState<OrderDetail | null>(null);
-  const [isDeleteProductCodeModalOpen, setIsDeleteProductCodeModalOpen] = useState(false);
-  
+  const [deletingProductCodeDetail, setDeletingProductCodeDetail] =
+    useState<OrderDetail | null>(null);
+  const [isDeleteProductCodeModalOpen, setIsDeleteProductCodeModalOpen] =
+    useState(false);
+
   // Highlight dòng đang được thao tác
-  const [highlightedRowId, setHighlightedRowId] = useState<string | number | null>(null);
+  const [highlightedRowId, setHighlightedRowId] = useState<
+    string | number | null
+  >(null);
   // Notes history modal
   const [notesHistoryDetail, setNotesHistoryDetail] =
     useState<OrderDetail | null>(null);
@@ -351,8 +361,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // Send Inquiry states
   const [sendInquiryDetail, setSendInquiryDetail] =
     useState<OrderDetail | null>(null);
-  const [isSendInquiryModalOpen, setIsSendInquiryModalOpen] =
-    useState(false);
+  const [isSendInquiryModalOpen, setIsSendInquiryModalOpen] = useState(false);
 
   // Inquiry Presets modal state
   const [isInquiryPresetsModalOpen, setIsInquiryPresetsModalOpen] =
@@ -392,7 +401,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     useState<HTMLDivElement | null>(null);
 
   // ✅ NEW: Product code editing state
-  const [editingProductCodeId, setEditingProductCodeId] = useState<number | string | null>(null);
+  const [editingProductCodeId, setEditingProductCodeId] = useState<
+    number | string | null
+  >(null);
 
   // ✅ NEW: Auto-scroll to highlighted message when modal opens
   useEffect(() => {
@@ -794,22 +805,22 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   };
 
   const handleDeleteProductCodeConfirm = (reason?: string) => {
-    console.log('🟡 handleDeleteProductCodeConfirm được gọi với:', { 
-      deletingProductCodeDetail: deletingProductCodeDetail?.id, 
-      reason, 
-      hasOnDeleteProductCode: !!onDeleteProductCode 
+    console.log("🟡 handleDeleteProductCodeConfirm được gọi với:", {
+      deletingProductCodeDetail: deletingProductCodeDetail?.id,
+      reason,
+      hasOnDeleteProductCode: !!onDeleteProductCode,
     });
-    
+
     if (deletingProductCodeDetail && onDeleteProductCode) {
-      console.log('🟢 Gọi onDeleteProductCode...');
+      console.log("🟢 Gọi onDeleteProductCode...");
       onDeleteProductCode(deletingProductCodeDetail, reason);
       withSkipClear(() => setIsDeleteProductCodeModalOpen(false));
       setDeletingProductCodeDetail(null);
       setHighlightedRowId(null);
     } else {
-      console.log('🔴 Không thể gọi onDeleteProductCode:', { 
-        hasDeletingProductCodeDetail: !!deletingProductCodeDetail, 
-        hasOnDeleteProductCode: !!onDeleteProductCode 
+      console.log("🔴 Không thể gọi onDeleteProductCode:", {
+        hasDeletingProductCodeDetail: !!deletingProductCodeDetail,
+        hasOnDeleteProductCode: !!onDeleteProductCode,
       });
     }
   };
@@ -930,14 +941,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsAnalysisBlockModalOpen(true);
   };
 
-  const handleAnalysisBlockConfirm = async (data: { reason?: string; blockType: 'analysis' | 'reporting' | 'stats' }) => {
+  const handleAnalysisBlockConfirm = async (data: {
+    reason?: string;
+    blockType: "analysis" | "reporting" | "stats";
+  }) => {
     if (analysisBlockDetail && onAnalysisBlock) {
       try {
         await onAnalysisBlock(analysisBlockDetail, data);
         withSkipClear(() => setIsAnalysisBlockModalOpen(false));
         setAnalysisBlockDetail(null);
       } catch (error: any) {
-        console.error('Error in analysis block confirmation:', error);
+        console.error("Error in analysis block confirmation:", error);
         // Không re-throw error để tránh hiển thị ở nơi khác
         // Error sẽ được xử lý trong AnalysisBlockModal
         throw error; // Vẫn throw để modal có thể catch và hiển thị
@@ -957,7 +971,10 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsSendInquiryModalOpen(true);
   };
 
-  const handleSendInquiry = async (orderDetail: OrderDetail, message: string) => {
+  const handleSendInquiry = async (
+    orderDetail: OrderDetail,
+    message: string
+  ) => {
     if (onSendInquiry) {
       await onSendInquiry(orderDetail, message);
       withSkipClear(() => setIsSendInquiryModalOpen(false));
@@ -1430,7 +1447,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                           ? "focused-no-hover ring-2 ring-blue-400 shadow-lg bg-blue-100"
                           : ""
                       }`}
-                      {...(highlightedRowId === orderDetail.id || focusedRowId === orderDetail.id || editingProductCodeId === orderDetail.id
+                      {...(highlightedRowId === orderDetail.id ||
+                      focusedRowId === orderDetail.id ||
+                      editingProductCodeId === orderDetail.id
                         ? { "data-focused-row-id": String(orderDetail.id) }
                         : {})}
                     >
@@ -1667,7 +1686,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   )}
                                   {!hideEditButtons && (
                                     <ProductCodeEditor
-                                      currentProductCode={orderDetail.product?.productCode || ""}
+                                      currentProductCode={
+                                        orderDetail.product?.productCode || ""
+                                      }
                                       orderDetailId={Number(orderDetail.id)}
                                       onUpdate={(newCode: string) => {
                                         // Cập nhật local state
@@ -1675,44 +1696,64 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                           onReload();
                                         }
                                       }}
-                                      onOpen={() => setEditingProductCodeId(orderDetail.id)}
-                                      onClose={() => setEditingProductCodeId(null)}
+                                      onOpen={() =>
+                                        setEditingProductCodeId(orderDetail.id)
+                                      }
+                                      onClose={() =>
+                                        setEditingProductCodeId(null)
+                                      }
                                       disabled={actionMode === "view-only"}
                                     />
                                   )}
-                                  {orderDetail.product?.productCode && !hideDeleteButtons && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
-                                          onClick={() => {
-                                            if (skipOwnerCheck || isOwner(orderDetail)) {
-                                              setHighlightedRowId(orderDetail.id);
-                                              setDeletingProductCodeDetail(orderDetail);
-                                              setIsDeleteProductCodeModalOpen(true);
+                                  {orderDetail.product?.productCode &&
+                                    !hideDeleteButtons && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 text-red-600 hover:text-red-800 hover:bg-red-50"
+                                            onClick={() => {
+                                              if (
+                                                skipOwnerCheck ||
+                                                isOwner(orderDetail)
+                                              ) {
+                                                setHighlightedRowId(
+                                                  orderDetail.id
+                                                );
+                                                setDeletingProductCodeDetail(
+                                                  orderDetail
+                                                );
+                                                setIsDeleteProductCodeModalOpen(
+                                                  true
+                                                );
+                                              }
+                                            }}
+                                            disabled={
+                                              actionMode === "view-only" ||
+                                              (!skipOwnerCheck &&
+                                                !isOwner(orderDetail))
                                             }
-                                          }}
-                                          disabled={actionMode === "view-only" || (!skipOwnerCheck && !isOwner(orderDetail))}
-                                          title={
-                                            skipOwnerCheck || isOwner(orderDetail)
+                                            title={
+                                              skipOwnerCheck ||
+                                              isOwner(orderDetail)
+                                                ? "Xóa mã sản phẩm"
+                                                : "Chỉ chủ sở hữu được xóa mã sản phẩm"
+                                            }
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>
+                                            {skipOwnerCheck ||
+                                            isOwner(orderDetail)
                                               ? "Xóa mã sản phẩm"
-                                              : "Chỉ chủ sở hữu được xóa mã sản phẩm"
-                                          }
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>
-                                          {skipOwnerCheck || isOwner(orderDetail)
-                                            ? "Xóa mã sản phẩm"
-                                            : "Chỉ chủ sở hữu đơn hàng mới được xóa mã sản phẩm"}
-                                        </p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )}
+                                              : "Chỉ chủ sở hữu đơn hàng mới được xóa mã sản phẩm"}
+                                          </p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
                                 </div>
                               </TableCell>
                             )}
@@ -1982,11 +2023,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                   </Tooltip>
 
                                   {/* Analysis Block Button - Chỉ hiển thị cho Admin */}
-                                  {currentUser?.roles?.some(role => role.name === 'admin') && (
+                                  {currentUser?.roles?.some(
+                                    (role) => role.name === "admin"
+                                  ) && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
-                                          onClick={() => handleAnalysisBlockClick(orderDetail)}
+                                          onClick={() =>
+                                            handleAnalysisBlockClick(
+                                              orderDetail
+                                            )
+                                          }
                                           variant="outline"
                                           size="sm"
                                           className="h-7 w-7 p-0 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 transition-colors"
@@ -2006,7 +2053,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
-                                          onClick={() => handleSendInquiryClick(orderDetail)}
+                                          onClick={() =>
+                                            handleSendInquiryClick(orderDetail)
+                                          }
                                           variant="outline"
                                           size="sm"
                                           className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
@@ -2020,6 +2069,12 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                       </TooltipContent>
                                     </Tooltip>
                                   )}
+
+                                  {/* Send History View - always visible */}
+                                  <SendHistoryView
+                                    orderDetail={orderDetail}
+                                    className="mr-1"
+                                  />
                                 </POrderDynamic>
                               </div>
                             </TableCell>

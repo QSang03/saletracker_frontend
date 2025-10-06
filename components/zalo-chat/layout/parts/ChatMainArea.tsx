@@ -1,17 +1,23 @@
 "use client";
 
-import React, { useMemo, useRef, useState, useEffect, useLayoutEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useLayoutEffect, useContext } from "react";
 import { useMessages } from "@/hooks/zalo-chat/useMessages";
+import { useGroupMembers } from "@/hooks/zalo-chat/useGroupMembers";
 import TextMessage from "@/components/zalo-chat/messages/MessageTypes/TextMessage";
 import { Conversation } from "@/types/zalo-chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Smile, Paperclip, Image, MoreHorizontal, ThumbsUp } from "lucide-react";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
+import { AuthContext } from "@/contexts/AuthContext";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function ChatMainArea({ conversation }: { conversation: Conversation | null }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
+  
+  // Get user data
+  const { user } = useContext(AuthContext);
   
   // Check permissions
   const { isAdmin, isViewRole } = useDynamicPermission();
@@ -31,6 +37,31 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
   // chống auto lazyload khi mở
   const [ready, setReady] = useState(false);
   const [userScrolled, setUserScrolled] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [errorTooltip, setErrorTooltip] = useState<{ show: boolean; message: string; target: string }>({ show: false, message: '', target: '' });
+
+  // Helper function to format timestamp
+  const formatTimestamp = (timestamp: string) => {
+    const messageDate = new Date(timestamp);
+    const today = new Date();
+    const isToday = messageDate.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return messageDate.toLocaleTimeString('vi-VN', { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    } else {
+      return messageDate.toLocaleString('vi-VN', { 
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    }
+  };
+  const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
 
   // giữ vị trí khi prepend
   const [isPaging, setIsPaging] = useState(false);
@@ -51,6 +82,11 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
   }, [conversation?.id, page, q]);
 
   const { messages: fetched = [], isLoading, error, pagination } = useMessages(params);
+  
+  // Get group members for group conversations
+  const { members: groupMembers = [] } = useGroupMembers(
+    conversation?.conversation_type === 'group' ? { conversation_id: conversation.id } : null
+  );
 
   // reset khi đổi hội thoại / tìm kiếm
   useEffect(() => {
@@ -58,8 +94,11 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     setAcc([]);
     setHasMore(true);
     setReady(false);
-    setUserScrolled(false);
+    setUserScrolled(false); // Reset user scroll state
     setIsPaging(false);
+    setHasAutoScrolled(false); // Reset auto-scroll flag
+    setErrorTooltip({ show: false, message: '', target: '' }); // Reset error tooltip
+    console.log('🔄 Conversation changed, resetting states:', conversation?.conversation_name);
   }, [conversation?.id, q]);
 
   // gộp trang + cập nhật hasMore theo total_pages
@@ -86,43 +125,42 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     }
   }, [fetched, pagination]); // eslint-disable-line
 
-  // lần đầu: cuộn xuống đáy rồi mới bật observer
-  useLayoutEffect(() => {
-    if (page !== 1 || isLoading || ready || !scrollRef.current) return;
-    const el = scrollRef.current;
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight; // tin mới ở DƯỚI
-      setReady(true);
-      console.log('📜 Initial scroll to bottom for page 1');
-    });
-  }, [page, isLoading, acc.length, ready]);
-
-  // Auto scroll to bottom when conversation changes
+  // Scroll to bottom immediately when conversation changes
   useLayoutEffect(() => {
     if (!conversation || !scrollRef.current) return;
     
     // Reset states when conversation changes
     setReady(false);
     setUserScrolled(false);
+    setHasAutoScrolled(false);
     
-    console.log('🔄 Conversation changed, preparing to scroll to bottom:', conversation.conversation_name);
+    // Scroll to bottom immediately
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    console.log('🔄 Conversation changed, immediate scroll:', conversation.conversation_name);
   }, [conversation?.id]);
 
-  // Always scroll to bottom when messages are loaded for current conversation
+  // Scroll to bottom when messages are loaded (chỉ 1 lần khi mới vào)
   useLayoutEffect(() => {
     if (!conversation || !scrollRef.current || acc.length === 0 || isLoading) return;
     
-    // Always scroll to bottom when switching conversations
-    const timer = setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        setReady(true);
-        console.log('📜 Auto-scrolled to bottom for conversation:', conversation.conversation_name, 'with', acc.length, 'messages');
-      }
-    }, 50);
+    // Chỉ auto-scroll 1 lần khi mới vào cuộc hội thoại
+    if (!hasAutoScrolled) {
+      const timer = setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          setHasAutoScrolled(true);
+          setReady(true);
+          console.log('📜 Auto-scrolled to bottom for conversation:', conversation.conversation_name, 'with', acc.length, 'messages');
+        }
+      }, 50);
 
-    return () => clearTimeout(timer);
-  }, [conversation?.id, acc.length, isLoading]);
+      return () => clearTimeout(timer);
+    } else {
+      // Nếu đã auto-scroll rồi, chỉ set ready
+      setReady(true);
+      console.log('📜 Messages loaded, ready state set (no auto-scroll):', conversation.conversation_name, 'with', acc.length, 'messages');
+    }
+  }, [conversation?.id, acc.length, isLoading, hasAutoScrolled]);
 
   // observer: kéo LÊN chạm đỉnh mới load
   useEffect(() => {
@@ -131,7 +169,9 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
       (entries) => {
         if (!ready) return;
         if (!hasMore || isLoading || isPaging) return;
-        if (entries[0].isIntersecting) {
+        
+        // Chỉ load more khi user thực sự scroll lên đầu (không phải auto scroll)
+        if (entries[0].isIntersecting && userScrolled) {
           const el = scrollRef.current!;
           prevH.current = el.scrollHeight;
           prevTop.current = el.scrollTop;
@@ -144,7 +184,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     );
     ob.observe(topRef.current);
     return () => ob.disconnect();
-  }, [hasMore, isLoading, isPaging, ready, page]);
+  }, [hasMore, isLoading, isPaging, ready, page, userScrolled]);
 
   const onScroll = () => { if (!userScrolled) setUserScrolled(true); };
 
@@ -214,7 +254,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-auto bg-gray-50" onScroll={onScroll}>
+      <div ref={scrollRef} className="flex-1 overflow-auto overflow-x-hidden bg-gray-100" onScroll={onScroll}>
         {/* Bố cục: phần TOP cố định ở trên, phần tin nhắn nằm DƯỚI */}
         <div className="min-h-full flex flex-col px-4 py-6">
           {/* TOP: sentinel + banner */}
@@ -231,35 +271,1295 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
 
           {/* đẩy phần tin nhắn xuống đáy */}
           <div className="mt-auto space-y-4">
-            {acc.map(m => (
-              <div key={m.id} className={`flex ${m.is_outgoing ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[70%] ${m.is_outgoing ? "order-2" : "order-1"}`}>
-                  {!m.is_outgoing && (
-                    <div className="text-xs text-gray-500 mb-1 px-1">
-                      {m.sender_name}
-                    </div>
-                  )}
-                  <div className={`px-4 py-2 rounded-2xl ${
-                    m.is_outgoing 
-                      ? 'bg-blue-500 text-white rounded-br-md' 
-                      : 'bg-white text-gray-900 rounded-bl-md shadow-sm'
-                  }`}>
-                    <div className="text-sm leading-relaxed">
-                      {m.content_type === 'TEXT' && typeof m.content === 'string' ? 
-                        JSON.parse(m.content)?.text || m.content : 
-                        m.content
+            {acc.map(m => {
+              // Ẩn tin nhắn hệ thống không cần thiết
+              if (m.content_type === 'SYSTEM' && m.content?.includes('undo_message')) {
+                return null;
+              }
+              
+              // Kiểm tra nếu là tin nhắn file hoặc ảnh không có text
+              let isFileMessage = false;
+              let isImageWithoutText = false;
+              if (typeof m.content === 'string' && m.content.startsWith('{')) {
+                try {
+                  const parsed = JSON.parse(m.content);
+                  if (parsed.fileName || parsed.fileUrl) {
+                    isFileMessage = true;
+                  } else if (parsed.imageUrl && !parsed.caption && !parsed.title && !parsed.text) {
+                    isImageWithoutText = true;
+                  }
+                } catch {
+                  // Ignore parsing errors
+                }
+              }
+              
+              // Handle SYSTEM messages with msginfo.actionlist - display in center like Zalo
+              if (m.content_type === 'SYSTEM' && typeof m.content === 'string' && m.content.trim().startsWith('{')) {
+                try {
+                  const parsed = JSON.parse(m.content);
+                  const actionType = parsed.systemAction || parsed.action || parsed.actionData?.actionType;
+                  if (actionType === 'msginfo.actionlist') {
+                    // Get avatar of the person mentioned at the beginning of the sentence
+                    let avatarUrl: string | undefined;
+                    try {
+                      const rawMessage: string = parsed.message || '';
+                      let targetName = '';
+                      
+                      // Handle different message patterns
+                      if (rawMessage.includes(' được ')) {
+                        // Pattern: "Name được action"
+                        const parts = rawMessage.split(' được ');
+                        if (parts.length >= 2) {
+                          targetName = parts[0].trim();
+                        }
+                      } else if (rawMessage.includes(' đã ')) {
+                        // Pattern: "Name đã action"
+                        const parts = rawMessage.split(' đã ');
+                        if (parts.length >= 2) {
+                          targetName = parts[0].trim();
+                        }
+                      } else if (rawMessage.includes(' thêm ')) {
+                        // Pattern: "Name thêm action"
+                        const parts = rawMessage.split(' thêm ');
+                        if (parts.length >= 2) {
+                          targetName = parts[0].trim();
+                        }
                       }
+                      
+                      if (targetName) {
+                        // Try multiple matching strategies
+                        const member = groupMembers.find(mb => {
+                          const displayName = mb.contact?.display_name?.replace(/"/g, '') || '';
+                          return displayName === targetName || 
+                                 displayName.includes(targetName) ||
+                                 targetName.includes(displayName);
+                        });
+                        const url = member?.contact?.info_metadata?.avatar as string | undefined;
+                        if (url) avatarUrl = url.replace(/"/g, '');
+                      }
+                    } catch {}
+                    
+                    return (
+                      <div key={m.id} className="flex flex-col items-center my-2">
+                        <div className="bg-white rounded-3xl px-4 py-3 shadow-sm border border-gray-200 max-w-[80%]">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
+                              {avatarUrl ? (
+                                <img src={avatarUrl} alt="user" className="w-full h-full object-cover" />
+                              ) : (
+                                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm text-gray-700">{parsed.message || '📝 Thông báo hệ thống'}</span>
+                          </div>
+                        </div>
+                        {/* Thời gian */}
+                        <div className="text-xs text-gray-400 mt-1">
+                          {formatTimestamp(m.timestamp)}
+                        </div>
+                      </div>
+                    );
+                  }
+                } catch {}
+              }
+
+              // Tin nhắn nhận (bên trái)
+              if (!m.is_outgoing) {
+                // Tìm avatar từ group members nếu là nhóm
+                const getSenderAvatar = () => {
+                  if (conversation?.conversation_type === 'group' && groupMembers.length > 0) {
+                    const member = groupMembers.find(member => 
+                      member.contact?.zalo_contact_id === m.sender?.zalo_id ||
+                      member.contact?.display_name === m.sender?.name ||
+                      member.contact?.display_name === m.sender_name
+                    );
+                    return member?.contact?.info_metadata?.avatar;
+                  }
+                  return conversation?.participant?.avatar;
+                };
+
+                const senderAvatar = getSenderAvatar();
+                const senderName = m.sender?.name || m.sender_name || 'Unknown User';
+
+                // Nếu là tin nhắn file hoặc ảnh không có text, hiển thị không có khung bong bóng
+                if (isFileMessage || isImageWithoutText) {
+                  const getFileIcon = (extension: string) => {
+                    switch (extension?.toLowerCase()) {
+                      case 'xlsx':
+                      case 'xls':
+                        return (
+                          <div className="w-12 h-12 bg-green-500 rounded flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">X</span>
+                          </div>
+                        );
+                      case 'docx':
+                      case 'doc':
+                        return (
+                          <div className="w-12 h-12 bg-blue-500 rounded flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">W</span>
+                          </div>
+                        );
+                      case 'pdf':
+                        return (
+                          <div className="w-12 h-12 bg-red-500 rounded flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">P</span>
+                          </div>
+                        );
+                      case 'ppt':
+                      case 'pptx':
+                        return (
+                          <div className="w-12 h-12 bg-orange-500 rounded flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">P</span>
+                          </div>
+                        );
+                      default:
+                        return (
+                          <div className="w-12 h-12 bg-gray-500 rounded flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        );
+                    }
+                  };
+
+                  const formatFileSize = (bytes: number) => {
+                    if (bytes === 0) return '0 Bytes';
+                    const k = 1024;
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                  };
+
+                  let parsed;
+                  try {
+                    parsed = JSON.parse(m.content);
+                  } catch {
+                    parsed = {};
+                  }
+
+                  // Nếu là ảnh không có text
+                  if (isImageWithoutText) {
+                    return (
+                      <div key={m.id} className="flex items-start gap-2 justify-start">
+                        {/* Avatar bên trái */}
+                        <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                          {senderAvatar ? (
+                            <img 
+                              src={senderAvatar.replace(/"/g, '')} 
+                              alt={senderName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <svg className="w-7 h-7 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          )}
+                        </div>
+
+                        <div className="max-w-[70%] break-words">
+                          {/* Tên người gửi */}
+                          <div className="text-xs text-gray-500 mb-1 px-1">
+                            {senderName}
+                          </div>
+                        
+                          {/* Ảnh - không có khung bong bóng */}
+                          <img 
+                            src={parsed.imageUrl} 
+                            alt={parsed.title || 'Image'} 
+                            className="w-full h-auto block rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                            style={{ maxHeight: '300px', objectFit: 'cover' }}
+                            onClick={() => setSelectedImage(parsed.imageUrl)}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                              if (placeholder) placeholder.style.display = 'flex';
+                            }}
+                          />
+                          {/* Placeholder hiển thị khi ảnh lỗi */}
+                          <div 
+                            className="bg-gray-200 rounded-lg flex items-center justify-center text-gray-500"
+                            style={{ width: '470px', height: '250px', display: 'none' }}
+                          >
+                            <div className="flex flex-col items-center justify-center h-full">
+                              <svg className="w-12 h-12 text-gray-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                              </svg>
+                              <span className="text-sm">Image</span>
+                            </div>
+                          </div>
+                          
+                          {/* Thời gian */}
+                          <div className="text-xs text-gray-400 mt-1 text-left">
+                            {formatTimestamp(m.timestamp)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={m.id} className="flex items-start gap-2 justify-start">
+                      {/* Avatar bên trái */}
+                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                        {senderAvatar ? (
+                          <img 
+                            src={senderAvatar.replace(/"/g, '')} 
+                            alt={senderName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <svg className="w-7 h-7 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        )}
+                      </div>
+
+                      <div className="max-w-[70%] break-words">
+                        {/* Tên người gửi */}
+                        <div className="text-xs text-gray-500 mb-1 px-1">
+                          {senderName}
+                        </div>
+                      
+                        {/* Nội dung file - không có khung bong bóng */}
+                        <div className="w-full max-w-sm">
+                          <div className="flex items-start gap-3 p-3 bg-white rounded-xl">
+                            {getFileIcon(parsed.fileExtension)}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm text-gray-900 truncate">
+                                {parsed.fileName || 'Unknown file'}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-gray-500">
+                                  {parsed.fileSize ? formatFileSize(parsed.fileSize) : 'Unknown size'}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                  <span className="text-xs text-green-600">Đã có trên máy</span>
+                                </div>
+                              </div>
+                              {parsed.description && (
+                                <div className="text-xs text-gray-600 mt-1">
+                                  {parsed.description}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                                <TooltipTrigger asChild>
+                                  <button 
+                                    className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
+                                    onClick={() => {
+                                      if (parsed.fileUrl) {
+                                        try {
+                                          window.open(parsed.fileUrl, '_blank');
+                                          setErrorTooltip({ show: false, message: '', target: '' });
+                                        } catch (error) {
+                                          console.error('Error opening file:', error);
+                                          setErrorTooltip({ 
+                                            show: true, 
+                                            message: 'Không thể mở file. Vui lòng thử tải xuống.', 
+                                            target: `open-${m.id}` 
+                                          });
+                                          setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 3000);
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                                    </svg>
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Mở file'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                                <TooltipTrigger asChild>
+                                  <button 
+                                    className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
+                                    onClick={async () => {
+                                      if (parsed.fileUrl) {
+                                        try {
+                                          // Thử fetch file trước để kiểm tra quyền truy cập
+                                          const response = await fetch(parsed.fileUrl, { method: 'HEAD' });
+                                          if (!response.ok) {
+                                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                          }
+                                          
+                                          // Nếu OK thì tạo link download
+                                          const link = document.createElement('a');
+                                          link.href = parsed.fileUrl;
+                                          link.download = parsed.fileName || 'download';
+                                          link.target = '_blank';
+                                          document.body.appendChild(link);
+                                          link.click();
+                                          document.body.removeChild(link);
+                                          setErrorTooltip({ show: false, message: '', target: '' });
+                                        } catch (error) {
+                                          console.error('Error downloading file:', error);
+                                          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                                          setErrorTooltip({ 
+                                            show: true, 
+                                            message: `Không thể tải file: ${errorMessage}. File có thể đã hết hạn hoặc không có quyền truy cập.`, 
+                                            target: `download-${m.id}` 
+                                          });
+                                          setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 5000);
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Tải xuống'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Thời gian */}
+                        <div className="text-xs text-gray-400 mt-1 text-left">
+                          {formatTimestamp(m.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={m.id} className="flex items-start gap-2 justify-start">
+                    {/* Avatar bên trái */}
+                    <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                      {senderAvatar ? (
+                        <img 
+                          src={senderAvatar.replace(/"/g, '')} 
+                          alt={senderName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg className="w-7 h-7 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <div className="max-w-[70%] break-words">
+                      {/* Tên người gửi */}
+                      <div className="text-xs text-gray-500 mb-1 px-1">
+                        {senderName}
+                      </div>
+                    
+                      {/* Bubble tin nhắn */}
+                      <div className="px-4 py-2 rounded-2xl bg-white text-gray-900 rounded-bl-md shadow-sm">
+                        <div className="text-sm leading-relaxed break-words">
+                          {(() => {
+                            // Xử lý nội dung tin nhắn
+                            if (m.content_type === 'SYSTEM') {
+                              if (typeof m.content === 'string' && m.content.trim().startsWith('{')) {
+                                try {
+                                  const parsed = JSON.parse(m.content);
+                                  const actionType = parsed.systemAction || parsed.action || parsed.actionData?.actionType;
+                                  if (actionType === 'msginfo.actionlist') {
+                                    // Lấy avatar của người được nhắc tới ở đầu câu nếu tìm thấy trong groupMembers
+                                    let avatarUrl: string | undefined;
+                                    try {
+                                      const rawMessage: string = parsed.message || '';
+                                      const parts = rawMessage.split(' được ');
+                                      if (parts.length >= 2) {
+                                        const targetName = parts[0].trim();
+                                        const member = groupMembers.find(mb => mb.contact?.display_name?.replace(/"/g, '') === targetName);
+                                        const url = member?.contact?.info_metadata?.avatar as string | undefined;
+                                        if (url) avatarUrl = url.replace(/"/g, '');
+                                      }
+                                    } catch {}
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                          {avatarUrl ? (
+                                            <img src={avatarUrl} alt="user" className="w-full h-full object-cover" />
+                                          ) : (
+                                            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                          )}
+                                        </div>
+                                        <span className="text-gray-800">{parsed.message || '📝 Thông báo hệ thống'}</span>
+                                      </div>
+                                    );
+                                  }
+                                  return parsed.message || '📝 Tin nhắn hệ thống';
+                                } catch {
+                                  return '📝 Tin nhắn hệ thống';
+                                }
+                              }
+                              return m.content || '📝 Tin nhắn hệ thống';
+                            }
+                            
+                            // Xử lý tất cả loại content có JSON (TEXT, IMAGE, FILE, etc.)
+                            if (typeof m.content === 'string' && m.content.startsWith('{')) {
+                              try {
+                                const parsed = JSON.parse(m.content);
+                                
+                                // Xử lý action undo_message
+                                if (parsed.action === 'undo_message') {
+                                  return (
+                                    <div className="text-xs text-gray-500 italic">
+                                      📝 Tin nhắn đã được thu hồi
+                                    </div>
+                                  );
+                                }
+                                
+                                // Xử lý tin nhắn TEXT
+                                if (parsed.text) {
+                                  return parsed.text;
+                                }
+                                
+                                // Xử lý tin nhắn IMAGE
+                                if (parsed.imageUrl) {
+                                  const hasText = parsed.caption || parsed.title || parsed.text;
+                                  const isImageWithoutText = !hasText;
+                                  
+                                  if (isImageWithoutText) {
+                                    return (
+                                      <div className="w-full">
+                                        <img 
+                                          src={parsed.imageUrl} 
+                                          alt={parsed.title || 'Image'} 
+                                          className="w-full h-auto block rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                          style={{ maxHeight: '300px', objectFit: 'cover' }}
+                                          onClick={() => setSelectedImage(parsed.imageUrl)}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                            const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                                            if (placeholder) placeholder.style.display = 'block';
+                                          }}
+                                        />
+                                        <div 
+                                          className="bg-gray-200 flex items-center justify-center text-gray-500"
+                                          style={{ 
+                                            width: '470px', 
+                                            height: '250px',
+                                            display: 'none'
+                                          }}
+                                        >
+                                          <div className="flex flex-col items-center justify-center h-full">
+                                            <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                            <span className="text-sm">Image</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div className="w-full">
+                                        <div className="relative">
+                                          <img 
+                                            src={parsed.imageUrl} 
+                                            alt={parsed.title || 'Image'} 
+                                            className="w-full h-auto block rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                            style={{ maxHeight: '300px', objectFit: 'cover' }}
+                                            onClick={() => setSelectedImage(parsed.imageUrl)}
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                              const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                                              if (placeholder) placeholder.style.display = 'block';
+                                            }}
+                                          />
+                                          <div 
+                                          className="bg-gray-200 flex items-center justify-center text-gray-500"
+                                          style={{ 
+                                            width: '470px', 
+                                            height: '250px',
+                                            display: 'none'
+                                          }}
+                                          >
+                                            <div className="flex flex-col items-center justify-center h-full">
+                                              <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                              </svg>
+                                              <span className="text-sm">Image</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {parsed.caption && (
+                                          <div className="mt-2 text-sm text-gray-700 break-words" style={{ maxWidth: '470px' }}>
+                                            {parsed.caption}
+                                          </div>
+                                        )}
+                                        {parsed.title && (
+                                          <div className="mt-1 text-sm font-medium text-gray-900 break-words" style={{ maxWidth: '470px' }}>
+                                            {parsed.title}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                }
+                                
+                                // Xử lý tin nhắn FILE
+                                if (parsed.fileName || parsed.fileUrl) {
+                                  const getFileIcon = (extension: string) => {
+                                    switch (extension?.toLowerCase()) {
+                                      case 'xlsx':
+                                      case 'xls':
+                                        return (
+                                          <div className="w-12 h-12 bg-green-500 rounded flex items-center justify-center">
+                                            <span className="text-white font-bold text-lg">X</span>
+                                          </div>
+                                        );
+                                      case 'docx':
+                                      case 'doc':
+                                        return (
+                                          <div className="w-12 h-12 bg-blue-500 rounded flex items-center justify-center">
+                                            <span className="text-white font-bold text-lg">W</span>
+                                          </div>
+                                        );
+                                      case 'pdf':
+                                        return (
+                                          <div className="w-12 h-12 bg-red-500 rounded flex items-center justify-center">
+                                            <span className="text-white font-bold text-lg">P</span>
+                                          </div>
+                                        );
+                                      case 'ppt':
+                                      case 'pptx':
+                                        return (
+                                          <div className="w-12 h-12 bg-orange-500 rounded flex items-center justify-center">
+                                            <span className="text-white font-bold text-lg">P</span>
+                                          </div>
+                                        );
+                                      default:
+                                        return (
+                                          <div className="w-12 h-12 bg-gray-500 rounded flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                          </div>
+                                        );
+                                    }
+                                  };
+
+                                  const formatFileSize = (bytes: number) => {
+                                    if (bytes === 0) return '0 Bytes';
+                                    const k = 1024;
+                                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                                  };
+
+                                  return (
+                                    <div className="w-full max-w-sm">
+                                      <div className="flex items-start gap-3 p-3 bg-white rounded-xl">
+                                        {getFileIcon(parsed.fileExtension)}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-medium text-sm text-gray-900 truncate">
+                                            {parsed.fileName || 'Unknown file'}
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-xs text-gray-500">
+                                              {parsed.fileSize ? formatFileSize(parsed.fileSize) : 'Unknown size'}
+                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                              <span className="text-xs text-green-600">Đã có trên máy</span>
+                                            </div>
+                                          </div>
+                                          {parsed.description && (
+                                            <div className="text-xs text-gray-600 mt-1">
+                                              {parsed.description}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                          <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                                            <TooltipTrigger asChild>
+                                              <button 
+                                                className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
+                                                onClick={() => {
+                                                  if (parsed.fileUrl) {
+                                                    try {
+                                                      window.open(parsed.fileUrl, '_blank');
+                                                      setErrorTooltip({ show: false, message: '', target: '' });
+                                                    } catch (error) {
+                                                      console.error('Error opening file:', error);
+                                                      setErrorTooltip({ 
+                                                        show: true, 
+                                                        message: 'Không thể mở file. Vui lòng thử tải xuống.', 
+                                                        target: `open-${m.id}` 
+                                                      });
+                                                      setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 3000);
+                                                    }
+                                                  }
+                                                }}
+                                              >
+                                                <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                                                </svg>
+                                              </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Mở file'}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                          <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                                            <TooltipTrigger asChild>
+                                              <button 
+                                                className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
+                                                onClick={async () => {
+                                                  if (parsed.fileUrl) {
+                                                    try {
+                                                      const response = await fetch(parsed.fileUrl, { method: 'HEAD' });
+                                                      if (!response.ok) {
+                                                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                                      }
+                                                      
+                                                      const link = document.createElement('a');
+                                                      link.href = parsed.fileUrl;
+                                                      link.download = parsed.fileName || 'download';
+                                                      link.target = '_blank';
+                                                      document.body.appendChild(link);
+                                                      link.click();
+                                                      document.body.removeChild(link);
+                                                      setErrorTooltip({ show: false, message: '', target: '' });
+                                                    } catch (error) {
+                                                      console.error('Error downloading file:', error);
+                                                      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                                                      setErrorTooltip({ 
+                                                        show: true, 
+                                                        message: `Không thể tải file: ${errorMessage}. File có thể đã hết hạn hoặc không có quyền truy cập.`, 
+                                                        target: `download-${m.id}` 
+                                                      });
+                                                      setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 5000);
+                                                    }
+                                                  }
+                                                }}
+                                              >
+                                                <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                              </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Tải xuống'}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
+                                if (parsed.action) return `🔧 ${parsed.action}`;
+                                
+                                // Nếu không match với bất kỳ loại nào, hiển thị raw JSON
+                                return (
+                                  <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
+                                    <pre className="whitespace-pre-wrap">
+                                      {JSON.stringify(parsed, null, 2)}
+                                    </pre>
+                                  </div>
+                                );
+
+                              } catch (error) {
+                                // Nếu không parse được JSON, hiển thị raw content
+                                return m.content;
+                              }
+                            }
+                            
+                            // Xử lý content không phải JSON
+                            if (typeof m.content === 'string') {
+                              return m.content;
+                            }
+                            
+                            // Nếu content là object, convert thành string
+                            if (typeof m.content === 'object' && m.content !== null) {
+                              return JSON.stringify(m.content, null, 2);
+                            }
+                            
+                            // Fallback cuối cùng - hiển thị raw JSON để debug
+                            if (typeof m.content === 'string' && m.content.trim()) {
+                              return (
+                                <div className="text-xs text-gray-600 bg-yellow-100 p-2 rounded border">
+                                  <div className="font-semibold mb-1">🔍 DEBUG - Raw Content:</div>
+                                  <pre className="whitespace-pre-wrap text-xs">
+                                    {m.content}
+                                  </pre>
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    Type: {m.content_type} | ID: {m.id}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            return (
+                              <div className="text-xs text-gray-600 bg-red-100 p-2 rounded border">
+                                <div className="font-semibold mb-1">❌ DEBUG - Empty Content:</div>
+                                <div className="text-xs text-gray-500">
+                                  Type: {m.content_type} | ID: {m.id} | Content: "{m.content}"
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      
+                      {/* Thời gian */}
+                      <div className="text-xs text-gray-400 mt-1 text-left">
+                        {formatTimestamp(m.timestamp)}
+                      </div>
                     </div>
                   </div>
-                  <div className={`text-xs text-gray-400 mt-1 px-1 ${m.is_outgoing ? "text-right" : "text-left"}`}>
-                    {new Date(m.timestamp).toLocaleTimeString('vi-VN', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
+                );
+              }
+
+              // Tin nhắn gửi (bên phải)
+              // Nếu là tin nhắn file hoặc ảnh không có text, hiển thị không có khung bong bóng
+              if (isFileMessage || isImageWithoutText) {
+                const getFileIcon = (extension: string) => {
+                  switch (extension?.toLowerCase()) {
+                    case 'xlsx':
+                    case 'xls':
+                      return (
+                        <div className="w-12 h-12 bg-green-500 rounded flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">X</span>
+                        </div>
+                      );
+                    case 'docx':
+                    case 'doc':
+                      return (
+                        <div className="w-12 h-12 bg-blue-500 rounded flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">W</span>
+                        </div>
+                      );
+                    case 'pdf':
+                      return (
+                        <div className="w-12 h-12 bg-red-500 rounded flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">P</span>
+                        </div>
+                      );
+                    case 'ppt':
+                    case 'pptx':
+                      return (
+                        <div className="w-12 h-12 bg-orange-500 rounded flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">P</span>
+                        </div>
+                      );
+                    default:
+                      return (
+                        <div className="w-12 h-12 bg-gray-500 rounded flex items-center justify-center">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                      );
+                  }
+                };
+
+                const formatFileSize = (bytes: number) => {
+                  if (bytes === 0) return '0 Bytes';
+                  const k = 1024;
+                  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                  const i = Math.floor(Math.log(bytes) / Math.log(k));
+                  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                };
+
+                let parsed;
+                try {
+                  parsed = JSON.parse(m.content);
+                } catch {
+                  parsed = {};
+                }
+
+                // Nếu là ảnh không có text
+                if (isImageWithoutText) {
+                  return (
+                    <div key={m.id} className="flex items-start gap-2 justify-end">
+                      <div className="max-w-[70%] break-words">
+                        {/* Ảnh - không có khung bong bóng */}
+                        <img 
+                          src={parsed.imageUrl} 
+                          alt={parsed.title || 'Image'} 
+                          className="w-full h-auto block rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                          style={{ maxHeight: '300px', objectFit: 'cover' }}
+                          onClick={() => setSelectedImage(parsed.imageUrl)}
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (placeholder) placeholder.style.display = 'flex';
+                          }}
+                        />
+                        {/* Placeholder hiển thị khi ảnh lỗi */}
+                        <div 
+                          className="bg-gray-200 rounded-lg flex items-center justify-center text-gray-500"
+                          style={{ width: '470px', height: '250px', display: 'none' }}
+                        >
+                          <div className="flex flex-col items-center justify-center h-full">
+                            <svg className="w-12 h-12 text-gray-400 mb-2" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                            </svg>
+                            <span className="text-sm">Image</span>
+                          </div>
+                        </div>
+                        
+                        {/* Thời gian */}
+                        <div className="text-xs text-gray-400 mt-1 text-right">
+                          {formatTimestamp(m.timestamp)}
+                        </div>
+                      </div>
+
+                      {/* Avatar bên phải */}
+                      <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                        {user?.avatarZalo ? (
+                          <img 
+                            src={user.avatarZalo} 
+                            alt={user.username || 'User'}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={m.id} className="flex items-start gap-2 justify-end">
+                    <div className="max-w-[70%] break-words">
+                      {/* Nội dung file - không có khung bong bóng */}
+                      <div className="w-full max-w-sm">
+                        <div className="flex items-start gap-3 p-3 bg-white rounded-xl">
+                          {getFileIcon(parsed.fileExtension)}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm text-gray-900 truncate">
+                              {parsed.fileName || 'Unknown file'}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-gray-500">
+                                {parsed.fileSize ? formatFileSize(parsed.fileSize) : 'Unknown size'}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-xs text-green-600">Đã có trên máy</span>
+                              </div>
+                            </div>
+                            {parsed.description && (
+                              <div className="text-xs text-gray-600 mt-1">
+                                {parsed.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`)}>
+                              <TooltipTrigger asChild>
+                                <button 
+                                  className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
+                                  onClick={() => {
+                                    if (parsed.fileUrl) {
+                                      try {
+                                        window.open(parsed.fileUrl, '_blank');
+                                        setErrorTooltip({ show: false, message: '', target: '' });
+                                      } catch (error) {
+                                        console.error('Error opening file:', error);
+                                        setErrorTooltip({ 
+                                          show: true, 
+                                          message: 'Không thể mở file. Vui lòng thử tải xuống.', 
+                                          target: `open-out-${m.id}` 
+                                        });
+                                        setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 3000);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                                  </svg>
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`) ? errorTooltip.message : 'Mở file'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`)}>
+                              <TooltipTrigger asChild>
+                                <button 
+                                  className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
+                                  onClick={async () => {
+                                    if (parsed.fileUrl) {
+                                      try {
+                                        // Thử fetch file trước để kiểm tra quyền truy cập
+                                        const response = await fetch(parsed.fileUrl, { method: 'HEAD' });
+                                        if (!response.ok) {
+                                          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                        }
+                                        
+                                        // Nếu OK thì tạo link download
+                                        const link = document.createElement('a');
+                                        link.href = parsed.fileUrl;
+                                        link.download = parsed.fileName || 'download';
+                                        link.target = '_blank';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        setErrorTooltip({ show: false, message: '', target: '' });
+                                      } catch (error) {
+                                        console.error('Error downloading file:', error);
+                                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                                        setErrorTooltip({ 
+                                          show: true, 
+                                          message: `Không thể tải file: ${errorMessage}. File có thể đã hết hạn hoặc không có quyền truy cập.`, 
+                                          target: `download-out-${m.id}` 
+                                        });
+                                        setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 5000);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`) ? errorTooltip.message : 'Tải xuống'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Thời gian */}
+                      <div className="text-xs text-gray-400 mt-1 text-right">
+                        {formatTimestamp(m.timestamp)}
+                      </div>
+                    </div>
+
+                    {/* Avatar bên phải */}
+                    <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                      {user?.avatarZalo ? (
+                        <img 
+                          src={user.avatarZalo} 
+                          alt={user.username || 'User'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={m.id} className="flex items-start gap-2 justify-end">
+                  <div className="max-w-[70%] break-words">
+                    {/* Bubble tin nhắn */}
+                    <div className="px-4 py-2 rounded-2xl bg-blue-500 text-white rounded-br-md">
+                      <div className="text-sm leading-relaxed break-words">
+                        {(() => {
+                          // Xử lý nội dung tin nhắn
+                          if (m.content_type === 'SYSTEM') {
+                            if (typeof m.content === 'string' && m.content.trim().startsWith('{')) {
+                              try {
+                                const parsed = JSON.parse(m.content);
+                                const actionType = parsed.systemAction || parsed.action || parsed.actionData?.actionType;
+                                if (actionType === 'msginfo.actionlist') {
+                                  // Outgoing bubble: hiển thị message trắng trên nền xanh
+                                  return (
+                                    <div className="text-white">
+                                      {parsed.message || '📝 Thông báo hệ thống'}
+                                    </div>
+                                  );
+                                }
+                                return parsed.message || '📝 Tin nhắn hệ thống';
+                              } catch {
+                                return '📝 Tin nhắn hệ thống';
+                              }
+                            }
+                            return m.content || '📝 Tin nhắn hệ thống';
+                          }
+                          
+                          // Xử lý tất cả loại content có JSON (TEXT, IMAGE, FILE, etc.)
+                          if (typeof m.content === 'string' && m.content.startsWith('{')) {
+                            try {
+                              const parsed = JSON.parse(m.content);
+                              
+                              // Xử lý action undo_message
+                              if (parsed.action === 'undo_message') {
+                                return (
+                                  <div className="text-xs text-gray-500 italic">
+                                    📝 Tin nhắn đã được thu hồi
+                                  </div>
+                                );
+                              }
+                              
+                              // Xử lý tin nhắn TEXT
+                              if (parsed.text) {
+                                return parsed.text;
+                              }
+                              
+                                // Xử lý tin nhắn IMAGE
+                              if (parsed.imageUrl) {
+                                const hasText = parsed.caption || parsed.title || parsed.text;
+                                const isImageWithoutText = !hasText;
+                                
+                                if (isImageWithoutText) {
+                                  return (
+                                    <div className="w-full">
+                                      <img 
+                                        src={parsed.imageUrl} 
+                                        alt={parsed.title || 'Image'} 
+                                        className="w-full h-auto block rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                        style={{ maxHeight: '300px', objectFit: 'cover' }}
+                                        onClick={() => setSelectedImage(parsed.imageUrl)}
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                          const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                                          if (placeholder) placeholder.style.display = 'block';
+                                        }}
+                                      />
+                                      <div 
+                                        className="bg-gray-200 flex items-center justify-center text-gray-500"
+                                        style={{ 
+                                          width: '100%', 
+                                          height: '200px',
+                                          display: 'none'
+                                        }}
+                                      >
+                                        <div className="flex flex-col items-center justify-center h-full">
+                                          <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                          </svg>
+                                          <span className="text-sm">Image</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="w-full">
+                                      <div className="relative">
+                                        <img 
+                                          src={parsed.imageUrl} 
+                                          alt={parsed.title || 'Image'} 
+                                          className="w-full h-auto block rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                          style={{ maxHeight: '300px', objectFit: 'cover' }}
+                                          onClick={() => setSelectedImage(parsed.imageUrl)}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                            const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                                            if (placeholder) placeholder.style.display = 'block';
+                                          }}
+                                        />
+                                        <div 
+                                          className="bg-gray-200 flex items-center justify-center text-gray-500"
+                                          style={{ 
+                                            width: '100%', 
+                                            height: '200px',
+                                            display: 'none'
+                                          }}
+                                        >
+                                          <div className="flex flex-col items-center justify-center h-full">
+                                            <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                            <span className="text-sm">Image</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {parsed.caption && (
+                                        <div className="mt-2 text-sm text-gray-700 break-words" style={{ maxWidth: '470px' }}>
+                                          {parsed.caption}
+                                        </div>
+                                      )}
+                                      {parsed.title && (
+                                        <div className="mt-1 text-sm font-medium text-gray-900 break-words" style={{ maxWidth: '470px' }}>
+                                          {parsed.title}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              }
+                              
+                              if (parsed.action) return `🔧 ${parsed.action}`;
+                              
+                              // Xử lý tin nhắn file
+                              if (parsed.fileName || parsed.fileUrl) {
+                                const getFileIcon = (extension: string) => {
+                                  switch (extension?.toLowerCase()) {
+                                    case 'xlsx':
+                                    case 'xls':
+                                      return (
+                                        <div className="w-12 h-12 bg-green-500 rounded flex items-center justify-center">
+                                          <span className="text-white font-bold text-lg">X</span>
+                                        </div>
+                                      );
+                                    case 'docx':
+                                    case 'doc':
+                                      return (
+                                        <div className="w-12 h-12 bg-blue-500 rounded flex items-center justify-center">
+                                          <span className="text-white font-bold text-lg">W</span>
+                                        </div>
+                                      );
+                                    case 'pdf':
+                                      return (
+                                        <div className="w-12 h-12 bg-red-500 rounded flex items-center justify-center">
+                                          <span className="text-white font-bold text-lg">P</span>
+                                        </div>
+                                      );
+                                    case 'ppt':
+                                    case 'pptx':
+                                      return (
+                                        <div className="w-12 h-12 bg-orange-500 rounded flex items-center justify-center">
+                                          <span className="text-white font-bold text-lg">P</span>
+                                        </div>
+                                      );
+                                    default:
+                                      return (
+                                        <div className="w-12 h-12 bg-gray-500 rounded flex items-center justify-center">
+                                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                        </div>
+                                      );
+                                  }
+                                };
+
+                                const formatFileSize = (bytes: number) => {
+                                  if (bytes === 0) return '0 Bytes';
+                                  const k = 1024;
+                                  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                                  const i = Math.floor(Math.log(bytes) / Math.log(k));
+                                  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                                };
+
+                                return (
+                                  <div className="w-full max-w-sm">
+                                    <div className="flex items-start gap-3 p-3 bg-white rounded-xl">
+                                      {getFileIcon(parsed.fileExtension)}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-sm text-gray-900 truncate">
+                                          {parsed.fileName || 'Unknown file'}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <span className="text-xs text-gray-500">
+                                            {parsed.fileSize ? formatFileSize(parsed.fileSize) : 'Unknown size'}
+                                          </span>
+                                          <div className="flex items-center gap-1">
+                                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                            <span className="text-xs text-green-600">Đã có trên máy</span>
+                                          </div>
+                                        </div>
+                                        {parsed.description && (
+                                          <div className="text-xs text-gray-600 mt-1">
+                                            {parsed.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-col gap-1">
+                                        <button className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100">
+                                          <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                                          </svg>
+                                        </button>
+                                        <button className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100">
+                                          <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              // Nếu không match với bất kỳ loại nào, hiển thị raw JSON
+                              return (
+                                <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
+                                  <pre className="whitespace-pre-wrap">
+                                    {JSON.stringify(parsed, null, 2)}
+                                  </pre>
+                                </div>
+                              );
+                            } catch (error) {
+                              // Nếu không parse được JSON, hiển thị raw content
+                              return m.content;
+                            }
+                          }
+                          
+                          // Xử lý content không phải JSON
+                          if (typeof m.content === 'string') {
+                            return m.content;
+                          }
+                          
+                          // Fallback cuối cùng - hiển thị raw JSON để debug
+                          if (typeof m.content === 'string' && m.content.trim()) {
+                            return (
+                              <div className="text-xs text-gray-600 bg-yellow-100 p-2 rounded border">
+                                <div className="font-semibold mb-1">🔍 DEBUG - Raw Content:</div>
+                                <pre className="whitespace-pre-wrap text-xs">
+                                  {m.content}
+                                </pre>
+                                <div className="mt-1 text-xs text-gray-500">
+                                  Type: {m.content_type} | ID: {m.id}
+                                </div>
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <div className="text-xs text-gray-600 bg-red-100 p-2 rounded border">
+                              <div className="font-semibold mb-1">❌ DEBUG - Empty Content:</div>
+                              <div className="text-xs text-gray-500">
+                                Type: {m.content_type} | ID: {m.id} | Content: "{m.content}"
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    
+                    {/* Thời gian */}
+                    <div className="text-xs text-gray-400 mt-1 text-right">
+                      {formatTimestamp(m.timestamp)}
+                    </div>
+                  </div>
+
+                  {/* Avatar bên phải */}
+                  <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                    {user?.avatarZalo ? (
+                      <img 
+                        src={user.avatarZalo} 
+                        alt={user.username || 'User'}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {isLoading && page === 1 && (
               <div className="text-center text-sm text-gray-500 py-8">Đang tải...</div>
@@ -332,6 +1632,30 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
           </button>
         </div>
       </div>
+
+      {/* Modal hiển thị ảnh to */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-full p-4">
+            <img 
+              src={selectedImage} 
+              alt="Full size" 
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+            <button 
+              className="absolute top-4 right-4 bg-black bg-opacity-50 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-75 transition-colors cursor-pointer"
+              onClick={() => setSelectedImage(null)}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

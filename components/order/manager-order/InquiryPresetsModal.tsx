@@ -203,7 +203,7 @@ const InquiryPresetsModal: React.FC<InquiryPresetsModalProps> = ({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="!max-w-[80vw] !max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
@@ -271,13 +271,85 @@ const InquiryPresetsModal: React.FC<InquiryPresetsModalProps> = ({
 
                   <div>
                     <Label htmlFor="content">Nội dung câu hỏi</Label>
+                    
+                    {/* Template Variables Guide */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm mt-1 mb-2">
+                      <div className="flex items-start gap-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <div className="flex-1">
+                          <div className="font-medium text-blue-800 mb-2">Biến template có thể sử dụng:</div>
+                          <div className="grid grid-cols-1 gap-2">
+                            <div className="flex items-center justify-between">
+                              <div className="text-blue-700">
+                                <code className="bg-blue-100 px-1 rounded mr-2">{"{you}"}</code>
+                                <span className="text-sm">- Tự động thay thành cách xưng hô với khách hàng</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => {
+                                  const textarea = document.getElementById('content') as HTMLTextAreaElement;
+                                  const cursorPos = textarea?.selectionStart || formData.content.length;
+                                  const newContent = formData.content.slice(0, cursorPos) + '{you}' + formData.content.slice(cursorPos);
+                                  setFormData({ ...formData, content: newContent });
+                                  // Focus và set cursor sau khi insert
+                                  setTimeout(() => {
+                                    if (textarea) {
+                                      textarea.focus();
+                                      textarea.setSelectionRange(cursorPos + 5, cursorPos + 5);
+                                    }
+                                  }, 10);
+                                }}
+                                disabled={submitting}
+                              >
+                                Chèn
+                              </Button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-blue-700">
+                                <code className="bg-blue-100 px-1 rounded mr-2">{"{product_name}"}</code>
+                                <span className="text-sm">- Tự động thay thành tên sản phẩm</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => {
+                                  const textarea = document.getElementById('content') as HTMLTextAreaElement;
+                                  const cursorPos = textarea?.selectionStart || formData.content.length;
+                                  const newContent = formData.content.slice(0, cursorPos) + '{product_name}' + formData.content.slice(cursorPos);
+                                  setFormData({ ...formData, content: newContent });
+                                  // Focus và set cursor sau khi insert
+                                  setTimeout(() => {
+                                    if (textarea) {
+                                      textarea.focus();
+                                      textarea.setSelectionRange(cursorPos + 14, cursorPos + 14);
+                                    }
+                                  }, 10);
+                                }}
+                                disabled={submitting}
+                              >
+                                Chèn
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-2 pt-2 border-t border-blue-200 text-xs text-blue-600">
+                            💡 <strong>Ví dụ:</strong> "Chào {"{you}"}, anh/chị có quan tâm đến sản phẩm {"{product_name}"} không ạ?"
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <Textarea
                       id="content"
                       value={formData.content}
                       onChange={(e) =>
                         setFormData({ ...formData, content: e.target.value })
                       }
-                      placeholder="Nhập nội dung câu hỏi thăm dò sản phẩm..."
+                      placeholder="Ví dụ: Chào {you}, anh/chị có quan tâm đến sản phẩm {product_name} không ạ?"
                       rows={4}
                       disabled={submitting}
                       className="mt-1"

@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useSaleProducts } from "@/hooks/contact-list/useSaleProducts";
 import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
-import { ContactRole } from "@/types/auto-reply";
+import { ContactRole, AutoReplyProduct, AutoReplyProductPriceTier } from "@/types/auto-reply";
 import { api } from "@/lib/api";
 import {
   Dialog,
@@ -102,6 +102,8 @@ export default function SaleProductsModal({
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [selectedProductForPrice, setSelectedProductForPrice] = useState<AutoReplyProduct | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [alert, setAlert] = useState<{
@@ -754,10 +756,19 @@ export default function SaleProductsModal({
                                       </div>
                                     </TableCell>
                                     <TableCell className="text-xs py-2">
-                                      {p.minPrice ? (
-                                        <div className="bg-green-100 text-green-700 rounded px-1.5 py-0.5 inline-block font-medium">
-                                          {new Intl.NumberFormat('vi-VN').format(p.minPrice)} ₫
-                                        </div>
+                                      {p.priceTiers && p.priceTiers.length > 0 ? (
+                                        <button
+                                          onClick={() => {
+                                            setSelectedProductForPrice(p);
+                                            setShowPriceModal(true);
+                                          }}
+                                          className="bg-blue-100 hover:bg-blue-200 text-blue-700 rounded px-2 py-1 text-xs font-medium transition-all duration-200 flex items-center gap-1 cursor-pointer hover:scale-105 hover:shadow-md"
+                                        >
+                                          <span>Xem giá</span>
+                                          <span className="text-blue-600">
+                                            ({p.priceTiers.length})
+                                          </span>
+                                        </button>
                                       ) : (
                                         <span className="text-gray-400">Chưa có giá</span>
                                       )}
@@ -1227,6 +1238,139 @@ export default function SaleProductsModal({
                         )}
                       </Button>
                     </div>
+                  </div>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
+          {/* Price Modal */}
+          {showPriceModal && selectedProductForPrice && (
+            <Dialog open={showPriceModal} onOpenChange={setShowPriceModal}>
+              <DialogContent className="!max-w-[98vw] xl:!max-w-[95vw] 2xl:!max-w-[90vw] h-[98vh] flex flex-col bg-gradient-to-br from-blue-50/95 via-white/95 to-purple-50/95 backdrop-blur-xl border-0 shadow-2xl">
+                {/* Header */}
+                <DialogHeader className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-gray-200/50 p-6">
+                  <DialogTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-600 text-xl">💰</span>
+                      <span className="text-lg font-semibold text-gray-800">Bảng giá sản phẩm</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowPriceModal(false)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </DialogTitle>
+                </DialogHeader>
+                
+                {/* Content */}
+                <div className="flex-1 overflow-auto p-6">
+                  <div className="space-y-6">
+                    {/* Product Info */}
+                    <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50 shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="bg-orange-100 text-orange-700 rounded-lg px-3 py-2 text-sm font-medium">
+                          {selectedProductForPrice.code}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 text-lg mb-2">
+                            {selectedProductForPrice.name}
+                          </h3>
+                          <div className="flex items-center gap-3">
+                            <span className="bg-purple-100 text-purple-700 rounded-lg px-3 py-1 text-sm font-medium">
+                              {selectedProductForPrice.brand}
+                            </span>
+                            <span className="bg-blue-100 text-blue-700 rounded-lg px-3 py-1 text-sm font-medium">
+                              {selectedProductForPrice.cate}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Price Table */}
+                    {selectedProductForPrice.priceTiers && selectedProductForPrice.priceTiers.length > 0 ? (
+                      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200/50 shadow-sm overflow-hidden">
+                        <div className="bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4 border-b border-gray-200/50">
+                          <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                            <span className="text-green-600">📊</span>
+                            Bảng giá theo số lượng
+                          </h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-gray-50/80">
+                                <TableHead className="font-semibold text-gray-700 text-center py-4">Số lượng</TableHead>
+                                <TableHead className="font-semibold text-gray-700 text-center py-4">Giá / đơn vị</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {selectedProductForPrice.priceTiers
+                                .sort((a, b) => a.minQuantity - b.minQuantity)
+                                .map((tier: AutoReplyProductPriceTier, index: number) => (
+                                <TableRow key={tier.priceTierId || index} className="hover:bg-gray-50/50">
+                                  <TableCell className="text-center py-4">
+                                    <div className="bg-blue-100 text-blue-700 rounded-lg px-4 py-2 inline-block text-sm font-medium">
+                                      {new Intl.NumberFormat('vi-VN').format(tier.minQuantity)}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center py-4">
+                                    <div className="bg-green-100 text-green-700 rounded-lg px-4 py-2 inline-block text-sm font-medium">
+                                      {new Intl.NumberFormat('vi-VN').format(Number(tier.pricePerUnit))} ₫
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200/50 shadow-sm p-12 text-center">
+                        <div className="text-gray-400 mb-4">
+                          <span className="text-6xl">💰</span>
+                        </div>
+                        <h3 className="text-gray-600 font-semibold text-lg mb-2">Chưa có bảng giá</h3>
+                        <p className="text-gray-500">
+                          Sản phẩm này chưa được cấu hình bảng giá theo số lượng
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    {selectedProductForPrice.priceTiers && selectedProductForPrice.priceTiers.length > 0 && (
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200/50 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-600 text-lg">📈</span>
+                            <span className="text-green-700 font-semibold text-lg">
+                              Tổng cộng: {selectedProductForPrice.priceTiers.length} mức giá
+                            </span>
+                          </div>
+                          <div className="text-green-600 text-sm font-medium">
+                            Từ {new Intl.NumberFormat('vi-VN').format(Number(selectedProductForPrice.priceTiers[0].pricePerUnit))} ₫ 
+                            đến {new Intl.NumberFormat('vi-VN').format(Number(selectedProductForPrice.priceTiers[selectedProductForPrice.priceTiers.length - 1].pricePerUnit))} ₫
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <DialogFooter className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-t border-gray-200/50 p-6">
+                  <div className="flex justify-end">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowPriceModal(false)}
+                      className="px-6 py-2"
+                    >
+                      Đóng
+                    </Button>
                   </div>
                 </DialogFooter>
               </DialogContent>

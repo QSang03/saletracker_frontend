@@ -74,6 +74,27 @@ const SendInquiryModal: React.FC<SendInquiryModalProps> = ({
   // Get final message (preset content or custom message)
   const finalMessage = selectedPreset?.content || customMessage;
 
+  // Function to replace template variables
+  const replaceTemplateVariables = (text: string): string => {
+    if (!orderDetail) return text;
+    
+    let processedText = text;
+    
+    // Replace {you} - keep as is
+    // No replacement needed for {you} - it will be passed as-is
+    
+    // Replace {product_name} with actual product name
+    const productName = orderDetail.product?.productName || 
+                       orderDetail.raw_item || 
+                       'sản phẩm';
+    processedText = processedText.replace(/\{product_name\}/g, productName);
+    
+    return processedText;
+  };
+
+  // Get processed message for preview and sending
+  const processedMessage = replaceTemplateVariables(finalMessage);
+
   const handleSend = async () => {
     if (!orderDetail) return;
 
@@ -86,7 +107,8 @@ const SendInquiryModal: React.FC<SendInquiryModalProps> = ({
       setSending(true);
 
       if (onSend) {
-        await onSend(orderDetail, finalMessage.trim());
+        // Use processedMessage which has template variables replaced
+        await onSend(orderDetail, processedMessage.trim());
       }
 
       toast.success("Gửi câu hỏi thăm dò thành công!");
@@ -111,7 +133,7 @@ const SendInquiryModal: React.FC<SendInquiryModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="!max-w-[60vw] !max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-blue-600" />
@@ -199,6 +221,84 @@ const SendInquiryModal: React.FC<SendInquiryModalProps> = ({
                 </span>
               )}
             </Label>
+            
+            {/* Template Variables Help */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                <div className="flex-1">
+                  <div className="font-medium text-blue-800 mb-2">Biến template có thể sử dụng:</div>
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-blue-700">
+                        <code className="bg-blue-100 px-1 rounded mr-2">{"{you}"}</code>
+                        <span className="text-sm">- Tự động thay thành cách xưng hô với khách hàng</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const textarea = document.getElementById('message') as HTMLTextAreaElement;
+                          const cursorPos = textarea?.selectionStart || customMessage.length;
+                          const newContent = customMessage.slice(0, cursorPos) + '{you}' + customMessage.slice(cursorPos);
+                          setCustomMessage(newContent);
+                          if (newContent.trim()) {
+                            setSelectedPresetId("");
+                          }
+                          // Focus và set cursor sau khi insert
+                          setTimeout(() => {
+                            if (textarea) {
+                              textarea.focus();
+                              textarea.setSelectionRange(cursorPos + 5, cursorPos + 5);
+                            }
+                          }, 10);
+                        }}
+                        disabled={sending}
+                      >
+                        Chèn
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-blue-700">
+                        <code className="bg-blue-100 px-1 rounded mr-2">{"{product_name}"}</code>
+                        <span className="text-sm">- Tự động thay thành: <span className="font-medium">{orderDetail.product?.productName || orderDetail.raw_item || 'tên sản phẩm'}</span></span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const textarea = document.getElementById('message') as HTMLTextAreaElement;
+                          const cursorPos = textarea?.selectionStart || customMessage.length;
+                          const newContent = customMessage.slice(0, cursorPos) + '{product_name}' + customMessage.slice(cursorPos);
+                          setCustomMessage(newContent);
+                          if (newContent.trim()) {
+                            setSelectedPresetId("");
+                          }
+                          // Focus và set cursor sau khi insert
+                          setTimeout(() => {
+                            if (textarea) {
+                              textarea.focus();
+                              textarea.setSelectionRange(cursorPos + 14, cursorPos + 14);
+                            }
+                          }, 10);
+                        }}
+                        disabled={sending}
+                      >
+                        Chèn
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-blue-200 text-xs text-blue-600">
+                    💡 <strong>Ví dụ:</strong> "Chào {"{you}"}, anh/chị có quan tâm đến sản phẩm {"{product_name}"} không ạ?"
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <Textarea
               id="message"
               value={customMessage}
@@ -208,7 +308,7 @@ const SendInquiryModal: React.FC<SendInquiryModalProps> = ({
                   setSelectedPresetId("");
                 }
               }}
-              placeholder="Nhập tin nhắn thăm dò tùy chỉnh..."
+              placeholder="Ví dụ: Chào {you}, anh/chị có quan tâm đến sản phẩm {product_name} không ạ?"
               rows={4}
               disabled={sending}
             />
@@ -222,10 +322,15 @@ const SendInquiryModal: React.FC<SendInquiryModalProps> = ({
                 <div className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-blue-800 whitespace-pre-wrap">
-                    {finalMessage}
+                    {processedMessage}
                   </div>
                 </div>
               </div>
+              {finalMessage !== processedMessage && (
+                <div className="text-xs text-gray-500">
+                  * Các biến template đã được thay thế tự động
+                </div>
+              )}
             </div>
           )}
         </div>

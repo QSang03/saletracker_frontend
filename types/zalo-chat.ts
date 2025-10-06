@@ -152,16 +152,51 @@ export type GroupRole = 'admin' | 'moderator' | 'member' | 'owner';
 export interface GroupMember {
   id: number;
   conversation_id: number;
-  user_id: number;
-  display_name: string;
-  avatar?: string | null;
-  role: GroupRole;
-  joined_at: string;
-  last_seen_at?: string | null;
-  is_online: boolean;
+  contact_id: number;
+  role: string;
+  is_owner: boolean;
+  is_active: boolean;
+  metadata?: any;
   is_muted: boolean;
   is_blocked: boolean;
-  message_count: number;
+  zalo_group_member_id?: string | null;
+  raw_payload?: any;
+  joined_at: string;
+  last_seen_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  contact: {
+    id: number;
+    display_name: string;
+    zalo_contact_id: string;
+    info_metadata?: {
+      zName?: string;
+      avatar?: string;
+      pbName?: string;
+      name_history?: Array<{
+        at: string;
+        new: string;
+        old: string;
+      }>;
+    } | null;
+    is_favorite: boolean;
+    is_blocked: boolean;
+  };
+  group: {
+    id: number;
+    name: string;
+    type: string;
+  };
+  stats: {
+    message_count: number;
+    reaction_count: number;
+  };
+  is_admin: number;
+  is_moderator: number;
+  can_manage_group: number;
+  formatted_joined_at: string;
+  formatted_last_seen?: string | null;
+  is_online: boolean;
 }
 
 export interface DashboardStats {

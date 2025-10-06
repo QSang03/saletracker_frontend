@@ -39,7 +39,7 @@ export default function ChatInfoPanel({ conversation }: ChatInfoPanelProps) {
         {!isLoading && !error && members.map(m => (
           <div key={m.id} className="flex items-center justify-between border-b border-border pb-2">
             <div>
-              <div className="text-sm font-medium">{m.display_name}</div>
+              <div className="text-sm font-medium">{m.contact?.display_name || 'Unknown'}</div>
               <div className="text-xs opacity-70">{m.role}</div>
             </div>
             <div className={`text-xs ${m.is_online ? 'text-green-600' : 'opacity-60'}`}>{m.is_online ? 'Online' : 'Offline'}</div>
