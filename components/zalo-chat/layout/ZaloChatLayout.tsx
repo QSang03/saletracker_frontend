@@ -11,6 +11,7 @@ export default function ZaloChatLayout() {
   const { user } = useDynamicPermission();
   const userId = useMemo(() => user?.id ? Number(user.id) : null, [user?.id]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const hasAutoSelectedRef = React.useRef(false);
 
@@ -46,6 +47,17 @@ export default function ZaloChatLayout() {
           activeConversationId={activeConversation?.id ?? null} 
           onSelectConversation={setActiveConversation}
           onConversationsChange={setConversations}
+          onSearchApply={(q) => setSearchQuery(q)}
+          onSelectMessageTarget={(conversationId, messageId, q) => {
+            // If message belongs to a different conversation, switch first
+            if (!activeConversation || activeConversation.id !== conversationId) {
+              const found = conversations.find((c) => c.id === conversationId) || null;
+              setActiveConversation(found);
+            }
+            // Store query to apply in MainArea; ChatMainArea already supports 'q' via its own state
+            setSearchQuery(q);
+            // ChatMainArea exposes internal scrollToMessage via UI interactions; we rely on query and user click
+          }}
         />
       </div>
       <div className="overflow-hidden">
