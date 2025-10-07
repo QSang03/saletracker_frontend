@@ -7,15 +7,19 @@ import { Conversation } from '@/types/zalo-chat';
 import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { AuthContext } from '@/contexts/AuthContext';
 import { EmployeeFilterModal } from './EmployeeFilterModal';
+import SearchDialog from '@/components/zalo-chat/search/SearchDialog';
 
 interface ChatSidebarProps {
   userId: number;
   activeConversationId: number | null;
   onSelectConversation: (c: Conversation | null) => void;
   onConversationsChange?: (conversations: Conversation[]) => void;
+  onSearchApply?: (q: string) => void;
+  onSelectMessageTarget?: (conversationId: number, messageId: number, q: string) => void;
 }
 
-export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange }: ChatSidebarProps) {
+export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange, onSearchApply, onSelectMessageTarget }: ChatSidebarProps) {
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ConversationType | 'all'>('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -299,18 +303,33 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         
         {/* Search */}
         <div className="relative">
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm" 
-            className="w-full pl-8 pr-3 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <input
+            type="text"
+            placeholder="Tìm kiếm"
+            className="w-full pl-8 pr-3 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            onFocus={() => setSearchDialogOpen(true)}
+            onClick={() => setSearchDialogOpen(true)}
+            readOnly
           />
-          <div className="absolute left-2.5 top-2.5 text-gray-400">
+          <div className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
         </div>
       </div>
+      <SearchDialog
+        isOpen={searchDialogOpen}
+        onOpenChange={setSearchDialogOpen}
+        userId={Number(userId)}
+        onSelectConversation={(c) => onSelectConversation(c)}
+        onApplyQuery={(q) => { setSearch(q); onSearchApply && onSearchApply(q); }}
+        onSelectMessage={(m) => {
+          if (m?.conversation_id && m?.id) {
+            onSelectMessageTarget && onSelectMessageTarget(m.conversation_id, m.id, search);
+          }
+        }}
+      />
 
       {/* Tabs */}
       {!hideTabs && (
