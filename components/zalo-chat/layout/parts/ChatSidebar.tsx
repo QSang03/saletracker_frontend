@@ -7,15 +7,17 @@ import { Conversation } from '@/types/zalo-chat';
 import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { AuthContext } from '@/contexts/AuthContext';
 import { EmployeeFilterModal } from './EmployeeFilterModal';
+import SearchDropdown from '@/components/zalo-chat/common/SearchDropdown';
 
 interface ChatSidebarProps {
   userId: number;
   activeConversationId: number | null;
   onSelectConversation: (c: Conversation | null) => void;
   onConversationsChange?: (conversations: Conversation[]) => void;
+  onSelectMessage?: (message: any, conversation: any) => void;
 }
 
-export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange }: ChatSidebarProps) {
+export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange, onSelectMessage }: ChatSidebarProps) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ConversationType | 'all'>('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -298,18 +300,11 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         </div>
         
         {/* Search */}
-        <div className="relative">
-          <input 
-            type="text" 
-            placeholder="Tìm kiếm" 
-            className="w-full pl-8 pr-3 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <div className="absolute left-2.5 top-2.5 text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-        </div>
+        <SearchDropdown 
+          userId={userId} 
+          onSelectConversation={onSelectConversation}
+          onSelectMessage={onSelectMessage}
+        />
       </div>
 
       {/* Tabs */}

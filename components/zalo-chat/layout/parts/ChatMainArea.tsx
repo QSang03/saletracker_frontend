@@ -12,7 +12,12 @@ import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { AuthContext } from "@/contexts/AuthContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export default function ChatMainArea({ conversation }: { conversation: Conversation | null }) {
+interface ChatMainAreaProps {
+  conversation: Conversation | null;
+  highlightMessageId?: number | null;
+}
+
+export default function ChatMainArea({ conversation, highlightMessageId }: ChatMainAreaProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
   
@@ -128,6 +133,16 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
       console.log('🔄 Conversation changed, resetting states:', conversation?.conversation_name);
     }
   }, [conversation, q]); // Track toàn bộ conversation object, không chỉ id
+
+  // Handle highlighting message from search
+  useEffect(() => {
+    if (highlightMessageId && acc.length > 0) {
+      // Wait a bit for DOM to update
+      setTimeout(() => {
+        scrollToMessage(highlightMessageId);
+      }, 100);
+    }
+  }, [highlightMessageId, acc.length]);
 
   // gộp trang + cập nhật hasMore theo total_pages
   useEffect(() => {
