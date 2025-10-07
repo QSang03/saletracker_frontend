@@ -23,6 +23,7 @@ interface SendHistoryResponse {
 
 interface SendHistoryFilters {
   zalo_customer_id?: string;
+  order_detail_id?: number | string; // Filter by specific order detail ID
   user_id?: number;
   send_function?: string;
   from?: string;
@@ -47,6 +48,7 @@ export function useSendHistory(filters?: SendHistoryFilters) {
       const finalFilters = { ...filters, ...customFilters };
 
       if (finalFilters.zalo_customer_id) params.append('zalo_customer_id', finalFilters.zalo_customer_id);
+      if (finalFilters.order_detail_id) params.append('order_detail_id', finalFilters.order_detail_id.toString());
       if (finalFilters.user_id) params.append('user_id', finalFilters.user_id.toString());
       if (finalFilters.send_function) params.append('send_function', finalFilters.send_function);
       if (finalFilters.from) params.append('from', finalFilters.from);

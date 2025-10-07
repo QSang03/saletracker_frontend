@@ -66,7 +66,7 @@ import BulkNotesModal from "./BulkNotesModal";
 import HideOrderDetailModal from "./HideOrderDetailModal";
 import BulkHideModal from "./BulkHideModal";
 import ViewNotesHistoryModal from "./ViewNotesHistoryModal";
-import SendInquiryModal from "./SendInquiryModal";
+import QuoteReplyModal from "./QuoteReplyModal";
 import { SendHistoryView } from "./SendHistoryView";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
@@ -93,7 +93,6 @@ interface OrderManagementProps {
     orderDetail: OrderDetail,
     data: { reason?: string; blockType: "analysis" | "reporting" | "stats" }
   ) => Promise<void>;
-  onSendInquiry?: (orderDetail: OrderDetail, message: string) => Promise<void>;
   checkContactBlocked?: (
     zaloContactId: string
   ) => Promise<{ isBlocked: boolean; blockType?: string; reason?: string }>;
@@ -254,7 +253,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   onBulkNotes,
   onAddToBlacklist,
   onAnalysisBlock,
-  onSendInquiry,
   checkContactBlocked,
   onBulkHide,
   onHide,
@@ -358,10 +356,17 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isAnalysisBlockModalOpen, setIsAnalysisBlockModalOpen] =
     useState(false);
 
-  // Send Inquiry states
-  const [sendInquiryDetail, setSendInquiryDetail] =
-    useState<OrderDetail | null>(null);
-  const [isSendInquiryModalOpen, setIsSendInquiryModalOpen] = useState(false);
+  // Quote Reply states
+  const [quoteReplyDetail, setQuoteReplyDetail] = useState<OrderDetail | null>(
+    null
+  );
+  const [quoteReplyMessageId, setQuoteReplyMessageId] = useState<string | null>(
+    null
+  );
+  const [quotedMessageContent, setQuotedMessageContent] = useState<
+    string | null
+  >(null);
+  const [isQuoteReplyModalOpen, setIsQuoteReplyModalOpen] = useState(false);
 
   // Inquiry Presets modal state
   const [isInquiryPresetsModalOpen, setIsInquiryPresetsModalOpen] =
@@ -594,7 +599,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
       isEditCustomerNameModalOpen ||
       isAddToBlacklistModalOpen ||
       isAnalysisBlockModalOpen ||
-      isSendInquiryModalOpen ||
+      isQuoteReplyModalOpen ||
       isBulkDeleteModalOpen ||
       isBulkExtendModalOpen ||
       isBulkNotesModalOpen ||
@@ -611,7 +616,7 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     isEditCustomerNameModalOpen,
     isAddToBlacklistModalOpen,
     isAnalysisBlockModalOpen,
-    isSendInquiryModalOpen,
+    isQuoteReplyModalOpen,
     isBulkDeleteModalOpen,
     isBulkExtendModalOpen,
     isBulkNotesModalOpen,
@@ -963,28 +968,64 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     withSkipClear(() => setIsAnalysisBlockModalOpen(false));
     setAnalysisBlockDetail(null);
   };
-
-  // Send Inquiry handlers
-  const handleSendInquiryClick = (orderDetail: OrderDetail) => {
+  // Quote Reply handlers
+  const handleQuoteReplyClick = (
+    orderDetail: OrderDetail,
+    messageId: string,
+    messageContent: string
+  ) => {
     setFocusSafely(orderDetail.id);
-    setSendInquiryDetail(orderDetail);
-    setIsSendInquiryModalOpen(true);
+    setQuoteReplyDetail(orderDetail);
+    setQuoteReplyMessageId(messageId);
+    setQuotedMessageContent(messageContent);
+    withSkipClear(() => setIsQuoteReplyModalOpen(true));
   };
 
-  const handleSendInquiry = async (
-    orderDetail: OrderDetail,
-    message: string
-  ) => {
-    if (onSendInquiry) {
-      await onSendInquiry(orderDetail, message);
-      withSkipClear(() => setIsSendInquiryModalOpen(false));
-      setSendInquiryDetail(null);
+  const handleQuoteReply = async (data: {
+    user_id: number;
+    message_content: string;
+    zalo_customer_id: string;
+    customer_type: string;
+    msg_id: string;
+    send_function: string;
+    notes?: string;
+  }) => {
+    try {
+      // Call the new quote API
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/send-message/quote`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+            "x-master-key": process.env.NEXT_PUBLIC_MASTER_KEY || "nkcai",
+          },
+          body: JSON.stringify(data),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to send quote reply");
+      }
+
+      // Success handling
+      withSkipClear(() => setIsQuoteReplyModalOpen(false));
+      setQuoteReplyDetail(null);
+      setQuoteReplyMessageId(null);
+      setQuotedMessageContent(null);
+    } catch (error) {
+      console.error("Error sending quote reply:", error);
+      throw error; // Re-throw to let the modal handle the error display
     }
   };
 
-  const handleSendInquiryCancel = () => {
-    withSkipClear(() => setIsSendInquiryModalOpen(false));
-    setSendInquiryDetail(null);
+  const handleQuoteReplyCancel = () => {
+    withSkipClear(() => setIsQuoteReplyModalOpen(false));
+    setQuoteReplyDetail(null);
+    setQuoteReplyMessageId(null);
+    setQuotedMessageContent(null);
   };
 
   // Data được sort từ backend, không cần sort ở frontend nữa
@@ -1257,6 +1298,71 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
     return selectedOrders.every(isOwner);
   }, [selectedOrders, isOwner]);
 
+  // ✅ States cho sticky scrollbar và sticky bulk actions
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const stickyScrollRef = useRef<HTMLDivElement>(null);
+  const [showStickyScroll, setShowStickyScroll] = useState(false);
+  const [showStickyBulkActions, setShowStickyBulkActions] = useState(false);
+  const bulkActionsRef = useRef<HTMLDivElement>(null);
+
+  // ✅ Đồng bộ scroll giữa bảng chính và thanh scroll sticky
+  useEffect(() => {
+    const tableContainer = tableContainerRef.current;
+    const stickyScroll = stickyScrollRef.current;
+    if (!tableContainer || !stickyScroll) return;
+
+    const handleTableScroll = () => {
+      if (stickyScroll) {
+        stickyScroll.scrollLeft = tableContainer.scrollLeft;
+      }
+    };
+
+    const handleStickyScroll = () => {
+      if (tableContainer) {
+        tableContainer.scrollLeft = stickyScroll.scrollLeft;
+      }
+    };
+
+    tableContainer.addEventListener('scroll', handleTableScroll);
+    stickyScroll.addEventListener('scroll', handleStickyScroll);
+
+    return () => {
+      tableContainer.removeEventListener('scroll', handleTableScroll);
+      stickyScroll.removeEventListener('scroll', handleStickyScroll);
+    };
+  }, []);
+
+  // ✅ Kiểm tra khi nào hiển thị sticky scrollbar và sticky bulk actions
+  useEffect(() => {
+    const handleScroll = () => {
+      const tableContainer = tableContainerRef.current;
+      const bulkActions = bulkActionsRef.current;
+      
+      if (tableContainer) {
+        const rect = tableContainer.getBoundingClientRect();
+        const isTableScrollable = tableContainer.scrollWidth > tableContainer.clientWidth;
+        
+        // Hiển thị sticky scroll khi bảng bị cuộn ra khỏi viewport
+        setShowStickyScroll(isTableScrollable && rect.bottom > window.innerHeight);
+      }
+
+      if (bulkActions && selectedOrders.length > 0) {
+        const rect = bulkActions.getBoundingClientRect();
+        // Hiển thị sticky bulk actions khi scroll qua nó
+        setShowStickyBulkActions(rect.top < 0);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('resize', handleScroll);
+    handleScroll(); // Initial check
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [selectedOrders.length]);
+
   return (
     <TooltipProvider>
       <style>{`
@@ -1312,22 +1418,101 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
             box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
           }
         }
+
+        /* ✅ Sticky scrollbar styles */
+        .sticky-scrollbar {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 20px;
+          background: linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.1));
+          border-top: 1px solid rgba(0,0,0,0.1);
+          overflow-x: auto;
+          overflow-y: hidden;
+          z-index: 40;
+          backdrop-blur-sm;
+        }
+
+        .sticky-scrollbar::-webkit-scrollbar {
+          height: 12px;
+        }
+
+        .sticky-scrollbar::-webkit-scrollbar-track {
+          background: rgba(255,255,255,0.5);
+        }
+
+        .sticky-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.6);
+          border-radius: 6px;
+        }
+
+        .sticky-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(59, 130, 246, 0.8);
+        }
+
+        /* ✅ Sticky bulk actions styles */
+        .sticky-bulk-actions {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 50;
+          background: white;
+          border-bottom: 2px solid #e5e7eb;
+          padding: 12px 24px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+          from {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
       `}</style>
 
       <div className="space-y-2">
-        {/* Bulk Actions */}
-        <BulkActions
-          selectedOrders={selectedOrders}
-          onBulkDelete={handleBulkDelete}
-          onBulkExtend={handleBulkExtend}
-          onBulkNotes={handleBulkNotes}
-          onBulkHide={handleBulkHide}
-          loading={loading}
-          canAct={canBulkAct}
-        />
+        {/* ✅ Sticky Bulk Actions - Hiển thị khi scroll xuống */}
+        {showStickyBulkActions && selectedOrders.length > 0 && (
+          <div className="sticky-bulk-actions">
+            <div className="max-w-[1800px] mx-auto">
+              <BulkActions
+                selectedOrders={selectedOrders}
+                onBulkDelete={handleBulkDelete}
+                onBulkExtend={handleBulkExtend}
+                onBulkNotes={handleBulkNotes}
+                onBulkHide={handleBulkHide}
+                loading={loading}
+                canAct={canBulkAct}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Actions gốc */}
+        <div ref={bulkActionsRef}>
+          <BulkActions
+            selectedOrders={selectedOrders}
+            onBulkDelete={handleBulkDelete}
+            onBulkExtend={handleBulkExtend}
+            onBulkNotes={handleBulkNotes}
+            onBulkHide={handleBulkHide}
+            loading={loading}
+            canAct={canBulkAct}
+          />
+        </div>
 
         <div className="relative">
-          <div className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200">
+          <div 
+            ref={tableContainerRef}
+            className="overflow-x-auto scrollbar-hide shadow-inner rounded-lg border border-slate-200"
+          >
             <Table className="min-w-[1800px] table-auto bg-white [&_th]:px-3 [&_td]:px-3 [&_th]:py-2.5 [&_td]:py-2.5 [&_th]:align-middle [&_td]:align-middle">
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300 shadow-sm">
@@ -2048,28 +2233,6 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     </Tooltip>
                                   )}
 
-                                  {/* Send Inquiry Button - Chỉ hiển thị cho chủ sở hữu */}
-                                  {owner && onSendInquiry && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          onClick={() =>
-                                            handleSendInquiryClick(orderDetail)
-                                          }
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-                                          title="Gửi câu hỏi thăm dò"
-                                        >
-                                          <MessageSquare className="h-3 w-3" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        Gửi câu hỏi thăm dò sản phẩm
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )}
-
                                   {/* Send History View - always visible */}
                                   <SendHistoryView
                                     orderDetail={orderDetail}
@@ -2089,6 +2252,16 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
             </Table>
           </div>
         </div>
+
+        {/* ✅ Sticky Horizontal Scrollbar - Hiển thị ở bottom khi bảng không nhìn thấy */}
+        {showStickyScroll && (
+          <div 
+            ref={stickyScrollRef}
+            className="sticky-scrollbar"
+          >
+            <div style={{ width: '1800px', height: '1px' }}></div>
+          </div>
+        )}
       </div>
 
       {/* Notes history modal (global) */}
@@ -3138,16 +3311,53 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     </div>
 
                                     {/* Enhanced timestamp with sender name */}
-                                    <div className="flex items-center gap-2 ml-4">
-                                      <Clock className="w-3 h-3 text-gray-400" />
-                                      <span className="text-xs text-gray-500 font-medium">
-                                        {message.senderName
-                                          ? `${message.senderName} • ${
-                                              message.time || ""
-                                            }`
-                                          : message.time}
-                                      </span>
-                                      <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse"></div>
+                                    <div className="flex items-center justify-between ml-4">
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="w-3 h-3 text-gray-400" />
+                                        <span className="text-xs text-gray-500 font-medium">
+                                          {message.senderName
+                                            ? `${message.senderName} • ${
+                                                message.time || ""
+                                              }`
+                                            : message.time}
+                                        </span>
+                                        <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse"></div>
+                                      </div>
+
+                                      {/* Reply button for customer messages - only show if user owns this order */}
+                                      {message.messageId && isOwner(viewingDetail) && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                                          onClick={() => {
+                                            const messageContent =
+                                              message.text ||
+                                              (message.contentType === "image"
+                                                ? message.imageCaption
+                                                : null) ||
+                                              (message.contentType === "file"
+                                                ? message.fileName
+                                                : null) ||
+                                              (message.contentType ===
+                                              "location"
+                                                ? message.locationName
+                                                : null) ||
+                                              `[${message.contentType}]`;
+                                            handleQuoteReplyClick(
+                                              viewingDetail,
+                                              String(message.messageId),
+                                              messageContent || "Tin nhắn"
+                                            );
+                                          }}
+                                          title="Trả lời tin nhắn"
+                                        >
+                                          <span className="flex items-center">
+                                            <MessageSquare className="h-3 w-3 mr-1" />
+                                            Trả lời
+                                          </span>
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -3403,16 +3613,53 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                                     </div>
 
                                     {/* Enhanced timestamp with sender name */}
-                                    <div className="flex items-center gap-2 mr-4 justify-end">
-                                      <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
-                                      <span className="text-xs text-gray-500 font-medium">
-                                        {message.senderName
-                                          ? `${message.senderName} • ${
-                                              message.time || ""
-                                            }`
-                                          : message.time}
-                                      </span>
-                                      <CheckCircle className="w-3 h-3 text-blue-500" />
+                                    <div className="flex items-center justify-between mr-4">
+                                      {/* Reply button for sale messages - only show if user owns this order */}
+                                      {message.messageId && isOwner(viewingDetail) && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                                          onClick={() => {
+                                            const messageContent =
+                                              message.text ||
+                                              (message.contentType === "image"
+                                                ? message.imageCaption
+                                                : null) ||
+                                              (message.contentType === "file"
+                                                ? message.fileName
+                                                : null) ||
+                                              (message.contentType ===
+                                              "location"
+                                                ? message.locationName
+                                                : null) ||
+                                              `[${message.contentType}]`;
+                                            handleQuoteReplyClick(
+                                              viewingDetail,
+                                              String(message.messageId),
+                                              messageContent || "Tin nhắn"
+                                            );
+                                          }}
+                                          title="Trả lời tin nhắn"
+                                        >
+                                          <span className="flex items-center">
+                                            <MessageSquare className="h-3 w-3 mr-1" />
+                                            Trả lời
+                                          </span>
+                                        </Button>
+                                      )}
+
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-1 h-1 bg-blue-400 rounded-full animate-pulse"></div>
+                                        <span className="text-xs text-gray-500 font-medium">
+                                          {message.senderName
+                                            ? `${message.senderName} • ${
+                                                message.time || ""
+                                              }`
+                                            : message.time}
+                                        </span>
+                                        <CheckCircle className="w-3 h-3 text-blue-500" />
+                                      </div>
                                     </div>
                                   </div>
 
@@ -3854,12 +4101,14 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         </DialogContent>
       </Dialog>
 
-      {/* Send Inquiry Modal */}
-      <SendInquiryModal
-        orderDetail={sendInquiryDetail}
-        isOpen={isSendInquiryModalOpen}
-        onClose={handleSendInquiryCancel}
-        onSend={handleSendInquiry}
+      {/* Quote Reply Modal */}
+      <QuoteReplyModal
+        orderDetail={quoteReplyDetail}
+        messageId={quoteReplyMessageId}
+        quotedMessageContent={quotedMessageContent}
+        isOpen={isQuoteReplyModalOpen}
+        onClose={handleQuoteReplyCancel}
+        onSend={handleQuoteReply}
       />
     </TooltipProvider>
   );

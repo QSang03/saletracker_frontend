@@ -39,6 +39,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
   const [userScrolled, setUserScrolled] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [errorTooltip, setErrorTooltip] = useState<{ show: boolean; message: string; target: string }>({ show: false, message: '', target: '' });
+  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
 
   // Helper function to format timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -61,6 +62,27 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
       });
     }
   };
+
+  // Function to scroll to and highlight a message
+  const scrollToMessage = (messageId: number) => {
+    const messageElement = document.getElementById(`message-${messageId}`);
+    if (messageElement) {
+      // Highlight the message
+      setHighlightedMessageId(messageId);
+      
+      // Scroll to the message with smooth behavior
+      messageElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+      
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 3000);
+    }
+  };
+
   const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
 
   // giữ vị trí khi prepend
@@ -98,12 +120,22 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     setIsPaging(false);
     setHasAutoScrolled(false); // Reset auto-scroll flag
     setErrorTooltip({ show: false, message: '', target: '' }); // Reset error tooltip
-    console.log('🔄 Conversation changed, resetting states:', conversation?.conversation_name);
-  }, [conversation?.id, q]);
+    
+    // Log để debug
+    if (!conversation) {
+      console.log('🔄 Conversation cleared, messages should be empty');
+    } else {
+      console.log('🔄 Conversation changed, resetting states:', conversation?.conversation_name);
+    }
+  }, [conversation, q]); // Track toàn bộ conversation object, không chỉ id
 
   // gộp trang + cập nhật hasMore theo total_pages
   useEffect(() => {
-    if (!conversation) return;
+    if (!conversation) {
+      // Clear messages khi không có conversation
+      setAcc([]);
+      return;
+    }
 
     const asc = [...fetched].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -231,7 +263,9 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
 
           {/* Info */}
           <div className="flex-1">
-            <div className="font-semibold text-gray-900 text-lg">{conversation.conversation_name}</div>
+            <div className="font-semibold text-gray-900 text-lg">
+              {conversation.conversation_name?.replace(/^(PrivateChat_|privatechat_)/i, '') || conversation.conversation_name}
+            </div>
             <div className="text-sm text-gray-500">
               {conversation.conversation_type === 'group' ? 'Nhóm' : 'Cuộc trò chuyện'} 
               {conversation.total_messages && ` • ${conversation.total_messages} tin nhắn`}
@@ -277,9 +311,11 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 return null;
               }
               
-              // Kiểm tra nếu là tin nhắn file hoặc ảnh không có text
+              // Kiểm tra nếu là tin nhắn file, ảnh không có text, contact card, hoặc birthday greeting
               let isFileMessage = false;
               let isImageWithoutText = false;
+              let isContactCard = false;
+              let isBirthdayGreeting = false;
               if (typeof m.content === 'string' && m.content.startsWith('{')) {
                 try {
                   const parsed = JSON.parse(m.content);
@@ -287,6 +323,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                     isFileMessage = true;
                   } else if (parsed.imageUrl && !parsed.caption && !parsed.title && !parsed.text) {
                     isImageWithoutText = true;
+                  } else if (parsed.contactName && parsed.contactId) {
+                    isContactCard = true;
+                  } else if (parsed.title && parsed.href && parsed.action === 'show.profile') {
+                    isBirthdayGreeting = true;
                   }
                 } catch {
                   // Ignore parsing errors
@@ -340,7 +380,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                     } catch {}
                     
                     return (
-                      <div key={m.id} className="flex flex-col items-center my-2">
+                      <div key={m.id} id={`message-${m.id}`} className={`flex flex-col items-center my-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                         <div className="bg-white rounded-3xl px-4 py-3 shadow-sm border border-gray-200 max-w-[80%]">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
@@ -382,6 +422,157 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
 
                 const senderAvatar = getSenderAvatar();
                 const senderName = m.sender?.name || m.sender_name || 'Unknown User';
+
+                // Xử lý contact card riêng (không có khung bong bóng)
+                if (isContactCard) {
+                  let parsed;
+                  try {
+                    parsed = JSON.parse(m.content);
+                  } catch {
+                    parsed = {};
+                  }
+
+                  return (
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                      {/* Avatar bên trái */}
+                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                        {senderAvatar ? (
+                          <img 
+                            src={senderAvatar.replace(/"/g, '')} 
+                            alt={senderName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <svg className="w-7 h-7 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col">
+                        {/* Tên người gửi */}
+                        <div className="text-xs text-gray-500 mb-1 px-1">
+                          {senderName}
+                        </div>
+                        
+                        {/* Contact Card */}
+                        <div className="bg-white rounded shadow-md overflow-hidden w-[300px]">
+                          <div className="bg-blue-500 px-5 pt-6 pb-12 relative">
+                            <div className="flex items-start gap-3">
+                              <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-white flex-shrink-0">
+                                {parsed.contactAvatar ? (
+                                  <img 
+                                    src={parsed.contactAvatar} 
+                                    alt={parsed.contactName}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <svg className="w-full h-full text-gray-400 p-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-white text-base truncate mb-0.5">{parsed.contactName}</div>
+                                <div className="text-xs text-white/90 truncate">{parsed.contactId}</div>
+                              </div>
+                            </div>
+                            {parsed.qrCodeUrl && (
+                              <div className="absolute bottom-2 right-2">
+                                <div className="bg-white p-1 rounded">
+                                  <img 
+                                    src={parsed.qrCodeUrl} 
+                                    alt="QR Code"
+                                    className="w-16 h-16 object-contain"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex">
+                            <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                              Gọi Điện
+                            </button>
+                            <div className="w-px bg-gray-200"></div>
+                            <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                              Nhắn Tin
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Thời gian */}
+                        <div className="text-xs text-gray-400 mt-1 text-left px-1">
+                          {formatTimestamp(m.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Xử lý birthday greeting riêng (không có khung bong bóng)
+                if (isBirthdayGreeting) {
+                  let parsed;
+                  try {
+                    parsed = JSON.parse(m.content);
+                  } catch {
+                    parsed = {};
+                  }
+
+                  return (
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                      {/* Avatar bên trái */}
+                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                        {senderAvatar ? (
+                          <img 
+                            src={senderAvatar.replace(/"/g, '')} 
+                            alt={senderName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <svg className="w-7 h-7 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col">
+                        {/* Tên người gửi */}
+                        <div className="text-xs text-gray-500 mb-1 px-1">
+                          {senderName}
+                        </div>
+                        
+                        {/* Birthday Greeting Card */}
+                        <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-[300px]">
+                          <div className="relative">
+                            <img 
+                              src={parsed.href} 
+                              alt={parsed.title}
+                              className="w-full h-auto object-cover"
+                              style={{ maxHeight: '200px' }}
+                            />
+                          </div>
+                          
+                          <div className="p-4">
+                            <div className="font-semibold text-gray-900 text-sm mb-2">
+                              {parsed.title}
+                            </div>
+                            {parsed.description && (
+                              <div className="text-xs text-gray-600">
+                                {parsed.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Thời gian */}
+                        <div className="text-xs text-gray-400 mt-1 text-left px-1">
+                          {formatTimestamp(m.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
                 // Nếu là tin nhắn file hoặc ảnh không có text, hiển thị không có khung bong bóng
                 if (isFileMessage || isImageWithoutText) {
@@ -443,7 +634,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                   // Nếu là ảnh không có text
                   if (isImageWithoutText) {
                     return (
-                      <div key={m.id} className="flex items-start gap-2 justify-start">
+                      <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                         {/* Avatar bên trái */}
                         <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                           {senderAvatar ? (
@@ -501,7 +692,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                   }
 
                   return (
-                    <div key={m.id} className="flex items-start gap-2 justify-start">
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                       {/* Avatar bên trái */}
                       <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                         {senderAvatar ? (
@@ -547,23 +738,30 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                               )}
                             </div>
                             <div className="flex flex-col gap-1">
-                              <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                              <Tooltip open={errorTooltip.show && errorTooltip.target === `open-${m.id}`}>
                                 <TooltipTrigger asChild>
                                   <button 
                                     className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (parsed.fileUrl) {
                                         try {
+                                          // Thử fetch file trước để kiểm tra quyền truy cập
+                                          const response = await fetch(parsed.fileUrl, { method: 'HEAD' });
+                                          if (!response.ok) {
+                                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                          }
+                                          
                                           window.open(parsed.fileUrl, '_blank');
                                           setErrorTooltip({ show: false, message: '', target: '' });
                                         } catch (error) {
                                           console.error('Error opening file:', error);
+                                          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                                           setErrorTooltip({ 
                                             show: true, 
-                                            message: 'Không thể mở file. Vui lòng thử tải xuống.', 
+                                            message: `Không thể mở file: ${errorMessage}. File có thể đã hết hạn hoặc không có quyền truy cập.`, 
                                             target: `open-${m.id}` 
                                           });
-                                          setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 3000);
+                                          setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 5000);
                                         }
                                       }
                                     }}
@@ -575,10 +773,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Mở file'}</p>
+                                  <p>{errorTooltip.show && errorTooltip.target === `open-${m.id}` ? errorTooltip.message : 'Mở file'}</p>
                                 </TooltipContent>
                               </Tooltip>
-                              <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                              <Tooltip open={errorTooltip.show && errorTooltip.target === `download-${m.id}`}>
                                 <TooltipTrigger asChild>
                                   <button 
                                     className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
@@ -619,7 +817,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Tải xuống'}</p>
+                                  <p>{errorTooltip.show && errorTooltip.target === `download-${m.id}` ? errorTooltip.message : 'Tải xuống'}</p>
                                 </TooltipContent>
                               </Tooltip>
                             </div>
@@ -636,7 +834,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 }
 
                 return (
-                  <div key={m.id} className="flex items-start gap-2 justify-start">
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                     {/* Avatar bên trái */}
                     <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                       {senderAvatar ? (
@@ -701,7 +899,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                   return '📝 Tin nhắn hệ thống';
                                 }
                               }
-                              return m.content || '📝 Tin nhắn hệ thống';
+                              return String(m.content || '📝 Tin nhắn hệ thống');
                             }
                             
                             // Xử lý tất cả loại content có JSON (TEXT, IMAGE, FILE, etc.)
@@ -720,7 +918,114 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 
                                 // Xử lý tin nhắn TEXT
                                 if (parsed.text) {
-                                  return parsed.text;
+                                  const textContent = String(parsed.text);
+                                  // Hỗ trợ xuống dòng với \n
+                                  return (
+                                    <div>
+                                      {/* Hiển thị quoted message nếu có */}
+                                      {m.quoted_message && (
+                                        <div 
+                                          className="mb-2 pl-3 border-l-4 border-blue-400 bg-gray-100/50 rounded py-2 px-3 cursor-pointer hover:bg-gray-200/50 transition-colors"
+                                          onClick={() => scrollToMessage(m.quoted_message.id)}
+                                        >
+                                          <div className="text-xs font-bold text-gray-900 mb-1">
+                                            {m.quoted_message.sender_name || 'Unknown'}
+                                          </div>
+                                          <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                            {(() => {
+                                              // Render quoted content based on content_type
+                                              if (m.quoted_message.content_type === 'TEXT' && m.quote_text) {
+                                                return String(m.quote_text);
+                                              } else if (m.quoted_message.content_type === 'IMAGE') {
+                                                try {
+                                                  // Thử lấy thumbnail từ quote.attach trước
+                                                  let thumbnailUrl = null;
+                                                  if (m.metadata?.raw_websocket_data?.quote?.attach) {
+                                                    const attachData = JSON.parse(m.metadata.raw_websocket_data.quote.attach);
+                                                    thumbnailUrl = attachData.thumbUrl || attachData.thumb;
+                                                  }
+                                                  
+                                                  // Nếu không có, thử từ quoted_message.content
+                                                  if (!thumbnailUrl) {
+                                                    const parsed = JSON.parse(m.quoted_message.content);
+                                                    thumbnailUrl = parsed.thumbnailUrl || parsed.imageUrl;
+                                                  }
+                                                  
+                                                  return (
+                                                    <div className="flex items-center gap-2">
+                                                      {thumbnailUrl ? (
+                                                        <img 
+                                                          src={thumbnailUrl} 
+                                                          alt="Quoted image" 
+                                                          className="w-6 h-6 rounded object-cover flex-shrink-0"
+                                                          onError={(e) => {
+                                                            e.currentTarget.style.display = 'none';
+                                                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                          }}
+                                                        />
+                                                      ) : null}
+                                                      <div className={`w-6 h-6 bg-gray-300 rounded flex items-center justify-center flex-shrink-0 ${thumbnailUrl ? 'hidden' : ''}`}>
+                                                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                      </div>
+                                                      <span>Ảnh</span>
+                                                    </div>
+                                                  );
+                                                } catch {
+                                                  return '📷 Ảnh';
+                                                }
+                                              } else if (m.quoted_message.content_type === 'FILE') {
+                                                try {
+                                                  const parsed = JSON.parse(m.quoted_message.content);
+                                                  return `📄 ${parsed.fileName || 'File'}`;
+                                                } catch {
+                                                  return '📄 File';
+                                                }
+                                              }
+                                              return m.quote_text ? String(m.quote_text) : 'Tin nhắn';
+                                            })()}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Tin nhắn chính */}
+                                      <span style={{ whiteSpace: 'pre-wrap' }}>
+                                        {textContent}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Xử lý tin nhắn LINK (link preview)
+                                if (parsed.href || parsed.url) {
+                                  return (
+                                    <a 
+                                      href={String(parsed.href || parsed.url)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block bg-white border border-gray-200 rounded-lg overflow-hidden hover:bg-gray-50 transition-colors max-w-[350px]"
+                                    >
+                                      {parsed.thumb && (
+                                        <img 
+                                          src={String(parsed.thumb)}
+                                          alt={String(parsed.title || 'Link')}
+                                          className="w-full h-32 object-cover"
+                                        />
+                                      )}
+                                      <div className="p-3">
+                                        {parsed.title && (
+                                          <div className="font-medium text-sm text-gray-900 mb-1">
+                                            {String(parsed.title)}
+                                          </div>
+                                        )}
+                                        {parsed.description && (
+                                          <div className="text-xs text-gray-600 line-clamp-2">
+                                            {String(parsed.description)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </a>
+                                  );
                                 }
                                 
                                 // Xử lý tin nhắn IMAGE
@@ -731,6 +1036,20 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                   if (isImageWithoutText) {
                                     return (
                                       <div className="w-full">
+                                        {/* Hiển thị quoted message nếu có */}
+                                        {m.quoted_message && m.quote_text && (
+                                          <div 
+                                          className="mb-2 pl-3 border-l-4 border-blue-400 bg-gray-100/50 rounded py-2 px-3 cursor-pointer hover:bg-gray-200/50 transition-colors"
+                                          onClick={() => scrollToMessage(m.quoted_message.id)}
+                                        >
+                                            <div className="text-xs font-bold text-gray-900 mb-1">
+                                              {m.quoted_message.sender_name || 'Unknown'}
+                                            </div>
+                                            <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                              {String(m.quote_text)}
+                                            </div>
+                                          </div>
+                                        )}
                                         <img 
                                           src={parsed.imageUrl} 
                                           alt={parsed.title || 'Image'} 
@@ -763,6 +1082,20 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                   } else {
                                     return (
                                       <div className="w-full">
+                                        {/* Hiển thị quoted message nếu có */}
+                                        {m.quoted_message && m.quote_text && (
+                                          <div 
+                                          className="mb-2 pl-3 border-l-4 border-blue-400 bg-gray-100/50 rounded py-2 px-3 cursor-pointer hover:bg-gray-200/50 transition-colors"
+                                          onClick={() => scrollToMessage(m.quoted_message.id)}
+                                        >
+                                            <div className="text-xs font-bold text-gray-900 mb-1">
+                                              {m.quoted_message.sender_name || 'Unknown'}
+                                            </div>
+                                            <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                              {String(m.quote_text)}
+                                            </div>
+                                          </div>
+                                        )}
                                         <div className="relative">
                                           <img 
                                             src={parsed.imageUrl} 
@@ -805,6 +1138,102 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                       </div>
                                     );
                                   }
+                                }
+                                
+                                // Xử lý tin nhắn STICKER
+                                if (parsed.stickerId && parsed.stickerUrl) {
+                                  return (
+                                    <div className="inline-block">
+                                      <img 
+                                        src={parsed.stickerUrl} 
+                                        alt={parsed.description || 'Sticker'} 
+                                        className="w-24 h-24 object-contain cursor-pointer hover:scale-110 transition-transform"
+                                        title={parsed.description || 'Sticker'}
+                                      />
+                                    </div>
+                                  );
+                                }
+                                
+                                // Xử lý tin nhắn BIRTHDAY GREETING (chúc mừng sinh nhật)
+                                if (parsed.title && parsed.href && parsed.action === 'show.profile') {
+                                  return (
+                                    <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-[300px]">
+                                      {/* Birthday Image */}
+                                      <div className="relative">
+                                        <img 
+                                          src={parsed.href} 
+                                          alt={parsed.title}
+                                          className="w-full h-auto object-cover"
+                                          style={{ maxHeight: '200px' }}
+                                        />
+                                      </div>
+                                      
+                                      {/* Content */}
+                                      <div className="p-4">
+                                        <div className="font-semibold text-gray-900 text-sm mb-2">
+                                          {parsed.title}
+                                        </div>
+                                        {parsed.description && (
+                                          <div className="text-xs text-gray-600">
+                                            {parsed.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Xử lý tin nhắn CONTACT (danh thiếp)
+                                if (parsed.contactName && parsed.contactId) {
+                                  return (
+                                    <div className="bg-white rounded-2xl shadow-lg overflow-hidden w-[300px]">
+                                      {/* Header với background xanh */}
+                                      <div className="bg-blue-500 px-5 pt-6 pb-8 relative">
+                                        <div className="flex items-start gap-3">
+                                          <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-white flex-shrink-0">
+                                            {parsed.contactAvatar ? (
+                                              <img 
+                                                src={parsed.contactAvatar} 
+                                                alt={parsed.contactName}
+                                                className="w-full h-full object-cover"
+                                              />
+                                            ) : (
+                                              <svg className="w-full h-full text-gray-400 p-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                              </svg>
+                                            )}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-semibold text-white text-base truncate mb-0.5">{parsed.contactName}</div>
+                                            <div className="text-xs text-white/90 truncate">{parsed.contactId}</div>
+                                          </div>
+                                        </div>
+                                        {/* QR Code positioned in bottom right of blue area */}
+                                        {parsed.qrCodeUrl && (
+                                          <div className="absolute bottom-2 right-2">
+                                            <div className="bg-white p-1 rounded">
+                                              <img 
+                                                src={parsed.qrCodeUrl} 
+                                                alt="QR Code"
+                                                className="w-16 h-16 object-contain"
+                                              />
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                      
+                                      {/* Buttons */}
+                                      <div className="flex">
+                                        <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                                          Gọi Điện
+                                        </button>
+                                        <div className="w-px bg-gray-200"></div>
+                                        <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                                          Nhắn Tin
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
                                 }
                                 
                                 // Xử lý tin nhắn FILE
@@ -859,6 +1288,72 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
 
                                   return (
                                     <div className="w-full max-w-sm">
+                                      {/* Hiển thị quoted message nếu có */}
+                                      {m.quoted_message && (
+                                        <div 
+                                          className="mb-2 pl-3 border-l-4 border-blue-400 bg-gray-100/50 rounded py-2 px-3 cursor-pointer hover:bg-gray-200/50 transition-colors"
+                                          onClick={() => scrollToMessage(m.quoted_message.id)}
+                                        >
+                                          <div className="text-xs font-bold text-gray-900 mb-1">
+                                            {m.quoted_message.sender_name || 'Unknown'}
+                                          </div>
+                                          <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                            {(() => {
+                                              // Render quoted content based on content_type
+                                              if (m.quoted_message.content_type === 'TEXT' && m.quote_text) {
+                                                return String(m.quote_text);
+                                              } else if (m.quoted_message.content_type === 'IMAGE') {
+                                                try {
+                                                  // Thử lấy thumbnail từ quote.attach trước
+                                                  let thumbnailUrl = null;
+                                                  if (m.metadata?.raw_websocket_data?.quote?.attach) {
+                                                    const attachData = JSON.parse(m.metadata.raw_websocket_data.quote.attach);
+                                                    thumbnailUrl = attachData.thumbUrl || attachData.thumb;
+                                                  }
+                                                  
+                                                  // Nếu không có, thử từ quoted_message.content
+                                                  if (!thumbnailUrl) {
+                                                    const parsed = JSON.parse(m.quoted_message.content);
+                                                    thumbnailUrl = parsed.thumbnailUrl || parsed.imageUrl;
+                                                  }
+                                                  
+                                                  return (
+                                                    <div className="flex items-center gap-2">
+                                                      {thumbnailUrl ? (
+                                                        <img 
+                                                          src={thumbnailUrl} 
+                                                          alt="Quoted image" 
+                                                          className="w-6 h-6 rounded object-cover flex-shrink-0"
+                                                          onError={(e) => {
+                                                            e.currentTarget.style.display = 'none';
+                                                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                          }}
+                                                        />
+                                                      ) : null}
+                                                      <div className={`w-6 h-6 bg-gray-300 rounded flex items-center justify-center flex-shrink-0 ${thumbnailUrl ? 'hidden' : ''}`}>
+                                                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                      </div>
+                                                      <span>Ảnh</span>
+                                                    </div>
+                                                  );
+                                                } catch {
+                                                  return '📷 Ảnh';
+                                                }
+                                              } else if (m.quoted_message.content_type === 'FILE') {
+                                                try {
+                                                  const parsed = JSON.parse(m.quoted_message.content);
+                                                  return `📄 ${parsed.fileName || 'File'}`;
+                                                } catch {
+                                                  return '📄 File';
+                                                }
+                                              }
+                                              return m.quote_text ? String(m.quote_text) : 'Tin nhắn';
+                                            })()}
+                                          </div>
+                                        </div>
+                                      )}
                                       <div className="flex items-start gap-3 p-3 bg-white rounded-xl">
                                         {getFileIcon(parsed.fileExtension)}
                                         <div className="flex-1 min-w-0">
@@ -881,23 +1376,30 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                           )}
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                          <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                                          <Tooltip open={errorTooltip.show && errorTooltip.target === `open-${m.id}`}>
                                             <TooltipTrigger asChild>
                                               <button 
                                                 className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
-                                                onClick={() => {
+                                                onClick={async () => {
                                                   if (parsed.fileUrl) {
                                                     try {
+                                                      // Thử fetch file trước để kiểm tra quyền truy cập
+                                                      const response = await fetch(parsed.fileUrl, { method: 'HEAD' });
+                                                      if (!response.ok) {
+                                                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                                      }
+                                                      
                                                       window.open(parsed.fileUrl, '_blank');
                                                       setErrorTooltip({ show: false, message: '', target: '' });
                                                     } catch (error) {
                                                       console.error('Error opening file:', error);
+                                                      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                                                       setErrorTooltip({ 
                                                         show: true, 
-                                                        message: 'Không thể mở file. Vui lòng thử tải xuống.', 
+                                                        message: `Không thể mở file: ${errorMessage}. File có thể đã hết hạn hoặc không có quyền truy cập.`, 
                                                         target: `open-${m.id}` 
                                                       });
-                                                      setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 3000);
+                                                      setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 5000);
                                                     }
                                                   }
                                                 }}
@@ -909,10 +1411,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                               </button>
                                             </TooltipTrigger>
                                             <TooltipContent>
-                                              <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Mở file'}</p>
+                                              <p>{errorTooltip.show && errorTooltip.target === `open-${m.id}` ? errorTooltip.message : 'Mở file'}</p>
                                             </TooltipContent>
                                           </Tooltip>
-                                          <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`)}>
+                                          <Tooltip open={errorTooltip.show && errorTooltip.target === `download-${m.id}`}>
                                             <TooltipTrigger asChild>
                                               <button 
                                                 className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
@@ -951,7 +1453,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                               </button>
                                             </TooltipTrigger>
                                             <TooltipContent>
-                                              <p>{errorTooltip.show && (errorTooltip.target === `open-${m.id}` || errorTooltip.target === `download-${m.id}`) ? errorTooltip.message : 'Tải xuống'}</p>
+                                              <p>{errorTooltip.show && errorTooltip.target === `download-${m.id}` ? errorTooltip.message : 'Tải xuống'}</p>
                                             </TooltipContent>
                                           </Tooltip>
                                         </div>
@@ -960,9 +1462,22 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                   );
                                 }
                                 
-                                if (parsed.action) return `🔧 ${parsed.action}`;
+                                if (parsed.action) return `🔧 ${String(parsed.action)}`;
                                 
-                                // Nếu không match với bất kỳ loại nào, hiển thị raw JSON
+                                // Nếu không match với bất kỳ loại nào, hiển thị text từ object
+                                const extractedText = String(
+                                  parsed?.text ||
+                                  parsed?.title ||
+                                  parsed?.description ||
+                                  parsed?.message ||
+                                  ''
+                                );
+                                
+                                if (extractedText) {
+                                  return extractedText;
+                                }
+                                
+                                // Nếu không extract được gì, hiển thị raw JSON
                                 return (
                                   <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
                                     <pre className="whitespace-pre-wrap">
@@ -973,18 +1488,30 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
 
                               } catch (error) {
                                 // Nếu không parse được JSON, hiển thị raw content
-                                return m.content;
+                                return String(m.content || '');
                               }
                             }
                             
                             // Xử lý content không phải JSON
                             if (typeof m.content === 'string') {
-                              return m.content;
+                              return String(m.content || '');
                             }
                             
-                            // Nếu content là object, convert thành string
+                            // Nếu content là object, extract text fields safely
                             if (typeof m.content === 'object' && m.content !== null) {
-                              return JSON.stringify(m.content, null, 2);
+                              try {
+                                const content = m.content as any;
+                                const extractedText = String(
+                                  content?.text || 
+                                  content?.title || 
+                                  content?.description || 
+                                  content?.message ||
+                                  JSON.stringify(content)
+                                );
+                                return extractedText;
+                              } catch (err) {
+                                return '[Không thể hiển thị nội dung]';
+                              }
                             }
                             
                             // Fallback cuối cùng - hiển thị raw JSON để debug
@@ -993,10 +1520,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 <div className="text-xs text-gray-600 bg-yellow-100 p-2 rounded border">
                                   <div className="font-semibold mb-1">🔍 DEBUG - Raw Content:</div>
                                   <pre className="whitespace-pre-wrap text-xs">
-                                    {m.content}
+                                    {String(m.content)}
                                   </pre>
                                   <div className="mt-1 text-xs text-gray-500">
-                                    Type: {m.content_type} | ID: {m.id}
+                                    Type: {String(m.content_type)} | ID: {String(m.id)}
                                   </div>
                                 </div>
                               );
@@ -1006,7 +1533,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                               <div className="text-xs text-gray-600 bg-red-100 p-2 rounded border">
                                 <div className="font-semibold mb-1">❌ DEBUG - Empty Content:</div>
                                 <div className="text-xs text-gray-500">
-                                  Type: {m.content_type} | ID: {m.id} | Content: "{m.content}"
+                                  Type: {String(m.content_type)} | ID: {String(m.id)} | Content: "{String(m.content)}"
                                 </div>
                               </div>
                             );
@@ -1024,6 +1551,117 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
               }
 
               // Tin nhắn gửi (bên phải)
+              // Xử lý contact card riêng (không có khung bong bóng)
+              if (isContactCard) {
+                let parsed;
+                try {
+                  parsed = JSON.parse(m.content);
+                } catch {
+                  parsed = {};
+                }
+
+                return (
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                    <div className="flex flex-col items-end">
+                      {/* Contact Card */}
+                      <div className="bg-white rounded-lg shadow-md overflow-hidden w-[300px]">
+                        <div className="bg-blue-500 px-5 pt-6 pb-12 relative">
+                          <div className="flex items-start gap-3">
+                            <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-white flex-shrink-0">
+                              {parsed.contactAvatar ? (
+                                <img 
+                                  src={parsed.contactAvatar} 
+                                  alt={parsed.contactName}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <svg className="w-full h-full text-gray-400 p-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-white text-base truncate mb-0.5">{parsed.contactName}</div>
+                              <div className="text-xs text-white/90 truncate">{parsed.contactId}</div>
+                            </div>
+                          </div>
+                          {parsed.qrCodeUrl && (
+                            <div className="absolute bottom-2 right-2">
+                              <div className="bg-white p-1 rounded">
+                                <img 
+                                  src={parsed.qrCodeUrl} 
+                                  alt="QR Code"
+                                  className="w-16 h-16 object-contain"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex">
+                          <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                            Gọi Điện
+                          </button>
+                          <div className="w-px bg-gray-200"></div>
+                          <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                            Nhắn Tin
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Thời gian */}
+                      <div className="text-xs text-gray-400 mt-1 text-right px-1">
+                        {formatTimestamp(m.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Xử lý birthday greeting riêng (không có khung bong bóng)
+              if (isBirthdayGreeting) {
+                let parsed;
+                try {
+                  parsed = JSON.parse(m.content);
+                } catch {
+                  parsed = {};
+                }
+
+                return (
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                    <div className="flex flex-col items-end">
+                      {/* Birthday Greeting Card */}
+                      <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-[300px]">
+                        <div className="relative">
+                          <img 
+                            src={parsed.href} 
+                            alt={parsed.title}
+                            className="w-full h-auto object-cover"
+                            style={{ maxHeight: '200px' }}
+                          />
+                        </div>
+                        
+                        <div className="p-4">
+                          <div className="font-semibold text-gray-900 text-sm mb-2">
+                            {parsed.title}
+                          </div>
+                          {parsed.description && (
+                            <div className="text-xs text-gray-600">
+                              {parsed.description}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Thời gian */}
+                      <div className="text-xs text-gray-400 mt-1 text-right px-1">
+                        {formatTimestamp(m.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               // Nếu là tin nhắn file hoặc ảnh không có text, hiển thị không có khung bong bóng
               if (isFileMessage || isImageWithoutText) {
                 const getFileIcon = (extension: string) => {
@@ -1084,7 +1722,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 // Nếu là ảnh không có text
                 if (isImageWithoutText) {
                   return (
-                    <div key={m.id} className="flex items-start gap-2 justify-end">
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                       <div className="max-w-[70%] break-words">
                         {/* Ảnh - không có khung bong bóng */}
                         <img 
@@ -1137,7 +1775,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 }
 
                 return (
-                  <div key={m.id} className="flex items-start gap-2 justify-end">
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                     <div className="max-w-[70%] break-words">
                       {/* Nội dung file - không có khung bong bóng */}
                       <div className="w-full max-w-sm">
@@ -1163,23 +1801,30 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                             )}
                           </div>
                           <div className="flex flex-col gap-1">
-                            <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`)}>
+                            <Tooltip open={errorTooltip.show && errorTooltip.target === `open-out-${m.id}`}>
                               <TooltipTrigger asChild>
                                 <button 
                                   className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (parsed.fileUrl) {
                                       try {
+                                        // Thử fetch file trước để kiểm tra quyền truy cập
+                                        const response = await fetch(parsed.fileUrl, { method: 'HEAD' });
+                                        if (!response.ok) {
+                                          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                                        }
+                                        
                                         window.open(parsed.fileUrl, '_blank');
                                         setErrorTooltip({ show: false, message: '', target: '' });
                                       } catch (error) {
                                         console.error('Error opening file:', error);
+                                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                                         setErrorTooltip({ 
                                           show: true, 
-                                          message: 'Không thể mở file. Vui lòng thử tải xuống.', 
+                                          message: `Không thể mở file: ${errorMessage}. File có thể đã hết hạn hoặc không có quyền truy cập.`, 
                                           target: `open-out-${m.id}` 
                                         });
-                                        setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 3000);
+                                        setTimeout(() => setErrorTooltip({ show: false, message: '', target: '' }), 5000);
                                       }
                                     }
                                   }}
@@ -1191,10 +1836,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>{errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`) ? errorTooltip.message : 'Mở file'}</p>
+                                <p>{errorTooltip.show && errorTooltip.target === `open-out-${m.id}` ? errorTooltip.message : 'Mở file'}</p>
                               </TooltipContent>
                             </Tooltip>
-                            <Tooltip open={errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`)}>
+                            <Tooltip open={errorTooltip.show && errorTooltip.target === `download-out-${m.id}`}>
                               <TooltipTrigger asChild>
                                 <button 
                                   className="w-6 h-6 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-100"
@@ -1235,7 +1880,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>{errorTooltip.show && (errorTooltip.target === `open-out-${m.id}` || errorTooltip.target === `download-out-${m.id}`) ? errorTooltip.message : 'Tải xuống'}</p>
+                                <p>{errorTooltip.show && errorTooltip.target === `download-out-${m.id}` ? errorTooltip.message : 'Tải xuống'}</p>
                               </TooltipContent>
                             </Tooltip>
                           </div>
@@ -1267,10 +1912,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
               }
 
               return (
-                <div key={m.id} className="flex items-start gap-2 justify-end">
+                <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
                   <div className="max-w-[70%] break-words">
                     {/* Bubble tin nhắn */}
-                    <div className="px-4 py-2 rounded-2xl bg-blue-500 text-white rounded-br-md">
+                    <div className="px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm">
                       <div className="text-sm leading-relaxed break-words">
                         {(() => {
                           // Xử lý nội dung tin nhắn
@@ -1292,7 +1937,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 return '📝 Tin nhắn hệ thống';
                               }
                             }
-                            return m.content || '📝 Tin nhắn hệ thống';
+                            return String(m.content || '📝 Tin nhắn hệ thống');
                           }
                           
                           // Xử lý tất cả loại content có JSON (TEXT, IMAGE, FILE, etc.)
@@ -1311,7 +1956,114 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                               
                               // Xử lý tin nhắn TEXT
                               if (parsed.text) {
-                                return parsed.text;
+                                const textContent = String(parsed.text);
+                                // Hỗ trợ xuống dòng với \n
+                                return (
+                                  <div>
+                                    {/* Hiển thị quoted message nếu có */}
+                                    {m.quoted_message && (
+                                      <div 
+                                        className="mb-2 pl-3 border-l-4 border-blue-400 bg-blue-200/40 rounded py-2 px-3 cursor-pointer hover:bg-blue-300/50 transition-colors"
+                                        onClick={() => scrollToMessage(m.quoted_message.id)}
+                                      >
+                                        <div className="text-xs font-bold text-gray-900 mb-1">
+                                          {m.quoted_message.sender_name || 'Unknown'}
+                                        </div>
+                                        <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                          {(() => {
+                                            // Render quoted content based on content_type
+                                            if (m.quoted_message.content_type === 'TEXT' && m.quote_text) {
+                                              return String(m.quote_text);
+                                            } else if (m.quoted_message.content_type === 'IMAGE') {
+                                              try {
+                                                // Thử lấy thumbnail từ quote.attach trước
+                                                let thumbnailUrl = null;
+                                                if (m.metadata?.raw_websocket_data?.quote?.attach) {
+                                                  const attachData = JSON.parse(m.metadata.raw_websocket_data.quote.attach);
+                                                  thumbnailUrl = attachData.thumbUrl || attachData.thumb;
+                                                }
+                                                
+                                                // Nếu không có, thử từ quoted_message.content
+                                                if (!thumbnailUrl) {
+                                                  const parsed = JSON.parse(m.quoted_message.content);
+                                                  thumbnailUrl = parsed.thumbnailUrl || parsed.imageUrl;
+                                                }
+                                                
+                                                return (
+                                                  <div className="flex items-center gap-2">
+                                                    {thumbnailUrl ? (
+                                                      <img 
+                                                        src={thumbnailUrl} 
+                                                        alt="Quoted image" 
+                                                        className="w-6 h-6 rounded object-cover flex-shrink-0"
+                                                        onError={(e) => {
+                                                          e.currentTarget.style.display = 'none';
+                                                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                        }}
+                                                      />
+                                                    ) : null}
+                                                    <div className={`w-6 h-6 bg-gray-300 rounded flex items-center justify-center flex-shrink-0 ${thumbnailUrl ? 'hidden' : ''}`}>
+                                                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                      </svg>
+                                                    </div>
+                                                    <span>Ảnh</span>
+                                                  </div>
+                                                );
+                                              } catch {
+                                                return '📷 Ảnh';
+                                              }
+                                            } else if (m.quoted_message.content_type === 'FILE') {
+                                              try {
+                                                const parsed = JSON.parse(m.quoted_message.content);
+                                                return `📄 ${parsed.fileName || 'File'}`;
+                                              } catch {
+                                                return '📄 File';
+                                              }
+                                            }
+                                            return m.quote_text ? String(m.quote_text) : 'Tin nhắn';
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {/* Tin nhắn chính */}
+                                    <span style={{ whiteSpace: 'pre-wrap' }}>
+                                      {textContent}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              
+                              // Xử lý tin nhắn LINK (link preview)
+                              if (parsed.href || parsed.url) {
+                                return (
+                                  <a 
+                                    href={String(parsed.href || parsed.url)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block bg-white border border-gray-200 rounded-lg overflow-hidden hover:bg-gray-50 transition-colors max-w-[350px]"
+                                  >
+                                    {parsed.thumb && (
+                                      <img 
+                                        src={String(parsed.thumb)}
+                                        alt={String(parsed.title || 'Link')}
+                                        className="w-full h-32 object-cover"
+                                      />
+                                    )}
+                                    <div className="p-3">
+                                      {parsed.title && (
+                                        <div className="font-medium text-sm text-gray-900 mb-1">
+                                          {String(parsed.title)}
+                                        </div>
+                                      )}
+                                      {parsed.description && (
+                                        <div className="text-xs text-gray-600 line-clamp-2">
+                                          {String(parsed.description)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </a>
+                                );
                               }
                               
                                 // Xử lý tin nhắn IMAGE
@@ -1322,6 +2074,20 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 if (isImageWithoutText) {
                                   return (
                                     <div className="w-full">
+                                      {/* Hiển thị quoted message nếu có */}
+                                      {m.quoted_message && m.quote_text && (
+                                        <div 
+                                        className="mb-2 pl-3 border-l-4 border-blue-400 bg-blue-200/40 rounded py-2 px-3 cursor-pointer hover:bg-blue-300/50 transition-colors"
+                                        onClick={() => scrollToMessage(m.quoted_message.id)}
+                                      >
+                                          <div className="text-xs font-bold text-gray-900 mb-1">
+                                            {m.quoted_message.sender_name || 'Unknown'}
+                                          </div>
+                                          <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                            {String(m.quote_text)}
+                                          </div>
+                                        </div>
+                                      )}
                                       <img 
                                         src={parsed.imageUrl} 
                                         alt={parsed.title || 'Image'} 
@@ -1354,6 +2120,20 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 } else {
                                   return (
                                     <div className="w-full">
+                                      {/* Hiển thị quoted message nếu có */}
+                                      {m.quoted_message && m.quote_text && (
+                                        <div 
+                                        className="mb-2 pl-3 border-l-4 border-blue-400 bg-blue-200/40 rounded py-2 px-3 cursor-pointer hover:bg-blue-300/50 transition-colors"
+                                        onClick={() => scrollToMessage(m.quoted_message.id)}
+                                      >
+                                          <div className="text-xs font-bold text-gray-900 mb-1">
+                                            {m.quoted_message.sender_name || 'Unknown'}
+                                          </div>
+                                          <div className="text-xs text-gray-600 line-clamp-3" style={{ whiteSpace: 'pre-wrap' }}>
+                                            {String(m.quote_text)}
+                                          </div>
+                                        </div>
+                                      )}
                                       <div className="relative">
                                         <img 
                                           src={parsed.imageUrl} 
@@ -1398,7 +2178,103 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 }
                               }
                               
-                              if (parsed.action) return `🔧 ${parsed.action}`;
+                              // Xử lý tin nhắn STICKER
+                              if (parsed.stickerId && parsed.stickerUrl) {
+                                return (
+                                  <div className="inline-block">
+                                    <img 
+                                      src={parsed.stickerUrl} 
+                                      alt={parsed.description || 'Sticker'} 
+                                      className="w-24 h-24 object-contain cursor-pointer hover:scale-110 transition-transform"
+                                      title={parsed.description || 'Sticker'}
+                                    />
+                                  </div>
+                                );
+                              }
+                              
+                              // Xử lý tin nhắn BIRTHDAY GREETING (chúc mừng sinh nhật)
+                              if (parsed.title && parsed.href && parsed.action === 'show.profile') {
+                                return (
+                                  <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-[300px]">
+                                    {/* Birthday Image */}
+                                    <div className="relative">
+                                      <img 
+                                        src={parsed.href} 
+                                        alt={parsed.title}
+                                        className="w-full h-auto object-cover"
+                                        style={{ maxHeight: '200px' }}
+                                      />
+                                    </div>
+                                    
+                                    {/* Content */}
+                                    <div className="p-4">
+                                      <div className="font-semibold text-gray-900 text-sm mb-2">
+                                        {parsed.title}
+                                      </div>
+                                      {parsed.description && (
+                                        <div className="text-xs text-gray-600">
+                                          {parsed.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              // Xử lý tin nhắn CONTACT (danh thiếp)
+                              if (parsed.contactName && parsed.contactId) {
+                                return (
+                                  <div className="bg-white rounded-2xl shadow-lg overflow-hidden w-[300px]">
+                                    {/* Header với background xanh */}
+                                    <div className="bg-blue-500 px-5 pt-6 pb-8 relative">
+                                      <div className="flex items-start gap-3">
+                                        <div className="w-14 h-14 rounded-full overflow-hidden bg-white border-2 border-white flex-shrink-0">
+                                          {parsed.contactAvatar ? (
+                                            <img 
+                                              src={parsed.contactAvatar} 
+                                              alt={parsed.contactName}
+                                              className="w-full h-full object-cover"
+                                            />
+                                          ) : (
+                                            <svg className="w-full h-full text-gray-400 p-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                          )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-semibold text-white text-base truncate mb-0.5">{parsed.contactName}</div>
+                                          <div className="text-xs text-white/90 truncate">{parsed.contactId}</div>
+                                        </div>
+                                      </div>
+                                      {/* QR Code positioned in bottom right of blue area */}
+                                      {parsed.qrCodeUrl && (
+                                        <div className="absolute bottom-2 right-2">
+                                          <div className="bg-white p-1 rounded">
+                                            <img 
+                                              src={parsed.qrCodeUrl} 
+                                              alt="QR Code"
+                                              className="w-16 h-16 object-contain"
+                                            />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Buttons */}
+                                    <div className="flex">
+                                      <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                                        Gọi Điện
+                                      </button>
+                                      <div className="w-px bg-gray-200"></div>
+                                      <button className="flex-1 py-3 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors">
+                                        Nhắn Tin
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              if (parsed.action) return `🔧 ${String(parsed.action)}`;
                               
                               // Xử lý tin nhắn file
                               if (parsed.fileName || parsed.fileUrl) {
@@ -1491,7 +2367,20 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                                 );
                               }
                               
-                              // Nếu không match với bất kỳ loại nào, hiển thị raw JSON
+                              // Nếu không match với bất kỳ loại nào, hiển thị text từ object
+                              const extractedText = String(
+                                parsed?.text ||
+                                parsed?.title ||
+                                parsed?.description ||
+                                parsed?.message ||
+                                ''
+                              );
+                              
+                              if (extractedText) {
+                                return extractedText;
+                              }
+                              
+                              // Nếu không extract được gì, hiển thị raw JSON
                               return (
                                 <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
                                   <pre className="whitespace-pre-wrap">
@@ -1501,13 +2390,30 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                               );
                             } catch (error) {
                               // Nếu không parse được JSON, hiển thị raw content
-                              return m.content;
+                              return String(m.content || '');
                             }
                           }
                           
                           // Xử lý content không phải JSON
                           if (typeof m.content === 'string') {
-                            return m.content;
+                            return String(m.content);
+                          }
+                          
+                          // Nếu content là object, extract text fields safely
+                          if (typeof m.content === 'object' && m.content !== null) {
+                            try {
+                              const content = m.content as any;
+                              const extractedText = String(
+                                content?.text || 
+                                content?.title || 
+                                content?.description || 
+                                content?.message ||
+                                JSON.stringify(content)
+                              );
+                              return extractedText;
+                            } catch (err) {
+                              return '[Không thể hiển thị nội dung]';
+                            }
                           }
                           
                           // Fallback cuối cùng - hiển thị raw JSON để debug
@@ -1516,10 +2422,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                               <div className="text-xs text-gray-600 bg-yellow-100 p-2 rounded border">
                                 <div className="font-semibold mb-1">🔍 DEBUG - Raw Content:</div>
                                 <pre className="whitespace-pre-wrap text-xs">
-                                  {m.content}
+                                  {String(m.content)}
                                 </pre>
                                 <div className="mt-1 text-xs text-gray-500">
-                                  Type: {m.content_type} | ID: {m.id}
+                                  Type: {String(m.content_type)} | ID: {String(m.id)}
                                 </div>
                               </div>
                             );
@@ -1529,7 +2435,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                             <div className="text-xs text-gray-600 bg-red-100 p-2 rounded border">
                               <div className="font-semibold mb-1">❌ DEBUG - Empty Content:</div>
                               <div className="text-xs text-gray-500">
-                                Type: {m.content_type} | ID: {m.id} | Content: "{m.content}"
+                                Type: {String(m.content_type)} | ID: {String(m.id)} | Content: "{String(m.content)}"
                               </div>
                             </div>
                           );
@@ -1585,7 +2491,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
             <input
               value={messageText}
               onChange={(e) => canSendMessages && setMessageText(e.target.value)}
-              placeholder={canSendMessages ? `Nhập @, tin nhắn tới ${conversation.conversation_name.split('_').pop() || 'bạn'}` : 'Không thể gửi tin nhắn'}
+              placeholder={canSendMessages ? `Nhập @, tin nhắn tới ${(conversation.conversation_name?.replace(/^(PrivateChat_|privatechat_)/i, '') || conversation.conversation_name)}` : 'Không thể gửi tin nhắn'}
               disabled={!canSendMessages}
               className="w-full px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 text-sm"
               onKeyDown={(e) => {

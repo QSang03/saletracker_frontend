@@ -33,21 +33,10 @@ export function SendHistoryView({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10; // Giảm từ 20 xuống 10 để phân trang rõ ràng hơn
 
-  // Extract zalo customer ID from metadata
-  let zaloCustomerId: string | undefined;
-  try {
-    if (orderDetail.metadata) {
-      const metadata =
-        typeof orderDetail.metadata === "string"
-          ? JSON.parse(orderDetail.metadata)
-          : orderDetail.metadata;
-      zaloCustomerId = metadata.customer_id;
-    }
-  } catch (error) {
-    console.error("Error parsing metadata for send history:", error);
-  }
+  // Use order detail ID for filtering send history
+  const orderDetailId = orderDetail.id;
 
-  // Fetch send history for this customer
+  // Fetch send history for this order detail
   const {
     data: sendHistory,
     total,
@@ -55,13 +44,14 @@ export function SendHistoryView({
     error,
     refetch,
   } = useSendHistory({
-    zalo_customer_id: zaloCustomerId,
-    send_function: "handleSendInquiry",
+    order_detail_id: orderDetailId,
+    send_function: "handleQuoteReply", // Updated function name
+    notes: `Order Detail #${orderDetailId}`, // Filter by notes containing order detail ID
     page: currentPage,
     pageSize: pageSize,
   });
 
-  // Count total sent messages for this customer
+  // Count total sent messages for this order detail
   const totalSentCount = total || 0;
 
   const formatDate = (dateString: string) => {
@@ -87,10 +77,6 @@ export function SendHistoryView({
       refetch();
     }
   };
-
-  if (!zaloCustomerId) {
-    return null; // Don't show if no customer ID available
-  }
 
   return (
     <div className={className}>
@@ -118,7 +104,7 @@ export function SendHistoryView({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MessageCircle className="h-5 w-5" />
-              Lịch sử gửi tin nhắn - {orderDetail.customer_name || "Unknown"}
+              Lịch sử gửi tin nhắn - Đơn hàng #{orderDetail.id}
               <Badge variant="outline">{totalSentCount} lần gửi</Badge>
             </DialogTitle>
           </DialogHeader>
@@ -138,7 +124,7 @@ export function SendHistoryView({
             ) : sendHistory.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Chưa có tin nhắn nào được gửi cho khách hàng này</p>
+                <p>Chưa có tin nhắn nào được gửi cho đơn hàng này</p>
               </div>
             ) : (
               <Table>

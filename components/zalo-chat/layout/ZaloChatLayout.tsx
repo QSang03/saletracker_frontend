@@ -12,6 +12,7 @@ export default function ZaloChatLayout() {
   const userId = useMemo(() => user?.id ? Number(user.id) : null, [user?.id]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const hasAutoSelectedRef = React.useRef(false);
 
   console.log('🏗️ ZaloChatLayout Debug:', { 
     user, 
@@ -19,12 +20,13 @@ export default function ZaloChatLayout() {
     userRoles: user?.roles 
   });
 
-  // Auto-select first conversation when conversations load
+  // Auto-select first conversation ONLY on initial load (lần đầu vào trang)
   useEffect(() => {
-    if (conversations.length > 0 && !activeConversation) {
+    if (conversations.length > 0 && !activeConversation && !hasAutoSelectedRef.current) {
       const firstConversation = conversations[0];
-      console.log('🎯 Auto-selecting first conversation:', firstConversation.conversation_name);
+      console.log('🎯 Auto-selecting first conversation (initial load):', firstConversation.conversation_name);
       setActiveConversation(firstConversation);
+      hasAutoSelectedRef.current = true; // Đánh dấu đã auto-select rồi
     }
   }, [conversations, activeConversation]);
 
@@ -37,7 +39,7 @@ export default function ZaloChatLayout() {
   }
 
   return (
-    <div className="h-screen w-screen grid" style={{ gridTemplateColumns: '380px 1fr 0px' }}>
+    <div className="h-screen w-screen grid overflow-hidden" style={{ gridTemplateColumns: '450px 1fr 0px' }}>
       <div className="border-r border-border overflow-hidden">
         <ChatSidebar 
           userId={userId} 

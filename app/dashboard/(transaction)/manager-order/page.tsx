@@ -866,97 +866,6 @@ function ManagerOrderContent() {
     [bulkHideOrderDetails, refetch, saveCurrentPosition]
   );
 
-  // ✅ Handle send inquiry
-  const handleSendInquiry = useCallback(
-    async (orderDetail: OrderDetail, message: string) => {
-      try {
-        // ✅ Lưu vị trí hiện tại trước khi thực hiện thao tác
-        saveCurrentPosition();
-
-        // ✅ Extract customer information from metadata
-        if (!orderDetail.metadata) {
-          throw new Error("Không tìm thấy thông tin khách hàng trong order detail");
-        }
-
-        let metadata;
-        try {
-          metadata = typeof orderDetail.metadata === 'string' 
-            ? JSON.parse(orderDetail.metadata) 
-            : orderDetail.metadata;
-        } catch (parseError) {
-          throw new Error("Không thể đọc thông tin metadata của order detail");
-        }
-
-        const zaloCustomerId = metadata.customer_id;
-        const conversationInfo = metadata.conversation_info;
-        
-        if (!zaloCustomerId) {
-          throw new Error("Không tìm thấy ID khách hàng Zalo trong order detail");
-        }
-
-        if (!conversationInfo) {
-          throw new Error("Không tìm thấy thông tin cuộc hội thoại trong order detail");
-        }
-
-        // ✅ Determine customer type based on conversation info
-        const customerType = conversationInfo.is_group ? "group" : "private";
-
-        // ✅ Get current user ID
-        if (!user?.id) {
-          throw new Error("Không tìm thấy thông tin người dùng hiện tại");
-        }
-
-        // ✅ Prepare API payload
-        const payload = {
-          user_id: user.id,
-          message_content: message,
-          zalo_customer_id: zaloCustomerId,
-          customer_type: customerType,
-          send_function: "handleSendInquiry",
-          // Ghi chú từ order detail để theo dõi lịch sử
-          notes: orderDetail.notes || `Order #${orderDetail.id} - ${orderDetail.customer_name || 'Unknown'}`,
-        };
-
-        // ✅ Call the send message API
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/send-message`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-master-key": process.env.NEXT_PUBLIC_MASTER_KEY || "nkcai",
-            "accept": "application/json"
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          const errorMessage = errorData?.message || `HTTP ${response.status}: ${response.statusText}`;
-          throw new Error(`Lỗi khi gửi tin nhắn: ${errorMessage}`);
-        }
-
-        const result = await response.json();
-        
-        if (!result.success) {
-          throw new Error(result.message || "Gửi tin nhắn thất bại");
-        }
-
-        console.log('✅ Message sent successfully:', result);
-        
-        setAlert({
-          type: "success",
-          message: "Đã gửi câu hỏi thăm dò thành công!",
-        });
-        refetch();
-      } catch (err: any) {
-        console.error("Error sending inquiry:", err);
-        const errorMessage = err.message || "Lỗi khi gửi câu hỏi thăm dò!";
-        setAlert({ type: "error", message: errorMessage });
-        throw err; // Re-throw để modal có thể hiển thị lỗi
-      }
-    },
-    [refetch, saveCurrentPosition, user?.id]
-  );
-
   const handleReload = useCallback(() => {
     refetch();
   }, [refetch]);
@@ -1597,7 +1506,6 @@ function ManagerOrderContent() {
               onEditCustomerName={handleEditCustomerName}
               onAddToBlacklist={handleAddToBlacklist}
               onAnalysisBlock={handleAnalysisBlock}
-              onSendInquiry={handleSendInquiry}
               checkContactBlocked={checkContactBlocked}
               onBulkDelete={handleBulkDelete}
               onBulkExtend={handleBulkExtend}
