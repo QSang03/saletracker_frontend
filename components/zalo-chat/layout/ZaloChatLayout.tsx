@@ -12,6 +12,7 @@ export default function ZaloChatLayout() {
   const userId = useMemo(() => user?.id ? Number(user.id) : null, [user?.id]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [highlightMessageId, setHighlightMessageId] = useState<number | null>(null);
   const hasAutoSelectedRef = React.useRef(false);
 
   console.log('🏗️ ZaloChatLayout Debug:', { 
@@ -30,6 +31,18 @@ export default function ZaloChatLayout() {
     }
   }, [conversations, activeConversation]);
 
+  const handleSelectMessage = (message: any, conversation: any) => {
+    // First, set the conversation
+    setActiveConversation(conversation);
+    // Then set the message to highlight
+    setHighlightMessageId(message.id);
+    
+    // Clear the highlight after a delay
+    setTimeout(() => {
+      setHighlightMessageId(null);
+    }, 5000);
+  };
+
   if (!userId) {
     return (
       <div className="h-full w-full flex items-center justify-center text-sm opacity-80">
@@ -46,10 +59,14 @@ export default function ZaloChatLayout() {
           activeConversationId={activeConversation?.id ?? null} 
           onSelectConversation={setActiveConversation}
           onConversationsChange={setConversations}
+          onSelectMessage={handleSelectMessage}
         />
       </div>
       <div className="overflow-hidden">
-        <ChatMainArea conversation={activeConversation} />
+        <ChatMainArea 
+          conversation={activeConversation} 
+          highlightMessageId={highlightMessageId}
+        />
       </div>
       <div className="border-l border-border overflow-hidden hidden xl:block" style={{ width: 320 }}>
         <ChatInfoPanel conversation={activeConversation} />
