@@ -604,7 +604,7 @@ export default function ContactProfileModal({
                       )}>
                         <SelectValue placeholder="Chọn giới tính" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" sideOffset={4} className="z-[1100]">
                         <SelectItem value="Nam">Nam</SelectItem>
                         <SelectItem value="Nữ">Nữ</SelectItem>
                       </SelectContent>
