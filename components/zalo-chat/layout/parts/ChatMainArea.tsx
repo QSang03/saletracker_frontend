@@ -12,7 +12,13 @@ import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { AuthContext } from "@/contexts/AuthContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export default function ChatMainArea({ conversation }: { conversation: Conversation | null }) {
+interface ChatMainAreaProps {
+  conversation: Conversation | null;
+  searchNavigateData?: {conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number} | null;
+  onSearchNavigateComplete?: () => void;
+}
+
+export default function ChatMainArea({ conversation, searchNavigateData, onSearchNavigateComplete }: ChatMainAreaProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
   
@@ -25,7 +31,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
 
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const LIMIT = 30;
+  const LIMIT = 20;
   
   // Message input state
   const [messageText, setMessageText] = useState("");
@@ -40,6 +46,9 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [errorTooltip, setErrorTooltip] = useState<{ show: boolean; message: string; target: string }>({ show: false, message: '', target: '' });
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+  const [isNavigatingFromSearch, setIsNavigatingFromSearch] = useState(false);
+  const [searchNavigatedConversations, setSearchNavigatedConversations] = useState<Set<number>>(new Set());
+  const [searchNavigationKey, setSearchNavigationKey] = useState(0);
 
   // Helper function to format timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -63,14 +72,19 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     }
   };
 
-  // Function to scroll to and highlight a message
+  // Function to scroll to and highlight a message (same as quote click)
   const scrollToMessage = (messageId: number) => {
+    console.log('🎯 Attempting to scroll to message:', messageId);
     const messageElement = document.getElementById(`message-${messageId}`);
+    console.log('🎯 Message element found:', !!messageElement);
+    
     if (messageElement) {
       // Highlight the message
+      console.log('🎯 Setting highlight for message:', messageId);
       setHighlightedMessageId(messageId);
       
       // Scroll to the message with smooth behavior
+      console.log('🎯 Scrolling to message element');
       messageElement.scrollIntoView({ 
         behavior: 'smooth', 
         block: 'center' 
@@ -78,12 +92,143 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
       
       // Remove highlight after 3 seconds
       setTimeout(() => {
+        console.log('🎯 Removing highlight after 3 seconds');
         setHighlightedMessageId(null);
       }, 3000);
+    } else {
+      console.log('❌ Message element not found for ID:', messageId);
     }
   };
 
+  // Handle search navigation - force load correct page
+  useEffect(() => {
+    console.log('🔍 Search navigation effect triggered:', {
+      hasSearchData: !!searchNavigateData,
+      hasConversation: !!conversation,
+      conversationId: conversation?.id,
+      searchConversationId: searchNavigateData?.conversationId,
+      isNavigating: isNavigatingFromSearch
+    });
+    
+    if (searchNavigateData && !isNavigatingFromSearch && 
+        (conversation?.id === searchNavigateData.conversationId || !conversation)) {
+      const { messageId, messagePosition, conversationId } = searchNavigateData;
+      
+      // Calculate page from message_position 
+      // Since API sorts DESC (newest first), we need to calculate from the end
+      // message_position is from oldest (1) to newest (total)
+      // For DESC sort, page 1 = newest messages, page 2 = older messages, etc.
+      const totalMessages = searchNavigateData.totalMessagesInConversation || 1000; // fallback
+      const positionFromEnd = totalMessages - messagePosition + 1;
+      const calculatedPage = Math.ceil(positionFromEnd / 20);
+      
+      console.log('🔍 Search navigation - Force loading page:', {
+        messageId,
+        messagePosition,
+        conversationId,
+        totalMessages,
+        positionFromEnd,
+        calculatedPage,
+        currentPage: page,
+        needPageChange: calculatedPage !== page,
+        hasConversation: !!conversation
+      });
+      
+      // Mark that we're navigating from search
+      setIsNavigatingFromSearch(true);
+      
+      // Force reload by incrementing search navigation key
+      setSearchNavigationKey(prev => prev + 1);
+      
+      // Always force reload with the correct page (even if same page, clear data to force reload)
+      setPage(calculatedPage);
+      // Clear accumulated messages to force reload
+      setAcc([]);
+      setReady(false);
+    }
+  }, [searchNavigateData]);
+
+  // Handle scroll to search message after data is loaded
+  useEffect(() => {
+    if (searchNavigateData && acc.length > 0 && isNavigatingFromSearch && 
+        (conversation?.id === searchNavigateData.conversationId || !conversation)) {
+      const { messageId } = searchNavigateData;
+      
+      console.log('🔍 Checking for target message in loaded data:', {
+        messageId,
+        totalMessages: acc.length,
+        messageIds: acc.map(m => m.id),
+        fullMessages: acc.map(m => ({ id: m.id, timestamp: m.timestamp, content: m.content }))
+      });
+      
+      // Check if the target message is in the loaded data
+      const targetMessage = acc.find(m => m.id === messageId);
+      
+      if (targetMessage) {
+        console.log('✅ Target message found, scrolling to it');
+        
+        // Wait for DOM to render, then scroll with retry mechanism
+        const attemptScroll = (attempts = 0) => {
+          if (attempts >= 10) {
+            console.log('❌ Failed to scroll after 10 attempts');
+            setIsNavigatingFromSearch(false);
+            if (onSearchNavigateComplete) {
+              onSearchNavigateComplete();
+            }
+            return;
+          }
+          
+          const messageElement = document.getElementById(`message-${messageId}`);
+          if (messageElement) {
+            console.log('✅ Message element found, scrolling and highlighting');
+            scrollToMessage(messageId);
+            // Mark this conversation as search-navigated and reset navigation state
+            setSearchNavigatedConversations(prev => new Set([...prev, searchNavigateData.conversationId]));
+            setTimeout(() => {
+              setIsNavigatingFromSearch(false);
+              if (onSearchNavigateComplete) {
+                onSearchNavigateComplete();
+              }
+            }, 1000); // Đợi 1s để đảm bảo scroll hoàn thành
+          } else {
+            console.log(`⏳ Message element not found, attempt ${attempts + 1}/10`);
+            setTimeout(() => attemptScroll(attempts + 1), 100);
+          }
+        };
+        
+        // Start scrolling attempts after DOM has time to render
+        setTimeout(() => attemptScroll(), 300);
+      } else {
+        console.log('❌ Target message not found in loaded data');
+        // Message not found, reset navigation state
+        setIsNavigatingFromSearch(false);
+      }
+    }
+  }, [acc, searchNavigateData, conversation, isNavigatingFromSearch, onSearchNavigateComplete]);
+
   const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
+
+  // Reset navigation state when conversation changes (but keep search-navigated list)
+  useEffect(() => {
+    setIsNavigatingFromSearch(false);
+  }, [conversation?.id]);
+
+  // Additional effect to ensure scroll works when message is highlighted from search
+  useEffect(() => {
+    if (searchNavigateData && highlightedMessageId === searchNavigateData.messageId && isNavigatingFromSearch &&
+        (conversation?.id === searchNavigateData.conversationId || !conversation)) {
+      console.log('🎯 Additional scroll attempt for search highlighted message');
+      setTimeout(() => {
+        const messageElement = document.getElementById(`message-${highlightedMessageId}`);
+        if (messageElement) {
+          messageElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+      }, 100);
+    }
+  }, [highlightedMessageId, searchNavigateData, isNavigatingFromSearch, conversation?.id]);
 
   // giữ vị trí khi prepend
   const [isPaging, setIsPaging] = useState(false);
@@ -91,17 +236,39 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
   const prevTop = useRef(0);
 
   const params = useMemo(() => {
-    if (!conversation) return null;
+    // Use conversation from props or create temporary one from searchNavigateData
+    const currentConversation = conversation || (searchNavigateData ? {
+      id: searchNavigateData.conversationId,
+      conversation_name: `Conversation ${searchNavigateData.conversationId}`,
+      conversation_type: 'private' as const,
+      unread_count: 0,
+      total_messages: 0,
+      last_message_timestamp: '',
+      created_at: '',
+      updated_at: '',
+      user_id: 0,
+      account_username: '',
+      account_display_name: '',
+      last_message: null,
+      participant: null,
+      is_group: false,
+      is_private: true
+    } : null);
+    
+    if (!currentConversation) return null;
+    
     return {
-      conversation_id: conversation.id,
+      conversation_id: currentConversation.id,
       page,
       limit: LIMIT,
       sort_by: "timestamp" as const,
       sort_order: "desc" as const, // API trả mới -> cũ
       include_quotes: true,
       search: q || undefined,
+      // Add search navigation key to force reload when navigating from search
+      _search_nav_key: searchNavigationKey,
     };
-  }, [conversation?.id, page, q]);
+  }, [conversation?.id, searchNavigateData?.conversationId, page, q, searchNavigationKey]);
 
   const { messages: fetched = [], isLoading, error, pagination } = useMessages(params);
   
@@ -166,17 +333,23 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     setUserScrolled(false);
     setHasAutoScrolled(false);
     
-    // Scroll to bottom immediately
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    console.log('🔄 Conversation changed, immediate scroll:', conversation.conversation_name);
-  }, [conversation?.id]);
+    // Only auto scroll to bottom if not navigating from search and conversation hasn't been search-navigated
+    const isSearchNavigated = searchNavigatedConversations.has(conversation.id);
+    if (!isNavigatingFromSearch && !isSearchNavigated) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      console.log('🔄 Conversation changed, immediate scroll:', conversation.conversation_name);
+    } else {
+      console.log('🔄 Conversation changed, skipping auto scroll (search navigation or previously navigated)');
+    }
+  }, [conversation?.id, isNavigatingFromSearch, searchNavigatedConversations]);
 
   // Scroll to bottom when messages are loaded (chỉ 1 lần khi mới vào)
   useLayoutEffect(() => {
     if (!conversation || !scrollRef.current || acc.length === 0 || isLoading) return;
     
-    // Chỉ auto-scroll 1 lần khi mới vào cuộc hội thoại
-    if (!hasAutoScrolled) {
+    // Chỉ auto-scroll 1 lần khi mới vào cuộc hội thoại (không khi search navigation)
+    const isSearchNavigated = searchNavigatedConversations.has(conversation.id);
+    if (!hasAutoScrolled && !isNavigatingFromSearch && !isSearchNavigated) {
       const timer = setTimeout(() => {
         if (scrollRef.current) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -192,7 +365,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
       setReady(true);
       console.log('📜 Messages loaded, ready state set (no auto-scroll):', conversation.conversation_name, 'with', acc.length, 'messages');
     }
-  }, [conversation?.id, acc.length, isLoading, hasAutoScrolled]);
+  }, [conversation?.id, acc.length, isLoading, hasAutoScrolled, searchNavigatedConversations]);
 
   // observer: kéo LÊN chạm đỉnh mới load
   useEffect(() => {
@@ -201,6 +374,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
       (entries) => {
         if (!ready) return;
         if (!hasMore || isLoading || isPaging) return;
+        if (isNavigatingFromSearch) return; // Không load more khi đang navigate từ search
         
         // Chỉ load more khi user thực sự scroll lên đầu (không phải auto scroll)
         if (entries[0].isIntersecting && userScrolled) {
@@ -216,7 +390,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
     );
     ob.observe(topRef.current);
     return () => ob.disconnect();
-  }, [hasMore, isLoading, isPaging, ready, page, userScrolled]);
+  }, [hasMore, isLoading, isPaging, ready, page, userScrolled, isNavigatingFromSearch]);
 
   const onScroll = () => { if (!userScrolled) setUserScrolled(true); };
 
@@ -380,8 +554,8 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                     } catch {}
                     
                     return (
-                      <div key={m.id} id={`message-${m.id}`} className={`flex flex-col items-center my-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
-                        <div className="bg-white rounded-3xl px-4 py-3 shadow-sm border border-gray-200 max-w-[80%]">
+                      <div key={m.id} id={`message-${m.id}`} className={`flex flex-col items-center my-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
+                        <div className={`bg-white rounded-3xl px-4 py-3 shadow-sm border max-w-[80%] ${highlightedMessageId === m.id ? 'border-blue-400' : 'border-gray-200'}`}>
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
                               {avatarUrl ? (
@@ -433,7 +607,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                   }
 
                   return (
-                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                       {/* Avatar bên trái */}
                       <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                         {senderAvatar ? (
@@ -520,7 +694,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                   }
 
                   return (
-                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                       {/* Avatar bên trái */}
                       <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                         {senderAvatar ? (
@@ -634,7 +808,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                   // Nếu là ảnh không có text
                   if (isImageWithoutText) {
                     return (
-                      <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                      <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                         {/* Avatar bên trái */}
                         <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                           {senderAvatar ? (
@@ -692,7 +866,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                   }
 
                   return (
-                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                       {/* Avatar bên trái */}
                       <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                         {senderAvatar ? (
@@ -834,7 +1008,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 }
 
                 return (
-                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                     {/* Avatar bên trái */}
                     <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                       {senderAvatar ? (
@@ -857,7 +1031,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                       </div>
                     
                       {/* Bubble tin nhắn */}
-                      <div className="px-4 py-2 rounded-2xl bg-white text-gray-900 rounded-bl-md shadow-sm">
+                      <div className={`px-4 py-2 rounded-2xl bg-white text-gray-900 rounded-bl-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
                         <div className="text-sm leading-relaxed break-words">
                           {(() => {
                             // Xử lý nội dung tin nhắn
@@ -1561,7 +1735,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 }
 
                 return (
-                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                     <div className="flex flex-col items-end">
                       {/* Contact Card */}
                       <div className="bg-white rounded-lg shadow-md overflow-hidden w-[300px]">
@@ -1628,7 +1802,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 }
 
                 return (
-                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                     <div className="flex flex-col items-end">
                       {/* Birthday Greeting Card */}
                       <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-[300px]">
@@ -1722,7 +1896,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 // Nếu là ảnh không có text
                 if (isImageWithoutText) {
                   return (
-                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                       <div className="max-w-[70%] break-words">
                         {/* Ảnh - không có khung bong bóng */}
                         <img 
@@ -1775,7 +1949,7 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
                 }
 
                 return (
-                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                     <div className="max-w-[70%] break-words">
                       {/* Nội dung file - không có khung bong bóng */}
                       <div className="w-full max-w-sm">
@@ -1912,10 +2086,10 @@ export default function ChatMainArea({ conversation }: { conversation: Conversat
               }
 
               return (
-                <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-yellow-100 rounded-lg p-2 transition-colors duration-300' : ''}`}>
+                <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
                   <div className="max-w-[70%] break-words">
                     {/* Bubble tin nhắn */}
-                    <div className="px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm">
+                    <div className={`px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
                       <div className="text-sm leading-relaxed break-words">
                         {(() => {
                           // Xử lý nội dung tin nhắn

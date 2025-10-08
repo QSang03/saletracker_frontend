@@ -7,15 +7,17 @@ import { Conversation } from '@/types/zalo-chat';
 import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { AuthContext } from '@/contexts/AuthContext';
 import { EmployeeFilterModal } from './EmployeeFilterModal';
+import { useSearch } from '@/hooks/zalo-chat/useSearch';
 
 interface ChatSidebarProps {
   userId: number;
   activeConversationId: number | null;
   onSelectConversation: (c: Conversation | null) => void;
   onConversationsChange?: (conversations: Conversation[]) => void;
+  onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void;
 }
 
-export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange }: ChatSidebarProps) {
+export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange, onSearchMessageClick }: ChatSidebarProps) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ConversationType | 'all'>('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -29,6 +31,13 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh key
+
+  // Search mode state
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [activeSearchMessageId, setActiveSearchMessageId] = useState<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -90,6 +99,21 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
       onSelectConversation(null);
     }
   }, [filterKey, onSelectConversation]);
+
+  // Debounce the search query to limit API requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Focus search input when entering search mode
+  useEffect(() => {
+    if (isSearchMode && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchMode]);
 
   // Dùng hook khác nhau tùy theo có employee filter hay không
   // Hook cho single user (không có employee filter)
@@ -273,8 +297,170 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         </div>
       </div>
 
-      {/* Right: existing sidebar content */}
+      {/* Right: sidebar content */}
       <div className="w-[400px] flex flex-col bg-white overflow-hidden">
+        {isSearchMode ? (
+          // Search Mode
+          <>
+            {/* Header */}
+            <div className="p-3 border-b border-gray-200">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+                  {user?.avatarZalo ? (
+                    <img 
+                      src={user.avatarZalo} 
+                      alt={user.username || 'User'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900">Zalo - {user?.username || 'NKC'}</div>
+                  <div className="text-xs text-gray-500">Hệ thống chat</div>
+                </div>
+              </div>
+              
+              {/* Search Input */}
+              <div className="relative flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    ref={searchInputRef}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    type="text"
+                    placeholder="Tìm kiếm"
+                    className="w-full pl-8 pr-3 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="absolute left-2.5 top-2.5 text-gray-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
+                 <button
+                   className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1"
+                   onClick={() => {
+                     setIsSearchMode(false);
+                     setSearchQuery('');
+                     setDebouncedQuery('');
+                     setActiveSearchMessageId(null);
+                   }}
+                 >
+                   Đóng
+                 </button>
+              </div>
+            </div>
+
+            {/* Search Results / Recent */}
+            <div className="flex-1 overflow-y-auto">
+              {debouncedQuery ? (
+                <SearchResults
+                  query={debouncedQuery}
+                  userId={targetUserId}
+                  onPickConversation={(id) => {
+                    const found = allConversations.find(c => c.id === id);
+                    if (found) {
+                      onSelectConversation(found);
+                      setIsSearchMode(false);
+                      setSearchQuery('');
+                      setDebouncedQuery('');
+                    }
+                  }}
+                  onSearchMessageClick={onSearchMessageClick}
+                  activeSearchMessageId={activeSearchMessageId}
+                  setActiveSearchMessageId={setActiveSearchMessageId}
+                />
+              ) : (
+                <div className="p-4">
+                  <div className="text-sm font-medium text-gray-700 mb-3">Tìm gần đây</div>
+                  <div className="flex flex-col">
+                    {conversations.slice(0, 12).map(c => {
+                      const isGroup = c.conversation_type === 'group';
+                      const avatarUrl = c.participant?.avatar?.replace(/"/g, '');
+                      return (
+                        <button
+                          key={c.id}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors rounded-lg"
+                          onClick={() => {
+                            onSelectConversation(c);
+                            setIsSearchMode(false);
+                            setSearchQuery('');
+                            setDebouncedQuery('');
+                          }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                              {avatarUrl ? (
+                                <img src={avatarUrl} alt={c.conversation_name} className="w-full h-full object-cover" />
+                              ) : (
+                                isGroup ? (
+                                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                  </svg>
+                                )
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 truncate">
+                                {c.conversation_name?.replace(/^(PrivateChat_|privatechat_)/i, '') || c.conversation_name}
+                              </div>
+                              <div className="text-xs text-gray-500 truncate">
+                                {c.last_message?.sender_name ? `${c.last_message.sender_name}: ` : ''}
+                                {(() => {
+                                  try {
+                                    if (!c.last_message?.content) return '';
+                                    if (typeof c.last_message.content === 'string') {
+                                      try {
+                                        const parsed = JSON.parse(c.last_message.content);
+                                        return String(parsed?.text || parsed?.title || parsed?.description || '');
+                                      } catch {
+                                        return String(c.last_message.content);
+                                      }
+                                    }
+                                    if (typeof c.last_message.content === 'object' && c.last_message.content !== null) {
+                                      const content: any = c.last_message.content;
+                                      return String(content?.text || content?.title || content?.description || '');
+                                    }
+                                    return String(c.last_message.content || '');
+                                  } catch {
+                                    return '';
+                                  }
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Filter Messages */}
+                  <div className="mt-6">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Lọc tin nhắn</div>
+                    <div className="flex gap-2">
+                      <button className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors">
+                        Nhắc bạn
+                      </button>
+                      <button className="px-3 py-1.5 bg-white text-gray-700 border border-gray-200 rounded-full text-sm hover:bg-gray-50 transition-colors">
+                        Biểu cảm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          // Normal Mode
+          <>
       {/* Header */}
       <div className="p-3 border-b border-gray-200">
         <div className="flex items-center gap-2 mb-3">
@@ -303,6 +489,8 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
             type="text" 
             placeholder="Tìm kiếm" 
             className="w-full pl-8 pr-3 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onFocus={() => setIsSearchMode(true)}
+                  onClick={() => setIsSearchMode(true)}
           />
           <div className="absolute left-2.5 top-2.5 text-gray-400">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -540,6 +728,8 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         <div className="p-4 text-center text-xs text-gray-400">Đã hiển thị tất cả</div>
       )}
     </div>
+          </>
+        )}
       </div>
 
       {/* Employee Filter Modal */}
@@ -555,6 +745,106 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         isManager={isManager}
         managedDepartments={user?.departments?.map(d => d.id) || []}
       />
+    </div>
+  );
+}
+
+// Inline component to render search results using /web/search
+function SearchResults({ query, userId, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; onPickConversation: (conversationId: number) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
+  const params = query
+    ? { q: query, user_id: userId ?? undefined, type: 'all' as const, limit: 50 }
+    : null;
+  const { data, isLoading, error } = useSearch<any>(params);
+
+  return (
+    <div className="p-4">
+      {isLoading && <div className="text-sm text-gray-500">Đang tìm kiếm…</div>}
+      {error && <div className="text-xs text-red-500">{error}</div>}
+
+      {data?.results?.conversations?.length > 0 && (
+        <div className="mb-6">
+          <div className="text-sm font-medium text-gray-700 mb-2">Cuộc trò chuyện</div>
+          <div className="flex flex-col">
+            {data.results.conversations.map((c: any) => (
+              <button
+                key={c.id}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors rounded-lg"
+                onClick={() => onPickConversation(c.id)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-200" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-900 truncate">{String(c.conversation_name || c.name || '')}</div>
+                    {typeof c.last_message?.content === 'string' && (
+                      <div className="text-xs text-gray-500 truncate">{c.last_message.content}</div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data?.results?.messages?.length > 0 && (
+        <div className="mb-6">
+          <div className="text-sm font-medium text-gray-700 mb-2">Tin nhắn</div>
+          <div className="flex flex-col -mx-4">
+            {data.results.messages.map((m: any) => (
+              <button
+                key={m.id}
+                className={`w-full text-left py-3 transition-colors ${
+                  activeSearchMessageId === m.id 
+                    ? 'bg-blue-100' 
+                    : 'hover:bg-gray-50 px-4'
+                }`}
+                onClick={() => {
+                  setActiveSearchMessageId(m.id);
+                  if (onSearchMessageClick) {
+                    onSearchMessageClick(m.conversation_id, m.id, m.message_position, m.total_messages_in_conversation);
+                  }
+                }}
+              >
+                <div className={`text-sm text-gray-800 truncate ${activeSearchMessageId === m.id ? 'px-4' : ''}`}>{(() => {
+                  try {
+                    if (typeof m.content === 'string') {
+                      const parsed = JSON.parse(m.content);
+                      return String(parsed?.text || parsed?.title || parsed?.description || m.content);
+                    }
+                    if (typeof m.content === 'object' && m.content) {
+                      const content: any = m.content;
+                      return String(content?.text || content?.title || content?.description || '');
+                    }
+                    return String(m.content || '');
+                  } catch {
+                    return String(m.content || '');
+                  }
+                })()}</div>
+                {m.conversation?.name && (
+                  <div className={`text-xs text-gray-500 ${activeSearchMessageId === m.id ? 'px-4' : ''}`}>{m.conversation.name}</div>
+                )}
+                {m.position_text && (
+                  <div className={`text-xs text-gray-400 mt-1 ${activeSearchMessageId === m.id ? 'px-4' : ''}`}>Vị trí: {m.position_text}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data?.results?.contacts?.length > 0 && (
+        <div className="mb-6">
+          <div className="text-sm font-medium text-gray-700 mb-2">Danh bạ</div>
+          <div className="flex flex-col">
+            {data.results.contacts.map((ct: any) => (
+              <div key={ct.id} className="px-3 py-2 rounded-lg hover:bg-gray-50">
+                <div className="font-medium text-gray-900">{String(ct.display_name || ct.name || '')}</div>
+                {ct.zalo_id && <div className="text-xs text-gray-500">{ct.zalo_id}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -132,7 +132,7 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
     return () => {
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [params?.conversation_id, params?.page, params?.limit, params?.search, params?.sort_by, params?.sort_order]);
+  }, [params]);
 
   const refetch = useCallback(() => {
     refreshRef.current++;
