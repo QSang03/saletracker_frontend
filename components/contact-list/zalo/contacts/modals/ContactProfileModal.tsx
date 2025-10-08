@@ -5,6 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useContactProfile } from "@/hooks/contact-list/useContactProfile";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import {
@@ -25,6 +32,7 @@ import {
   Calendar,
   Heart,
   ShoppingBag,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,12 +41,16 @@ interface Props {
   open: boolean;
   onClose: () => void;
   contactId: number | null;
+  contactZaloId?: string | null;
+  contactName?: string | null;
 }
 
 export default function ContactProfileModal({
   open,
   onClose,
   contactId,
+  contactZaloId,
+  contactName,
 }: Props) {
   const { profile, fetchProfile, saveProfile, loading, error } =
     useContactProfile(contactId);
@@ -65,6 +77,55 @@ export default function ContactProfileModal({
     [key: string]: string;
   }>({});
   const [showTonePresets, setShowTonePresets] = useState(false);
+  const [greetingSuggestion, setGreetingSuggestion] = useState<{
+    salutation: string | null;
+    detectedGender: string | null;
+  } | null>(null);
+  const [fetchingSuggestion, setFetchingSuggestion] = useState(false);
+
+  // Fetch auto-greeting suggestion
+  const fetchGreetingSuggestion = async () => {
+    if (!currentUser?.id || (!contactZaloId && !contactName)) return;
+    
+    setFetchingSuggestion(true);
+    try {
+      let url = `${process.env.NEXT_PUBLIC_API_URL}/auto-greeting/customers/extract-salutation?userId=${currentUser.id}`;
+      
+      if (contactZaloId) {
+        url += `&zaloId=${contactZaloId}`;
+      } else if (contactName) {
+        url += `&zaloDisplayName=${encodeURIComponent(contactName)}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const salutation = data?.salutation || null;
+        
+        // Detect gender from salutation
+        let detectedGender: string | null = null;
+        if (salutation) {
+          const normalized = salutation.toLowerCase().trim();
+          if (normalized.startsWith('anh') || normalized === 'anh') {
+            detectedGender = 'Nam';
+          } else if (normalized.startsWith('chị') || normalized === 'chị') {
+            detectedGender = 'Nữ';
+          }
+        }
+        
+        setGreetingSuggestion({ salutation, detectedGender });
+      }
+    } catch (error) {
+      console.error('Error fetching greeting suggestion:', error);
+    } finally {
+      setFetchingSuggestion(false);
+    }
+  };
 
   // Helper function to parse customer info from existing profile data (backwards compatible)
   const parseCustomerInfoFromProfile = (profile: any) => {
@@ -129,6 +190,7 @@ export default function ContactProfileModal({
   useEffect(() => {
     if (open) {
       fetchProfile();
+      fetchGreetingSuggestion();
       setValidationErrors({});
       setJustSaved(false);
     }
@@ -145,6 +207,14 @@ export default function ContactProfileModal({
       });
     }
   }, [profile]);
+
+  // Auto-apply greeting suggestions if form fields are empty
+  useEffect(() => {
+    if (greetingSuggestion && profile) {
+      applySalutationSuggestion();
+      applyGenderSuggestion();
+    }
+  }, [greetingSuggestion]);
 
   // Handle ESC key and body scroll
   useEffect(() => {
@@ -230,6 +300,24 @@ export default function ContactProfileModal({
     // Clear validation error when user starts typing
     if (validationErrors[field]) {
       setValidationErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  const applySalutationSuggestion = () => {
+    if (!greetingSuggestion?.salutation) return;
+    
+    // If user hasn't entered a name yet, auto-apply
+    if (!form.customerInfo.name || !form.customerInfo.name.trim()) {
+      handleCustomerInfoChange('name', greetingSuggestion.salutation);
+    }
+  };
+
+  const applyGenderSuggestion = () => {
+    if (!greetingSuggestion?.detectedGender) return;
+    
+    // If user hasn't selected gender yet, auto-apply
+    if (!form.customerInfo.gender || !form.customerInfo.gender.trim()) {
+      handleCustomerInfoChange('gender', greetingSuggestion.detectedGender);
     }
   };
 
@@ -441,16 +529,31 @@ export default function ContactProfileModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Customer Name */}
                   <div className="md:col-span-2">
-                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
-                      <User className="w-4 h-4" />
-                      Tên khách hàng
-                      <div className="relative group">
-                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          Tên của khách hàng để AI giao tiếp cá nhân hóa hơn
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Tên khách hàng
+                        <div className="relative group">
+                          <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                            Tên của khách hàng để AI giao tiếp cá nhân hóa hơn
+                          </div>
                         </div>
-                      </div>
-                    </Label>
+                      </Label>
+                      {greetingSuggestion?.salutation && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCustomerInfoChange('name', greetingSuggestion.salutation!)}
+                          disabled={zaloDisabled || fetchingSuggestion}
+                          className="text-xs h-7 px-2 gap-1"
+                        >
+                          <Wand2 className="w-3 h-3" />
+                          Gợi ý: {greetingSuggestion.salutation}
+                        </Button>
+                      )}
+                    </div>
                     <Input
                       disabled={zaloDisabled}
                       className={cn(
@@ -465,30 +568,47 @@ export default function ContactProfileModal({
 
                   {/* Gender */}
                   <div>
-                    <Label className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-2">
-                      <Users className="w-4 h-4" />
-                      Giới tính
-                      <div className="relative group">
-                        <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          Giới tính của khách hàng để AI điều chỉnh cách giao tiếp
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        Giới tính
+                        <div className="relative group">
+                          <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                            Giới tính của khách hàng để AI điều chỉnh cách giao tiếp
+                          </div>
                         </div>
-                      </div>
-                    </Label>
-                    <select
-                      disabled={zaloDisabled}
-                      className={cn(
-                        "w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300 bg-white",
-                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                      </Label>
+                      {greetingSuggestion?.detectedGender && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCustomerInfoChange('gender', greetingSuggestion.detectedGender!)}
+                          disabled={zaloDisabled || fetchingSuggestion}
+                          className="text-xs h-7 px-2 gap-1"
+                        >
+                          <Wand2 className="w-3 h-3" />
+                          Gợi ý: {greetingSuggestion.detectedGender}
+                        </Button>
                       )}
+                    </div>
+                    <Select
+                      disabled={zaloDisabled}
                       value={form.customerInfo.gender}
-                      onChange={(e) => handleCustomerInfoChange("gender", e.target.value)}
+                      onValueChange={(value) => handleCustomerInfoChange("gender", value)}
                     >
-                      <option value="">Chọn giới tính</option>
-                      <option value="Nam">Nam</option>
-                      <option value="Nữ">Nữ</option>
-                      <option value="Khác">Khác</option>
-                    </select>
+                      <SelectTrigger className={cn(
+                        "bg-white border-2 border-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all duration-300",
+                        zaloDisabled && "bg-gray-50 text-gray-500 cursor-not-allowed"
+                      )}>
+                        <SelectValue placeholder="Chọn giới tính" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Nam">Nam</SelectItem>
+                        <SelectItem value="Nữ">Nữ</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Age */}

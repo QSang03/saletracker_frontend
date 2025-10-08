@@ -2,6 +2,7 @@
 import React from "react";
 import { AutoReplyContact, ContactRole } from "@/types/auto-reply";
 import { useContactsPaginated } from "@/hooks/contact-list/useContactsPaginated";
+import { useContactsWithGreeting, ContactWithGreeting } from "@/hooks/contact-list/useContactsWithGreeting";
 import { useSalePersonas } from "@/hooks/contact-list/useSalePersonas";
 import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { useTutorial } from "@/contexts/TutorialContext";
@@ -10,6 +11,8 @@ import ContactKeywordsModal from "./modals/ContactKeywordsModal";
 import ContactProfileModal from "./modals/ContactProfileModal";
 import LogsDrawer from "./modals/LogsDrawer";
 import RenameContactModal from "./RenameContactModal";
+import EditGreetingModal from "./modals/EditGreetingModal";
+import CustomerHistoryModal from "@/components/contact-list/zalo/auto-greeting/CustomerHistoryModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import ContactTableTutorial from "./ContactTableTutorial";
 import {
@@ -72,6 +75,9 @@ import {
   Hash,
   Settings,
   AlertTriangle,
+  MessageSquare,
+  Sparkles,
+  History,
 } from "lucide-react";
 
 interface Props {
@@ -91,12 +97,15 @@ export const ContactTable: React.FC<Props> = ({
     setPageSize,
     search,
     setSearch,
+    filters,
+    setFilters,
     loading,
     error,
     updateRole,
     toggleAutoReply,
-  fetchContacts,
-  } = useContactsPaginated();
+    updateGreeting,
+    fetchContacts,
+  } = useContactsWithGreeting();
   const { currentUser } = useCurrentUser();
   const { isTutorialActive } = useTutorial();
   const zaloDisabled = (currentUser?.zaloLinkStatus ?? 0) === 0;
@@ -117,9 +126,11 @@ export const ContactTable: React.FC<Props> = ({
   const [contactIdForKeywords, setContactIdForKeywords] = React.useState<
     number | null
   >(null);
-  const [contactIdForProfile, setContactIdForProfile] = React.useState<
-    number | null
-  >(null);
+  const [contactForProfile, setContactForProfile] = React.useState<{
+    id: number;
+    zaloId: string;
+    name: string;
+  } | null>(null);
   const [contactIdForLogs, setContactIdForLogs] = React.useState<number | null>(
     null
   );
@@ -127,6 +138,12 @@ export const ContactTable: React.FC<Props> = ({
     id: number;
     name: string;
   } | null>(null);
+  
+  // Edit greeting modal state
+  const [contactForGreeting, setContactForGreeting] = React.useState<ContactWithGreeting | null>(null);
+  
+  // Greeting history modal state
+  const [greetingHistoryContactId, setGreetingHistoryContactId] = React.useState<string | null>(null);
 
   // Confirm Dialog states for auto-reply toggle
   const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false);
@@ -367,6 +384,24 @@ export const ContactTable: React.FC<Props> = ({
     }
   };
 
+  // Handle save greeting
+  const handleSaveGreeting = async (data: {
+    salutation?: string;
+    greetingMessage?: string;
+    greetingIsActive?: number;
+  }) => {
+    if (!contactForGreeting) return;
+    
+    try {
+      await updateGreeting(contactForGreeting.contactId, data);
+      setAlert({ type: "success", message: "Đã cập nhật lời chào thành công" });
+      setContactForGreeting(null);
+    } catch (e: any) {
+      setAlert({ type: "error", message: e?.message || "Cập nhật lời chào thất bại" });
+      throw e;
+    }
+  };
+
   // Handle confirm toggle
   const handleConfirmToggle = () => {
     (async () => {
@@ -510,6 +545,16 @@ export const ContactTable: React.FC<Props> = ({
     return (page - 1) * pageSize + index + 1;
   };
 
+  // Calculate days since last message
+  const getDaysSinceLastMessage = (lastMessageDate: string | null | undefined): number | null => {
+    if (!lastMessageDate) return null;
+    const now = new Date();
+    const lastDate = new Date(lastMessageDate);
+    const diffTime = Math.abs(now.getTime() - lastDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
   // Listen for personas changes emitted by PersonasManagerModal and refresh
   // local personas and contacts so UI updates immediately without full page reload
   React.useEffect(() => {
@@ -574,6 +619,83 @@ export const ContactTable: React.FC<Props> = ({
             /* Table Content - Only show when has data */
             <div className="overflow-x-auto">
               <div className="p-3">
+                {/* Filter Bar */}
+                <div className="mb-4 flex flex-wrap gap-3 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                      Trạng thái lời chào:
+                    </label>
+                    <Select 
+                      value={filters.greetingStatus || 'all'} 
+                      onValueChange={(v: any) => setFilters({ ...filters, greetingStatus: v })}
+                    >
+                      <SelectTrigger className="w-[140px] h-9 bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tất cả</SelectItem>
+                        <SelectItem value="active">Đang bật</SelectItem>
+                        <SelectItem value="inactive">Đang tắt</SelectItem>
+                        <SelectItem value="none">Chưa có</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                      Trạng thái khách:
+                    </label>
+                    <Select 
+                      value={filters.customerStatus || 'all'} 
+                      onValueChange={(v: any) => setFilters({ ...filters, customerStatus: v })}
+                    >
+                      <SelectTrigger className="w-[140px] h-9 bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tất cả</SelectItem>
+                        <SelectItem value="urgent">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            Cần báo gấp
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="reminder">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                            Cần nhắc nhở
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="normal">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            Bình thường
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                      Loại hội thoại:
+                    </label>
+                    <Select 
+                      value={filters.conversationType || 'all'} 
+                      onValueChange={(v: any) => setFilters({ ...filters, conversationType: v })}
+                    >
+                      <SelectTrigger className="w-[120px] h-9 bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tất cả</SelectItem>
+                        <SelectItem value="group">Nhóm</SelectItem>
+                        <SelectItem value="private">Cá nhân</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="filter-controls">
                   <PaginatedTable
                     enableSearch
@@ -636,6 +758,18 @@ export const ContactTable: React.FC<Props> = ({
                         </TableHead>
                         <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
                           <div className="flex items-center justify-center gap-2">
+                            <MessageSquare className="w-3 h-3" />
+                            Lời chào
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <Clock className="w-3 h-3" />
+                            Số ngày
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-center font-semibold text-gray-700 text-xs h-12 px-4">
+                          <div className="flex items-center justify-center gap-2">
                             <Activity className="w-3 h-3" />
                             Auto-Reply
                           </div>
@@ -661,7 +795,7 @@ export const ContactTable: React.FC<Props> = ({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {contacts.map((c: AutoReplyContact, index: number) => {
+                      {contacts.map((c: ContactWithGreeting, index: number) => {
                         const messageText = parseLastMessage(c.lastMessage);
 
                         return (
@@ -698,6 +832,11 @@ export const ContactTable: React.FC<Props> = ({
                                 <div>
                                   <div className="font-semibold text-gray-900 text-sm">
                                     {c.name}
+                                    {c.salutation && (
+                                      <span className="ml-1 text-gray-500 font-normal">
+                                        ({c.salutation})
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-xs text-gray-500">
                                     ID: {c.contactId}
@@ -812,6 +951,149 @@ export const ContactTable: React.FC<Props> = ({
                                   ))}
                                 </SelectContent>
                               </Select>
+                            </TableCell>
+
+                            {/* Greeting Info Cell */}
+                            <TableCell className="text-center px-4 py-3">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    {/* Salutation Badge */}
+                                    {c.salutation || c.greetingMessage ? (
+                                      <div className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 rounded-lg border border-green-200">
+                                        <Sparkles className="w-3 h-3 text-green-600" />
+                                        <span className="text-xs font-medium text-green-700">
+                                          {c.salutation || 'Có lời chào'}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-lg border border-gray-200">
+                                        <MessageSquare className="w-3 h-3 text-gray-400" />
+                                        <span className="text-xs text-gray-500">Chưa có</span>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Status & View History Button */}
+                                    <div className="flex items-center gap-2 text-xs">
+                                      {c.greetingIsActive === 1 ? (
+                                        <span className="inline-flex items-center gap-0.5 text-green-600">
+                                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                                          Hoạt động
+                                        </span>
+                                      ) : c.greetingIsActive === 0 ? (
+                                        <span className="inline-flex items-center gap-0.5 text-gray-400">
+                                          <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
+                                          Tắt
+                                        </span>
+                                      ) : null}
+                                      
+                                      {/* View History Button */}
+                                      {c.zaloContactId && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setGreetingHistoryContactId(c.zaloContactId)}
+                                          className="h-5 px-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          title="Xem lịch sử gửi lời chào"
+                                        >
+                                          <History className="w-3 h-3" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent className="!max-w-[350px] bg-white text-gray-700 shadow-lg border border-gray-100">
+                                  <div className="space-y-2">
+                                  {c.salutation && (
+                                    <div>
+                                    <span className="font-semibold text-gray-900">Xưng hô:</span>{' '}
+                                    <span className="text-gray-700">{c.salutation}</span>
+                                    </div>
+                                  )}
+                                  {c.greetingMessage && (
+                                    <div>
+                                    <span className="font-semibold text-gray-900">Lời chào:</span>
+                                    <p className="text-sm text-gray-700 mt-1 line-clamp-4">
+                                      {c.greetingMessage}
+                                    </p>
+                                    </div>
+                                  )}
+                                  {c.greetingLastMessageDate && (
+                                    <div className="pt-2 border-t border-gray-200">
+                                    <span className="font-semibold text-gray-900">Tin nhắn cuối:</span>{' '}
+                                    <span className="text-sm text-gray-600">
+                                      {new Date(c.greetingLastMessageDate).toLocaleString('vi-VN')}
+                                    </span>
+                                    </div>
+                                  )}
+                                  {c.greetingCustomerStatus && (
+                                    <div>
+                                    <span className="font-semibold text-gray-900">Trạng thái:</span>{' '}
+                                    <span className={`text-sm ${
+                                      c.greetingCustomerStatus === 'urgent' ? 'text-red-600 font-medium' :
+                                      c.greetingCustomerStatus === 'reminder' ? 'text-yellow-600 font-medium' :
+                                      'text-green-600'
+                                    }`}>
+                                      {c.greetingCustomerStatus === 'urgent' ? 'Cần báo gấp' :
+                                       c.greetingCustomerStatus === 'reminder' ? 'Cần nhắc nhở' :
+                                       'Bình thường'}
+                                    </span>
+                                    </div>
+                                  )}
+                                  {!c.salutation && !c.greetingMessage && (
+                                    <p className="text-gray-600">Chưa cấu hình lời chào</p>
+                                  )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TableCell>
+
+                            {/* Days Since Last Message Cell */}
+                            <TableCell className="text-center px-4 py-3">
+                              {(() => {
+                                const days = getDaysSinceLastMessage(c.greetingLastMessageDate);
+                                if (days === null) {
+                                  return (
+                                    <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-50 rounded-lg border border-gray-200">
+                                      <Clock className="w-3 h-3 text-gray-400" />
+                                      <span className="text-xs text-gray-500">N/A</span>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Color coding based on urgency
+                                const color = days >= 7 ? 'red' : days >= 3 ? 'yellow' : 'green';
+                                const bgColor = days >= 7 ? 'bg-red-50 border-red-200' : 
+                                               days >= 3 ? 'bg-yellow-50 border-yellow-200' : 
+                                               'bg-green-50 border-green-200';
+                                const textColor = days >= 7 ? 'text-red-700' : 
+                                                 days >= 3 ? 'text-yellow-700' : 
+                                                 'text-green-700';
+                                
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border ${bgColor}`}>
+                                        <Clock className={`w-3 h-3 ${textColor}`} />
+                                        <span className={`text-xs font-medium ${textColor}`}>
+                                          {days} ngày
+                                        </span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="!bg-white !text-gray-600 shadow-md border border-gray-100 rounded-lg">
+                                      <div className="text-sm text-gray-600">
+                                        <p className="font-semibold text-gray-700">Tin nhắn cuối:</p>
+                                        <p>{new Date(c.greetingLastMessageDate!).toLocaleString('vi-VN')}</p>
+                                        <p className="mt-1 text-gray-600">
+                                          {days >= 7 ? '⚠️ Đã lâu không liên lạc' :
+                                           days >= 3 ? '⏰ Nên liên lạc sớm' :
+                                           '✅ Mới liên lạc gần đây'}
+                                        </p>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              })()}
                             </TableCell>
 
                             {/* Auto-Reply Toggle with Confirmation */}
@@ -1036,7 +1318,11 @@ export const ContactTable: React.FC<Props> = ({
                                     <DropdownMenuItem
                                       disabled={(zaloDisabled && !isTutorialActive) || isRestrictedRole(c.role)}
                                       onClick={() =>
-                                        setContactIdForProfile(c.contactId)
+                                        setContactForProfile({
+                                          id: c.contactId,
+                                          zaloId: c.zaloContactId,
+                                          name: c.name,
+                                        })
                                       }
                                       className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-purple-50 rounded-lg m-1 transition-colors duration-200"
                                     >
@@ -1074,6 +1360,24 @@ export const ContactTable: React.FC<Props> = ({
                                     </DropdownMenuItem>
 
                                     <div className="h-px bg-gray-200 my-1"></div>
+
+                                    <DropdownMenuItem
+                                      disabled={(zaloDisabled && !isTutorialActive) || isRestrictedRole(c.role)}
+                                      onClick={() => setContactForGreeting(c)}
+                                      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-emerald-50 rounded-lg m-1 transition-colors duration-200"
+                                    >
+                                      <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                        <MessageSquare className="w-4 h-4 text-emerald-600" />
+                                      </div>
+                                      <div>
+                                        <div className="font-medium text-sm text-gray-900">
+                                          Lời chào
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          Cấu hình xưng hô & lời chào
+                                        </div>
+                                      </div>
+                                    </DropdownMenuItem>
 
                                     <DropdownMenuItem
                                       disabled={zaloDisabled && !isTutorialActive}
@@ -1193,11 +1497,13 @@ export const ContactTable: React.FC<Props> = ({
             })()}
           />
         )}
-        {contactIdForProfile !== null && (
+        {contactForProfile && (
           <ContactProfileModal
-            open={contactIdForProfile !== null}
-            onClose={() => setContactIdForProfile(null)}
-            contactId={contactIdForProfile}
+            open={!!contactForProfile}
+            onClose={() => setContactForProfile(null)}
+            contactId={contactForProfile.id}
+            contactZaloId={contactForProfile.zaloId}
+            contactName={contactForProfile.name}
           />
         )}
         {contactIdForLogs !== null && (
@@ -1215,6 +1521,18 @@ export const ContactTable: React.FC<Props> = ({
             currentName={contactForRename.name}
           />
         )}
+        <EditGreetingModal
+          key={contactForGreeting?.contactId || 'greeting-modal'}
+          open={contactForGreeting !== null}
+          onClose={() => setContactForGreeting(null)}
+          contact={contactForGreeting}
+          onSave={handleSaveGreeting}
+        />
+        <CustomerHistoryModal
+          customerId={greetingHistoryContactId}
+          open={greetingHistoryContactId !== null}
+          onClose={() => setGreetingHistoryContactId(null)}
+        />
 
         {/* Confirm Dialog for Auto-Reply Toggle */}
         <ConfirmDialog

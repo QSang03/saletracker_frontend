@@ -772,7 +772,20 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
                 onClick={() => onPickConversation(c.id)}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-200" />
+                  {/* Avatar */}
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                    {c.participant?.avatar ? (
+                      <img 
+                        src={c.participant.avatar.replace(/"/g, '')} 
+                        alt={c.conversation_name || 'Avatar'} 
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
+                        {(c.conversation_name || c.name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-900 truncate">{String(c.conversation_name || c.name || '')}</div>
                     {typeof c.last_message?.content === 'string' && (
@@ -793,7 +806,7 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
             {data.results.messages.map((m: any) => (
               <button
                 key={m.id}
-                className={`w-full text-left py-3 transition-colors ${
+                className={`w-full text-left py-3 transition-colors flex items-start gap-3 ${
                   activeSearchMessageId === m.id 
                     ? 'bg-blue-100' 
                     : 'hover:bg-gray-50 px-4'
@@ -805,27 +818,73 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
                   }
                 }}
               >
-                <div className={`text-sm text-gray-800 truncate ${activeSearchMessageId === m.id ? 'px-4' : ''}`}>{(() => {
-                  try {
-                    if (typeof m.content === 'string') {
-                      const parsed = JSON.parse(m.content);
-                      return String(parsed?.text || parsed?.title || parsed?.description || m.content);
-                    }
-                    if (typeof m.content === 'object' && m.content) {
-                      const content: any = m.content;
-                      return String(content?.text || content?.title || content?.description || '');
-                    }
-                    return String(m.content || '');
-                  } catch {
-                    return String(m.content || '');
-                  }
-                })()}</div>
-                {m.conversation?.name && (
-                  <div className={`text-xs text-gray-500 ${activeSearchMessageId === m.id ? 'px-4' : ''}`}>{m.conversation.name}</div>
-                )}
-                {m.position_text && (
-                  <div className={`text-xs text-gray-400 mt-1 ${activeSearchMessageId === m.id ? 'px-4' : ''}`}>Vị trí: {m.position_text}</div>
-                )}
+                {/* Avatar */}
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                  {m.sender?.avatar ? (
+                    <img 
+                      src={m.sender.avatar.replace(/"/g, '')} 
+                      alt={m.sender.name || 'Avatar'} 
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium">
+                      {(m.sender?.name || m.conversation?.name || 'U').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  {/* Sender/Group Name */}
+                  <div className="text-sm font-medium text-gray-900 truncate">
+                    {(m.sender?.name || m.conversation?.name || 'Unknown').replace(/"/g, '')}
+                  </div>
+                  
+                  {/* Message Content */}
+                  <div className="text-sm text-gray-800 mt-1 overflow-hidden" style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical'
+                  }}>
+                    {(() => {
+                      try {
+                        if (typeof m.content === 'string') {
+                          const parsed = JSON.parse(m.content);
+                          return String(parsed?.text || parsed?.title || parsed?.description || m.content);
+                        }
+                        if (typeof m.content === 'object' && m.content) {
+                          const content: any = m.content;
+                          return String(content?.text || content?.title || content?.description || '');
+                        }
+                        return String(m.content || '');
+                      } catch {
+                        return String(m.content || '');
+                      }
+                    })()}
+                  </div>
+                  
+                  {/* Timestamp */}
+                  {m.timestamp && (
+                    <div className="text-xs text-gray-400 mt-1">
+                      {(() => {
+                        const date = new Date(m.timestamp);
+                        const now = new Date();
+                        const diffMs = now.getTime() - date.getTime();
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        
+                        if (diffDays === 0) {
+                          return 'Hôm nay';
+                        } else if (diffDays === 1) {
+                          return 'Hôm qua';
+                        } else if (diffDays < 7) {
+                          return `${diffDays} ngày`;
+                        } else {
+                          return date.toLocaleDateString('vi-VN');
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
               </button>
             ))}
           </div>

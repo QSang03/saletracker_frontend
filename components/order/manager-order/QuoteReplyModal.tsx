@@ -117,27 +117,28 @@ const QuoteReplyModal: React.FC<QuoteReplyModalProps> = ({
   // Function to replace template variables
   const replaceTemplateVariables = async (text: string): Promise<string> => {
     if (!orderDetail) return text;
-    
+
     let processedText = text;
-    
-    // Replace {you} with actual salutation from auto-greeting system
-    if (processedText.includes('{you}')) {
+    let salutation = 'anh/chị'; // Default salutation
+
+    // Always fetch salutation if {you} or {me} present
+    if (processedText.includes('{you}') || processedText.includes('{me}')) {
       try {
         const { customerId } = getZaloCustomerInfo();
         const customerName = orderDetail.customer_name || '';
-        
+
         // Try with zaloId first
         let response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auto-greeting/customers/extract-salutation?userId=${currentUser?.id}&zaloId=${customerId}`, {
           headers: {
             'Authorization': `Bearer ${getAccessToken()}`,
           },
         });
-        
+
         let data = null;
         if (response.ok) {
           data = await response.json();
         }
-        
+
         // If no result with zaloId, try with zaloDisplayName
         if (!data?.salutation && customerName) {
           response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auto-greeting/customers/extract-salutation?userId=${currentUser?.id}&zaloDisplayName=${encodeURIComponent(customerName)}`, {
@@ -145,21 +146,58 @@ const QuoteReplyModal: React.FC<QuoteReplyModalProps> = ({
               'Authorization': `Bearer ${getAccessToken()}`,
             },
           });
-          
+
           if (response.ok) {
             data = await response.json();
           }
         }
+
+        salutation = data?.salutation || 'anh/chị';
         
-        const salutation = data?.salutation || 'anh/chị';
+        // Normalize salutation for pattern matching
+        const normalizedSalutation = salutation.toLowerCase().trim();
+        
+        // Replace {you} first
         processedText = processedText.replace(/\{you\}/g, salutation);
+
+        // Replace {me} based on the {you} value
+        if (processedText.includes('{me}')) {
+          let meValue = 'em'; // Default
+          
+          // Check if salutation starts with known patterns (to handle cases like "Em Dương", "Anh Nam", etc.)
+          if (normalizedSalutation.startsWith('anh ') || normalizedSalutation === 'anh' || 
+              normalizedSalutation.startsWith('a ') || normalizedSalutation === 'a' ||
+              normalizedSalutation.startsWith('chị ') || normalizedSalutation === 'chị' ||
+              normalizedSalutation.startsWith('c ') || normalizedSalutation === 'c') {
+            // Customer is older/higher status -> use "em"
+            meValue = 'em';
+          } else if (normalizedSalutation.startsWith('em ') || normalizedSalutation === 'em' ||
+                     normalizedSalutation.startsWith('e ') || normalizedSalutation === 'e') {
+            // Customer is younger/lower status -> use "anh/chị" based on user gender
+            const userGender = currentUser?.zaloGender?.toLowerCase()?.trim();
+            
+            if (userGender === 'male' || userGender === 'nam') {
+              meValue = 'anh';
+            } else if (userGender === 'female' || userGender === 'nữ') {
+              meValue = 'chị';
+            } else {
+              // Fallback - default to "anh" nếu không xác định được giới tính
+              meValue = 'anh';
+            }
+          } else {
+            // Unknown salutation (e.g., customer name only) -> default to "em" (polite)
+            meValue = 'em';
+          }
+          
+          processedText = processedText.replace(/\{me\}/g, meValue);
+        }
       } catch (error) {
         console.error('Error fetching salutation:', error);
         // Fallback to default if error occurs
         processedText = processedText.replace(/\{you\}/g, 'anh/chị');
+        processedText = processedText.replace(/\{me\}/g, 'em');
       }
     }
-    
     return processedText;
   };
 
@@ -384,9 +422,42 @@ const QuoteReplyModal: React.FC<QuoteReplyModalProps> = ({
                         Chèn
                       </Button>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-blue-700">
+                        <code className="bg-blue-100 px-1 rounded mr-2">{"{me}"}</code>
+                        <span className="text-sm">- Tự động thay thành cách tự xưng (em/anh/chị)</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          const textarea = document.getElementById('message') as HTMLTextAreaElement;
+                          const cursorPos = textarea?.selectionStart || customMessage.length;
+                          const newContent = customMessage.slice(0, cursorPos) + '{me}' + customMessage.slice(cursorPos);
+                          setCustomMessage(newContent);
+                          if (newContent.trim()) {
+                            setSelectedPresetId("");
+                          }
+                          // Focus và set cursor sau khi insert
+                          setTimeout(() => {
+                            if (textarea) {
+                              textarea.focus();
+                              textarea.setSelectionRange(cursorPos + 4, cursorPos + 4);
+                            }
+                          }, 10);
+                        }}
+                        disabled={sending}
+                      >
+                        Chèn
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-2 pt-2 border-t border-blue-200 text-xs text-blue-600">
-                    💡 <strong>Ví dụ:</strong> "Chào {"{you}"}, anh/chị cần hỗ trợ gì thêm không ạ?"
+                    💡 <strong>Ví dụ:</strong> "Chào {"{you}"}, {"{me}"} có thể hỗ trợ gì thêm không ạ?"
+                    <br />
+                    📌 <strong>Quy tắc:</strong> Nếu {"{you}"} = anh/chị thì {"{me}"} = em; Nếu {"{you}"} = em thì {"{me}"} = anh/chị
                   </div>
                 </div>
               </div>
@@ -401,7 +472,7 @@ const QuoteReplyModal: React.FC<QuoteReplyModalProps> = ({
                   setSelectedPresetId("");
                 }
               }}
-              placeholder="Ví dụ: Chào {you}, anh/chị cần hỗ trợ gì thêm không ạ?"
+              placeholder="Ví dụ: Chào {you}, {me} có thể hỗ trợ gì thêm không ạ?"
               rows={4}
               disabled={sending}
             />

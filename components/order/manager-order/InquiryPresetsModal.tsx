@@ -309,6 +309,34 @@ const InquiryPresetsModal: React.FC<InquiryPresetsModalProps> = ({
                             </div>
                             <div className="flex items-center justify-between">
                               <div className="text-blue-700">
+                                <code className="bg-blue-100 px-1 rounded mr-2">{"{me}"}</code>
+                                <span className="text-sm">- Tự động thay thành cách tự xưng (em/anh/chị)</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => {
+                                  const textarea = document.getElementById('content') as HTMLTextAreaElement;
+                                  const cursorPos = textarea?.selectionStart || formData.content.length;
+                                  const newContent = formData.content.slice(0, cursorPos) + '{me}' + formData.content.slice(cursorPos);
+                                  setFormData({ ...formData, content: newContent });
+                                  // Focus và set cursor sau khi insert
+                                  setTimeout(() => {
+                                    if (textarea) {
+                                      textarea.focus();
+                                      textarea.setSelectionRange(cursorPos + 4, cursorPos + 4);
+                                    }
+                                  }, 10);
+                                }}
+                                disabled={submitting}
+                              >
+                                Chèn
+                              </Button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-blue-700">
                                 <code className="bg-blue-100 px-1 rounded mr-2">{"{product_name}"}</code>
                                 <span className="text-sm">- Tự động thay thành tên sản phẩm</span>
                               </div>
@@ -337,7 +365,9 @@ const InquiryPresetsModal: React.FC<InquiryPresetsModalProps> = ({
                             </div>
                           </div>
                           <div className="mt-2 pt-2 border-t border-blue-200 text-xs text-blue-600">
-                            💡 <strong>Ví dụ:</strong> "Chào {"{you}"}, anh/chị có quan tâm đến sản phẩm {"{product_name}"} không ạ?"
+                            💡 <strong>Ví dụ:</strong> "Chào {"{you}"}, {"{me}"} có thể giới thiệu sản phẩm {"{product_name}"} cho anh/chị không ạ?"
+                            <br />
+                            📌 <strong>Quy tắc:</strong> Nếu {"{you}"} = anh/chị thì {"{me}"} = em; Nếu {"{you}"} = em thì {"{me}"} = anh/chị
                           </div>
                         </div>
                       </div>
@@ -349,7 +379,7 @@ const InquiryPresetsModal: React.FC<InquiryPresetsModalProps> = ({
                       onChange={(e) =>
                         setFormData({ ...formData, content: e.target.value })
                       }
-                      placeholder="Ví dụ: Chào {you}, anh/chị có quan tâm đến sản phẩm {product_name} không ạ?"
+                      placeholder="Ví dụ: Chào {you}, {me} có thể giới thiệu sản phẩm {product_name} cho anh/chị không ạ?"
                       rows={4}
                       disabled={submitting}
                       className="mt-1"

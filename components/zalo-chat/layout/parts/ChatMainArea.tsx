@@ -3,11 +3,13 @@
 import React, { useMemo, useRef, useState, useEffect, useLayoutEffect, useContext } from "react";
 import { useMessages } from "@/hooks/zalo-chat/useMessages";
 import { useGroupMembers } from "@/hooks/zalo-chat/useGroupMembers";
+import { useSendMessage } from "@/hooks/zalo-chat/useSendMessage";
 import TextMessage from "@/components/zalo-chat/messages/MessageTypes/TextMessage";
 import { Conversation } from "@/types/zalo-chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Smile, Paperclip, Image, MoreHorizontal, ThumbsUp } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Smile, Paperclip, Image, MoreHorizontal, ThumbsUp, Users, Calendar, Type, Zap, Send, Quote } from "lucide-react";
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { AuthContext } from "@/contexts/AuthContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,6 +30,12 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   // Check permissions
   const { isAdmin, isViewRole } = useDynamicPermission();
   const canSendMessages = !isAdmin && !isViewRole;
+  
+  // Debug: Log permissions
+  console.log('Permissions:', { isAdmin, isViewRole, canSendMessages });
+  
+  // Send message hook
+  const { sendMessage, isLoading: isSendingMessage } = useSendMessage();
 
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -35,6 +43,11 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   
   // Message input state
   const [messageText, setMessageText] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
+  
+  // Quote state
+  const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
+  const [quotedMessage, setQuotedMessage] = useState<any | null>(null);
 
   // tích lũy theo thời gian tăng dần (cũ -> mới)
   const [acc, setAcc] = useState<any[]>([]);
@@ -49,6 +62,19 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   const [isNavigatingFromSearch, setIsNavigatingFromSearch] = useState(false);
   const [searchNavigatedConversations, setSearchNavigatedConversations] = useState<Set<number>>(new Set());
   const [searchNavigationKey, setSearchNavigationKey] = useState(0);
+
+  // Backup scroll to ensure highlight works
+  useEffect(() => {
+    if (highlightedMessageId && searchNavigateData && highlightedMessageId === searchNavigateData.messageId) {
+      const messageElement = document.getElementById(`message-${highlightedMessageId}`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }
+    }
+  }, [highlightedMessageId, searchNavigateData]);
 
   // Helper function to format timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -74,17 +100,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
   // Function to scroll to and highlight a message (same as quote click)
   const scrollToMessage = (messageId: number) => {
-    console.log('🎯 Attempting to scroll to message:', messageId);
     const messageElement = document.getElementById(`message-${messageId}`);
-    console.log('🎯 Message element found:', !!messageElement);
     
     if (messageElement) {
-      // Highlight the message
-      console.log('🎯 Setting highlight for message:', messageId);
+      // Highlight the message first
       setHighlightedMessageId(messageId);
       
       // Scroll to the message with smooth behavior
-      console.log('🎯 Scrolling to message element');
       messageElement.scrollIntoView({ 
         behavior: 'smooth', 
         block: 'center' 
@@ -92,24 +114,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       
       // Remove highlight after 3 seconds
       setTimeout(() => {
-        console.log('🎯 Removing highlight after 3 seconds');
         setHighlightedMessageId(null);
       }, 3000);
-    } else {
-      console.log('❌ Message element not found for ID:', messageId);
     }
   };
 
   // Handle search navigation - force load correct page
   useEffect(() => {
-    console.log('🔍 Search navigation effect triggered:', {
-      hasSearchData: !!searchNavigateData,
-      hasConversation: !!conversation,
-      conversationId: conversation?.id,
-      searchConversationId: searchNavigateData?.conversationId,
-      isNavigating: isNavigatingFromSearch
-    });
-    
     if (searchNavigateData && !isNavigatingFromSearch && 
         (conversation?.id === searchNavigateData.conversationId || !conversation)) {
       const { messageId, messagePosition, conversationId } = searchNavigateData;
@@ -121,18 +132,6 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       const totalMessages = searchNavigateData.totalMessagesInConversation || 1000; // fallback
       const positionFromEnd = totalMessages - messagePosition + 1;
       const calculatedPage = Math.ceil(positionFromEnd / 20);
-      
-      console.log('🔍 Search navigation - Force loading page:', {
-        messageId,
-        messagePosition,
-        conversationId,
-        totalMessages,
-        positionFromEnd,
-        calculatedPage,
-        currentPage: page,
-        needPageChange: calculatedPage !== page,
-        hasConversation: !!conversation
-      });
       
       // Mark that we're navigating from search
       setIsNavigatingFromSearch(true);
@@ -154,23 +153,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         (conversation?.id === searchNavigateData.conversationId || !conversation)) {
       const { messageId } = searchNavigateData;
       
-      console.log('🔍 Checking for target message in loaded data:', {
-        messageId,
-        totalMessages: acc.length,
-        messageIds: acc.map(m => m.id),
-        fullMessages: acc.map(m => ({ id: m.id, timestamp: m.timestamp, content: m.content }))
-      });
-      
       // Check if the target message is in the loaded data
       const targetMessage = acc.find(m => m.id === messageId);
       
       if (targetMessage) {
-        console.log('✅ Target message found, scrolling to it');
-        
         // Wait for DOM to render, then scroll with retry mechanism
         const attemptScroll = (attempts = 0) => {
-          if (attempts >= 10) {
-            console.log('❌ Failed to scroll after 10 attempts');
+          if (attempts >= 20) {
             setIsNavigatingFromSearch(false);
             if (onSearchNavigateComplete) {
               onSearchNavigateComplete();
@@ -180,7 +169,6 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
           
           const messageElement = document.getElementById(`message-${messageId}`);
           if (messageElement) {
-            console.log('✅ Message element found, scrolling and highlighting');
             scrollToMessage(messageId);
             // Mark this conversation as search-navigated and reset navigation state
             setSearchNavigatedConversations(prev => new Set([...prev, searchNavigateData.conversationId]));
@@ -191,15 +179,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
               }
             }, 1000); // Đợi 1s để đảm bảo scroll hoàn thành
           } else {
-            console.log(`⏳ Message element not found, attempt ${attempts + 1}/10`);
-            setTimeout(() => attemptScroll(attempts + 1), 100);
+            setTimeout(() => attemptScroll(attempts + 1), 200);
           }
         };
         
         // Start scrolling attempts after DOM has time to render
-        setTimeout(() => attemptScroll(), 300);
+        setTimeout(() => attemptScroll(), 500);
       } else {
-        console.log('❌ Target message not found in loaded data');
         // Message not found, reset navigation state
         setIsNavigatingFromSearch(false);
       }
@@ -395,14 +381,40 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   const onScroll = () => { if (!userScrolled) setUserScrolled(true); };
 
   // Handle message sending
-  const handleSendMessage = () => {
-    if (!messageText.trim() || !conversation || !canSendMessages) return;
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !conversation || !canSendMessages || !user) return;
     
-    // TODO: Implement actual message sending
-    console.log('Sending message:', messageText, 'to conversation:', conversation.id);
+    // Clear previous errors
+    setSendError(null);
     
-    // For now, just clear the input
-    setMessageText("");
+    try {
+      // Get zalo_customer_id from conversation
+      const zaloCustomerId = conversation.zalo_conversation_id;
+      const customerType = conversation.conversation_type === 'group' ? 'group' : 'private';
+      
+      await sendMessage({
+        user_id: user.id,
+        message_content: messageText.trim(),
+        zalo_customer_id: zaloCustomerId,
+        customer_type: customerType
+      });
+      
+      // Clear the input and quoted message after successful send
+      setMessageText("");
+      setQuotedMessage(null);
+      
+      // TODO: Refresh messages or add optimistic update
+      // You might want to refresh the messages list here
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setSendError(error instanceof Error ? error.message : 'Có lỗi xảy ra khi gửi tin nhắn');
+      
+      // Auto hide error after 5 seconds
+      setTimeout(() => {
+        setSendError(null);
+      }, 5000);
+    }
   };
 
   // Handle quick reaction (thumbs up)
@@ -411,6 +423,21 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     
     // TODO: Implement quick reaction
     console.log('Sending quick reaction to conversation:', conversation.id);
+  };
+
+  // Handle quote message
+  const handleQuoteMessage = (message: any) => {
+    setQuotedMessage(message);
+    // Focus vào input để user có thể nhập tin nhắn
+    const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+    if (input) {
+      input.focus();
+    }
+  };
+
+  // Clear quoted message
+  const clearQuotedMessage = () => {
+    setQuotedMessage(null);
   };
 
   if (!conversation) {
@@ -423,8 +450,14 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       <div className="border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-4">
           {/* Avatar */}
-          <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-            {conversation.conversation_type === 'group' ? (
+          <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+            {conversation.participant?.avatar ? (
+              <img 
+                src={conversation.participant.avatar.replace(/"/g, '')} 
+                alt={conversation.conversation_name || 'Avatar'} 
+                className="w-full h-full object-cover"
+              />
+            ) : conversation.conversation_type === 'group' ? (
               <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
@@ -581,8 +614,14 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
               // Tin nhắn nhận (bên trái)
               if (!m.is_outgoing) {
-                // Tìm avatar từ group members nếu là nhóm
+                // Lấy avatar từ message sender
                 const getSenderAvatar = () => {
+                  // Ưu tiên avatar từ sender trong message
+                  if (m.sender?.avatar) {
+                    return m.sender.avatar;
+                  }
+                  
+                  // Fallback: Tìm từ group members nếu là nhóm
                   if (conversation?.conversation_type === 'group' && groupMembers.length > 0) {
                     const member = groupMembers.find(member => 
                       member.contact?.zalo_contact_id === m.sender?.zalo_id ||
@@ -591,6 +630,8 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                     );
                     return member?.contact?.info_metadata?.avatar;
                   }
+                  
+                  // Fallback: Lấy từ conversation participant
                   return conversation?.participant?.avatar;
                 };
 
@@ -1008,7 +1049,11 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                 }
 
                 return (
-                  <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
+                  <div 
+                    key={m.id} 
+                    id={`message-${m.id}`} 
+                     className={`flex items-start gap-2 justify-start group relative ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}
+                  >
                     {/* Avatar bên trái */}
                     <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
                       {senderAvatar ? (
@@ -1024,11 +1069,11 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                       )}
                     </div>
 
-                    <div className="max-w-[70%] break-words">
-                      {/* Tên người gửi */}
-                      <div className="text-xs text-gray-500 mb-1 px-1">
-                        {senderName}
-                      </div>
+                     <div className="max-w-[70%] break-words relative group">
+                       {/* Tên người gửi */}
+                       <div className="text-xs text-gray-500 mb-1 px-1">
+                         {senderName}
+                       </div>
                     
                       {/* Bubble tin nhắn */}
                       <div className={`px-4 py-2 rounded-2xl bg-white text-gray-900 rounded-bl-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
@@ -1715,11 +1760,23 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                         </div>
                       </div>
                       
-                      {/* Thời gian */}
-                      <div className="text-xs text-gray-400 mt-1 text-left">
-                        {formatTimestamp(m.timestamp)}
-                      </div>
-                    </div>
+                       {/* Thời gian */}
+                       <div className="text-xs text-gray-400 mt-1 text-left">
+                         {formatTimestamp(m.timestamp)}
+                       </div>
+
+                       {/* Quote Icon - Hiển thị khi hover */}
+                       {canSendMessages && (
+                         <div className={`absolute -right-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50`}>
+                            <button
+                              className="w-8 h-8 bg-white rounded-full shadow border flex items-center justify-center hover:bg-gray-50"
+                              onClick={() => handleQuoteMessage(m)}
+                            >
+                              <Quote className="w-4 h-4 text-blue-600" />
+                            </button>
+                         </div>
+                       )}
+                     </div>
                   </div>
                 );
               }
@@ -1932,10 +1989,10 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
                       {/* Avatar bên phải */}
                       <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
-                        {user?.avatarZalo ? (
+                        {(m.sender?.avatar || user?.avatarZalo) ? (
                           <img 
-                            src={user.avatarZalo} 
-                            alt={user.username || 'User'}
+                            src={(m.sender?.avatar || user?.avatarZalo).replace(/"/g, '')} 
+                            alt={m.sender?.name || user?.username || 'User'}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -2069,10 +2126,10 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
                     {/* Avatar bên phải */}
                     <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
-                      {user?.avatarZalo ? (
+                      {(m.sender?.avatar || user?.avatarZalo) ? (
                         <img 
-                          src={user.avatarZalo} 
-                          alt={user.username || 'User'}
+                          src={(m.sender?.avatar || user?.avatarZalo).replace(/"/g, '')} 
+                          alt={m.sender?.name || user?.username || 'User'}
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -2086,10 +2143,14 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
               }
 
               return (
-                <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
-                  <div className="max-w-[70%] break-words">
-                    {/* Bubble tin nhắn */}
-                    <div className={`px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
+                <div 
+                  key={m.id} 
+                  id={`message-${m.id}`} 
+                   className={`flex items-start gap-2 justify-end group relative ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}
+                >
+                   <div className="max-w-[70%] break-words relative group">
+                     {/* Bubble tin nhắn */}
+                     <div className={`px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
                       <div className="text-sm leading-relaxed break-words">
                         {(() => {
                           // Xử lý nội dung tin nhắn
@@ -2617,18 +2678,30 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                       </div>
                     </div>
                     
-                    {/* Thời gian */}
-                    <div className="text-xs text-gray-400 mt-1 text-right">
-                      {formatTimestamp(m.timestamp)}
-                    </div>
-                  </div>
+                     {/* Thời gian */}
+                     <div className="text-xs text-gray-400 mt-1 text-right">
+                       {formatTimestamp(m.timestamp)}
+                     </div>
+
+                     {/* Quote Icon - Hiển thị khi hover */}
+                     {canSendMessages && (
+                       <div className={`absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50`}>
+                          <button
+                            className="w-8 h-8 bg-white rounded-full shadow border flex items-center justify-center hover:bg-gray-50"
+                            onClick={() => handleQuoteMessage(m)}
+                          >
+                            <Quote className="w-4 h-4 text-blue-600" />
+                          </button>
+                       </div>
+                     )}
+                   </div>
 
                   {/* Avatar bên phải */}
                   <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
-                    {user?.avatarZalo ? (
+                    {(m.sender?.avatar || user?.avatarZalo) ? (
                       <img 
-                        src={user.avatarZalo} 
-                        alt={user.username || 'User'}
+                        src={(m.sender?.avatar || user?.avatarZalo).replace(/"/g, '')}
+                        alt={m.sender?.name || user?.username || 'User'}
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -2649,67 +2722,184 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       </div>
 
       {/* Message Input Area */}
-      <div className="border-t border-gray-200 px-6 py-4 bg-white">
-        <div className={`flex items-center gap-3 ${!canSendMessages ? 'opacity-50' : ''}`}>
-          {/* Emoji Button */}
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            disabled={!canSendMessages}
-            onClick={() => canSendMessages && console.log('Open emoji picker')}
-          >
-            <Smile className="h-5 w-5 text-gray-500" />
-          </button>
+      <div className="bg-white border-t border-gray-200">
+        {/* Error Alert */}
+        {sendError && (
+          <div className="px-6 py-2">
+            <Alert variant="destructive">
+              <AlertDescription>{sendError}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+        
+        {/* Quoted Message Display */}
+        {quotedMessage && (
+          <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <Quote className="w-5 h-5 text-blue-600 mt-0.5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-blue-900 mb-1">
+                  Trả lời {quotedMessage.sender_name || 'Unknown'}
+                </div>
+                <div className="text-sm text-blue-800 line-clamp-2" style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden'
+                }}>
+                  {(() => {
+                    if (quotedMessage.content_type === 'TEXT') {
+                      return String(quotedMessage.content || '');
+                    } else if (quotedMessage.content_type === 'IMAGE') {
+                      return '📷 Ảnh';
+                    } else if (quotedMessage.content_type === 'FILE') {
+                      try {
+                        const parsed = JSON.parse(quotedMessage.content);
+                        return `📄 ${parsed.fileName || 'File'}`;
+                      } catch {
+                        return '📄 File';
+                      }
+                    }
+                    return String(quotedMessage.content || '');
+                  })()}
+                </div>
+              </div>
+              <button
+                className="flex-shrink-0 p-1 hover:bg-blue-200 rounded transition-colors"
+                onClick={clearQuotedMessage}
+              >
+                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
 
-          {/* Text Input */}
-          <div className="flex-1 relative">
-            <input
-              value={messageText}
-              onChange={(e) => canSendMessages && setMessageText(e.target.value)}
-              placeholder={canSendMessages ? `Nhập @, tin nhắn tới ${(conversation.conversation_name?.replace(/^(PrivateChat_|privatechat_)/i, '') || conversation.conversation_name)}` : 'Không thể gửi tin nhắn'}
-              disabled={!canSendMessages}
-              className="w-full px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 text-sm"
-              onKeyDown={(e) => {
-                if (canSendMessages && e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-            />
+        {/* Combined Toolbar and Input - Full Width */}
+        <div className={`bg-gray-50 border-t border-gray-200 ${!canSendMessages ? 'opacity-50' : ''}`}>
+          {/* Top Toolbar */}
+          <div className="px-6 py-2 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              {/* Emoji/Sticker Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Open emoji/sticker picker')}
+              >
+                <Smile className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* Image/Gallery Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Attach image')}
+              >
+                <Image className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* Attachment Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Attach file')}
+              >
+                <Paperclip className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* Contact/Participant Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Add contact')}
+              >
+                <Users className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* Calendar/Scheduling Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Schedule message')}
+              >
+                <Calendar className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* Text Formatting Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Text formatting')}
+              >
+                <Type className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* Quick Reply Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Quick reply')}
+              >
+                <Zap className="h-4 w-4 text-gray-700" />
+              </button>
+
+              {/* More Options Button */}
+              <button
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('More options')}
+              >
+                <MoreHorizontal className="h-4 w-4 text-gray-700" />
+              </button>
+            </div>
           </div>
 
-          {/* Attachment Buttons */}
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            disabled={!canSendMessages}
-            onClick={() => canSendMessages && console.log('Attach image')}
-          >
-            <Image className="h-5 w-5 text-gray-500" />
-          </button>
+          {/* Bottom Message Input */}
+          <div className="px-6 py-3">
+            <div className="flex items-center gap-2">
+              {/* Text Input */}
+              <div className="flex-1 relative">
+                <input
+                  value={messageText}
+                  onChange={(e) => canSendMessages && setMessageText(e.target.value)}
+                  placeholder={canSendMessages ? `Nhập @, tin nhắn tới ${(conversation.conversation_name?.replace(/^(PrivateChat_|privatechat_)/i, '') || conversation.conversation_name)}` : 'Không thể gửi tin nhắn'}
+                  disabled={!canSendMessages || isSendingMessage}
+                  className={`w-full px-3 py-2 border-0 bg-transparent focus:outline-none text-sm placeholder-gray-500 ${isSendingMessage ? 'opacity-50' : ''}`}
+                  onKeyDown={(e) => {
+                    if (canSendMessages && !isSendingMessage && e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                />
+              </div>
 
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            disabled={!canSendMessages}
-            onClick={() => canSendMessages && console.log('Attach file')}
-          >
-            <Paperclip className="h-5 w-5 text-gray-500" />
-          </button>
+              {/* Emoji Button */}
+              <button
+                className="p-1.5 hover:bg-gray-200 rounded transition-colors"
+                disabled={!canSendMessages}
+                onClick={() => canSendMessages && console.log('Open emoji picker')}
+              >
+                <Smile className="h-4 w-4 text-gray-700" />
+              </button>
 
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            disabled={!canSendMessages}
-            onClick={() => canSendMessages && console.log('More options')}
-          >
-            <MoreHorizontal className="h-5 w-5 text-gray-500" />
-          </button>
-
-          {/* Quick Reaction / Send Button */}
-          <button
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            disabled={!canSendMessages}
-            onClick={() => canSendMessages && (messageText.trim() ? handleSendMessage() : handleQuickReaction())}
-          >
-            <ThumbsUp className="h-5 w-5 text-gray-500" />
-          </button>
+              {/* Send/Thumbs Up Button */}
+              <button
+                className={`p-1.5 hover:bg-gray-200 rounded transition-colors ${isSendingMessage ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={!canSendMessages || isSendingMessage}
+                onClick={() => canSendMessages && !isSendingMessage && (messageText.trim() ? handleSendMessage() : handleQuickReaction())}
+              >
+                {messageText.trim() ? (
+                  <Send className="h-4 w-4 text-blue-500" />
+                ) : (
+                  <ThumbsUp className="h-4 w-4 text-gray-400" />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
