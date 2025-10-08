@@ -1947,6 +1947,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                <EmojiRenderer 
                                  text="/-strong" 
                                  renderMode="image" 
+                                 className="block leading-none"
                                  style={{ width: '16px', height: '16px' }}
                                />
                              </button>
@@ -2895,6 +2896,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                               <EmojiRenderer 
                                 text="/-strong" 
                                 renderMode="image" 
+                                className="block leading-none"
                                 style={{ width: '16px', height: '16px' }}
                               />
                             </button>
