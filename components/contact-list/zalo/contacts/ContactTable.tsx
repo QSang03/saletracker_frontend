@@ -78,6 +78,9 @@ import {
   MessageSquare,
   Sparkles,
   History,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 interface Props {
@@ -176,6 +179,12 @@ export const ContactTable: React.FC<Props> = ({
   const [selectedContacts, setSelectedContacts] = React.useState<Set<number>>(new Set());
   const [bulkOperation, setBulkOperation] = React.useState<string>("");
   const [showBulkActions, setShowBulkActions] = React.useState(false);
+
+  // Auto-greeting config state
+  const [greetingConfig, setGreetingConfig] = React.useState<{
+    defaultGreeting: string;
+    allowCustomMessage: boolean;
+  }>({ defaultGreeting: '', allowCustomMessage: true });
 
   // Bulk operations functions
   const toggleContactSelection = (contactId: number) => {
@@ -567,6 +576,24 @@ export const ContactTable: React.FC<Props> = ({
     return () => window.removeEventListener("personas:changed", handler as EventListener);
   }, [fetchPersonas, fetchContacts]);
 
+  // Fetch auto-greeting config on mount
+  React.useEffect(() => {
+    const fetchGreetingConfig = async () => {
+      try {
+        // Use axios api instance to auto-include Bearer token
+        const { api } = await import('@/lib/api');
+        const response = await api.get('/auto-greeting/config');
+        setGreetingConfig({
+          defaultGreeting: response.data.messageTemplate || '',
+          allowCustomMessage: response.data.allowCustomMessage ?? true,
+        });
+      } catch (error) {
+        console.error('Error fetching auto-greeting config:', error);
+      }
+    };
+    fetchGreetingConfig();
+  }, []);
+
   // Check if should show empty state
   const showEmptyState = !loading && total === 0;
 
@@ -576,7 +603,7 @@ export const ContactTable: React.FC<Props> = ({
         {/* Decorative Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-purple-500/3 to-pink-500/3 rounded-2xl blur-lg"></div>
 
-        <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="relative bg-white/85 backdrop-blur-sm border border-white/60 rounded-2xl overflow-hidden">
           {/* Header - Compact */}
           <div className="bg-gradient-to-r from-blue-500 to-purple-500 px-6 py-4">
             <div className="flex items-center gap-3">
@@ -602,6 +629,140 @@ export const ContactTable: React.FC<Props> = ({
           {/* Error Banner */}
           {errorBanner}
 
+          {/* Filter Bar (always visible) */}
+          <div className="p-3">
+            <div className="mb-4 flex flex-wrap gap-3 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Trạng thái lời chào:
+                </label>
+                <Select 
+                  value={filters.greetingStatus || 'all'} 
+                  onValueChange={(v: any) => setFilters({ ...filters, greetingStatus: v })}
+                >
+                  <SelectTrigger className="w-[140px] h-9 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="active">Đang bật</SelectItem>
+                    <SelectItem value="inactive">Đang tắt</SelectItem>
+                    <SelectItem value="none">Chưa có</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Trạng thái khách:
+                </label>
+                <Select 
+                  value={filters.customerStatus || 'all'} 
+                  onValueChange={(v: any) => setFilters({ ...filters, customerStatus: v })}
+                >
+                  <SelectTrigger className="w-[140px] h-9 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="urgent">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        Cần báo gấp
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="reminder">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                        Cần nhắc nhở
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="normal">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        Bình thường
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Loại hội thoại:
+                </label>
+                <Select 
+                  value={filters.conversationType || 'all'} 
+                  onValueChange={(v: any) => setFilters({ ...filters, conversationType: v })}
+                >
+                  <SelectTrigger className="w-[120px] h-9 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="group">Nhóm</SelectItem>
+                    <SelectItem value="private">Cá nhân</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sort By */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Sắp xếp theo:
+                </label>
+                <Select 
+                  value={filters.sortBy || 'autoReplyUpdated'} 
+                  onValueChange={(v: any) => setFilters({ ...filters, sortBy: v })}
+                >
+                  <SelectTrigger className="w-[180px] h-9 bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="autoReplyUpdated">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-3 h-3" />
+                        Auto-Reply (Cập nhật)
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="greetingLastMessage">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-3 h-3" />
+                        Lời chào (Tin nhắn)
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sort Order */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilters({ 
+                    ...filters, 
+                    sortOrder: filters.sortOrder === 'desc' ? 'asc' : 'desc' 
+                  })}
+                  className="h-9 px-3 bg-white hover:bg-gray-50"
+                  title={filters.sortOrder === 'desc' ? 'Giảm dần' : 'Tăng dần'}
+                >
+                  {filters.sortOrder === 'desc' ? (
+                    <div className="flex items-center gap-1.5">
+                      <ArrowDown className="w-4 h-4" />
+                      <span className="text-xs font-medium">Giảm dần</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <ArrowUp className="w-4 h-4" />
+                      <span className="text-xs font-medium">Tăng dần</span>
+                    </div>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Show Empty State or Table */}
           {showEmptyState ? (
             <div className="p-12 text-center">
@@ -619,83 +780,6 @@ export const ContactTable: React.FC<Props> = ({
             /* Table Content - Only show when has data */
             <div className="overflow-x-auto">
               <div className="p-3">
-                {/* Filter Bar */}
-                <div className="mb-4 flex flex-wrap gap-3 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                      Trạng thái lời chào:
-                    </label>
-                    <Select 
-                      value={filters.greetingStatus || 'all'} 
-                      onValueChange={(v: any) => setFilters({ ...filters, greetingStatus: v })}
-                    >
-                      <SelectTrigger className="w-[140px] h-9 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả</SelectItem>
-                        <SelectItem value="active">Đang bật</SelectItem>
-                        <SelectItem value="inactive">Đang tắt</SelectItem>
-                        <SelectItem value="none">Chưa có</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                      Trạng thái khách:
-                    </label>
-                    <Select 
-                      value={filters.customerStatus || 'all'} 
-                      onValueChange={(v: any) => setFilters({ ...filters, customerStatus: v })}
-                    >
-                      <SelectTrigger className="w-[140px] h-9 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả</SelectItem>
-                        <SelectItem value="urgent">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                            Cần báo gấp
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="reminder">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                            Cần nhắc nhở
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="normal">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            Bình thường
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                      Loại hội thoại:
-                    </label>
-                    <Select 
-                      value={filters.conversationType || 'all'} 
-                      onValueChange={(v: any) => setFilters({ ...filters, conversationType: v })}
-                    >
-                      <SelectTrigger className="w-[120px] h-9 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tất cả</SelectItem>
-                        <SelectItem value="group">Nhóm</SelectItem>
-                        <SelectItem value="private">Cá nhân</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
                 <div className="filter-controls">
                   <PaginatedTable
                     enableSearch
@@ -891,7 +975,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </div>
                                   </SelectValue>
                                 </SelectTrigger>
-                                <SelectContent className="rounded-lg border-0 shadow-xl">
+                                <SelectContent className="rounded-lg border-0 shadow-xs">
                                   {roleOptions.map((r) => (
                                     <SelectItem
                                       key={r}
@@ -936,7 +1020,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </div>
                                   </SelectValue>
                                 </SelectTrigger>
-                                <SelectContent className="rounded-lg border-0 shadow-xl">
+                                <SelectContent className="rounded-lg border-0 shadow-xs">
                                   <SelectItem key="none" value="none" className="rounded-lg my-0.5">
                                     <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg">
                                       <span className="font-medium text-xs text-gray-600">Chưa chọn</span>
@@ -1002,7 +1086,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </div>
                                   </div>
                                 </TooltipTrigger>
-                                <TooltipContent className="!max-w-[350px] bg-white text-gray-700 shadow-lg border border-gray-100">
+                                <TooltipContent className="!max-w-[350px] bg-white text-gray-700 shadow-xs border border-gray-100">
                                   <div className="space-y-2">
                                   {c.salutation && (
                                     <div>
@@ -1010,11 +1094,23 @@ export const ContactTable: React.FC<Props> = ({
                                     <span className="text-gray-700">{c.salutation}</span>
                                     </div>
                                   )}
-                                  {c.greetingMessage && (
+                                  {c.greetingMessage ? (
                                     <div>
                                     <span className="font-semibold text-gray-900">Lời chào:</span>
                                     <p className="text-sm text-gray-700 mt-1 line-clamp-4">
                                       {c.greetingMessage}
+                                    </p>
+                                    </div>
+                                  ) : greetingConfig.defaultGreeting && (
+                                    <div>
+                                    <span className="font-semibold text-gray-900">Lời chào:</span>
+                                    <p className="text-sm text-blue-600 italic mt-1 line-clamp-4">
+                                      {greetingConfig.defaultGreeting}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {greetingConfig.allowCustomMessage 
+                                        ? '(Đang dùng lời chào mặc định)' 
+                                        : '⚠️ Hệ thống đang khóa tùy chỉnh'}
                                     </p>
                                     </div>
                                   )}
@@ -1040,7 +1136,7 @@ export const ContactTable: React.FC<Props> = ({
                                     </span>
                                     </div>
                                   )}
-                                  {!c.salutation && !c.greetingMessage && (
+                                  {!c.salutation && !c.greetingMessage && !greetingConfig.defaultGreeting && (
                                     <p className="text-gray-600">Chưa cấu hình lời chào</p>
                                   )}
                                   </div>
@@ -1080,7 +1176,7 @@ export const ContactTable: React.FC<Props> = ({
                                         </span>
                                       </div>
                                     </TooltipTrigger>
-                                    <TooltipContent className="!bg-white !text-gray-600 shadow-md border border-gray-100 rounded-lg">
+                                    <TooltipContent className="!bg-white !text-gray-600 shadow-xs border border-gray-100 rounded-lg">
                                       <div className="text-sm text-gray-600">
                                         <p className="font-semibold text-gray-700">Tin nhắn cuối:</p>
                                         <p>{new Date(c.greetingLastMessageDate!).toLocaleString('vi-VN')}</p>
@@ -1208,7 +1304,7 @@ export const ContactTable: React.FC<Props> = ({
                                       </div>
                                     </HoverCardTrigger>
                                     <HoverCardContent
-                                      className="w-[900px] max-w-[90vw] p-4 bg-white border shadow-xl rounded-xl"
+                                      className="w-[900px] max-w-[90vw] p-4 bg-white border shadow-xs rounded-xs"
                                       side="top"
                                       align="end"
                                       sideOffset={8}
@@ -1273,7 +1369,7 @@ export const ContactTable: React.FC<Props> = ({
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent
                                     align="end"
-                                    className="w-56 rounded-xl shadow-xl border-0 bg-white/95 backdrop-blur-sm modal-tabs"
+                                    className="w-56 rounded-xl shadow-xs border-0 bg-white/95 backdrop-blur-sm modal-tabs"
                                   >
                                     <DropdownMenuItem
                                       disabled={(zaloDisabled && !isTutorialActive) || isRestrictedRole(c.role)}
@@ -1419,7 +1515,7 @@ export const ContactTable: React.FC<Props> = ({
 
         {/* Bulk Actions Bar */}
         {selectedContacts.size > 0 && (
-          <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 bulk-actions">
+          <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-xs p-4 z-50 bulk-actions">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>

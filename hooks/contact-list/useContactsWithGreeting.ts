@@ -17,6 +17,8 @@ export interface ContactFilters {
   greetingStatus?: 'all' | 'active' | 'inactive' | 'none';
   customerStatus?: 'all' | 'urgent' | 'reminder' | 'normal';
   conversationType?: 'all' | 'group' | 'private';
+  sortBy?: 'autoReplyUpdated' | 'greetingLastMessage';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface UseContactsWithGreetingReturn {
@@ -48,13 +50,39 @@ export function useContactsWithGreeting(): UseContactsWithGreetingReturn {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  
+  // Load sort preferences from localStorage
+  const getSavedSortPreferences = () => {
+    if (typeof window === 'undefined') return { sortBy: 'autoReplyUpdated', sortOrder: 'desc' };
+    const saved = localStorage.getItem('contactTable_sortPreferences');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return { sortBy: 'autoReplyUpdated', sortOrder: 'desc' };
+      }
+    }
+    return { sortBy: 'autoReplyUpdated', sortOrder: 'desc' };
+  };
+
   const [filters, setFilters] = useState<ContactFilters>({
     greetingStatus: 'all',
     customerStatus: 'all',
     conversationType: 'all',
+    ...getSavedSortPreferences(),
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Save sort preferences to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && filters.sortBy && filters.sortOrder) {
+      localStorage.setItem('contactTable_sortPreferences', JSON.stringify({
+        sortBy: filters.sortBy,
+        sortOrder: filters.sortOrder,
+      }));
+    }
+  }, [filters.sortBy, filters.sortOrder]);
 
   const fetchContacts = useCallback(async () => {
     setLoading(true);
@@ -75,6 +103,14 @@ export function useContactsWithGreeting(): UseContactsWithGreetingReturn {
       }
       if (filters.conversationType && filters.conversationType !== 'all') {
         params.conversationType = filters.conversationType;
+      }
+
+      // Add sort params
+      if (filters.sortBy) {
+        params.sortBy = filters.sortBy;
+      }
+      if (filters.sortOrder) {
+        params.sortOrder = filters.sortOrder;
       }
 
       const response = await api.get('/auto-reply/contacts-with-greeting', {

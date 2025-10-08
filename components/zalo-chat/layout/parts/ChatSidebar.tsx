@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useContext, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useConversations, ConversationType } from '@/hooks/zalo-chat/useConversations';
 import { useMultiUserConversations } from '@/hooks/zalo-chat/useMultiUserConversations';
 import { Conversation } from '@/types/zalo-chat';
@@ -18,6 +19,7 @@ interface ChatSidebarProps {
 }
 
 export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange, onSearchMessageClick }: ChatSidebarProps) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ConversationType | 'all'>('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -305,19 +307,15 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
             {/* Header */}
             <div className="p-3 border-b border-gray-200">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
-                  {user?.avatarZalo ? (
-                    <img 
-                      src={user.avatarZalo} 
-                      alt={user.username || 'User'}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  )}
-                </div>
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Về trang chủ"
+                >
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
                 <div>
                   <div className="font-medium text-gray-900">Zalo - {user?.username || 'NKC'}</div>
                   <div className="text-xs text-gray-500">Hệ thống chat</div>
@@ -464,19 +462,15 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
       {/* Header */}
       <div className="p-3 border-b border-gray-200">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
-            {user?.avatarZalo ? (
-              <img 
-                src={user.avatarZalo} 
-                alt={user.username || 'User'}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            )}
-          </div>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Về trang chủ"
+          >
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <div>
             <div className="font-medium text-gray-900">Zalo - NKC</div>
             <div className="text-xs text-gray-500">Hệ thống chat</div>

@@ -370,8 +370,8 @@ export default function ContactProfileModal({
         onClick={onClose}
       />
       
-      {/* Modal */}
-      <div className="relative !max-w-3xl w-full !max-h-[90vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl rounded-xl animate-fadeIn">
+  {/* Modal */}
+  <div className="relative !max-w-3xl w-full !max-h-[90vh] flex flex-col overflow-hidden bg-white border border-gray-200 rounded-xl animate-fadeIn">
         {/* Enhanced Header */}
         <div className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
           <div className="flex items-center justify-between">
@@ -381,7 +381,7 @@ export default function ContactProfileModal({
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center shadow-lg">
+                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center">
                 <User className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -900,7 +900,7 @@ export default function ContactProfileModal({
               <Button
                 onClick={save}
                 disabled={zaloDisabled || saving}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-300 min-w-[120px]"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 min-w-[120px]"
               >
                 {saving ? (
                   <>
@@ -924,12 +924,12 @@ export default function ContactProfileModal({
       {/* Tone Presets Modal */}
       {showTonePresets && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1001] p-4">
-          <div className="relative !max-w-2xl w-full !max-h-[80vh] flex flex-col overflow-hidden bg-white border border-gray-200 shadow-2xl rounded-xl">
+          <div className="relative !max-w-2xl w-full !max-h-[80vh] flex flex-col overflow-hidden bg-white border border-gray-200 rounded-xl">
             {/* Header */}
             <div className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
                     <Sparkles className="w-5 h-5 text-white" />
                   </div>
                   <div>
@@ -959,7 +959,7 @@ export default function ContactProfileModal({
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-md transition-all duration-300 cursor-pointer group"
+                    className="p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition-all duration-300 cursor-pointer group"
                     onClick={() => applyTonePreset(preset)}
                   >
                     <div className="flex items-start justify-between">

@@ -29,6 +29,31 @@ export default function EditGreetingModal({
   const [greetingMessage, setGreetingMessage] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [defaultGreeting, setDefaultGreeting] = useState<string>('');
+  const [allowCustomMessage, setAllowCustomMessage] = useState<boolean>(true);
+  const [loadingDefault, setLoadingDefault] = useState(false);
+
+  // Fetch default greeting and allowCustomMessage from auto-greeting config
+  useEffect(() => {
+    const fetchDefaultGreeting = async () => {
+      try {
+        setLoadingDefault(true);
+        // Use axios api instance to auto-include Bearer token
+        const { api } = await import('@/lib/api');
+        const response = await api.get('/auto-greeting/config');
+        setDefaultGreeting(response.data.messageTemplate || '');
+        setAllowCustomMessage(response.data.allowCustomMessage ?? true);
+      } catch (error) {
+        console.error('Error fetching default greeting:', error);
+      } finally {
+        setLoadingDefault(false);
+      }
+    };
+
+    if (open) {
+      fetchDefaultGreeting();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (contact) {
@@ -91,7 +116,7 @@ export default function EditGreetingModal({
       />
       
       {/* Modal Content */}
-      <div className="relative bg-white rounded-lg shadow-lg w-full max-w-[600px] max-h-[90vh] overflow-y-auto m-4 animate-in zoom-in-95 fade-in-0 duration-200">
+  <div className="relative bg-white rounded-lg w-full max-w-[600px] max-h-[90vh] overflow-y-auto m-4 animate-in zoom-in-95 fade-in-0 duration-200">
         {/* Close Button */}
         <button
           onClick={handleClose}
@@ -176,18 +201,51 @@ export default function EditGreetingModal({
           <div className="space-y-2">
             <Label htmlFor="greetingMessage" className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-gray-500" />
-              Lời chào
+              Lời chào {allowCustomMessage ? '(tùy chỉnh)' : '(mặc định)'}
             </Label>
             <Textarea
               id="greetingMessage"
               value={greetingMessage}
               onChange={(e) => setGreetingMessage(e.target.value)}
-              placeholder="Nhập lời chào tùy chỉnh cho khách hàng này..."
+              placeholder={
+                allowCustomMessage
+                  ? "Nhập lời chào tùy chỉnh cho khách hàng này..."
+                  : "Hệ thống đang sử dụng lời chào mặc định"
+              }
               className="rounded-lg min-h-[120px]"
+              disabled={!allowCustomMessage}
             />
-            <p className="text-xs text-gray-500">
-              Để trống để sử dụng lời chào mặc định của hệ thống
-            </p>
+            {!allowCustomMessage && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-600 text-sm">
+                  <span>⚠️</span>
+                  <span>
+                    Hệ thống đang sử dụng lời chào mặc định. Không thể chỉnh sửa.
+                  </span>
+                </div>
+              </div>
+            )}
+            {allowCustomMessage && !greetingMessage && defaultGreeting && (
+              <div className="text-xs p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-700 font-medium mb-1">
+                  <Info className="w-3 h-3" />
+                  Lời chào mặc định sẽ được sử dụng:
+                </div>
+                <p className="text-blue-600 italic">"{defaultGreeting}"</p>
+              </div>
+            )}
+            {allowCustomMessage && (
+              <p className="text-xs text-gray-500">
+                Để trống để sử dụng lời chào mặc định của hệ thống
+              </p>
+            )}
+            {!allowCustomMessage && defaultGreeting && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="text-sm text-blue-700">
+                  <strong>Lời chào mặc định:</strong> {defaultGreeting}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Is Active */}
@@ -206,20 +264,28 @@ export default function EditGreetingModal({
           </div>
 
           {/* Preview */}
-          {(salutation || greetingMessage) && (
+          {(salutation || greetingMessage || defaultGreeting) && (
             <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
               <div className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-2">
                 <MessageSquare className="w-4 h-4" />
                 Xem trước tin nhắn
+                {(!greetingMessage || !allowCustomMessage) && defaultGreeting && (
+                  <span className="text-xs font-normal text-blue-600 ml-2">(Lời chào mặc định)</span>
+                )}
               </div>
               <div className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border border-blue-100">
                 {salutation && <span className="font-medium">{salutation},</span>}
-                {greetingMessage && (
+                {allowCustomMessage && greetingMessage ? (
                   <>
                     {salutation && '\n'}
                     {greetingMessage}
                   </>
-                )}
+                ) : defaultGreeting ? (
+                  <>
+                    {salutation && '\n'}
+                    <span className="italic text-blue-600">{defaultGreeting}</span>
+                  </>
+                ) : null}
               </div>
             </div>
           )}

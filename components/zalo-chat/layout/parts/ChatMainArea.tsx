@@ -13,6 +13,9 @@ import { Smile, Paperclip, Image, MoreHorizontal, ThumbsUp, Users, Calendar, Typ
 import { useDynamicPermission } from "@/hooks/useDynamicPermission";
 import { AuthContext } from "@/contexts/AuthContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getAccessToken } from "@/lib/auth";
+import { useEmoji } from "@/hooks/useEmoji";
+import { EmojiRenderer } from "@/components/common/EmojiRenderer";
 
 interface ChatMainAreaProps {
   conversation: Conversation | null;
@@ -36,6 +39,14 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   
   // Send message hook
   const { sendMessage, isLoading: isSendingMessage } = useSendMessage();
+  
+  // Emoji hook with 16x16 size
+  const { getEmojiInfo } = useEmoji({
+    config: {
+      spriteSize: 16,
+      spriteSheetPath: '/emoji/emoji-16'
+    }
+  });
 
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -45,9 +56,15 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   const [messageText, setMessageText] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   
-  // Quote state
+  // Quote state - lưu theo conversation ID
   const [hoveredMessageId, setHoveredMessageId] = useState<number | null>(null);
-  const [quotedMessage, setQuotedMessage] = useState<any | null>(null);
+  const [quotedMessagesByConversation, setQuotedMessagesByConversation] = useState<{[key: number]: any}>({});
+  
+  // Reaction state
+  const [hoveredReactionMessageId, setHoveredReactionMessageId] = useState<number | null>(null);
+  
+  // Get current quoted message for this conversation
+  const quotedMessage = conversation?.id ? quotedMessagesByConversation[conversation.id] || null : null;
 
   // tích lũy theo thời gian tăng dần (cũ -> mới)
   const [acc, setAcc] = useState<any[]>([]);
@@ -392,16 +409,47 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       const zaloCustomerId = conversation.zalo_conversation_id;
       const customerType = conversation.conversation_type === 'group' ? 'group' : 'private';
       
-      await sendMessage({
-        user_id: user.id,
-        message_content: messageText.trim(),
-        zalo_customer_id: zaloCustomerId,
-        customer_type: customerType
-      });
+      // Check if there's a quoted message
+      if (quotedMessage) {
+        // Send message with quote
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/send-message/quote`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getAccessToken()}`,
+            'X-Master-Key': process.env.NEXT_PUBLIC_MASTER_KEY || ''
+          },
+          body: JSON.stringify({
+            user_id: user.id,
+            message_content: messageText.trim(),
+            zalo_customer_id: zaloCustomerId,
+            customer_type: customerType,
+            msg_id: quotedMessage.id.toString()
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      } else {
+        // Send normal message
+        await sendMessage({
+          user_id: user.id,
+          message_content: messageText.trim(),
+          zalo_customer_id: zaloCustomerId,
+          customer_type: customerType
+        });
+      }
       
       // Clear the input and quoted message after successful send
       setMessageText("");
-      setQuotedMessage(null);
+      if (conversation?.id) {
+        setQuotedMessagesByConversation(prev => {
+          const updated = { ...prev };
+          delete updated[conversation.id];
+          return updated;
+        });
+      }
       
       // TODO: Refresh messages or add optimistic update
       // You might want to refresh the messages list here
@@ -427,6 +475,8 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
   // Handle quote message
   const handleQuoteMessage = (message: any) => {
+    if (!conversation?.id) return;
+    
     // Tạo quoted message object với sender name
     const quotedMsg = {
       ...message,
@@ -434,17 +484,111 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                   (message.is_outgoing ? user?.username : conversation?.participant?.name) ||
                   'Unknown'
     };
-    setQuotedMessage(quotedMsg);
-    // Focus vào input để user có thể nhập tin nhắn
-    const input = document.querySelector('input[type="text"]') as HTMLInputElement;
-    if (input) {
-      input.focus();
-    }
+    
+    // Lưu quoted message theo conversation ID
+    setQuotedMessagesByConversation(prev => ({
+      ...prev,
+      [conversation.id]: quotedMsg
+    }));
+    
+    // Focus vào input nhập tin nhắn (không phải search input)
+    setTimeout(() => {
+      const messageInput = document.querySelector('input[placeholder*="tin nhắn"]') as HTMLInputElement;
+      if (messageInput) {
+        messageInput.focus();
+      }
+    }, 100);
   };
 
   // Clear quoted message
   const clearQuotedMessage = () => {
-    setQuotedMessage(null);
+    if (!conversation?.id) return;
+    
+    setQuotedMessagesByConversation(prev => {
+      const updated = { ...prev };
+      delete updated[conversation.id];
+      return updated;
+    });
+  };
+
+  // Handle reaction
+  const handleReaction = (messageId: number, emoji: string) => {
+    console.log('Reacting to message:', messageId, 'with emoji:', emoji);
+    // TODO: Call API to add reaction
+    setHoveredReactionMessageId(null); // Close reaction picker
+  };
+
+  // Reactions display component
+  const ReactionsDisplay = ({ reactions }: { reactions: any[] }) => {
+    if (!reactions || reactions.length === 0) return null;
+
+    // Group reactions by type
+    const groupedReactions = reactions.reduce((acc: any, reaction: any) => {
+      const type = reaction.reaction_type;
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(reaction);
+      return acc;
+    }, {});
+
+    return (
+      <div className="flex items-center gap-1">
+        {Object.entries(groupedReactions).map(([type, reactions]: [string, any]) => (
+          <Tooltip key={type}>
+            <TooltipTrigger asChild>
+              <button className="px-2 py-1 bg-gray-100 rounded-full text-xs hover:bg-gray-200 transition-colors flex items-center gap-1">
+                <span className="text-xs">
+                  <EmojiRenderer 
+                    text={type} 
+                    renderMode="image" 
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                </span>
+                <span className="text-gray-600">{reactions.length}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="flex flex-col gap-1">
+                {reactions.map((reaction: any, index: number) => (
+                  <span key={index} className="text-xs">
+                    {reaction.user_name}
+                  </span>
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    );
+  };
+
+  // Reaction picker component
+  const ReactionPicker = ({ messageId, isVisible }: { messageId: number, isVisible: boolean }) => {
+    if (!isVisible) return null;
+
+    const reactions = ['/-strong', '/-heart', ':>', ':o', ':-((', ':-h'];
+
+    return (
+      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-50">
+        <div className="flex items-center gap-1">
+          {reactions.map((emojiShortcode, index) => (
+            <button
+              key={index}
+              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors"
+              onClick={() => handleReaction(messageId, emojiShortcode)}
+            >
+              <EmojiRenderer 
+                text={emojiShortcode} 
+                renderMode="image" 
+                className="block leading-none"
+                style={{ width: '16px', height: '16px' }}
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   if (!conversation) {
@@ -872,7 +1016,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                           )}
                         </div>
 
-                        <div className="max-w-[70%] break-words">
+                        <div className="max-w-[70%] min-w-[80px] break-words">
                           {/* Tên người gửi */}
                           <div className="text-xs text-gray-500 mb-1 px-1">
                             {senderName}
@@ -930,7 +1074,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                         )}
                       </div>
 
-                      <div className="max-w-[70%] break-words">
+                      <div className="max-w-[70%] min-w-[80px] break-words">
                         {/* Tên người gửi */}
                         <div className="text-xs text-gray-500 mb-1 px-1">
                           {senderName}
@@ -1076,7 +1220,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                       )}
                     </div>
 
-                     <div className="max-w-[70%] break-words relative group">
+                     <div className="max-w-[70%] min-w-[120px] break-words relative group">
                        {/* Tên người gửi */}
                        <div className="text-xs text-gray-500 mb-1 px-1">
                          {senderName}
@@ -1084,7 +1228,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                     
                       {/* Bubble tin nhắn */}
                       <div className={`px-4 py-2 rounded-2xl bg-white text-gray-900 rounded-bl-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
-                        <div className="text-sm leading-relaxed break-words">
+                        <div className="text-sm leading-relaxed break-words text-left">
                           {(() => {
                             // Xử lý nội dung tin nhắn
                             if (m.content_type === 'SYSTEM') {
@@ -1772,7 +1916,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                          {formatTimestamp(m.timestamp)}
                        </div>
 
-                       {/* Quote Icon - Hiển thị khi hover */}
+                       {/* Quote Icon - Hiển thị khi hover (vị trí cũ) */}
                        {canSendMessages && (
                          <div className={`absolute -right-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50`}>
                             <button
@@ -1781,6 +1925,36 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                             >
                               <Quote className="w-4 h-4 text-blue-600" />
                             </button>
+                         </div>
+                       )}
+                       
+                       {/* Reactions Display */}
+                       {m.reactions && m.reactions.length > 0 && (
+                         <div className="absolute -bottom-2 left-0 z-40">
+                           <ReactionsDisplay reactions={m.reactions} />
+                         </div>
+                       )}
+                       
+                       {/* Like Button - Hiển thị khi hover (vị trí dưới) */}
+                       {canSendMessages && (
+                        <div className="absolute bottom-1 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
+                           <div className="relative">
+                             <button
+                               className="w-8 h-8 bg-white rounded-full shadow border flex items-center justify-center hover:bg-gray-50"
+                               onMouseEnter={() => setHoveredReactionMessageId(m.id)}
+                               onMouseLeave={() => setHoveredReactionMessageId(null)}
+                             >
+                               <EmojiRenderer 
+                                 text="/-strong" 
+                                 renderMode="image" 
+                                 style={{ width: '16px', height: '16px' }}
+                               />
+                             </button>
+                             <ReactionPicker 
+                               messageId={m.id} 
+                               isVisible={hoveredReactionMessageId === m.id} 
+                             />
+                           </div>
                          </div>
                        )}
                      </div>
@@ -1961,7 +2135,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                 if (isImageWithoutText) {
                   return (
                     <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
-                      <div className="max-w-[70%] break-words">
+                      <div className="max-w-[70%] min-w-[120px] break-words">
                         {/* Ảnh - không có khung bong bóng */}
                         <img 
                           src={parsed.imageUrl} 
@@ -2014,7 +2188,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
                 return (
                   <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-end ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
-                    <div className="max-w-[70%] break-words">
+                    <div className="max-w-[70%] min-w-[120px] break-words">
                       {/* Nội dung file - không có khung bong bóng */}
                       <div className="w-full max-w-sm">
                         <div className="flex items-start gap-3 p-3 bg-white rounded-xl">
@@ -2155,10 +2329,10 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                   id={`message-${m.id}`} 
                    className={`flex items-start gap-2 justify-end group relative ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}
                 >
-                   <div className="max-w-[70%] break-words relative group">
+                   <div className="max-w-[70%] min-w-[60px] break-words relative group">
                      {/* Bubble tin nhắn */}
                      <div className={`px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
-                      <div className="text-sm leading-relaxed break-words">
+                      <div className="text-sm leading-relaxed break-words text-left">
                         {(() => {
                           // Xử lý nội dung tin nhắn
                           if (m.content_type === 'SYSTEM') {
@@ -2690,7 +2864,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                        {formatTimestamp(m.timestamp)}
                      </div>
 
-                     {/* Quote Icon - Hiển thị khi hover */}
+                     {/* Quote Icon - Hiển thị khi hover (vị trí cũ) */}
                      {canSendMessages && (
                        <div className={`absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50`}>
                           <button
@@ -2699,6 +2873,36 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                           >
                             <Quote className="w-4 h-4 text-blue-600" />
                           </button>
+                       </div>
+                     )}
+                     
+                     {/* Reactions Display */}
+                     {m.reactions && m.reactions.length > 0 && (
+                       <div className="absolute -bottom-2 right-0 z-40">
+                         <ReactionsDisplay reactions={m.reactions} />
+                       </div>
+                     )}
+                     
+                     {/* Like Button - Hiển thị khi hover (vị trí dưới) */}
+                     {canSendMessages && (
+                      <div className="absolute bottom-1 left-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
+                         <div className="relative">
+                            <button
+                              className="w-8 h-8 bg-white rounded-full shadow border flex items-center justify-center hover:bg-gray-50"
+                              onMouseEnter={() => setHoveredReactionMessageId(m.id)}
+                              onMouseLeave={() => setHoveredReactionMessageId(null)}
+                            >
+                              <EmojiRenderer 
+                                text="/-strong" 
+                                renderMode="image" 
+                                style={{ width: '16px', height: '16px' }}
+                              />
+                            </button>
+                           <ReactionPicker 
+                             messageId={m.id} 
+                             isVisible={hoveredReactionMessageId === m.id} 
+                           />
+                         </div>
                        </div>
                      )}
                    </div>
@@ -2739,52 +2943,6 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
           </div>
         )}
         
-        {/* Quoted Message Display */}
-        {quotedMessage && (
-          <div className="px-6 py-3 bg-blue-50 border-b border-blue-200">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <Quote className="w-5 h-5 text-blue-600 mt-0.5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-blue-900 mb-1">
-                  Trả lời {quotedMessage.sender_name || 'Unknown'}
-                </div>
-                <div className="text-sm text-blue-800 line-clamp-2" style={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden'
-                }}>
-                  {(() => {
-                    if (quotedMessage.content_type === 'TEXT') {
-                      return String(quotedMessage.content || '');
-                    } else if (quotedMessage.content_type === 'IMAGE') {
-                      return '📷 Ảnh';
-                    } else if (quotedMessage.content_type === 'FILE') {
-                      try {
-                        const parsed = JSON.parse(quotedMessage.content);
-                        return `📄 ${parsed.fileName || 'File'}`;
-                      } catch {
-                        return '📄 File';
-                      }
-                    }
-                    return String(quotedMessage.content || '');
-                  })()}
-                </div>
-              </div>
-              <button
-                className="flex-shrink-0 p-1 hover:bg-blue-200 rounded transition-colors"
-                onClick={clearQuotedMessage}
-              >
-                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Combined Toolbar and Input - Full Width */}
         <div className={`bg-gray-50 border-t border-gray-200 ${!canSendMessages ? 'opacity-50' : ''}`}>
           {/* Top Toolbar */}
@@ -2864,8 +3022,62 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
             </div>
           </div>
 
+          {/* Quoted Message Display - Inside Input Area */}
+          {quotedMessage && (
+            <div className="px-6 py-3 bg-gray-100">
+              <div className="bg-gray-200 rounded-lg p-3 border-l-4 border-blue-500">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Quote className="w-3 h-3 text-gray-600" />
+                      <div className="text-sm font-medium text-gray-700">
+                        Trả lời {quotedMessage.sender_name || 'Unknown'}
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600 line-clamp-2" style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}>
+                      {(() => {
+                        if (quotedMessage.content_type === 'TEXT') {
+                          // Parse JSON để lấy text
+                          try {
+                            const parsed = JSON.parse(quotedMessage.content);
+                            return parsed.text || String(quotedMessage.content || '');
+                          } catch {
+                            return String(quotedMessage.content || '');
+                          }
+                        } else if (quotedMessage.content_type === 'IMAGE') {
+                          return '📷 Ảnh';
+                        } else if (quotedMessage.content_type === 'FILE') {
+                          try {
+                            const parsed = JSON.parse(quotedMessage.content);
+                            return `📄 ${parsed.fileName || 'File'}`;
+                          } catch {
+                            return '📄 File';
+                          }
+                        }
+                        return String(quotedMessage.content || '');
+                      })()}
+                    </div>
+                  </div>
+                  <button
+                    className="flex-shrink-0 p-1 hover:bg-gray-100 rounded transition-colors"
+                    onClick={clearQuotedMessage}
+                  >
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Bottom Message Input */}
-          <div className="px-6 py-3">
+          <div className="px-6 py-3 bg-white">
             <div className="flex items-center gap-2">
               {/* Text Input */}
               <div className="flex-1 relative">
@@ -2883,6 +3095,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                   }}
                 />
               </div>
+
+              {/* Mention Text */}
+              {messageText.includes('@') && (
+                <div className="text-sm text-blue-600 font-medium">
+                  @{(conversation.conversation_name?.replace(/^(PrivateChat_|privatechat_)/i, '') || conversation.conversation_name)}
+                </div>
+              )}
 
               {/* Emoji Button */}
               <button
