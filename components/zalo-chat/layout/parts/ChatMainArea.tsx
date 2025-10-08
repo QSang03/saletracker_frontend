@@ -427,7 +427,14 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
   // Handle quote message
   const handleQuoteMessage = (message: any) => {
-    setQuotedMessage(message);
+    // Tạo quoted message object với sender name
+    const quotedMsg = {
+      ...message,
+      sender_name: message.sender?.name || 
+                  (message.is_outgoing ? user?.username : conversation?.participant?.name) ||
+                  'Unknown'
+    };
+    setQuotedMessage(quotedMsg);
     // Focus vào input để user có thể nhập tin nhắn
     const input = document.querySelector('input[type="text"]') as HTMLInputElement;
     if (input) {
