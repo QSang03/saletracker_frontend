@@ -200,9 +200,13 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   }, [isLoading, allConversations.length, hasEmployeeFilter]);
 
   // auto load trang kế khi chạm đáy, không nhảy scroll
+  // Rebind observer when leaving search mode or list container changes
   useEffect(() => {
     if (!bottomRef.current || !listRef.current) return;
-    
+
+    const container = listRef.current;
+    const sentinel = bottomRef.current;
+
     const observer = new IntersectionObserver(
       entries => {
         // Chỉ load thêm khi: 
@@ -214,12 +218,12 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
           setPage(p => p + 1);
         }
       },
-      { root: listRef.current, rootMargin: '100px' }
+      { root: container, rootMargin: '100px' }
     );
-    
-    observer.observe(bottomRef.current);
+
+    observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, isLoading, allConversations.length]);
+  }, [hasMore, isLoading, allConversations.length, isSearchMode, refreshKey]);
 
   // Use conversations directly from API (already filtered by backend)
   const conversations = allConversations;

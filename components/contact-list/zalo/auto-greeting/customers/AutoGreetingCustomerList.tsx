@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Settings,
@@ -53,6 +53,53 @@ const AutoGreetingCustomerList: React.FC<
   AutoGreetingCustomerListProps
 > = () => {
   const { currentUser } = useCurrentUser();
+
+  // Helpers to normalize filters coming from PaginatedTable (which uses arrays/Date)
+  const formatDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  // Build CSV of selected statuses (urgent,reminder,normal); exclude "all"
+  const getEffectiveStatusesCsv = (f: any): string => {
+    if (Array.isArray(f?.statuses)) {
+      const cleaned = (f.statuses as any[])
+        .map((v) => String(v))
+        .filter((v) => v && v !== "all");
+      if (cleaned.length > 0) {
+        const deduped = Array.from(new Set(cleaned));
+        return deduped.join(",");
+      }
+      // Explicitly chosen none -> clear status filter
+      return "";
+    }
+    // If statuses[] not provided at all, fallback to existing consolidated field
+    if (f?.statusFilter && f.statusFilter !== "all") return String(f.statusFilter);
+    return "";
+  };
+
+  const getEffectiveConversationType = (f: any): string => {
+    // Prefer current multi-select value from PaginatedTable
+    if (Array.isArray(f?.conversationType)) {
+      if (f.conversationType.length > 0) return String(f.conversationType[f.conversationType.length - 1]);
+      // Explicitly cleared -> reset to all
+      return "all";
+    }
+    // Fallback to existing consolidated field
+    if (f?.conversationTypeFilter && f.conversationTypeFilter !== "all")
+      return f.conversationTypeFilter;
+    return "all";
+  };
+
+  const getEffectiveDate = (f: any): string => {
+    if (f?.dateFilter) return f.dateFilter;
+    const sd = f?.singleDate;
+    if (sd instanceof Date) return formatDate(sd);
+    if (typeof sd === "string" && sd) return sd.slice(0, 10);
+    return "";
+  };
 
   // Helper function để kiểm tra user có quyền xem thông tin người sở hữu không
   const canViewOwnerInfo = () => {
@@ -189,10 +236,23 @@ const AutoGreetingCustomerList: React.FC<
 
   // PaginatedTable handlers
   const handleFilterChange = (newFilters: any) => {
-    setFilters(prev => ({
-      ...prev,
-      ...newFilters,
-    }));
+    setFilters(prev => {
+      const effStatuses = getEffectiveStatusesCsv({ ...prev, ...newFilters });
+      const effConversation = getEffectiveConversationType({ ...prev, ...newFilters });
+      const effDate = getEffectiveDate({ ...prev, ...newFilters });
+
+      return {
+        ...prev,
+        ...newFilters,
+        // Normalize to the query params our backend expects
+        statusFilter: effStatuses || "all",
+        conversationTypeFilter: effConversation,
+        dateFilter: effDate,
+        // Ensure page fields are preserved when not provided
+        page: newFilters.page ?? prev.page,
+        pageSize: newFilters.pageSize ?? prev.pageSize,
+      };
+    });
     setSelectedCustomerIds(new Set());
   };
 
@@ -240,13 +300,17 @@ const AutoGreetingCustomerList: React.FC<
     setLoading(true);
     try {
       const token = getAccessToken();
+      // Compute effective filters from either our local fields or PaginatedTable fields
+      const effStatuses = getEffectiveStatusesCsv(filters);
+      const effConversation = getEffectiveConversationType(filters);
+      const effDate = getEffectiveDate(filters);
       const params = new URLSearchParams({
         page: filters.page.toString(),
         limit: filters.pageSize.toString(),
         ...(filters.search && { search: filters.search }),
-        ...(filters.statusFilter !== "all" && { statusFilter: filters.statusFilter }),
-        ...(filters.conversationTypeFilter !== "all" && { conversationTypeFilter: filters.conversationTypeFilter }),
-        ...(filters.dateFilter && { dateFilter: filters.dateFilter }),
+        ...(effStatuses && { statusFilter: effStatuses }),
+        ...(effConversation !== "all" && { conversationTypeFilter: effConversation }),
+        ...(effDate && { dateFilter: effDate }),
       });
 
       const response = await fetch(

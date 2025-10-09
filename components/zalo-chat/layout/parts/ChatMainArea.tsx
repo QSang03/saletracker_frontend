@@ -136,10 +136,9 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     }
   };
 
-  // Handle search navigation - force load correct page
+  // Handle search navigation - force load correct page on first click
   useEffect(() => {
-    if (searchNavigateData && !isNavigatingFromSearch && 
-        (conversation?.id === searchNavigateData.conversationId || !conversation)) {
+    if (searchNavigateData && !isNavigatingFromSearch) {
       const { messageId, messagePosition, conversationId } = searchNavigateData;
       
       // Calculate page from message_position 
@@ -166,8 +165,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
   // Handle scroll to search message after data is loaded
   useEffect(() => {
-    if (searchNavigateData && acc.length > 0 && isNavigatingFromSearch && 
-        (conversation?.id === searchNavigateData.conversationId || !conversation)) {
+    if (searchNavigateData && acc.length > 0 && isNavigatingFromSearch) {
       const { messageId } = searchNavigateData;
       
       // Check if the target message is in the loaded data
@@ -207,19 +205,26 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         setIsNavigatingFromSearch(false);
       }
     }
-  }, [acc, searchNavigateData, conversation, isNavigatingFromSearch, onSearchNavigateComplete]);
+  }, [acc, searchNavigateData, isNavigatingFromSearch, onSearchNavigateComplete]);
 
   const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
 
-  // Reset navigation state when conversation changes (but keep search-navigated list)
+  // Reset navigation state when conversation changes, but keep it if we are switching
+  // exactly to the conversation initiated by search navigation. This prevents the need
+  // to click twice to trigger highlight.
   useEffect(() => {
-    setIsNavigatingFromSearch(false);
-  }, [conversation?.id]);
+    if (!searchNavigateData) {
+      setIsNavigatingFromSearch(false);
+      return;
+    }
+    if (conversation?.id !== searchNavigateData.conversationId) {
+      setIsNavigatingFromSearch(false);
+    }
+  }, [conversation?.id, searchNavigateData?.conversationId]);
 
   // Additional effect to ensure scroll works when message is highlighted from search
   useEffect(() => {
-    if (searchNavigateData && highlightedMessageId === searchNavigateData.messageId && isNavigatingFromSearch &&
-        (conversation?.id === searchNavigateData.conversationId || !conversation)) {
+    if (searchNavigateData && highlightedMessageId === searchNavigateData.messageId && isNavigatingFromSearch) {
       console.log('🎯 Additional scroll attempt for search highlighted message');
       setTimeout(() => {
         const messageElement = document.getElementById(`message-${highlightedMessageId}`);
@@ -231,7 +236,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         }
       }, 100);
     }
-  }, [highlightedMessageId, searchNavigateData, isNavigatingFromSearch, conversation?.id]);
+  }, [highlightedMessageId, searchNavigateData, isNavigatingFromSearch]);
 
   // giữ vị trí khi prepend
   const [isPaging, setIsPaging] = useState(false);

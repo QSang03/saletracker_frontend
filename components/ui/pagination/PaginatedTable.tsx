@@ -1144,8 +1144,16 @@ export default function PaginatedTable({
   const handleStatusesChange = useCallback(
     (vals: (string | number)[]) => {
       updateFilter("statuses", vals);
+      // If clearing all statuses, fetch immediately (bypass debounce) so backend drops statusFilter
+      try {
+        if ((!vals || vals.length === 0) && onFilterChange) {
+          const immediate = { ...filters, statuses: [], page: 1 } as Filters;
+          onFilterChange(immediate);
+          if (onPageChange) onPageChange(1);
+        }
+      } catch {}
     },
-    [updateFilter]
+    [updateFilter, onFilterChange, onPageChange, filters]
   );
 
   const handleZaloLinkStatusesChange = useCallback(
@@ -1390,13 +1398,21 @@ export default function PaginatedTable({
               value={filters.conversationType || []}
               options={[
                 { label: "Nhóm", value: "group" },
-                { label: "Cá nhân", value: "personal" },
+                { label: "Cá nhân", value: "private" },
               ]}
               onChange={(vals) => {
-                updateFilter("conversationType", vals as any);
+                // Normalize to single-select behavior: keep only the newly added value
+                let next = (vals as any[]) || [];
+                let normalized: any[] = next;
+                if (Array.isArray(next) && next.length > 1) {
+                  const prev = filters.conversationType || [];
+                  const added = next.find((v) => !prev.includes(v));
+                  normalized = added ? [added] : [next[0]];
+                }
+                updateFilter("conversationType", normalized as any);
                 // ✅ SỬA: Khi bỏ chọn hết tag -> gọi ngay parent onFilterChange để refetch tức thì (bypass debounce)
                 try {
-                  if ((vals as any)?.length === 0 && onFilterChange) {
+                  if ((normalized as any)?.length === 0 && onFilterChange) {
                     const immediate = { ...filters, conversationType: [], page: 1 } as Filters;
                     onFilterChange(immediate);
                     if (onPageChange) onPageChange(1);
