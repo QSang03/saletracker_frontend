@@ -1,34 +1,12 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Settings,
-  FileSpreadsheet,
-  Upload,
   RefreshCw,
-  Download,
-  Filter,
-  Users,
   History,
-  Trash2,
-  CheckCircle,
-  AlertCircle,
   Edit3,
-  Star,
-  Zap,
-  Sparkles,
-  User,
-  MessageSquare,
-  FileText,
-  XCircle,
+  Users,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getAccessToken } from "@/lib/auth";
@@ -36,12 +14,8 @@ import { useCurrentUser } from "@/contexts/CurrentUserContext";
 import { toast } from "sonner";
 import CustomerHistoryModal from "@/components/contact-list/zalo/auto-greeting/CustomerHistoryModal";
 import DeleteCustomerModal from "@/components/contact-list/zalo/auto-greeting/DeleteCustomerModal";
-import ImportExcelModal from "@/components/contact-list/zalo/auto-greeting/ImportExcelModal";
-import CSVExportPanel from "@/components/ui/tables/CSVExportPanel";
 import PaginatedTable from "@/components/ui/pagination/PaginatedTable";
 import SystemStatusBanner from "./SystemStatusBanner";
-import SearchAndFilterControls from "./SearchAndFilterControls";
-import ActionButtons from "./ActionButtons";
 import BulkActionsBar from "./BulkActionsBar";
 import EditCustomerModal from "./EditCustomerModal";
 import BulkEditModal from "./BulkEditModal";
@@ -92,17 +66,12 @@ const AutoGreetingCustomerList: React.FC<
   };
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-  const [recentlyImportedIds, setRecentlyImportedIds] = useState<Set<string>>(
-    new Set()
-  );
   const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(
     null
   );
   const [deleting, setDeleting] = useState(false);
-  const [importModalOpen, setImportModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [conversationTypeFilter, setConversationTypeFilter] =
@@ -568,183 +537,6 @@ const AutoGreetingCustomerList: React.FC<
     setBulkEditForm({ salutation: "", greetingMessage: "" });
   };
 
-  const handleImportSuccess = async (importedIds: string[]) => {
-    // Set loading để user biết đang refresh
-    setLoading(true);
-    
-    try {
-      // Set recently imported IDs để highlight
-      setRecentlyImportedIds(new Set(importedIds));
-      setTimeout(() => {
-        setRecentlyImportedIds(new Set());
-      }, 30000);
-
-      // Reset selection và về trang đầu
-      setSelectedCustomerIds(new Set());
-      setCurrentPage(1);
-      setFilters(prev => ({ ...prev, page: 1 }));
-
-      // Fetch lại data để hiển thị danh sách mới nhất
-      await loadCustomers();
-      
-      // Cập nhật refresh key để trigger re-render
-      setRefreshKey(prev => prev + 1);
-      
-      // Thông báo cho user biết đã refresh data
-      toast.success("Đã cập nhật danh sách khách hàng");
-    } catch (error) {
-      console.error("Error refreshing data after import:", error);
-      toast.error("Lỗi khi cập nhật danh sách khách hàng");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImportFromContacts = async () => {
-    setLoading(true);
-    try {
-      const token = getAccessToken();
-      const response = await fetch("/api/auto-greeting/import-from-contacts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify({ userId: currentUser?.id }),
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.style.display = "none";
-        a.href = url;
-
-        const contentDisposition = response.headers.get("content-disposition");
-        const filename = contentDisposition
-          ? contentDisposition.split("filename=")[1]?.replace(/"/g, "")
-          : `danh-sach-khach-hang-tu-danh-ba-${
-              new Date().toISOString().split("T")[0]
-            }.xlsx`;
-
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
-        toast.success("Đã tải xuống file Excel danh sách khách hàng từ danh bạ!");
-      } else {
-        const errorData = await response.json();
-        const errorMessage = errorData.message || errorData.error || "Unknown error";
-        
-        // Bắt các lỗi cụ thể
-        if (errorMessage.includes("chưa liên kết") || errorMessage.includes("not linked") || errorMessage.includes("zalo_account_not_found")) {
-          toast.error("Tài khoản chưa được liên kết với Zalo. Vui lòng liên kết tài khoản trước khi sử dụng chức năng này.");
-        } else if (errorMessage.includes("no contacts") || errorMessage.includes("không có danh bạ")) {
-          toast.warning("Không tìm thấy danh bạ nào. Vui lòng kiểm tra lại tài khoản Zalo của bạn.");
-        } else if (errorMessage.includes("permission") || errorMessage.includes("quyền")) {
-          toast.error("Bạn không có quyền thực hiện chức năng này.");
-        } else if (errorMessage.includes("timeout") || errorMessage.includes("bị timeout") || errorMessage.includes("AbortError") || errorMessage.includes("Request timeout")) {
-          toast.error("Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.", {
-            description: "Server có thể đang quá tải hoặc mạng chậm",
-            duration: 6000,
-          });
-        } else if (errorMessage.includes("không thể kết nối") || errorMessage.includes("ECONNREFUSED")) {
-          toast.error("Không thể kết nối đến server Zalo. Vui lòng kiểm tra kết nối mạng hoặc liên hệ admin.", {
-            description: "Server Zalo có thể đang bảo trì",
-            duration: 6000,
-          });
-        } else if (errorMessage.includes("không tìm thấy server") || errorMessage.includes("DNS")) {
-          toast.error("Không tìm thấy server Zalo. Vui lòng kiểm tra cấu hình mạng.", {
-            description: "Liên hệ admin để kiểm tra cấu hình server",
-            duration: 6000,
-          });
-        } else if (errorMessage.includes("network") || errorMessage.includes("kết nối")) {
-          toast.error("Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.");
-        } else {
-          toast.error(`Lỗi khi nhập từ danh bạ: ${errorMessage}`);
-        }
-      }
-    } catch (error) {
-      console.error("Failed to import from contacts:", error);
-      
-      // Bắt lỗi network
-      if (error instanceof TypeError && error.message.includes("fetch")) {
-        toast.error("Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.");
-      } else if (error instanceof Error) {
-        const errorMessage = error.message;
-        
-        if (errorMessage.includes("chưa liên kết") || errorMessage.includes("not linked")) {
-          toast.error("Tài khoản chưa được liên kết với Zalo. Vui lòng liên kết tài khoản trước khi sử dụng chức năng này.");
-        } else if (errorMessage.includes("no contacts") || errorMessage.includes("không có danh bạ")) {
-          toast.warning("Không tìm thấy danh bạ nào. Vui lòng kiểm tra lại tài khoản Zalo của bạn.");
-        } else if (errorMessage.includes("timeout") || errorMessage.includes("bị timeout") || errorMessage.includes("AbortError") || errorMessage.includes("Request timeout")) {
-          toast.error("Kết nối đến server Zalo bị timeout. Vui lòng thử lại sau.", {
-            description: "Server có thể đang quá tải hoặc mạng chậm",
-            duration: 6000,
-          });
-        } else if (errorMessage.includes("không thể kết nối") || errorMessage.includes("ECONNREFUSED")) {
-          toast.error("Không thể kết nối đến server Zalo. Vui lòng kiểm tra kết nối mạng hoặc liên hệ admin.", {
-            description: "Server Zalo có thể đang bảo trì",
-            duration: 6000,
-          });
-        } else {
-          toast.error(`Lỗi khi nhập từ danh bạ: ${errorMessage}`);
-        }
-      } else {
-        toast.error("Đã xảy ra lỗi không xác định. Vui lòng thử lại sau.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDownloadTemplate = async () => {
-    setDownloadingTemplate(true);
-    try {
-      const response = await fetch("/api/auto-greeting/download-template", {
-        method: "GET",
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.style.display = "none";
-        a.href = url;
-
-        const contentDisposition = response.headers.get("content-disposition");
-        const filename = contentDisposition
-          ? contentDisposition.split("filename=")[1]?.replace(/"/g, "")
-          : `mau-danh-sach-khach-hang-${
-              new Date().toISOString().split("T")[0]
-            }.xlsx`;
-
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
-        toast.success("Đã tải xuống file mẫu Excel!", {
-          description: "File mẫu đã được tải xuống thư mục Downloads",
-          duration: 3000,
-        });
-      } else {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to download template");
-      }
-    } catch (error) {
-      console.error("Failed to download template:", error);
-      toast.error("Lỗi khi tải file mẫu", {
-        description: error instanceof Error ? error.message : "Unknown error",
-        duration: 5000,
-      });
-    } finally {
-      setDownloadingTemplate(false);
-    }
-  };
 
   const handleDeleteCustomer = (customer: Customer) => {
     setCustomerToDelete(customer);
@@ -851,172 +643,6 @@ const AutoGreetingCustomerList: React.FC<
     []
   );
 
-  // Prepare data for CSVExportPanel
-  const getExportData = () => {
-    const baseHeaders = [
-      "STT",
-      "Mã Khách Hàng",
-      "Tên Zalo Khách",
-    ];
-
-    const ownerHeader = "Người Sở Hữu";
-    
-    const remainingHeaders = [
-      "Xưng hô",
-      "Lời Chào",
-      "Loại Hội Thoại",
-      "Tin Nhắn Cuối",
-      "Lần Cuối Gửi",
-      "Số Ngày",
-      "Trạng Thái",
-      "Kích Hoạt",
-    ];
-
-    // Chỉ thêm cột "Người Sở Hữu" nếu user có quyền
-    const headers = canViewOwnerInfo() 
-      ? [...baseHeaders, ownerHeader, ...remainingHeaders]
-      : [...baseHeaders, ...remainingHeaders];
-
-    const data = customers.map((customer, index) => {
-        const baseData = [
-          ((filters.page - 1) * filters.pageSize) + index + 1,
-          customer.id,
-          customer.zaloDisplayName,
-        customer.salutation || "",
-        customer.greetingMessage || "",
-        customer.conversationType === "group"
-          ? "Nhóm"
-          : customer.conversationType === "private"
-          ? "Cá nhân"
-          : "Chưa xác định",
-        customer.customerLastMessageDate
-          ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
-          : "Chưa có",
-        customer.lastMessageDate
-          ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
-          : "Chưa gửi",
-        customer.daysSinceLastMessage === null
-          ? "Chưa có"
-          : customer.daysSinceLastMessage,
-        customer.customerStatus === "urgent"
-          ? "Cần báo gấp"
-          : customer.customerStatus === "reminder"
-          ? "Cần nhắc nhở"
-          : customer.customerStatus === "normal"
-          ? "Bình thường"
-          : "Bình thường",
-        customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
-      ];
-
-      // Chỉ thêm userDisplayName nếu user có quyền
-      if (canViewOwnerInfo()) {
-        return [
-          baseData[0], // STT
-          baseData[1], // Mã Khách Hàng
-          baseData[2], // Tên Zalo Khách
-          customer.userDisplayName || `User ${customer.userId}`, // Người Sở Hữu
-          ...baseData.slice(3) // Các cột còn lại
-        ];
-      }
-
-      return baseData;
-    });
-
-    return { headers, data };
-  };
-
-  // Fetch all data for export (with current filters)
-  const getExportAllData = async () => {
-    try {
-      const token = getAccessToken();
-      const response = await fetch(
-        "/api/auto-greeting/export-customers-filtered",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-          body: JSON.stringify({
-            searchTerm: filters.search,
-            statusFilter: filters.statusFilter,
-            conversationTypeFilter: filters.conversationTypeFilter,
-            dateFilter: filters.dateFilter,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch all data");
-      }
-
-      const data = await response.json();
-      const customers = data.data || [];
-
-      return customers.map((customer: any, index: number) => {
-        const baseData = [
-          index + 1,
-          customer.id,
-          customer.zaloDisplayName,
-          customer.salutation || "",
-          customer.greetingMessage || "",
-          customer.conversationType === "group"
-            ? "Nhóm"
-            : customer.conversationType === "private"
-            ? "Cá nhân"
-            : "Chưa xác định",
-          customer.customerLastMessageDate
-            ? new Date(customer.customerLastMessageDate).toLocaleString("vi-VN")
-            : "Chưa có",
-          customer.lastMessageDate
-            ? new Date(customer.lastMessageDate).toLocaleString("vi-VN")
-            : "Chưa gửi",
-          customer.daysSinceLastMessage === null
-            ? "Chưa có"
-            : customer.daysSinceLastMessage,
-          customer.customerStatus === "urgent"
-            ? "Cần báo gấp"
-            : customer.customerStatus === "reminder"
-            ? "Cần nhắc nhở"
-            : customer.customerStatus === "normal"
-            ? "Bình thường"
-            : "Bình thường",
-          customer.isActive === 1 ? "Kích hoạt" : "Chưa kích hoạt",
-        ];
-
-        // Chỉ thêm userDisplayName nếu user có quyền
-        if (canViewOwnerInfo()) {
-          return [
-            baseData[0], // STT
-            baseData[1], // Mã Khách Hàng
-            baseData[2], // Tên Zalo Khách
-            customer.userDisplayName || `User ${customer.userId}`, // Người Sở Hữu
-            ...baseData.slice(3) // Các cột còn lại
-          ];
-        }
-
-        return baseData;
-      });
-    } catch (error) {
-      console.error("Error fetching all data:", error);
-      
-      // Hiển thị thông báo lỗi cho user
-      if (error instanceof Error) {
-        if (error.message.includes("network") || error.message.includes("fetch")) {
-          toast.error("Lỗi kết nối khi xuất dữ liệu. Vui lòng thử lại sau.");
-        } else if (error.message.includes("permission") || error.message.includes("unauthorized")) {
-          toast.error("Bạn không có quyền xuất dữ liệu này.");
-        } else {
-          toast.error(`Lỗi khi xuất dữ liệu: ${error.message}`);
-        }
-      } else {
-        toast.error("Đã xảy ra lỗi không xác định khi xuất dữ liệu.");
-      }
-      
-      return [];
-    }
-  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -1033,18 +659,6 @@ const AutoGreetingCustomerList: React.FC<
         systemConfig={systemConfig}
         configLoading={configLoading}
         onRefresh={loadSystemConfig}
-      />
-
-      {/* Action Buttons */}
-      <ActionButtons
-        downloadingTemplate={downloadingTemplate}
-        loading={loading}
-        onDownloadTemplate={handleDownloadTemplate}
-        onImportModalOpen={() => setImportModalOpen(true)}
-        onReload={loadCustomers}
-        onExportModalOpen={() => {}} // Not needed anymore with PaginatedTable
-        onImportFromContacts={handleImportFromContacts}
-        onClearFilters={clearFilters}
       />
 
       {/* Bulk Actions Bar */}
@@ -1076,9 +690,7 @@ const AutoGreetingCustomerList: React.FC<
         onPageSizeChange={handlePageSizeChange}
         onResetFilter={clearFilters}
         loading={loading}
-        canExport={true}
-        getExportData={getExportData}
-        getExportAllData={getExportAllData}
+        canExport={false}
         singleDateLabel="Ngày tin nhắn cuối"
         defaultPageSize={10}
       >
@@ -1157,9 +769,7 @@ const AutoGreetingCustomerList: React.FC<
                       <tr
                         key={customer.id}
                         className={`${
-                          recentlyImportedIds.has(customer.id)
-                            ? "bg-green-50 border-l-4 border-l-green-400"
-                            : index % 2 === 0
+                          index % 2 === 0
                             ? "bg-white"
                             : "bg-gray-50"
                         } transition-colors duration-300`}
@@ -1368,12 +978,6 @@ const AutoGreetingCustomerList: React.FC<
         onClose={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
         loading={deleting}
-      />
-
-      <ImportExcelModal
-        open={importModalOpen}
-        onClose={() => setImportModalOpen(false)}
-        onImportSuccess={handleImportSuccess}
       />
 
       <EditCustomerModal

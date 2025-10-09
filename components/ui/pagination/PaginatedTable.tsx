@@ -1315,10 +1315,10 @@ export default function PaginatedTable({
       }`}
     >
       <div className="mb-4 tutorial-filter-controls tutorial-filter-section">
-        <div className={`grid gap-3 ${fullWidthFilters ? 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3' : 'grid-cols-6'}`}>
+        <div className={`grid gap-3 items-start ${fullWidthFilters ? 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3' : 'grid-cols-6'}`}>
           {enableSearch && (
             <div className="min-w-0 w-full tutorial-search-input">
-              <div>
+              <div className="min-h-[2.5rem]">
                 <Input
                   className={`min-w-0 w-full ${filterClassNames.search ?? ""}`}
                   placeholder="Tìm kiếm..."
@@ -1368,6 +1368,7 @@ export default function PaginatedTable({
           )}
           {((enableEmployeeFilter && availableEmployees.length > 0) || 
             enableEmployeeFilterForViewRole) && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full`}
               placeholder={isLoadingEmployeesForView ? "Đang tải nhân viên..." : "Nhân viên"}
@@ -1379,8 +1380,10 @@ export default function PaginatedTable({
               })()}
               onChange={handleEmployeesChange}
             />
+            </div>
           )}
           {enableConversationTypeFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full`}
               placeholder="Loại hội thoại"
@@ -1401,9 +1404,11 @@ export default function PaginatedTable({
                 } catch {}
               }}
             />
+            </div>
           )}
           {((enableDepartmentFilter && availableDepartments.length > 0) || 
             enableDepartmentFilterForViewRole) && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.departments ?? ""}`}
               placeholder={isLoadingDepartmentsForView ? "Đang tải phòng ban..." : "Phòng ban"}
@@ -1414,8 +1419,10 @@ export default function PaginatedTable({
               }
               onChange={handleDepartmentsChange}
             />
+            </div>
           )}
           {enableManagerFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.managers ?? ""}`}
               placeholder="Trưởng nhóm"
@@ -1423,8 +1430,10 @@ export default function PaginatedTable({
               options={managerOptions}
               onChange={handleManagersChange}
             />
+            </div>
           )}
           {enableRoleFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.roles ?? ""}`}
               placeholder="Vai trò"
@@ -1432,8 +1441,10 @@ export default function PaginatedTable({
               options={roleOptions}
               onChange={handleRolesChange}
             />
+            </div>
           )}
           {enableStatusFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.statuses ?? ""}`}
               placeholder="Trạng thái"
@@ -1441,8 +1452,10 @@ export default function PaginatedTable({
               options={statusOptions}
               onChange={handleStatusesChange}
             />
+            </div>
           )}
           {enableZaloLinkStatusFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full`}
               placeholder="Trạng thái liên kết"
@@ -1450,10 +1463,11 @@ export default function PaginatedTable({
               options={zaloLinkStatusOptions}
               onChange={handleZaloLinkStatusesChange}
             />
+            </div>
           )}
           {((enableCategoriesFilter && availableCategories.length > 0) || 
             enableCategoriesFilterForViewRole) && (
-            <div className="min-w-0 w-full tutorial-category-dropdown">
+            <div className="min-w-0 w-full min-h-[2.5rem] tutorial-category-dropdown">
               <MultiSelectCombobox
                 className={`min-w-0 w-full ${filterClassNames.categories ?? ""}`}
                 placeholder={isLoadingCategoriesForView ? "Đang tải danh mục..." : "Danh mục"}
@@ -1468,6 +1482,7 @@ export default function PaginatedTable({
           )}
           {((enableBrandsFilter && availableBrands.length > 0) || 
             enableBrandsFilterForViewRole) && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full ${filterClassNames.brands ?? ""}`}
               placeholder={isLoadingBrandsForView ? "Đang tải thương hiệu..." : "Thương hiệu"}
@@ -1478,8 +1493,10 @@ export default function PaginatedTable({
               }
               onChange={handleBrandsChange}
             />
+            </div>
           )}
           {enableWarningLevelFilter && warningLevelOptions.length > 0 && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <MultiSelectCombobox
               className={`min-w-0 w-full`}
               placeholder="Mức độ cảnh báo"
@@ -1487,6 +1504,7 @@ export default function PaginatedTable({
               options={warningLevelOptions}
               onChange={handleWarningLevelsChange}
             />
+            </div>
           )}
           {/* {enableBrandCategoryFilter && availableBrandCategories.length > 0 && (
             <MultiSelectCombobox
@@ -1498,6 +1516,7 @@ export default function PaginatedTable({
             />
           )} */}
           {enableQuantityFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Input
@@ -1543,9 +1562,10 @@ export default function PaginatedTable({
                 <p>Chọn số lượng tối thiểu để lọc các đơn có số lượng &ge; giá trị này.</p>
               </TooltipContent>
             </Tooltip>
+            </div>
           )}
           {enableProductCodeFilter && (
-            <div className="min-w-0 w-full">
+            <div className="min-w-0 w-full min-h-[2.5rem]">
               <Select
                 value={filters.productCode && filters.productCode.trim() ? filters.productCode : "all"}
                 onValueChange={(value) => updateFilter("productCode", value === "all" ? "" : value)}
@@ -1565,6 +1585,7 @@ export default function PaginatedTable({
             </div>
           )}
           {enableSingleDateFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
             <DatePicker
               value={
                 filters.singleDate ? new Date(filters.singleDate) : undefined
@@ -1576,9 +1597,10 @@ export default function PaginatedTable({
                 )
               }
             />
+            </div>
           )}
           {enableDateRangeFilter && (
-            <div className="min-w-0 w-full">
+            <div className="min-w-0 w-full min-h-[2.5rem]">
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -1683,7 +1705,7 @@ export default function PaginatedTable({
           )}
           {/* Số dòng/trang nằm ngang hàng filter */}
           {enablePageSize && (
-            <div className="flex gap-2 min-w-0 w-full tutorial-page-size">
+            <div className="flex gap-2 min-w-0 w-full min-h-[2.5rem] tutorial-page-size items-center">
               <select
                 className="min-w-0 w-3/5 border rounded px-2 py-1 text-sm bg-white"
                 value={currentPageSize}
