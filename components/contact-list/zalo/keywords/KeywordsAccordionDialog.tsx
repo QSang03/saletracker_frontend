@@ -184,6 +184,9 @@ export default function KeywordsAccordionDialog({
         !isRestrictedRole(c.role) && !existingContactIds.has(c.contactId)
       );
       
+      // ✅ FIXED: Log để debug và ensure data structure
+      console.log('Available contacts for adding:', available);
+      
       setAvailableContacts(available);
     } catch (error) {
       console.error("Error fetching contacts:", error);
@@ -952,7 +955,7 @@ export default function KeywordsAccordionDialog({
                           {availableContacts
                             .filter(contact => 
                               !contactSearch || 
-                              contact.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                              (contact.name?.toLowerCase().includes(contactSearch.toLowerCase())) ||
                               contact.contactId.toString().includes(contactSearch)
                             )
                             .map((contact) => {
@@ -978,7 +981,7 @@ export default function KeywordsAccordionDialog({
                                     </div>
                                     <div className="min-w-0 flex-1">
                                       <div className="font-medium text-slate-900 truncate">
-                                        {contact.name || `Contact #${contact.contactId}`}
+                                        {contact.name?.trim() || contact.name || `Khách hàng #${contact.contactId}`}
                                       </div>
                                       <div className="text-xs text-slate-500">
                                         ID: {contact.contactId}
@@ -1050,10 +1053,13 @@ export default function KeywordsAccordionDialog({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="font-medium text-slate-900 truncate">
-                                    {(
-                                      contactMap.get(route.contactId ?? -1) ??
-                                      ""
-                                    ).trim() || `--`}
+                                    {(() => {
+                                      const contactName = contactMap.get(route.contactId ?? -1);
+                                      if (contactName?.trim()) {
+                                        return contactName.trim();
+                                      }
+                                      return `Khách hàng #${route.contactId}`;
+                                    })()}
                                   </div>
                                   <div className="text-xs text-slate-500">
                                     ID: {route.contactId}
