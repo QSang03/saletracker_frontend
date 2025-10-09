@@ -39,11 +39,17 @@ import {
   Loader2,
   ChevronUp,
   X, // ✅ Added for deselect button
+  UserPlus,
+  Users,
+  CheckCircle,
+  Circle,
 } from "lucide-react";
 import {
   ServerResponseAlert,
   type AlertType,
 } from "@/components/ui/loading/ServerResponseAlert";
+import { api } from "@/lib/api";
+import { ContactRole } from "@/types/auto-reply";
 
 type RouteItem = any;
 
@@ -61,11 +67,14 @@ interface Props {
   isLoading: boolean;
   updateRoute: (id: number, data: any) => Promise<any>;
   deleteRoute: (id: number) => Promise<any>;
+  createRoute: (data: any, options?: any) => Promise<any>; // ✅ NEW: Add createRoute
   setIsLoading: (v: boolean) => void;
   setAlert: (a: any) => void;
   currentUser?: any;
   open: boolean;
   onClose: () => void;
+  // ✅ NEW: Callback để update selectedKeyword khi rename
+  onKeywordRenamed?: (oldKeyword: string, newKeyword: string) => void;
 }
 
 // ✅ Configuration for infinite scroll
@@ -86,11 +95,13 @@ export default function KeywordsAccordionDialog({
   isLoading,
   updateRoute,
   deleteRoute,
+  createRoute, // ✅ NEW: Add createRoute
   setIsLoading,
   setAlert,
   currentUser,
   open,
   onClose,
+  onKeywordRenamed,
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
@@ -111,6 +122,12 @@ export default function KeywordsAccordionDialog({
   const [loadingMore, setLoadingMore] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
 
+  // ✅ NEW: Add contacts to keyword states
+  const [showAddContactsMode, setShowAddContactsMode] = useState(false);
+  const [selectedContactsToAdd, setSelectedContactsToAdd] = useState<Set<number>>(new Set());
+  const [availableContacts, setAvailableContacts] = useState<any[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+
   // ✅ Refs for infinite scroll
   const contactsListRef = useRef<HTMLDivElement>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
@@ -126,12 +143,62 @@ export default function KeywordsAccordionDialog({
         [selectedKeyword]: Math.min(INITIAL_LOAD, Math.max(0, total)),
       }));
     }
-  }, [selectedKeyword, visibleCounts]);
+  }, [selectedKeyword]); // ✅ FIXED: Remove visibleCounts from dependencies to prevent infinite loop
 
   // ✅ Reset search khi đổi keyword
   useEffect(() => {
     setContactSearch("");
   }, [selectedKeyword]);
+
+  // ✅ FIXED: Listen for keyword rename and update selectedKeyword
+  useEffect(() => {
+    if (onKeywordRenamed && selectedKeyword) {
+      // Check if current selectedKeyword still exists in grouped data
+      const keywordExists = grouped.some(([kw]) => kw === selectedKeyword);
+      if (!keywordExists) {
+        // If selected keyword was renamed, we need to find the new name
+        // This is a simple approach - in a real scenario, you might want to pass the new name directly
+        setSelectedKeyword(null);
+      }
+    }
+  }, [grouped, selectedKeyword, onKeywordRenamed]);
+
+  // ✅ NEW: Fetch available contacts for adding to keyword
+  const fetchAvailableContacts = useCallback(async () => {
+    if (!currentUser?.id) return;
+    
+    setContactsLoading(true);
+    try {
+      const { data } = await api.get("auto-reply/contacts", {
+        params: { userId: currentUser.id, mine: "1" },
+      });
+      
+      // Filter out restricted roles and existing contacts for this keyword
+      const existingContactIds = new Set(
+        selectedKeyword ? 
+          (grouped.find(([kw]) => kw === selectedKeyword)?.[1] || []).map((r: any) => r.contactId) : 
+          []
+      );
+      
+      const available = (data || []).filter((c: any) => 
+        !isRestrictedRole(c.role) && !existingContactIds.has(c.contactId)
+      );
+      
+      setAvailableContacts(available);
+    } catch (error) {
+      console.error("Error fetching contacts:", error);
+      setAvailableContacts([]);
+    } finally {
+      setContactsLoading(false);
+    }
+  }, [currentUser?.id, selectedKeyword, grouped]);
+
+  // ✅ NEW: Fetch contacts when entering add mode
+  useEffect(() => {
+    if (showAddContactsMode && selectedKeyword) {
+      fetchAvailableContacts();
+    }
+  }, [showAddContactsMode, selectedKeyword, fetchAvailableContacts]);
 
   // ✅ Get all filtered routes for selected keyword (full data)
   const allFilteredRoutes = useMemo(() => {
@@ -220,7 +287,7 @@ export default function KeywordsAccordionDialog({
   }, [hasMoreData, loadingMore, loadMore, selectedKeyword]);
 
   // ✅ Handle contact search with reset - FIXED null check
-  const handleContactSearch = (value: string) => {
+  const handleContactSearch = useCallback((value: string) => {
     setContactSearch(value);
     // ✅ Null check before using as index
     if (selectedKeyword) {
@@ -231,7 +298,7 @@ export default function KeywordsAccordionDialog({
         [selectedKeyword]: Math.min(INITIAL_LOAD, Math.max(0, total)),
       }));
     }
-  };
+  }, [selectedKeyword, grouped]); // ✅ FIXED: Add dependencies and useCallback
 
   // Clamp visibleCounts if grouped/routes change (e.g., routes removed)
   useEffect(() => {
@@ -240,12 +307,12 @@ export default function KeywordsAccordionDialog({
       grouped.find(([kw]) => kw === selectedKeyword)?.[1]?.length || 0;
     setVisibleCounts((prev) => {
       const current = prev[selectedKeyword] || INITIAL_LOAD;
-      if (current > total) {
+      if (current > total && total > 0) {
         return { ...prev, [selectedKeyword]: Math.max(0, total) };
       }
       return prev;
     });
-  }, [grouped, selectedKeyword]);
+  }, [grouped, selectedKeyword]); // ✅ Keep dependencies but add safety check
 
   // ✅ Handle keyword selection with scroll reset
   const handleKeywordSelect = (keywordName: string) => {
@@ -272,6 +339,86 @@ export default function KeywordsAccordionDialog({
   const activeKeywords = grouped.filter(([, routes]) =>
     routes.some((r) => r.active)
   ).length;
+
+  // ✅ NEW: Helper function to check if role is restricted
+  const isRestrictedRole = (role: ContactRole) =>
+    role === ContactRole.SUPPLIER || role === ContactRole.INTERNAL;
+
+  // ✅ NEW: Add selected contacts to keyword
+  const addContactsToKeyword = async () => {
+    if (!selectedKeyword || selectedContactsToAdd.size === 0) return;
+    
+    try {
+      setIsLoading(true);
+      
+      const contactIds = Array.from(selectedContactsToAdd);
+      const keywordRoutes = grouped.find(([kw]) => kw === selectedKeyword)?.[1] || [];
+      
+      // Create new routes for selected contacts
+      for (const contactId of contactIds) {
+        await createRoute(
+          { 
+            keyword: selectedKeyword, 
+            contactId, 
+            routeProducts: [] 
+          },
+          { userId: currentUser?.id }
+        );
+      }
+      
+      setLocalAlert({
+        type: "success",
+        message: `✅ Đã thêm ${contactIds.length} khách hàng vào keyword "${selectedKeyword}"`,
+      });
+      
+      // ✅ FIXED: Close confirmation modal
+      setConfirmState({ open: false, title: "", message: "", onConfirm: null });
+      
+      // Reset state
+      setShowAddContactsMode(false);
+      setSelectedContactsToAdd(new Set());
+      
+      // Refresh data
+      if (onKeywordRenamed) {
+        onKeywordRenamed(selectedKeyword, selectedKeyword);
+      }
+      
+    } catch (error: any) {
+      setLocalAlert({
+        type: "error",
+        message: error?.message || "Có lỗi xảy ra khi thêm khách hàng",
+      });
+      // ✅ FIXED: Close confirmation modal even on error
+      setConfirmState({ open: false, title: "", message: "", onConfirm: null });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ✅ NEW: Toggle contact selection for adding
+  const toggleContactToAdd = (contactId: number) => {
+    setSelectedContactsToAdd(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(contactId)) {
+        newSet.delete(contactId);
+      } else {
+        newSet.add(contactId);
+      }
+      return newSet;
+    });
+  };
+
+  // ✅ NEW: Select all available contacts
+  const selectAllContactsToAdd = () => {
+    const allSelected = availableContacts.length > 0 && 
+      availableContacts.every(c => selectedContactsToAdd.has(c.contactId));
+    
+    if (allSelected) {
+      setSelectedContactsToAdd(new Set());
+    } else {
+      setSelectedContactsToAdd(new Set(availableContacts.map(c => c.contactId)));
+    }
+  };
 
   // ✅ Existing handlers
   const handleBulkAction = async (
@@ -517,6 +664,13 @@ export default function KeywordsAccordionDialog({
                         <Edit3 className="w-4 h-4 mr-2" />
                         Đổi keyword
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer text-blue-600"
+                        onClick={() => setShowAddContactsMode(true)}
+                      >
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        Thêm khách hàng
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-red-600 cursor-pointer"
@@ -550,13 +704,67 @@ export default function KeywordsAccordionDialog({
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
-                      placeholder="Tìm kiếm liên hệ..."
+                      placeholder={showAddContactsMode ? "Tìm kiếm khách hàng để thêm..." : "Tìm kiếm liên hệ..."}
                       value={contactSearch}
                       onChange={(e) => handleContactSearch(e.target.value)}
                       className="pl-9 h-9 bg-white border-slate-300 focus:border-blue-500"
                     />
                   </div>
                 </div>
+
+                {/* ✅ NEW: Add Contacts Mode UI */}
+                {showAddContactsMode && (
+                  <div className="flex-shrink-0 mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <UserPlus className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-sm text-blue-900">
+                            Thêm khách hàng vào "{selectedKeyword}"
+                          </div>
+                          <div className="text-xs text-blue-600">
+                            {selectedContactsToAdd.size} khách hàng đã chọn
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowAddContactsMode(false);
+                            setSelectedContactsToAdd(new Set());
+                          }}
+                          className="h-7 text-xs px-2"
+                        >
+                          <span className="flex items-center gap-2">
+                          <X className="w-3 h-3 mr-1" />
+                          
+                          Hủy
+                          </span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setConfirmState({
+                            open: true,
+                            title: "Thêm khách hàng",
+                            message: `Thêm ${selectedContactsToAdd.size} khách hàng vào keyword "${selectedKeyword}"?`,
+                            onConfirm: addContactsToKeyword,
+                          })}
+                          disabled={selectedContactsToAdd.size === 0 || isLoading}
+                          className="h-7 text-xs px-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                          <span className="flex items-center gap-2">
+                          <UserPlus className="w-3 h-3 mr-1" />
+                          Thêm {selectedContactsToAdd.size}
+                          </span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* ✅ UPDATED: Bulk Actions với nút bỏ chọn */}
                 {selectedKeyword &&
@@ -691,7 +899,105 @@ export default function KeywordsAccordionDialog({
                 {/* ✅ UPDATED: INFINITE SCROLL Contacts List với row click */}
                 <div className="flex-1 overflow-y-auto" ref={contactsListRef}>
                   <div className="space-y-2">
-                    {visibleRoutes.length === 0 ? (
+                    {/* ✅ NEW: Show available contacts when in add mode */}
+                    {showAddContactsMode ? (
+                      contactsLoading ? (
+                        <div className="text-center py-12 text-slate-500">
+                          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+                          <div className="text-sm">Đang tải danh sách khách hàng...</div>
+                        </div>
+                      ) : availableContacts.length === 0 ? (
+                        <div className="text-center py-12 text-slate-500">
+                          <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                          <div className="text-sm">
+                            {contactSearch
+                              ? "Không tìm thấy khách hàng phù hợp"
+                              : "Không có khách hàng nào để thêm"}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Quick Actions for Add Mode */}
+                          <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200 mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className="p-1 bg-green-100 rounded-lg">
+                                <UserPlus className="w-3 h-3 text-green-600" />
+                              </div>
+                              <span className="text-xs font-medium text-slate-700">
+                                Chọn khách hàng để thêm
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={selectAllContactsToAdd}
+                                disabled={contactsLoading || availableContacts.length === 0}
+                                className="h-7 text-xs px-2 hover:bg-green-100 text-green-700 font-medium"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  {availableContacts.length > 0 &&
+                                  availableContacts.every(c =>
+                                    selectedContactsToAdd.has(c.contactId)
+                                  )
+                                    ? "Bỏ chọn tất cả"
+                                    : "Chọn tất cả"}
+                                </span>
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Available Contacts List */}
+                          {availableContacts
+                            .filter(contact => 
+                              !contactSearch || 
+                              contact.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                              contact.contactId.toString().includes(contactSearch)
+                            )
+                            .map((contact) => {
+                              const isSelected = selectedContactsToAdd.has(contact.contactId);
+                              return (
+                                <div
+                                  key={contact.contactId}
+                                  className={`flex items-center justify-between p-3 bg-white rounded-lg border hover:border-slate-300 transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "ring-2 ring-green-200 bg-green-50/30"
+                                      : ""
+                                  }`}
+                                  onClick={() => toggleContactToAdd(contact.contactId)}
+                                >
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => toggleContactToAdd(contact.contactId)}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                      <User className="w-4 h-4 text-green-600" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium text-slate-900 truncate">
+                                        {contact.name || `Contact #${contact.contactId}`}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        ID: {contact.contactId}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    {isSelected ? (
+                                      <CheckCircle className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                      <Circle className="w-4 h-4 text-slate-300" />
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </>
+                      )
+                    ) : visibleRoutes.length === 0 ? (
                       <div className="text-center py-12 text-slate-500">
                         <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
                         <div className="text-sm">

@@ -921,9 +921,14 @@ export default function KeywordsModal({
             isLoading={isLoading}
             updateRoute={updateRoute}
             deleteRoute={deleteRoute}
+            createRoute={createRoute} // ✅ NEW: Add createRoute for adding contacts
             setIsLoading={setIsLoading}
             setAlert={setAlert} // ✅ Keep for compatibility (child will use local alert)
             currentUser={currentUser}
+            onKeywordRenamed={(oldKeyword, newKeyword) => {
+              // ✅ FIXED: Refresh data after rename to update UI
+              fetchRoutes();
+            }}
           />
 
           <ConfirmDialog
