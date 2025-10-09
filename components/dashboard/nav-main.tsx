@@ -24,6 +24,7 @@ export function NavMain({
       url: string;
       showBadge?: boolean;
       badgeType?: string;
+      target?: string;
     }[];
   }[];
   activeUrl: string;
@@ -68,6 +69,7 @@ export function NavMain({
                       )}
                       title={subItem.title}
                       onClick={() => setActiveUrl(subItem.url)}
+                      target={subItem.target}
                     >
                       <span className="flex-1">{subItem.title}</span>
                     </Link>

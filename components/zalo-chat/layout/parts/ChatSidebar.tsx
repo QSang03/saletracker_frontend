@@ -686,11 +686,6 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                        }
                      })()}
                    </div>
-                   {c.unread_count > 0 && (
-                     <div className="bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[16px] h-4 flex items-center justify-center text-[10px]">
-                       {c.unread_count}
-                     </div>
-                   )}
                  </div>
                </div>
              </button>

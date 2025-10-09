@@ -1,5 +1,18 @@
 // Định nghĩa navItems dùng chung cho sidebar, middleware, layout
-const baseNavItems = [
+interface NavItem {
+  title: string;
+  url: string;
+  roles?: string[];
+  target?: string;
+}
+
+interface NavGroup {
+  title: string;
+  icon: string;
+  items: NavItem[];
+}
+
+const baseNavItems: NavGroup[] = [
   {
     title: "Thống kê",
     icon: "FileBarChart2",
@@ -67,7 +80,7 @@ const baseNavItems = [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
       { title: "Lời chào tự động", url: "/dashboard/auto-greeting" },
       // { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
-      { title: "Zalo NKC", url: "/zalo-chat"},
+      { title: "Zalo NKC", url: "/zalo-chat", target: "_blank"},
     ],
   },
   {
