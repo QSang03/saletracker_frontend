@@ -75,6 +75,8 @@ interface Props {
   onClose: () => void;
   // ✅ NEW: Callback để update selectedKeyword khi rename
   onKeywordRenamed?: (oldKeyword: string, newKeyword: string) => void;
+  // ✅ NEW: Callback để refresh data sau khi thêm contacts
+  onDataRefresh?: () => void;
 }
 
 // ✅ Configuration for infinite scroll
@@ -102,6 +104,7 @@ export default function KeywordsAccordionDialog({
   open,
   onClose,
   onKeywordRenamed,
+  onDataRefresh,
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
@@ -381,10 +384,13 @@ export default function KeywordsAccordionDialog({
       setShowAddContactsMode(false);
       setSelectedContactsToAdd(new Set());
       
-      // Refresh data
-      if (onKeywordRenamed) {
-        onKeywordRenamed(selectedKeyword, selectedKeyword);
+      // ✅ FIXED: Refresh data để hiển thị realtime
+      if (onDataRefresh) {
+        onDataRefresh(); // Refresh toàn bộ data từ parent
       }
+      
+      // ✅ FIXED: Refresh available contacts để loại bỏ những khách hàng đã thêm
+      await fetchAvailableContacts();
       
     } catch (error: any) {
       setLocalAlert({

@@ -929,6 +929,10 @@ export default function KeywordsModal({
               // ✅ FIXED: Refresh data after rename to update UI
               fetchRoutes();
             }}
+            onDataRefresh={() => {
+              // ✅ NEW: Refresh data after adding contacts
+              fetchRoutes();
+            }}
           />
 
           <ConfirmDialog
