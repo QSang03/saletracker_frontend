@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Message } from '@/types/zalo-chat';
+import { EmojiRenderer } from '@/components/common/EmojiRenderer';
 
 export default function MessageBubble({
   message,
@@ -20,7 +21,11 @@ export default function MessageBubble({
       <div className={`inline-block px-3 py-2 rounded-2xl ${isRight ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted rounded-bl-sm'}`}>
         {showName && <div className="text-[11px] opacity-70">{message.sender?.name}</div>}
         <div className="whitespace-pre-wrap break-words text-sm">
-          {typeof message.content === 'string' ? message.content : (message as any)?.content?.text ?? JSON.stringify(message.content)}
+          <EmojiRenderer 
+            text={typeof message.content === 'string' ? message.content : (message as any)?.content?.text ?? JSON.stringify(message.content)}
+            renderMode="image"
+            className="inline"
+          />
         </div>
         <div className="text-[10px] opacity-60 mt-1 flex items-center gap-2">
           <span>{message.formatted_timestamp || (message as any).timestamp}</span>

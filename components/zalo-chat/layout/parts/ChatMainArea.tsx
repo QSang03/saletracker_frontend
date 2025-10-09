@@ -1305,7 +1305,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                             {(() => {
                                               // Render quoted content based on content_type
                                               if (m.quoted_message.content_type === 'TEXT' && m.quote_text) {
-                                                return String(m.quote_text);
+                                                return (
+                                                  <EmojiRenderer 
+                                                    text={String(m.quote_text)}
+                                                    renderMode="image"
+                                                    className="inline"
+                                                  />
+                                                );
                                               } else if (m.quoted_message.content_type === 'IMAGE') {
                                                 try {
                                                   // Thử lấy thumbnail từ quote.attach trước
@@ -1353,15 +1359,23 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                                   return '📄 File';
                                                 }
                                               }
-                                              return m.quote_text ? String(m.quote_text) : 'Tin nhắn';
+                                              return m.quote_text ? (
+                                                <EmojiRenderer 
+                                                  text={String(m.quote_text)}
+                                                  renderMode="image"
+                                                  className="inline"
+                                                />
+                                              ) : 'Tin nhắn';
                                             })()}
                                           </div>
                                         </div>
                                       )}
                                       {/* Tin nhắn chính */}
-                                      <span style={{ whiteSpace: 'pre-wrap' }}>
-                                        {textContent}
-                                      </span>
+                                      <EmojiRenderer 
+                                        text={textContent}
+                                        renderMode="image"
+                                        style={{ whiteSpace: 'pre-wrap', display: 'inline' }}
+                                      />
                                     </div>
                                   );
                                 }
@@ -1671,7 +1685,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                             {(() => {
                                               // Render quoted content based on content_type
                                               if (m.quoted_message.content_type === 'TEXT' && m.quote_text) {
-                                                return String(m.quote_text);
+                                                return (
+                                                  <EmojiRenderer 
+                                                    text={String(m.quote_text)}
+                                                    renderMode="image"
+                                                    className="inline"
+                                                  />
+                                                );
                                               } else if (m.quoted_message.content_type === 'IMAGE') {
                                                 try {
                                                   // Thử lấy thumbnail từ quote.attach trước
@@ -1719,7 +1739,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                                   return '📄 File';
                                                 }
                                               }
-                                              return m.quote_text ? String(m.quote_text) : 'Tin nhắn';
+                                              return m.quote_text ? (
+                                                <EmojiRenderer 
+                                                  text={String(m.quote_text)}
+                                                  renderMode="image"
+                                                  className="inline"
+                                                />
+                                              ) : 'Tin nhắn';
                                             })()}
                                           </div>
                                         </div>
@@ -2390,7 +2416,13 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                           {(() => {
                                             // Render quoted content based on content_type
                                             if (m.quoted_message.content_type === 'TEXT' && m.quote_text) {
-                                              return String(m.quote_text);
+                                              return (
+                                                <EmojiRenderer 
+                                                  text={String(m.quote_text)}
+                                                  renderMode="image"
+                                                  className="inline"
+                                                />
+                                              );
                                             } else if (m.quoted_message.content_type === 'IMAGE') {
                                               try {
                                                 // Thử lấy thumbnail từ quote.attach trước
@@ -2438,15 +2470,23 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                                                 return '📄 File';
                                               }
                                             }
-                                            return m.quote_text ? String(m.quote_text) : 'Tin nhắn';
+                                            return m.quote_text ? (
+                                              <EmojiRenderer 
+                                                text={String(m.quote_text)}
+                                                renderMode="image"
+                                                className="inline"
+                                              />
+                                            ) : 'Tin nhắn';
                                           })()}
                                         </div>
                                       </div>
                                     )}
                                     {/* Tin nhắn chính */}
-                                    <span style={{ whiteSpace: 'pre-wrap' }}>
-                                      {textContent}
-                                    </span>
+                                    <EmojiRenderer 
+                                      text={textContent}
+                                      renderMode="image"
+                                      style={{ whiteSpace: 'pre-wrap', display: 'inline' }}
+                                    />
                                   </div>
                                 );
                               }
