@@ -1342,15 +1342,6 @@ const AutoGreetingCustomerList: React.FC<
                             >
                               <History className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteCustomer(customer)}
-                              className="border-red-300 text-red-600 hover:bg-red-50"
-                              title="Xóa khách hàng"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
                           </div>
                         </td>
                       </tr>

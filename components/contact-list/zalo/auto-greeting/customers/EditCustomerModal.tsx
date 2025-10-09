@@ -163,7 +163,8 @@ const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                             onFormChange("zaloDisplayName", e.target.value)
                           }
                           placeholder="Nhập tên hiển thị Zalo"
-                          className="relative h-14 text-base border-2 border-orange-200 rounded-xl bg-white shadow-sm hover:shadow-md focus:shadow-lg transition-all duration-200 focus:border-orange-300 pl-12 pr-4"
+                          className="relative h-14 text-base border-2 border-orange-200 rounded-xl bg-gray-100 shadow-sm cursor-not-allowed pl-12 pr-4"
+                          disabled={true}
                         />
 
                         {/* User icon inside input */}
@@ -270,13 +271,13 @@ const EditCustomerModal: React.FC<EditCustomerModalProps> = ({
                     )}
                   </div>
 
-                  {/* Trạng thái kích hoạt */}
+                  {/* Trạng thái gửi */}
                   <div className="space-y-3">
                     <label className="flex items-center gap-2 text-base font-bold text-gray-700">
                       <span className="w-5 h-5 flex items-center justify-center">
                         {editForm.isActive === 1 ? '🟢' : '🔴'}
                       </span>
-                      Trạng thái kích hoạt
+                      Trạng thái gửi
                     </label>
 
                     <div className="relative group">

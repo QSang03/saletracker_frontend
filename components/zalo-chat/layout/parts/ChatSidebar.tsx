@@ -306,21 +306,19 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
           <>
             {/* Header */}
             <div className="p-3 border-b border-gray-200">
-              <div className="flex items-center gap-2 mb-3">
-                <button
-                  onClick={() => router.push('/dashboard')}
-                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Về trang chủ"
-                >
-                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
+              <button 
+                onClick={() => router.push('/dashboard')}
+                className="flex items-center gap-2 mb-3 w-full text-left hover:bg-gray-50 p-2 rounded-lg transition-colors"
+                title="Quay lại Saletracker"
+              >
+                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
                 <div>
-                  <div className="font-medium text-gray-900">Zalo - {user?.username || 'NKC'}</div>
+                  <div className="font-medium text-gray-900">Quay lại Saletracker</div>
                   <div className="text-xs text-gray-500">Hệ thống chat</div>
                 </div>
-              </div>
+              </button>
               
               {/* Search Input */}
               <div className="relative flex items-center gap-2">
@@ -461,21 +459,19 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
           <>
       {/* Header */}
       <div className="p-3 border-b border-gray-200">
-        <div className="flex items-center gap-2 mb-3">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Về trang chủ"
-          >
-            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+        <button 
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center gap-2 mb-3 w-full text-left hover:bg-gray-50 p-2 rounded-lg transition-colors"
+          title="Quay lại Saletracker"
+        >
+          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
           <div>
-            <div className="font-medium text-gray-900">Zalo - NKC</div>
+            <div className="font-medium text-gray-900">Quay lại Saletracker</div>
             <div className="text-xs text-gray-500">Hệ thống chat</div>
           </div>
-        </div>
+        </button>
         
         {/* Search */}
         <div className="relative">
