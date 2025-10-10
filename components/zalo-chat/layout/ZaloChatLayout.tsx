@@ -6,13 +6,23 @@ import ChatSidebar from './parts/ChatSidebar';
 import ChatMainArea from './parts/ChatMainArea';
 import ChatInfoPanel from './parts/ChatInfoPanel';
 import { Conversation } from '@/types/zalo-chat';
-import { getAccessToken } from '@/lib/auth';
 
 export default function ZaloChatLayout() {
   const { user } = useDynamicPermission();
   const userId = useMemo(() => user?.id ? Number(user.id) : null, [user?.id]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  
+  // Enhanced setActiveConversation that also adds to conversations list if not present
+  const setActiveConversationWithList = useCallback((conversation: Conversation | null) => {
+    setActiveConversation(conversation);
+    
+    // If conversation is not null and not already in conversations list, add it
+    if (conversation && !conversations.find(c => c.id === conversation.id)) {
+      console.log('➕ Adding conversation to local list:', conversation.conversation_name);
+      setConversations(prev => [conversation, ...prev]);
+    }
+  }, [conversations]);
   const [searchNavigateData, setSearchNavigateData] = useState<{conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number} | null>(null);
   const hasAutoSelectedRef = React.useRef(false);
 
@@ -27,32 +37,11 @@ export default function ZaloChatLayout() {
     if (conversations.length > 0 && !activeConversation && !hasAutoSelectedRef.current) {
       const firstConversation = conversations[0];
       console.log('🎯 Auto-selecting first conversation (initial load):', firstConversation.conversation_name);
-      setActiveConversation(firstConversation);
+      setActiveConversationWithList(firstConversation);
       hasAutoSelectedRef.current = true; // Đánh dấu đã auto-select rồi
     }
-  }, [conversations, activeConversation]);
+  }, [conversations, activeConversation, setActiveConversationWithList]);
 
-  // Fetch a conversation by ID when it's not present locally (e.g., opened via search)
-  const fetchConversationById = useCallback(async (conversationId: number): Promise<Conversation | null> => {
-    try {
-      const token = getAccessToken();
-      if (!token) return null;
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/web/conversations/${conversationId}`;
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': process.env.NEXT_PUBLIC_MASTER_KEY || 'nkcai',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      return (json?.data || null) as Conversation | null;
-    } catch {
-      return null;
-    }
-  }, []);
 
   // Handle search message click
   const handleSearchMessageClick = (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => {
@@ -60,30 +49,33 @@ export default function ZaloChatLayout() {
       conversationId, 
       messageId, 
       messagePosition, 
-      totalMessagesInConversation,
-      availableConversations: conversations.length,
-      conversationIds: conversations.map(c => c.id)
+      totalMessagesInConversation
     });
     
-    // Find the conversation and set it as active
-    const foundConversation = conversations.find(c => c.id === conversationId);
-    if (foundConversation) {
-      console.log('📱 Setting active conversation:', foundConversation.conversation_name);
-      setActiveConversation(foundConversation);
-      setSearchNavigateData({ conversationId, messageId, messagePosition, totalMessagesInConversation });
-      return;
-    }
-
-    // Not found locally → fetch from backend to get full metadata
-    (async () => {
-      const fetched = await fetchConversationById(conversationId);
-      if (fetched) {
-        setActiveConversation(fetched);
-      } else {
-        console.error('❌ Conversation not found from API:', conversationId);
-      }
-      setSearchNavigateData({ conversationId, messageId, messagePosition, totalMessagesInConversation });
-    })();
+    // Always create a temporary conversation object and set it as active
+    // The actual conversation data will be loaded via messages API
+    const tempConversation: Conversation = {
+      id: conversationId,
+      conversation_name: `Conversation ${conversationId}`,
+      conversation_type: 'private',
+      unread_count: 0,
+      total_messages: totalMessagesInConversation || 0,
+      last_message_timestamp: new Date().toISOString(),
+      last_message: undefined,
+      participant: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user_id: 0,
+      account_username: '',
+      account_display_name: '',
+      is_group: false,
+      is_private: true,
+      zalo_conversation_id: `temp_${conversationId}`
+    };
+    
+    console.log('📱 Setting temporary conversation:', tempConversation.conversation_name);
+    setActiveConversationWithList(tempConversation);
+    setSearchNavigateData({ conversationId, messageId, messagePosition, totalMessagesInConversation });
   };
 
   if (!userId) {
@@ -100,7 +92,7 @@ export default function ZaloChatLayout() {
         <ChatSidebar 
           userId={userId} 
           activeConversationId={activeConversation?.id ?? null} 
-          onSelectConversation={setActiveConversation}
+          onSelectConversation={setActiveConversationWithList}
           onConversationsChange={setConversations}
           onSearchMessageClick={handleSearchMessageClick}
         />
