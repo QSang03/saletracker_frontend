@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAccessToken } from '@/lib/auth';
 
 export type SearchType = 'all' | 'conversations' | 'messages' | 'contacts' | 'files' | 'images' | 'videos' | 'locations';
@@ -91,7 +91,7 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
     return () => {
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [params?.q, params?.user_id, params?.type, params?.limit]);
+  }, [params?.q, params?.user_id, params?.type, params?.limit, fetchData]);
 
   const refetch = useCallback(() => {
     refreshRef.current++;
