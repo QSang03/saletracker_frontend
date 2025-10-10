@@ -107,13 +107,13 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
       return;
     }
 
-    // Show loading immediately during the 2s debounce window
+    // Show loading immediately during the 500ms debounce window
     setIsLoading(true);
 
-    // Enforce a 2s delay before calling API
+    // Enforce a 500ms delay before calling API
     timeoutRef.current = setTimeout(() => {
       fetchData();
-    }, 2000);
+    }, 500);
 
     return () => {
       if (timeoutRef.current) {
