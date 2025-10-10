@@ -112,6 +112,17 @@ const AutoGreetingCustomerList: React.FC<
       role.name === 'View'
     );
   };
+
+  // Helper function để kiểm tra user có quyền admin hoặc view (xem tất cả + filter)
+  const isAdminOrView = () => {
+    if (!currentUser?.roles) return false;
+    return currentUser.roles.some((role: any) => 
+      role.name === 'admin' || 
+      role.name === 'Admin' || 
+      role.name === 'view' || 
+      role.name === 'View'
+    );
+  };
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
@@ -228,8 +239,11 @@ const AutoGreetingCustomerList: React.FC<
   useEffect(() => {
     loadCustomers();
     loadSystemConfig();
-    loadUsers();
-    loadDepartments();
+    // Chỉ load users và departments nếu là admin hoặc view
+    if (isAdminOrView()) {
+      loadUsers();
+      loadDepartments();
+    }
   }, []);
 
   // Load customers when filters change
@@ -840,8 +854,8 @@ const AutoGreetingCustomerList: React.FC<
         enableStatusFilter={true}
         enableConversationTypeFilter={true}
         enableSingleDateFilter={true}
-        enableEmployeeFilter={true}
-        enableDepartmentFilter={true}
+        enableEmployeeFilter={isAdminOrView()}
+        enableDepartmentFilter={isAdminOrView()}
         enableQuantityFilter={true}
         enablePageSize={true}
         enableGoToPage={true}
