@@ -130,6 +130,9 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
     };
   }, [searchQuery]);
 
+  // Prevent unnecessary re-renders by memoizing the debounced query
+  const memoizedDebouncedQuery = useMemo(() => debouncedQuery, [debouncedQuery]);
+
   // Focus search input when entering search mode
   useEffect(() => {
     if (isSearchMode && searchInputRef.current) {
@@ -391,9 +394,9 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                     Nhập ít nhất 2 ký tự để tìm kiếm
                   </div>
                 </div>
-              ) : debouncedQuery ? (
+              ) : memoizedDebouncedQuery ? (
                 <SearchResults
-                  query={debouncedQuery}
+                  query={memoizedDebouncedQuery}
                   userId={targetUserId}
                   onPickConversation={(id) => {
                     const found = allConversations.find(c => c.id === id);
@@ -774,9 +777,12 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 
 // Inline component to render search results using /web/search
 function SearchResults({ query, userId, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; onPickConversation: (conversationId: number) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
-  const params = query
-    ? { q: query, user_id: userId ?? undefined, type: 'all' as const, limit: 50 }
-    : null;
+  // Memoize params to prevent unnecessary re-renders
+  const params = useMemo(() => {
+    if (!query || query.trim().length < 2) return null;
+    return { q: query.trim(), user_id: userId ?? undefined, type: 'all' as const, limit: 50 };
+  }, [query, userId]);
+  
   const { data, isLoading, error } = useSearch<any>(params);
 
   return (
