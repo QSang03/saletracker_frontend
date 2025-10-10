@@ -148,17 +148,22 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     // Nếu đang chuyển sang conversation khác theo search, chỉ chờ tới khi conversation khớp mới xử lý
     if (conversation?.id !== searchNavigateData.conversationId) return;
 
-    // Lần đầu vào từ search: tính page mục tiêu và set ngay
+    // Tính page mục tiêu
     const totalMessages = searchNavigateData.totalMessagesInConversation || 1000; // fallback
     const positionFromEnd = totalMessages - searchNavigateData.messagePosition + 1;
     const calculatedPage = Math.ceil(positionFromEnd / LIMIT);
 
-    // Chỉ set lại nếu khác page hiện tại để không tạo thêm một fetch nữa
-    setIsNavigatingFromSearch(true);
-    setAcc([]);
-    setReady(false);
-    setPage(prev => (prev === calculatedPage ? prev : calculatedPage));
-  }, [searchNavigateData?.conversationId, searchNavigateData?.messageId, searchNavigateData?.messagePosition, searchNavigateData?.totalMessagesInConversation, conversation?.id]);
+    if (page !== calculatedPage) {
+      // Cần nạp trang khác → reset dữ liệu và set page
+      setIsNavigatingFromSearch(true);
+      setAcc([]);
+      setReady(false);
+      setPage(calculatedPage);
+    } else {
+      // Đã ở đúng trang → chỉ kích hoạt điều hướng để scroll/highlight lại, KHÔNG xoá acc
+      setIsNavigatingFromSearch(true);
+    }
+  }, [searchNavigateData?.conversationId, searchNavigateData?.messageId, searchNavigateData?.messagePosition, searchNavigateData?.totalMessagesInConversation, conversation?.id, page]);
 
   // Handle scroll to search message after data is loaded
   useEffect(() => {
@@ -197,8 +202,16 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         // Start scrolling attempts after DOM has time to render
         setTimeout(() => attemptScroll(), 500);
       } else {
-        // Message not found, reset navigation state
-        setIsNavigatingFromSearch(false);
+        // Tin nhắn không có trong trang hiện tại.
+        // Nếu đang ở đúng page mục tiêu (page đã tính) nhưng vẫn chưa thấy do render chậm, thử lại ngắn.
+        // Không xoá acc để tránh trắng màn hình lần 2.
+        setTimeout(() => {
+          const el = document.getElementById(`message-${messageId}`);
+          if (el) {
+            scrollToMessage(messageId);
+          }
+          setIsNavigatingFromSearch(false);
+        }, 300);
       }
     }
   }, [acc, searchNavigateData, isNavigatingFromSearch, onSearchNavigateComplete]);
