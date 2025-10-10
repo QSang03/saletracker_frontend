@@ -90,16 +90,36 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
 
   useEffect(() => {
     const q = params?.q?.trim();
-    if (!q) return;
+
+    // Always clear any pending debounce when params change
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // If no query, reset loading state and abort any in-flight request
+    if (!q) {
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    // Show loading immediately during the 2s debounce window
+    setIsLoading(true);
 
     // Enforce a 2s delay before calling API
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       fetchData();
     }, 2000);
 
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
       if (abortRef.current) abortRef.current.abort();
     };
   }, [params?.q, params?.user_id, params?.type, params?.limit, fetchData]);
