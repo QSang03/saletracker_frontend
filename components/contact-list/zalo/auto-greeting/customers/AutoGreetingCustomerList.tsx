@@ -239,12 +239,15 @@ const AutoGreetingCustomerList: React.FC<
   useEffect(() => {
     loadCustomers();
     loadSystemConfig();
-    // Chỉ load users và departments nếu là admin hoặc view
-    if (isAdminOrView()) {
+  }, []);
+
+  // Load users và departments khi currentUser đã sẵn sàng
+  useEffect(() => {
+    if (currentUser && isAdminOrView()) {
       loadUsers();
       loadDepartments();
     }
-  }, []);
+  }, [currentUser]);
 
   // Load customers when filters change
   useEffect(() => {

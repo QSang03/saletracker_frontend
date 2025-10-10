@@ -132,8 +132,12 @@ export function useConversations(params: UseConversationsParams): UseConversatio
 
   useEffect(() => {
     if (!params) return;
-    fetchData();
+    // Defer fetch to next tick to avoid dev StrictMode double-invoke causing a canceled initial request
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 0);
     return () => {
+      clearTimeout(timer);
       if (abortRef.current) abortRef.current.abort();
     };
   }, [queryString, fetchData]);

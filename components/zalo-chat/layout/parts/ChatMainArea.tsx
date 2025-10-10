@@ -26,6 +26,7 @@ interface ChatMainAreaProps {
 export default function ChatMainArea({ conversation, searchNavigateData, onSearchNavigateComplete }: ChatMainAreaProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
   
   // Get user data
   const { user } = useContext(AuthContext);
@@ -78,7 +79,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const [isNavigatingFromSearch, setIsNavigatingFromSearch] = useState(false);
   const [searchNavigatedConversations, setSearchNavigatedConversations] = useState<Set<number>>(new Set());
-  const [searchNavigationKey, setSearchNavigationKey] = useState(0);
+  // No separate key; we'll compute target page directly from search data
 
   // Backup scroll to ensure highlight works
   useEffect(() => {
@@ -124,10 +125,15 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       setHighlightedMessageId(messageId);
       
       // Scroll to the message with smooth behavior
+      isProgrammaticScrollRef.current = true;
       messageElement.scrollIntoView({ 
         behavior: 'smooth', 
         block: 'center' 
       });
+      // Reset programmatic flag shortly after smooth scroll completes
+      setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 600);
       
       // Remove highlight after 3 seconds
       setTimeout(() => {
@@ -136,32 +142,23 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     }
   };
 
-  // Handle search navigation - force load correct page on first click
+  // Handle search navigation - compute and jump to exact page immediately
   useEffect(() => {
-    if (searchNavigateData && !isNavigatingFromSearch) {
-      const { messageId, messagePosition, conversationId } = searchNavigateData;
-      
-      // Calculate page from message_position 
-      // Since API sorts DESC (newest first), we need to calculate from the end
-      // message_position is from oldest (1) to newest (total)
-      // For DESC sort, page 1 = newest messages, page 2 = older messages, etc.
-      const totalMessages = searchNavigateData.totalMessagesInConversation || 1000; // fallback
-      const positionFromEnd = totalMessages - messagePosition + 1;
-      const calculatedPage = Math.ceil(positionFromEnd / 20);
-      
-      // Mark that we're navigating from search
-      setIsNavigatingFromSearch(true);
-      
-      // Force reload by incrementing search navigation key
-      setSearchNavigationKey(prev => prev + 1);
-      
-      // Always force reload with the correct page (even if same page, clear data to force reload)
-      setPage(calculatedPage);
-      // Clear accumulated messages to force reload
-      setAcc([]);
-      setReady(false);
-    }
-  }, [searchNavigateData]);
+    if (!searchNavigateData) return;
+    // Nếu đang chuyển sang conversation khác theo search, chỉ chờ tới khi conversation khớp mới xử lý
+    if (conversation?.id !== searchNavigateData.conversationId) return;
+
+    // Lần đầu vào từ search: tính page mục tiêu và set ngay
+    const totalMessages = searchNavigateData.totalMessagesInConversation || 1000; // fallback
+    const positionFromEnd = totalMessages - searchNavigateData.messagePosition + 1;
+    const calculatedPage = Math.ceil(positionFromEnd / LIMIT);
+
+    // Chỉ set lại nếu khác page hiện tại để không tạo thêm một fetch nữa
+    setIsNavigatingFromSearch(true);
+    setAcc([]);
+    setReady(false);
+    setPage(prev => (prev === calculatedPage ? prev : calculatedPage));
+  }, [searchNavigateData?.conversationId, searchNavigateData?.messageId, searchNavigateData?.messagePosition, searchNavigateData?.totalMessagesInConversation, conversation?.id]);
 
   // Handle scroll to search message after data is loaded
   useEffect(() => {
@@ -176,22 +173,21 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         const attemptScroll = (attempts = 0) => {
           if (attempts >= 20) {
             setIsNavigatingFromSearch(false);
-            if (onSearchNavigateComplete) {
-              onSearchNavigateComplete();
-            }
+            onSearchNavigateComplete?.();
             return;
           }
           
           const messageElement = document.getElementById(`message-${messageId}`);
           if (messageElement) {
+            // Temporarily suspend intersection-triggered pagination
+            isProgrammaticScrollRef.current = true;
             scrollToMessage(messageId);
             // Mark this conversation as search-navigated and reset navigation state
             setSearchNavigatedConversations(prev => new Set([...prev, searchNavigateData.conversationId]));
             setTimeout(() => {
               setIsNavigatingFromSearch(false);
-              if (onSearchNavigateComplete) {
-                onSearchNavigateComplete();
-              }
+              onSearchNavigateComplete?.();
+              isProgrammaticScrollRef.current = false;
             }, 1000); // Đợi 1s để đảm bảo scroll hoàn thành
           } else {
             setTimeout(() => attemptScroll(attempts + 1), 200);
@@ -265,20 +261,44 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     
     if (!currentConversation) return null;
     
+    // If coming from search and already on the target conversation, use the exact target page immediately
+    let pageToUse = page;
+    if (
+      searchNavigateData &&
+      currentConversation.id === searchNavigateData.conversationId
+    ) {
+      const total = searchNavigateData.totalMessagesInConversation || 1000;
+      const positionFromEnd = total - searchNavigateData.messagePosition + 1;
+      const targetPage = Math.ceil(positionFromEnd / LIMIT);
+      pageToUse = targetPage;
+    }
+
     return {
       conversation_id: currentConversation.id,
-      page,
+      page: pageToUse,
       limit: LIMIT,
       sort_by: "timestamp" as const,
       sort_order: "desc" as const, // API trả mới -> cũ
       include_quotes: true,
       search: q || undefined,
-      // Add search navigation key to force reload when navigating from search
-      _search_nav_key: searchNavigationKey,
     };
-  }, [conversation?.id, searchNavigateData?.conversationId, page, q, searchNavigationKey]);
+  }, [conversation?.id, searchNavigateData?.conversationId, searchNavigateData?.messagePosition, searchNavigateData?.totalMessagesInConversation, page, q]);
 
-  const { messages: fetched = [], isLoading, error, pagination } = useMessages(params);
+  // Stabilize params object identity to avoid duplicate fetches from rapid state changes
+  const stableParams = useMemo(() => {
+    if (!params) return null;
+    return { ...params };
+  }, [
+    params?.conversation_id,
+    params?.page,
+    params?.limit,
+    params?.sort_by,
+    params?.sort_order,
+    params?.include_quotes,
+    params?.search,
+  ]);
+
+  const { messages: fetched = [], isLoading, error, pagination } = useMessages(stableParams);
   
   // Get group members for group conversations
   const { members: groupMembers = [] } = useGroupMembers(
@@ -287,7 +307,11 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
   // reset khi đổi hội thoại / tìm kiếm
   useEffect(() => {
-    setPage(1);
+    // Nếu đang navigate từ search vào đúng conversation, không reset page về 1
+    const skipPageReset = !!searchNavigateData && conversation?.id === searchNavigateData.conversationId;
+    if (!skipPageReset) {
+      setPage(1);
+    }
     setAcc([]);
     setHasMore(true);
     setReady(false);
@@ -302,7 +326,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     } else {
       console.log('🔄 Conversation changed, resetting states:', conversation?.conversation_name);
     }
-  }, [conversation, q]); // Track toàn bộ conversation object, không chỉ id
+  }, [conversation?.id, q]); // Chỉ reset khi đổi conv hoặc thay đổi q
 
   // gộp trang + cập nhật hasMore theo total_pages
   useEffect(() => {
@@ -360,10 +384,12 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     if (!hasAutoScrolled && !isNavigatingFromSearch && !isSearchNavigated) {
       const timer = setTimeout(() => {
         if (scrollRef.current) {
+          isProgrammaticScrollRef.current = true;
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
           setHasAutoScrolled(true);
           setReady(true);
           console.log('📜 Auto-scrolled to bottom for conversation:', conversation.conversation_name, 'with', acc.length, 'messages');
+          setTimeout(() => { isProgrammaticScrollRef.current = false; }, 300);
         }
       }, 50);
 
@@ -382,7 +408,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       (entries) => {
         if (!ready) return;
         if (!hasMore || isLoading || isPaging) return;
-        if (isNavigatingFromSearch) return; // Không load more khi đang navigate từ search
+        if (isNavigatingFromSearch || isProgrammaticScrollRef.current) return; // Không load khi đang scroll chương trình
         
         // Chỉ load more khi user thực sự scroll lên đầu (không phải auto scroll)
         if (entries[0].isIntersecting && userScrolled) {
@@ -394,13 +420,16 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
           console.log('📜 Loading more messages, page:', page + 1);
         }
       },
-      { root: scrollRef.current, rootMargin: "200px 0px 0px 0px" }
+      { root: scrollRef.current, rootMargin: "50px 0px 0px 0px", threshold: 1.0 }
     );
     ob.observe(topRef.current);
     return () => ob.disconnect();
   }, [hasMore, isLoading, isPaging, ready, page, userScrolled, isNavigatingFromSearch]);
 
-  const onScroll = () => { if (!userScrolled) setUserScrolled(true); };
+  const onScroll = () => {
+    if (isProgrammaticScrollRef.current) return;
+    if (!userScrolled) setUserScrolled(true);
+  };
 
   // Handle message sending
   const handleSendMessage = async () => {

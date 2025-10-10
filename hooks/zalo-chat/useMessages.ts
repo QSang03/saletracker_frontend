@@ -88,7 +88,10 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
 
   const fetchData = useCallback(async () => {
     if (!params) return;
-    if (abortRef.current) abortRef.current.abort();
+    // Only abort if there was a previous in-flight request and params truly changed
+    if (abortRef.current) {
+      try { abortRef.current.abort(); } catch {}
+    }
     const abortController = new AbortController();
     abortRef.current = abortController;
 
@@ -130,9 +133,18 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
     if (!params?.conversation_id) return;
     fetchData();
     return () => {
-      if (abortRef.current) abortRef.current.abort();
+      // Do not abort here to avoid 'canceled' first request in some browsers
     };
-  }, [params]);
+  }, [
+    params?.conversation_id,
+    params?.page,
+    params?.limit,
+    params?.sort_by,
+    params?.sort_order,
+    params?.include_quotes,
+    params?.search,
+    fetchData,
+  ]);
 
   const refetch = useCallback(() => {
     refreshRef.current++;
