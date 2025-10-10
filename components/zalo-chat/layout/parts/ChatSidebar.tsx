@@ -121,15 +121,15 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
       return;
     }
     
-    // Check if query has 2 or more words (separated by spaces)
-    const wordCount = trimmedQuery.split(/\s+/).filter(word => word.length > 0).length;
+    // Check if query has 2 or more characters
+    const charCount = trimmedQuery.length;
     
-    if (wordCount >= 2) {
-      // For 2+ words, call API immediately without debounce
+    if (charCount >= 2) {
+      // For 2+ characters, call API immediately without debounce
       setDebouncedQuery(trimmedQuery);
       setIsDebouncing(false);
     } else {
-      // For single word, don't search
+      // For single character, don't search
       setDebouncedQuery('');
       setIsDebouncing(false);
     }
@@ -348,15 +348,15 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const trimmed = searchQuery.trim();
-                        const wordCount = trimmed.split(/\s+/).filter(word => word.length > 0).length;
-                        if (wordCount >= 2) {
+                        const charCount = trimmed.length;
+                        if (charCount >= 4) {
                           setIsDebouncing(false);
                           setDebouncedQuery(trimmed);
                         }
                       }
                     }}
                     type="text"
-                    placeholder="Tìm kiếm (từ 2 từ trở lên)"
+                    placeholder="Tìm kiếm (từ 4 kí tự trở lên)"
                     className="w-full pl-8 pr-10 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <div className="absolute left-2.5 top-2.5 text-gray-400">
@@ -377,8 +377,8 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                   className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900"
                   onClick={() => {
                     const trimmed = searchQuery.trim();
-                    const wordCount = trimmed.split(/\s+/).filter(word => word.length > 0).length;
-                    if (wordCount >= 2) {
+                    const charCount = trimmed.length;
+                    if (charCount >= 4) {
                       setIsDebouncing(false);
                       setDebouncedQuery(trimmed);
                     }
@@ -444,10 +444,10 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 
             {/* Search Results / Recent */}
             <div className="flex-1 overflow-y-auto">
-              {searchQuery.trim().length > 0 && searchQuery.trim().split(/\s+/).filter(word => word.length > 0).length < 2 ? (
+              {searchQuery.trim().length > 0 && searchQuery.trim().length < 4 ? (
                 <div className="p-4">
                   <div className="text-sm text-gray-500 text-center">
-                    Nhập từ 2 từ trở lên để tìm kiếm
+                    Nhập từ 4 kí tự trở lên để tìm kiếm
                   </div>
                 </div>
               ) : memoizedDebouncedQuery ? (
@@ -903,8 +903,8 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
   // Memoize params to prevent unnecessary re-renders
   const params = useMemo(() => {
     if (!query || query.trim().length === 0) return null;
-    const wordCount = query.trim().split(/\s+/).filter(word => word.length > 0).length;
-    if (wordCount < 2) return null;
+    const charCount = query.trim().length;
+    if (charCount < 4) return null;
     return { q: query.trim(), user_id: userId ?? undefined, type: 'all' as const, limit: 50 };
   }, [query, userId]);
   

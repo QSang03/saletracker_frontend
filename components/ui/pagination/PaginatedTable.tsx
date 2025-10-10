@@ -71,6 +71,8 @@ interface PaginatedTableProps {
     | { value: string; label: string }[]
     | readonly { readonly value: string; readonly label: string }[];
   availableZaloLinkStatuses?: { value: string | number; label: string }[];
+  // Enable active/inactive filter (is_active)
+  enableActiveFilter?: boolean;
   availableCategories?:
     | string[]
     | { value: string; label: string }[]
@@ -174,6 +176,8 @@ export type Filters = {
   departments: (string | number)[];
   roles: (string | number)[];
   statuses: (string | number)[];
+  // Active filter: 'all' | '1' | '0'
+  activeFilter?: string;
   managers?: (string | number)[]; // Thêm filter cho trưởng nhóm
   zaloLinkStatuses?: (string | number)[];
   categories: (string | number)[];
@@ -215,6 +219,7 @@ export default function PaginatedTable({
     { value: 1, label: "Đã liên kết" },
     { value: 2, label: "Lỗi liên kết" },
   ],
+  enableActiveFilter,
   enableSingleDateFilter,
   enableDateRangeFilter,
   singleDateLabel,
@@ -496,6 +501,7 @@ export default function PaginatedTable({
       departments: initialFilters?.departments || [],
       roles: initialFilters?.roles || [],
       statuses: initialFilters?.statuses || [],
+      activeFilter: initialFilters?.activeFilter || "all",
       managers: initialFilters?.managers || [], // Thêm filter trưởng nhóm
       zaloLinkStatuses: initialFilters?.zaloLinkStatuses || [],
       categories: initialFilters?.categories || [],
@@ -576,6 +582,7 @@ export default function PaginatedTable({
       JSON.stringify(initialFilters?.departments),
       JSON.stringify(initialFilters?.roles),
       JSON.stringify(initialFilters?.statuses),
+      initialFilters?.activeFilter,
       JSON.stringify(initialFilters?.managers),
       JSON.stringify(initialFilters?.zaloLinkStatuses),
       JSON.stringify(initialFilters?.categories),
@@ -634,6 +641,7 @@ export default function PaginatedTable({
           "departments",
           "roles",
           "statuses",
+          "activeFilter",
           "managers",
           "zaloLinkStatuses",
           "categories",
@@ -707,6 +715,7 @@ export default function PaginatedTable({
       departments: [],
       roles: [],
       statuses: [],
+      activeFilter: "all",
       managers: [],
       zaloLinkStatuses: [],
       categories: [],
@@ -1468,6 +1477,23 @@ export default function PaginatedTable({
               options={statusOptions}
               onChange={handleStatusesChange}
             />
+            </div>
+          )}
+          {enableActiveFilter && (
+            <div className="min-w-0 w-full min-h-[2.5rem]">
+              <Select
+                value={filters.activeFilter && filters.activeFilter.trim() ? filters.activeFilter : "all"}
+                onValueChange={(value) => updateFilter("activeFilter", value as any)}
+              >
+                <SelectTrigger className="min-w-0 w-full border rounded px-2 py-1 text-sm">
+                  <SelectValue placeholder="Kích hoạt" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả</SelectItem>
+                  <SelectItem value="1">Bật</SelectItem>
+                  <SelectItem value="0">Tắt</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
           {enableZaloLinkStatusFilter && (

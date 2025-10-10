@@ -136,6 +136,7 @@ const AutoGreetingCustomerList: React.FC<
   const [conversationTypeFilter, setConversationTypeFilter] =
     useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("");
+  const [activeFilter, setActiveFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -154,6 +155,7 @@ const AutoGreetingCustomerList: React.FC<
     statusFilter: "all",
     conversationTypeFilter: "all",
     dateFilter: "",
+    activeFilter: "all" as string,
     userId: undefined as number | undefined,
     departmentId: undefined as number | undefined,
     daysFilter: undefined as number | undefined,
@@ -202,12 +204,14 @@ const AutoGreetingCustomerList: React.FC<
           statusFilter: saved.statusFilter || "all",
           conversationTypeFilter: saved.conversationTypeFilter || "all",
           dateFilter: saved.dateFilter || "",
+          activeFilter: saved.activeFilter || "all",
           pageSize: saved.itemsPerPage || 10,
         }));
         setSearchTerm(saved.searchTerm || "");
         setStatusFilter(saved.statusFilter || "all");
         setConversationTypeFilter(saved.conversationTypeFilter || "all");
         setDateFilter(saved.dateFilter || "");
+        setActiveFilter(saved.activeFilter || "all");
         setItemsPerPage(saved.itemsPerPage || 10);
       } catch (error) {
         console.error("Error loading filters from localStorage:", error);
@@ -226,6 +230,8 @@ const AutoGreetingCustomerList: React.FC<
     if (filters.conversationTypeFilter && filters.conversationTypeFilter !== "all")
       saveData.conversationTypeFilter = filters.conversationTypeFilter;
     if (filters.dateFilter) saveData.dateFilter = filters.dateFilter;
+    if (filters.activeFilter && filters.activeFilter !== "all")
+      saveData.activeFilter = filters.activeFilter;
     if (filters.pageSize && filters.pageSize !== 10)
       saveData.itemsPerPage = filters.pageSize;
 
@@ -271,6 +277,8 @@ const AutoGreetingCustomerList: React.FC<
       const effStatuses = getEffectiveStatusesCsv({ ...prev, ...newFilters });
       const effConversation = getEffectiveConversationType({ ...prev, ...newFilters });
       const effDate = getEffectiveDate({ ...prev, ...newFilters });
+      // Active filter (single-select from dropdown in PaginatedTable)
+      const activeFilter = (newFilters.activeFilter ?? prev.activeFilter) as string;
 
       // Handle employee filter (single selection from multiselect)
       const userId = Array.isArray(newFilters.employees)
@@ -298,6 +306,7 @@ const AutoGreetingCustomerList: React.FC<
         statusFilter: effStatuses || "all",
         conversationTypeFilter: effConversation,
         dateFilter: effDate,
+        activeFilter,
         userId,
         departmentId,
         daysFilter,
@@ -339,6 +348,7 @@ const AutoGreetingCustomerList: React.FC<
       statusFilter: "all",
       conversationTypeFilter: "all",
       dateFilter: "",
+      activeFilter: "all" as string,
       userId: undefined as number | undefined,
       departmentId: undefined as number | undefined,
       daysFilter: undefined as number | undefined,
@@ -350,6 +360,7 @@ const AutoGreetingCustomerList: React.FC<
     setStatusFilter("all");
     setConversationTypeFilter("all");
     setDateFilter("");
+    setActiveFilter("all");
     setCurrentPage(1);
     setItemsPerPage(10);
     setSelectedCustomerIds(new Set());
@@ -371,6 +382,7 @@ const AutoGreetingCustomerList: React.FC<
         ...(effStatuses && { statusFilter: effStatuses }),
         ...(effConversation !== "all" && { conversationTypeFilter: effConversation }),
         ...(effDate && { dateFilter: effDate }),
+        ...(filters.activeFilter && filters.activeFilter !== 'all' && { activeFilter: filters.activeFilter }),
         ...(filters.userId && { userId: filters.userId.toString() }),
         ...(filters.departmentId && { departmentId: filters.departmentId.toString() }),
         ...(filters.daysFilter !== undefined && filters.daysFilter !== null && { daysFilter: filters.daysFilter.toString() }),
@@ -855,6 +867,7 @@ const AutoGreetingCustomerList: React.FC<
       <PaginatedTable
         enableSearch={true}
         enableStatusFilter={true}
+        enableActiveFilter={true}
         enableConversationTypeFilter={true}
         enableSingleDateFilter={true}
         enableEmployeeFilter={isAdminOrView()}

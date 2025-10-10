@@ -135,10 +135,10 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         isProgrammaticScrollRef.current = false;
       }, 600);
       
-      // Remove highlight after 3 seconds
+      // Remove highlight after 5 seconds
       setTimeout(() => {
         setHighlightedMessageId(null);
-      }, 3000);
+      }, 7000);
     }
   };
 
