@@ -12,22 +12,37 @@ interface SearchBarProps {
 export default function SearchBar({ userId, onApply }: SearchBarProps) {
   const [q, setQ] = useState('');
   const [committed, setCommitted] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [isDebouncing, setIsDebouncing] = useState(false);
 
   const params = useMemo(() => {
-    const hasAtLeastTwoWords = (input: string | null | undefined): boolean => {
-      if (!input) return false;
-      const words = input.trim().split(/\s+/).filter(Boolean);
-      return words.length >= 2;
-    };
-    if (!committed || !hasAtLeastTwoWords(committed)) return null;
-    return { q: committed, user_id: userId, type: 'all' as const, limit: 20 };
-  }, [committed, userId]);
+    if (!debounced.trim()) return null;
+    return { q: debounced.trim(), user_id: userId, type: 'all' as const, limit: 20 };
+  }, [debounced, userId]);
 
   const { data, isLoading, error } = useSearch(params);
 
   useEffect(() => {
-    if (committed && onApply) onApply(committed);
-  }, [committed, onApply]);
+    if (debounced && onApply) onApply(debounced);
+  }, [debounced, onApply]);
+
+  useEffect(() => {
+    const value = q.trim();
+    if (!value) {
+      setDebounced('');
+      setIsDebouncing(false);
+      return;
+    }
+    setIsDebouncing(true);
+    const t = setTimeout(() => {
+      setDebounced(value);
+      setIsDebouncing(false);
+    }, 2000);
+    return () => {
+      clearTimeout(t);
+      setIsDebouncing(false);
+    };
+  }, [q]);
 
   return (
     <P permission={{ departmentSlug: 'chat', action: 'search' }}>
@@ -37,16 +52,17 @@ export default function SearchBar({ userId, onApply }: SearchBarProps) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') setCommitted(q.trim());
+              if (e.key === 'Enter') setDebounced(q.trim());
             }}
-            placeholder="Tìm kiếm (tối thiểu 2 từ)..."
+            placeholder="Tìm kiếm (chờ 2s để gọi)..."
             className="w-full px-3 py-2 rounded-md bg-muted text-foreground outline-none"
           />
-          <button className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm" onClick={() => setCommitted(q.trim())}>
+          <button className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm" onClick={() => setDebounced(q.trim())}>
             Tìm
           </button>
         </div>
-        {isLoading && committed && <div className="text-xs opacity-60 mt-1">Đang tìm...</div>}
+        {isDebouncing && <div className="text-xs opacity-60 mt-1">Đang chờ 2s…</div>}
+        {isLoading && debounced && <div className="text-xs opacity-60 mt-1">Đang tìm...</div>}
         {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
         {/* Optional: you can render quick preview results here if needed */}
         {data?.results && Array.isArray(data.results?.messages) && data.results.messages.length > 0 && (
