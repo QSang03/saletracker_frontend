@@ -44,11 +44,14 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
   const [error, setError] = useState<string | null>(null);
   const refreshRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!params) return;
 
+    // Always abort any in-flight request when params change
     if (abortRef.current) abortRef.current.abort();
+
     const abortController = new AbortController();
     abortRef.current = abortController;
 
@@ -86,9 +89,17 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
   }, [params]);
 
   useEffect(() => {
-    if (!params?.q) return;
-    fetchData();
+    const q = params?.q?.trim();
+    if (!q) return;
+
+    // Enforce a 2s delay before calling API
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      fetchData();
+    }, 2000);
+
     return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (abortRef.current) abortRef.current.abort();
     };
   }, [params?.q, params?.user_id, params?.type, params?.limit, fetchData]);

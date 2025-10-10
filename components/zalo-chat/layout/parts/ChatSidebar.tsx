@@ -20,6 +20,11 @@ interface ChatSidebarProps {
 
 export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange, onSearchMessageClick }: ChatSidebarProps) {
   const router = useRouter();
+  const hasAtLeastTwoWords = (input: string | null | undefined): boolean => {
+    if (!input) return false;
+    const words = input.trim().split(/\s+/).filter(Boolean);
+    return words.length >= 2;
+  };
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ConversationType | 'all'>('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
