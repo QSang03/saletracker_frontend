@@ -20,6 +20,11 @@ interface ChatSidebarProps {
 
 export default function ChatSidebar({ userId, activeConversationId, onSelectConversation, onConversationsChange, onSearchMessageClick }: ChatSidebarProps) {
   const router = useRouter();
+  const hasAtLeastTwoWords = (input: string | null | undefined): boolean => {
+    if (!input) return false;
+    const words = input.trim().split(/\s+/).filter(Boolean);
+    return words.length >= 2;
+  };
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ConversationType | 'all'>('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -106,12 +111,13 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   }, [filterKey, onSelectConversation]);
 
   // Debounce the search query to limit API requests
-  // Only search if query has at least 2 characters
+  // Only search if query has at least 2 words
   useEffect(() => {
     const trimmedQuery = searchQuery.trim();
-    
-    // Clear results immediately if query is too short
-    if (trimmedQuery.length < 2) {
+    const enoughWords = hasAtLeastTwoWords(trimmedQuery);
+
+    // Clear results immediately if query has fewer than 2 words
+    if (!enoughWords) {
       setDebouncedQuery('');
       setIsDebouncing(false);
       return;
@@ -359,14 +365,14 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const trimmed = searchQuery.trim();
-                        if (trimmed.length >= 2) {
+                        if (hasAtLeastTwoWords(trimmed)) {
                           setIsDebouncing(false);
                           setDebouncedQuery(trimmed);
                         }
                       }
                     }}
                     type="text"
-                    placeholder="Tìm kiếm (tối thiểu 2 ký tự)"
+                    placeholder="Tìm kiếm (tối thiểu 2 từ)"
                     className="w-full pl-8 pr-10 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <div className="absolute left-2.5 top-2.5 text-gray-400">
@@ -387,7 +393,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                   className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900"
                   onClick={() => {
                     const trimmed = searchQuery.trim();
-                    if (trimmed.length >= 2) {
+                    if (hasAtLeastTwoWords(trimmed)) {
                       setIsDebouncing(false);
                       setDebouncedQuery(trimmed);
                     }
@@ -453,10 +459,10 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 
             {/* Search Results / Recent */}
             <div className="flex-1 overflow-y-auto">
-              {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 ? (
+              {searchQuery.trim().length > 0 && !hasAtLeastTwoWords(searchQuery) ? (
                 <div className="p-4">
                   <div className="text-sm text-gray-500 text-center">
-                    Nhập ít nhất 2 ký tự để tìm kiếm
+                    Nhập ít nhất 2 từ để tìm kiếm
                   </div>
                 </div>
               ) : memoizedDebouncedQuery ? (
@@ -887,7 +893,12 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 function SearchResults({ query, userId, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; onPickConversation: (conversationId: number) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
   // Memoize params to prevent unnecessary re-renders
   const params = useMemo(() => {
-    if (!query || query.trim().length < 2) return null;
+    const hasAtLeastTwoWords = (input: string | null | undefined): boolean => {
+      if (!input) return false;
+      const words = input.trim().split(/\s+/).filter(Boolean);
+      return words.length >= 2;
+    };
+    if (!query || !hasAtLeastTwoWords(query)) return null;
     return { q: query.trim(), user_id: userId ?? undefined, type: 'all' as const, limit: 50 };
   }, [query, userId]);
   

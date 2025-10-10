@@ -14,7 +14,12 @@ export default function SearchBar({ userId, onApply }: SearchBarProps) {
   const [committed, setCommitted] = useState('');
 
   const params = useMemo(() => {
-    if (!committed) return null;
+    const hasAtLeastTwoWords = (input: string | null | undefined): boolean => {
+      if (!input) return false;
+      const words = input.trim().split(/\s+/).filter(Boolean);
+      return words.length >= 2;
+    };
+    if (!committed || !hasAtLeastTwoWords(committed)) return null;
     return { q: committed, user_id: userId, type: 'all' as const, limit: 20 };
   }, [committed, userId]);
 
@@ -34,7 +39,7 @@ export default function SearchBar({ userId, onApply }: SearchBarProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') setCommitted(q.trim());
             }}
-            placeholder="Tìm kiếm..."
+            placeholder="Tìm kiếm (tối thiểu 2 từ)..."
             className="w-full px-3 py-2 rounded-md bg-muted text-foreground outline-none"
           />
           <button className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm" onClick={() => setCommitted(q.trim())}>
