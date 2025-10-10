@@ -2404,6 +2404,11 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                    className={`flex items-start gap-2 justify-end group relative ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}
                 >
                    <div className="max-w-[70%] min-w-[60px] break-words relative group">
+                     {/* Tên người gửi */}
+                     <div className="text-xs text-gray-500 mb-1 px-1 text-right">
+                       {m.sender?.name || m.sender_name || user?.username || 'You'}
+                     </div>
+                     
                      {/* Bubble tin nhắn */}
                      <div className={`px-4 py-2 rounded-2xl bg-blue-50 text-gray-800 rounded-br-md shadow-sm ${highlightedMessageId === m.id ? 'border-2 border-blue-400' : ''}`}>
                       <div className="text-sm leading-relaxed break-words text-left">
