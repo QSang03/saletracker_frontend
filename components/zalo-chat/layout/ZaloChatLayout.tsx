@@ -89,7 +89,7 @@ export default function ZaloChatLayout() {
   if (!userId) {
     return (
       <div className="h-full w-full flex items-center justify-center text-sm opacity-80">
-        Vui lòng đăng nhập để sử dụng Zalo Chat
+        Đang triển khai giao diện Zalo NKC...
       </div>
     );
   }

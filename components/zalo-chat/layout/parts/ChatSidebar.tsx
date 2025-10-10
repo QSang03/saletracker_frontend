@@ -454,13 +454,37 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                 <SearchResults
                   query={memoizedDebouncedQuery}
                   userId={targetUserId}
-                  onPickConversation={(id) => {
-                    const found = allConversations.find(c => c.id === id);
-                    if (found) {
-                      onSelectConversation(found);
+                  onPickConversation={(conversation) => {
+                    // If conversation is already full object from search results
+                    if (conversation && typeof conversation === 'object') {
+                      // Create a complete conversation object from search result
+                      const completeConversation = {
+                        id: conversation.id,
+                        conversation_name: conversation.conversation_name || conversation.name || `Conversation ${conversation.id}`,
+                        conversation_type: conversation.conversation_type || conversation.type || 'private',
+                        unread_count: conversation.unread_count || 0,
+                        total_messages: conversation.total_messages || 0,
+                        last_message_timestamp: conversation.last_message_timestamp || new Date().toISOString(),
+                        last_message: conversation.last_message || null,
+                        participant: conversation.participant || null,
+                        created_at: conversation.created_at || new Date().toISOString(),
+                        updated_at: conversation.updated_at || new Date().toISOString(),
+                        ...conversation // Include any other fields from search result
+                      };
+                      
+                      onSelectConversation(completeConversation);
                       setIsSearchMode(false);
                       setSearchQuery('');
                       setDebouncedQuery('');
+                    } else {
+                      // Fallback for ID only (shouldn't happen now)
+                      const found = allConversations.find(c => c.id === conversation);
+                      if (found) {
+                        onSelectConversation(found);
+                        setIsSearchMode(false);
+                        setSearchQuery('');
+                        setDebouncedQuery('');
+                      }
                     }
                   }}
                   onSearchMessageClick={onSearchMessageClick}
@@ -662,7 +686,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                       setActiveMinIcon(null); // Deactivate mini icon when using dropdown
                     }}
                   >
-                    Tin nhắn riêng tư
+                    Chat cá nhân
                   </button>
                   <button 
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
@@ -672,7 +696,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                       setActiveMinIcon(null); // Deactivate mini icon when using dropdown
                     }}
                   >
-                    Nhóm chat
+                    Chat nhóm
                   </button>
                 
                 </div>
@@ -875,7 +899,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 }
 
 // Inline component to render search results using /web/search
-function SearchResults({ query, userId, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; onPickConversation: (conversationId: number) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
+function SearchResults({ query, userId, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; onPickConversation: (conversation: any) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
   // Memoize params to prevent unnecessary re-renders
   const params = useMemo(() => {
     if (!query || query.trim().length === 0) return null;
@@ -899,7 +923,7 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
               <button
                 key={c.id}
                 className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors rounded-lg"
-                onClick={() => onPickConversation(c.id)}
+                onClick={() => onPickConversation(c)}
               >
                 <div className="flex items-center gap-3">
                   {/* Avatar */}
@@ -944,7 +968,11 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
                 onClick={() => {
                   setActiveSearchMessageId(m.id);
                   if (onSearchMessageClick) {
-                    onSearchMessageClick(m.conversation_id, m.id, m.message_position, m.total_messages_in_conversation);
+                    // Calculate message position if not provided by search results
+                    const messagePosition = m.message_position || 1; // Default to 1 if not provided
+                    const totalMessages = m.total_messages_in_conversation || 1000; // Default to 1000 if not provided
+                    
+                    onSearchMessageClick(m.conversation_id, m.id, messagePosition, totalMessages);
                   }
                 }}
               >

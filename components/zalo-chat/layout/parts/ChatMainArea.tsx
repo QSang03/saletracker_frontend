@@ -150,8 +150,26 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
     // Tính page mục tiêu
     const totalMessages = searchNavigateData.totalMessagesInConversation || 1000; // fallback
-    const positionFromEnd = totalMessages - searchNavigateData.messagePosition + 1;
-    const calculatedPage = Math.ceil(positionFromEnd / LIMIT);
+    const messagePosition = searchNavigateData.messagePosition;
+    
+    // Nếu message_position = 0, đó là tin nhắn đầu tiên (page 1)
+    // Nếu message_position > 0, tính page dựa trên vị trí từ cuối
+    let calculatedPage;
+    if (messagePosition === 0) {
+      calculatedPage = 1; // Tin nhắn đầu tiên
+    } else {
+      const positionFromEnd = totalMessages - messagePosition + 1;
+      calculatedPage = Math.ceil(positionFromEnd / LIMIT);
+    }
+    
+    console.log('🎯 Search navigation debug:', {
+      messageId: searchNavigateData.messageId,
+      messagePosition,
+      totalMessages,
+      calculatedPage,
+      currentPage: page,
+      LIMIT
+    });
 
     if (page !== calculatedPage) {
       // Cần nạp trang khác → reset dữ liệu và set page
@@ -170,10 +188,18 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     if (searchNavigateData && acc.length > 0 && isNavigatingFromSearch) {
       const { messageId } = searchNavigateData;
       
+      console.log('🔍 Looking for message in loaded data:', {
+        messageId,
+        accLength: acc.length,
+        accMessageIds: acc.map(m => m.id),
+        isNavigatingFromSearch
+      });
+      
       // Check if the target message is in the loaded data
       const targetMessage = acc.find(m => m.id === messageId);
       
       if (targetMessage) {
+        console.log('✅ Found target message, attempting scroll:', targetMessage.id);
         // Wait for DOM to render, then scroll with retry mechanism
         const attemptScroll = (attempts = 0) => {
           if (attempts >= 20) {
@@ -202,13 +228,17 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         // Start scrolling attempts after DOM has time to render
         setTimeout(() => attemptScroll(), 500);
       } else {
+        console.log('❌ Message not found in current page, trying fallback scroll');
         // Tin nhắn không có trong trang hiện tại.
         // Nếu đang ở đúng page mục tiêu (page đã tính) nhưng vẫn chưa thấy do render chậm, thử lại ngắn.
         // Không xoá acc để tránh trắng màn hình lần 2.
         setTimeout(() => {
           const el = document.getElementById(`message-${messageId}`);
           if (el) {
+            console.log('✅ Found message element in DOM, scrolling');
             scrollToMessage(messageId);
+          } else {
+            console.log('❌ Message element not found in DOM after timeout');
           }
           setIsNavigatingFromSearch(false);
         }, 300);
@@ -281,9 +311,29 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
       currentConversation.id === searchNavigateData.conversationId
     ) {
       const total = searchNavigateData.totalMessagesInConversation || 1000;
-      const positionFromEnd = total - searchNavigateData.messagePosition + 1;
-      const targetPage = Math.ceil(positionFromEnd / LIMIT);
+      const messagePosition = searchNavigateData.messagePosition;
+      
+      // Nếu message_position = 0, đó là tin nhắn đầu tiên (page 1)
+      // Nếu message_position > 0, tính page dựa trên vị trí từ cuối
+      let targetPage;
+      if (messagePosition === 0) {
+        targetPage = 1; // Tin nhắn đầu tiên
+      } else {
+        const positionFromEnd = total - messagePosition + 1;
+        targetPage = Math.ceil(positionFromEnd / LIMIT);
+      }
+      
       pageToUse = targetPage;
+      
+      console.log('📄 Params calculation debug:', {
+        messageId: searchNavigateData.messageId,
+        messagePosition,
+        total,
+        targetPage,
+        currentPage: page,
+        pageToUse,
+        LIMIT
+      });
     }
 
     return {
