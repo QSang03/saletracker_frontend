@@ -272,6 +272,8 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL(firstUrl, request.url));
     }
   }
+  
+  // Kiểm tra quyền truy cập cho các URLs trong navItems
   const allUrls = navItems.flatMap((g: any) => g.items.map((i: any) => i.url));
   if (allUrls.includes(pathname) && !isAccessible(userRoles, pathname, userPermissions)) {
     const firstUrl = getFirstAccessibleUrl(userRoles);

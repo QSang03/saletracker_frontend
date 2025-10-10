@@ -20,10 +20,11 @@ interface Department {
 interface EmployeeFilterModalProps {
   isOpen: boolean
   onClose: () => void
-  onApply: (employeeIds: number[]) => void
+  onApply: (employeeIds: number[], employees: {id: number, name: string}[]) => void
   selectedEmployeeIds: number[]
   isAdmin: boolean
   isManager: boolean
+  isViewRole: boolean
   managedDepartments?: number[]
 }
 
@@ -34,6 +35,7 @@ export function EmployeeFilterModal({
   selectedEmployeeIds,
   isAdmin,
   isManager,
+  isViewRole,
   managedDepartments = [],
 }: EmployeeFilterModalProps) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -75,8 +77,8 @@ export function EmployeeFilterModal({
         // data.departments has format: [{ value: number, label: string, users: [{ value: number, label: string }] }]
         let filteredDepartments = data.departments || []
         
-        if (isManager && !isAdmin && managedDepartments.length > 0) {
-          // Manager: chỉ hiển thị nhân viên trong phòng ban họ quản lý
+        if (isManager && !isAdmin && !isViewRole && managedDepartments.length > 0) {
+          // Manager (not Admin or View): chỉ hiển thị nhân viên trong phòng ban họ quản lý
           filteredDepartments = filteredDepartments.filter((dept: any) => 
             managedDepartments.includes(dept.value)
           )
@@ -105,7 +107,7 @@ export function EmployeeFilterModal({
     }
 
     fetchEmployees()
-  }, [isOpen, isAdmin, isManager, managedDepartments])
+  }, [isOpen, isAdmin, isManager, isViewRole, managedDepartments])
 
   // Reset temp selection when modal opens
   useEffect(() => {
@@ -114,9 +116,17 @@ export function EmployeeFilterModal({
     }
   }, [isOpen, selectedEmployeeIds])
 
-  // Flatten all employees
+  // Flatten all employees and deduplicate by ID (1 person can be in multiple departments)
   const allEmployees = useMemo(() => {
-    return departments.flatMap(dept => dept.employees)
+    const employeeMap = new Map<number, Employee>()
+    departments.forEach(dept => {
+      dept.employees.forEach(emp => {
+        if (!employeeMap.has(emp.id)) {
+          employeeMap.set(emp.id, emp)
+        }
+      })
+    })
+    return Array.from(employeeMap.values())
   }, [departments])
 
   // Filter employees by search term
@@ -150,7 +160,10 @@ export function EmployeeFilterModal({
   }
 
   const handleApply = () => {
-    onApply(tempSelectedIds)
+    const selectedEmployeesList = allEmployees
+      .filter(emp => tempSelectedIds.includes(emp.id))
+      .map(emp => ({ id: emp.id, name: emp.fullName }))
+    onApply(tempSelectedIds, selectedEmployeesList)
     onClose()
   }
 

@@ -80,7 +80,7 @@ const baseNavItems: NavGroup[] = [
       { title: "Liên kết tài khoản", url: "/dashboard/link-account" },
       { title: "Lời chào tự động", url: "/dashboard/auto-greeting" },
       // { title: "Zalo NKC", url: "/dashboard/zalo-nkc", roles: ["admin", "view"] },
-      { title: "Zalo NKC", url: "/zalo-chat", target: "_blank"},
+      { title: "Zalo NKC", url: "/zalo-chat", roles: ["admin", "view"], target: "_blank"},
     ],
   },
   {

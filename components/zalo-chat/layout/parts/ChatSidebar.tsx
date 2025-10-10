@@ -28,6 +28,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   const [activeMinIcon, setActiveMinIcon] = useState<'all' | 'group' | null>('all'); // Track which mini icon is active
   const [showEmployeeFilterModal, setShowEmployeeFilterModal] = useState(false);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
+  const [selectedEmployees, setSelectedEmployees] = useState<{id: number, name: string}[]>([]);
 
   const [allConversations, setAllConversations] = useState<Conversation[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -65,6 +66,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 
   const { user } = useContext(AuthContext);
   const { isAdmin, isManager, isPM, isViewRole } = useDynamicPermission();
+  const canUseEmployeeFilter = isAdmin || isManager || isViewRole;
 
   const targetUserId = useMemo(() => {
     if (isAdmin || isViewRole) return undefined;
@@ -305,9 +307,9 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
             </div>
         </div>
 
-        {/* Bottom icons - Employee Filter (Admin/Manager only) */}
+        {/* Bottom icons - Employee Filter (Admin/Manager/View) */}
         <div className="mt-auto">
-          {(isAdmin || isManager) && (
+          {canUseEmployeeFilter && (
             <div 
               className="w-10 h-10 rounded-lg flex items-center justify-center hover:bg-blue-700/60 cursor-pointer transition-colors relative"
               onClick={() => setShowEmployeeFilterModal(true)}
@@ -354,6 +356,15 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                     ref={searchInputRef}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const trimmed = searchQuery.trim();
+                        if (trimmed.length >= 2) {
+                          setIsDebouncing(false);
+                          setDebouncedQuery(trimmed);
+                        }
+                      }
+                    }}
                     type="text"
                     placeholder="Tìm kiếm (tối thiểu 2 ký tự)"
                     className="w-full pl-8 pr-10 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -372,6 +383,19 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                     </div>
                   )}
                 </div>
+                <button
+                  className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900"
+                  onClick={() => {
+                    const trimmed = searchQuery.trim();
+                    if (trimmed.length >= 2) {
+                      setIsDebouncing(false);
+                      setDebouncedQuery(trimmed);
+                    }
+                  }}
+                  title="Tìm ngay"
+                >
+                  Tìm
+                </button>
                  <button
                    className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1"
                    onClick={() => {
@@ -384,6 +408,47 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                    Đóng
                  </button>
               </div>
+
+              {/* Selected Employees Display */}
+              {selectedEmployees.length > 0 && (
+                <div className="mt-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-blue-900">
+                      Đang xem tin nhắn của {selectedEmployees.length} nhân viên:
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedEmployeeIds([]);
+                        setSelectedEmployees([]);
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Xóa tất cả
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedEmployees.map(emp => (
+                      <div
+                        key={emp.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded-md text-xs border border-blue-200"
+                      >
+                        <span className="text-gray-700">{emp.name}</span>
+                        <button
+                          onClick={() => {
+                            setSelectedEmployeeIds(prev => prev.filter(id => id !== emp.id));
+                            setSelectedEmployees(prev => prev.filter(e => e.id !== emp.id));
+                          }}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Search Results / Recent */}
@@ -529,6 +594,47 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
             </svg>
           </div>
         </div>
+
+        {/* Selected Employees Display */}
+        {selectedEmployees.length > 0 && (
+          <div className="mt-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-blue-900">
+                Đang xem tin nhắn của {selectedEmployees.length} nhân viên:
+              </span>
+              <button
+                onClick={() => {
+                  setSelectedEmployeeIds([]);
+                  setSelectedEmployees([]);
+                }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Xóa tất cả
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {selectedEmployees.map(emp => (
+                <div
+                  key={emp.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded-md text-xs border border-blue-200"
+                >
+                  <span className="text-gray-700">{emp.name}</span>
+                  <button
+                    onClick={() => {
+                      setSelectedEmployeeIds(prev => prev.filter(id => id !== emp.id));
+                      setSelectedEmployees(prev => prev.filter(e => e.id !== emp.id));
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -762,13 +868,15 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
       <EmployeeFilterModal
         isOpen={showEmployeeFilterModal}
         onClose={() => setShowEmployeeFilterModal(false)}
-        onApply={(employeeIds) => {
+        onApply={(employeeIds, employees) => {
           setSelectedEmployeeIds(employeeIds);
+          setSelectedEmployees(employees);
           setShowEmployeeFilterModal(false);
         }}
         selectedEmployeeIds={selectedEmployeeIds}
         isAdmin={isAdmin}
         isManager={isManager}
+        isViewRole={isViewRole}
         managedDepartments={user?.departments?.map(d => d.id) || []}
       />
     </div>

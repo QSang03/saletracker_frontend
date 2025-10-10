@@ -35,6 +35,7 @@ export const URL_PERMISSION_MAPPING = {
   '/dashboard/link-account': { name: 'link-account', action: 'read' },
   '/dashboard/auto-greeting': { name: 'auto-greeting', action: 'read' },
   '/dashboard/zalo-nkc': { name: 'zalo-nkc', action: 'read' },
+  '/zalo-chat': { name: 'zalo-nkc', action: 'read' },
   
   // ⚙️ CÀI ĐẶT
   '/dashboard/config-system': { name: 'config-system', action: 'read' },
