@@ -7,6 +7,7 @@ import {
   History,
   Edit3,
   Users,
+  ArrowUpDown,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getAccessToken } from "@/lib/auth";
@@ -142,7 +143,18 @@ const AutoGreetingCustomerList: React.FC<
     statusFilter: "all",
     conversationTypeFilter: "all",
     dateFilter: "",
+    userId: undefined as number | undefined,
+    departmentId: undefined as number | undefined,
+    daysFilter: undefined as number | undefined,
+    sortBy: "created_at" as string,
+    sortOrder: "DESC" as string,
   });
+
+  // State for users and departments
+  const [users, setUsers] = useState<Array<{ value: number; label: string }>>([]);
+  const [departments, setDepartments] = useState<Array<{ value: number; label: string }>>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
 
   // Edit customer states
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -216,6 +228,8 @@ const AutoGreetingCustomerList: React.FC<
   useEffect(() => {
     loadCustomers();
     loadSystemConfig();
+    loadUsers();
+    loadDepartments();
   }, []);
 
   // Load customers when filters change
@@ -241,6 +255,25 @@ const AutoGreetingCustomerList: React.FC<
       const effConversation = getEffectiveConversationType({ ...prev, ...newFilters });
       const effDate = getEffectiveDate({ ...prev, ...newFilters });
 
+      // Handle employee filter (single selection from multiselect)
+      const userId = Array.isArray(newFilters.employees)
+        ? (newFilters.employees.length > 0 ? Number(newFilters.employees[0]) : undefined)
+        : prev.userId;
+
+      // Handle department filter (single selection from multiselect)
+      const departmentId = Array.isArray(newFilters.departments)
+        ? (newFilters.departments.length > 0 ? Number(newFilters.departments[0]) : undefined)
+        : prev.departmentId;
+
+      // Handle days filter (quantity field)
+      const daysFilter = newFilters.quantity !== undefined
+        ? (newFilters.quantity > 0 ? Number(newFilters.quantity) : undefined)
+        : prev.daysFilter;
+
+      // Handle sorting
+      const sortBy = newFilters.sort?.field || prev.sortBy;
+      const sortOrder = newFilters.sort?.direction?.toUpperCase() || prev.sortOrder;
+
       return {
         ...prev,
         ...newFilters,
@@ -248,6 +281,11 @@ const AutoGreetingCustomerList: React.FC<
         statusFilter: effStatuses || "all",
         conversationTypeFilter: effConversation,
         dateFilter: effDate,
+        userId,
+        departmentId,
+        daysFilter,
+        sortBy,
+        sortOrder,
         // Ensure page fields are preserved when not provided
         page: newFilters.page ?? prev.page,
         pageSize: newFilters.pageSize ?? prev.pageSize,
@@ -284,6 +322,11 @@ const AutoGreetingCustomerList: React.FC<
       statusFilter: "all",
       conversationTypeFilter: "all",
       dateFilter: "",
+      userId: undefined as number | undefined,
+      departmentId: undefined as number | undefined,
+      daysFilter: undefined as number | undefined,
+      sortBy: "created_at" as string,
+      sortOrder: "DESC" as string,
     };
     setFilters(defaultFilters);
     setSearchTerm("");
@@ -311,6 +354,11 @@ const AutoGreetingCustomerList: React.FC<
         ...(effStatuses && { statusFilter: effStatuses }),
         ...(effConversation !== "all" && { conversationTypeFilter: effConversation }),
         ...(effDate && { dateFilter: effDate }),
+        ...(filters.userId && { userId: filters.userId.toString() }),
+        ...(filters.departmentId && { departmentId: filters.departmentId.toString() }),
+        ...(filters.daysFilter !== undefined && filters.daysFilter !== null && { daysFilter: filters.daysFilter.toString() }),
+        ...(filters.sortBy && { sortBy: filters.sortBy }),
+        ...(filters.sortOrder && { sortOrder: filters.sortOrder }),
       });
 
       const response = await fetch(
@@ -375,6 +423,60 @@ const AutoGreetingCustomerList: React.FC<
       toast.error("Lỗi tải cấu hình hệ thống");
     } finally {
       setConfigLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const token = getAccessToken();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users?limit=1000`, {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const userOptions = (data.data || []).map((user: any) => ({
+          value: user.id,
+          label: user.zaloName || user.fullName || user.username || `User ${user.id}`,
+        }));
+        setUsers(userOptions);
+      } else {
+        console.error("Failed to load users");
+      }
+    } catch (error) {
+      console.error("Error loading users:", error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const loadDepartments = async () => {
+    try {
+      setLoadingDepartments(true);
+      const token = getAccessToken();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/departments?limit=1000`, {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const deptOptions = (data.data || []).map((dept: any) => ({
+          value: dept.id,
+          label: dept.name,
+        }));
+        setDepartments(deptOptions);
+      } else {
+        console.error("Failed to load departments");
+      }
+    } catch (error) {
+      console.error("Error loading departments:", error);
+    } finally {
+      setLoadingDepartments(false);
     }
   };
 
@@ -738,6 +840,9 @@ const AutoGreetingCustomerList: React.FC<
         enableStatusFilter={true}
         enableConversationTypeFilter={true}
         enableSingleDateFilter={true}
+        enableEmployeeFilter={true}
+        enableDepartmentFilter={true}
+        enableQuantityFilter={true}
         enablePageSize={true}
         enableGoToPage={true}
         availableStatuses={[
@@ -746,6 +851,10 @@ const AutoGreetingCustomerList: React.FC<
           { value: "reminder", label: "Cần nhắc nhở" },
           { value: "normal", label: "Bình thường" },
         ]}
+        availableEmployees={users}
+        availableDepartments={departments}
+        quantityLabel="Số ngày từ tin nhắn cuối"
+        defaultQuantity={0}
         page={filters.page}
         total={totalItems}
         pageSize={filters.pageSize}
@@ -793,8 +902,24 @@ const AutoGreetingCustomerList: React.FC<
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
                     Loại Hội Thoại
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
-                    Tin Nhắn Cuối
+                  <th 
+                    className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b cursor-pointer hover:bg-gray-100"
+                    onClick={() => {
+                      const newOrder = filters.sortBy === 'last_message_date' && filters.sortOrder === 'DESC' ? 'ASC' : 'DESC';
+                      handleFilterChange({ 
+                        sort: { field: 'last_message_date', direction: newOrder.toLowerCase() } 
+                      });
+                    }}
+                    title="Click để sắp xếp"
+                  >
+                    <div className="flex items-center gap-1">
+                      Tin Nhắn Cuối
+                      {filters.sortBy === 'last_message_date' && (
+                        <span className="text-xs">
+                          {filters.sortOrder === 'ASC' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b">
                     Lần Cuối Gửi
