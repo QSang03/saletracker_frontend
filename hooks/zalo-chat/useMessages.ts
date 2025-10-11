@@ -45,7 +45,7 @@ export interface UseMessagesResult {
   isLoading: boolean;
   error: string | null;
   pagination: PaginationMeta | null;
-  refetch: () => void;
+  refetch: (silent?: boolean) => void; // silent = true to skip loading animation
 }
 
 function buildQuery(params: UseMessagesParams): string {
@@ -86,7 +86,7 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
   const refreshRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (!params) return;
     // Only abort if there was a previous in-flight request and params truly changed
     if (abortRef.current) {
@@ -95,7 +95,10 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    setIsLoading(true);
+    // Chỉ set loading state nếu không phải silent mode
+    if (!silent) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const token = getAccessToken();
@@ -125,6 +128,7 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
       if (e?.name === 'AbortError') return;
       setError(e?.message || 'Failed to load messages');
     } finally {
+      // Luôn clear loading state để tránh animation bị stuck
       setIsLoading(false);
     }
   }, [params]);
@@ -146,9 +150,9 @@ export function useMessages(params: UseMessagesParams | null): UseMessagesResult
     fetchData,
   ]);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback((silent = false) => {
     refreshRef.current++;
-    fetchData();
+    fetchData(silent);
   }, [fetchData]);
 
   return { messages, isLoading, error, pagination, refetch };

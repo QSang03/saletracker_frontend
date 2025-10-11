@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getAccessToken } from "@/lib/auth";
 import { useEmoji } from "@/hooks/useEmoji";
 import { EmojiRenderer } from "@/components/common/EmojiRenderer";
+import { useAutoRefresh } from "@/hooks/zalo-chat/useAutoRefresh";
 
 interface ChatMainAreaProps {
   conversation: Conversation | null;
@@ -361,12 +362,28 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
     params?.search,
   ]);
 
-  const { messages: fetched = [], isLoading, error, pagination } = useMessages(stableParams);
+  const { messages: fetched = [], isLoading, error, pagination, refetch } = useMessages(stableParams);
   
   // Get group members for group conversations
   const { members: groupMembers = [] } = useGroupMembers(
     conversation?.conversation_type === 'group' ? { conversation_id: conversation.id } : null
   );
+
+  // Auto-refresh messages (only when on first page, not navigating from search, and not typing)
+  const { resetTimer: resetMessagesTimer } = useAutoRefresh({
+    onRefresh: () => {
+      // Only refresh when:
+      // 1. On page 1 (most recent messages)
+      // 2. Not navigating from search
+      // 3. Not actively typing a message
+      // 4. Has a valid conversation
+      if (page === 1 && !isNavigatingFromSearch && !messageText.trim() && conversation && refetch) {
+        // Silent mode: không hiện loading animation khi auto-refresh
+        refetch(true);
+      }
+    },
+    enabled: !!conversation && page === 1 && !isNavigatingFromSearch,
+  });
 
   // reset khi đổi hội thoại / tìm kiếm
   useEffect(() => {
@@ -548,8 +565,11 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
         });
       }
       
-      // TODO: Refresh messages or add optimistic update
-      // You might want to refresh the messages list here
+      // Refresh messages immediately and reset auto-refresh timer
+      if (refetch) {
+        refetch();
+        resetMessagesTimer(); // Reset timer để không bị fetch duplicate ngay sau
+      }
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -766,11 +786,12 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                 return null;
               }
               
-              // Kiểm tra nếu là tin nhắn file, ảnh không có text, contact card, hoặc birthday greeting
+              // Kiểm tra nếu là tin nhắn file, ảnh không có text, contact card, birthday greeting, hoặc call message
               let isFileMessage = false;
               let isImageWithoutText = false;
               let isContactCard = false;
               let isBirthdayGreeting = false;
+              let isCallMessage = false;
               if (typeof m.content === 'string' && m.content.startsWith('{')) {
                 try {
                   const parsed = JSON.parse(m.content);
@@ -782,6 +803,8 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                     isContactCard = true;
                   } else if (parsed.title && parsed.href && parsed.action === 'show.profile') {
                     isBirthdayGreeting = true;
+                  } else if (parsed.callType !== undefined) {
+                    isCallMessage = true;
                   }
                 } catch {
                   // Ignore parsing errors
@@ -860,6 +883,7 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
                 } catch {}
               }
 
+
               // Tin nhắn nhận (bên trái)
               if (!m.is_outgoing) {
                 // Lấy avatar từ message sender
@@ -885,6 +909,141 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
 
                 const senderAvatar = getSenderAvatar();
                 const senderName = m.sender?.name || m.sender_name || 'Unknown User';
+
+                // Xử lý call message riêng (không có khung bong bóng)
+                if (isCallMessage) {
+                  let parsed;
+                  try {
+                    parsed = JSON.parse(m.content);
+                  } catch {
+                    parsed = {};
+                  }
+
+                  // Determine call icon and text based on call data
+                  const callType = parsed.callType; // 'voice' or 'video'
+                  const isCaller = parsed.isCaller;
+                  const reason = parsed.reason;
+                  const duration = parsed.duration;
+                  const callStage = parsed.callStage;
+                  
+                  // Determine call status text and icon
+                  let statusText = '';
+                  let statusIcon = null;
+                  
+                  if (callStage === 'missed' || reason === 'missed') {
+                    statusText = isCaller ? 'Cuộc gọi nhỡ' : 'Cuộc gọi không trả lời';
+                    statusIcon = (
+                      <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    );
+                  } else if (callStage === 'cancelled' || reason === 'cancelled') {
+                    statusText = 'Cuộc gọi đã hủy';
+                    statusIcon = (
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    );
+                  } else if (duration > 0) {
+                    // Format duration
+                    const minutes = Math.floor(duration / 60);
+                    const seconds = duration % 60;
+                    statusText = `${minutes > 0 ? `${minutes} phút ` : ''}${seconds} giây`;
+                    // Green arrow icon for successful call
+                    statusIcon = (
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    );
+                  } else {
+                    // Default call icon (phone with arrow)
+                    statusText = isCaller ? 'Cuộc gọi đi' : 'Cuộc gọi đến';
+                    statusIcon = (
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    );
+                  }
+
+                  // Call type icon
+                  const callIcon = callType === 'video' ? (
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                  );
+
+                  return (
+                    <div key={m.id} id={`message-${m.id}`} className={`flex items-start gap-2 justify-start mb-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
+                      {/* Avatar bên trái */}
+                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                        {senderAvatar ? (
+                          <img 
+                            src={senderAvatar.replace(/"/g, '')} 
+                            alt={senderName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <svg className="w-7 h-7 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col">
+                        {/* Tên người gửi */}
+                        <div className="text-xs text-gray-500 mb-1 px-1">
+                          {senderName}
+                        </div>
+                        
+                        {/* Call Message Card */}
+                        <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                          {/* Call details section */}
+                          <div className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                             
+                              <div className="flex flex-col flex-1">
+                                <span className="text-sm font-bold text-gray-900">
+                                  {callType === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}
+                                </span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {statusIcon}
+                                  <span className="text-xs text-gray-500">
+                                    {statusText}
+                                  </span>
+                                </div>
+                              </div>
+                              {/* More options button */}
+                              <button className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Separator line */}
+                          <div className="border-t border-gray-200"></div>
+                          
+                          {/* Call back button */}
+                          <div className="px-4 py-3 flex justify-center">
+                            <button className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors">
+                              Gọi lại
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Thời gian */}
+                        <div className="text-xs text-gray-400 mt-1 text-left px-1">
+                          {formatTimestamp(m.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
                 // Xử lý contact card riêng (không có khung bong bóng)
                 if (isContactCard) {
@@ -2087,6 +2246,121 @@ export default function ChatMainArea({ conversation, searchNavigateData, onSearc
               }
 
               // Tin nhắn gửi (bên phải)
+              // Xử lý call message riêng (không có khung bong bóng)
+              if (isCallMessage) {
+                let parsed;
+                try {
+                  parsed = JSON.parse(m.content);
+                } catch {
+                  parsed = {};
+                }
+
+                // Determine call icon and text based on call data
+                const callType = parsed.callType; // 'voice' or 'video'
+                const isCaller = parsed.isCaller;
+                const reason = parsed.reason;
+                const duration = parsed.duration;
+                const callStage = parsed.callStage;
+                
+                // Determine call status text - always show call time
+                let statusText = '';
+                let statusIcon = null;
+                
+                // Format call time from message timestamp
+                const callTime = new Date(m.timestamp);
+                const timeString = callTime.toLocaleTimeString('vi-VN', { 
+                  hour: '2-digit', 
+                  minute: '2-digit'
+                });
+                statusText = `Gọi lúc ${timeString}`;
+                
+                // Keep status icon for visual consistency
+                statusIcon = (
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                );
+
+                // Call type icon
+                const callIcon = callType === 'video' ? (
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                );
+
+                return (
+                  <div key={m.id} id={`message-${m.id}`} className={`flex items-end gap-2 justify-end mb-2 ${highlightedMessageId === m.id ? 'bg-blue-100/50 transition-colors duration-300 -mx-6 px-6 py-1' : ''}`}>
+                    <div className="flex flex-col items-end">
+                      {/* Tên người gửi */}
+                      <div className="text-xs text-gray-500 mb-1 px-1 text-right">
+                        {m.sender?.name || m.sender_name || user?.username || 'You'}
+                      </div>
+                      
+                      {/* Call Message Card */}
+                      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                        {/* Call details section */}
+                        <div className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            
+                            <div className="flex flex-col flex-1">
+                              <span className="text-sm font-bold text-gray-900">
+                                {callType === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại'}
+                              </span>
+                              <div className="flex items-center gap-2 mt-1">
+                                {statusIcon}
+                                <span className="text-xs text-gray-500">
+                                  {statusText}
+                                </span>
+                              </div>
+                            </div>
+                            {/* More options button */}
+                            <button className="p-1 hover:bg-gray-100 rounded-full transition-colors">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Separator line */}
+                        <div className="border-t border-gray-200"></div>
+                        
+                        {/* Call back button */}
+                        <div className="px-4 py-3 flex justify-center">
+                          <button className="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors">
+                            Gọi lại
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Thời gian */}
+                      <div className="text-xs text-gray-400 mt-1 text-right px-1">
+                        {formatTimestamp(m.timestamp)}
+                      </div>
+                    </div>
+
+                    {/* Avatar bên phải */}
+                    <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1 overflow-hidden">
+                      {(m.sender?.avatar || user?.avatarZalo) ? (
+                        <img 
+                          src={(m.sender?.avatar || user?.avatarZalo).replace(/"/g, '')} 
+                          alt={m.sender?.name || user?.username || 'User'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
               // Xử lý contact card riêng (không có khung bong bóng)
               if (isContactCard) {
                 let parsed;

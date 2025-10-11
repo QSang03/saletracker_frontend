@@ -5,7 +5,7 @@ import { getAccessToken } from '@/lib/auth';
 export type ConversationType = 'private' | 'group' | 'official' | 'business' | 'bot';
 
 export interface UseConversationsParams {
-  userId: number | undefined; // undefined = không truyền user_id (admin/view/manager)
+  userId: number | undefined; // undefined = không truyền user_id (admin/view/manager), -1 = disable hook
   isManager?: boolean; // true = manager mode
   page?: number;
   limit?: number;
@@ -29,7 +29,7 @@ export interface UseConversationsResult {
   isLoading: boolean;
   error: string | null;
   pagination: PaginationMeta | null;
-  refetch: () => void;
+  refetch: (silent?: boolean) => void;
 }
 
 function buildQuery(params: UseConversationsParams): string {
@@ -89,7 +89,16 @@ export function useConversations(params: UseConversationsParams): UseConversatio
     params.refreshKey,
   ]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
+    // Disable khi userId = -1 (được sử dụng để disable hook)
+    if (params.userId === -1) {
+      setConversations([]);
+      setPagination(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     // Chỉ abort nếu có request đang chạy và params thực sự thay đổi
     if (abortRef.current && refreshRef.current > 0) {
       abortRef.current.abort();
@@ -97,7 +106,10 @@ export function useConversations(params: UseConversationsParams): UseConversatio
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    setIsLoading(true);
+    // Chỉ set loading state nếu không phải silent mode
+    if (!silent) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const token = getAccessToken();
@@ -126,6 +138,7 @@ export function useConversations(params: UseConversationsParams): UseConversatio
       if (e?.name === 'AbortError') return;
       setError(e?.message || 'Failed to load conversations');
     } finally {
+      // Luôn clear loading state để tránh animation bị stuck
       setIsLoading(false);
     }
   }, [queryString]);
@@ -142,9 +155,9 @@ export function useConversations(params: UseConversationsParams): UseConversatio
     };
   }, [queryString, fetchData]);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback((silent = false) => {
     refreshRef.current++;
-    fetchData();
+    fetchData(silent);
   }, [fetchData]);
 
   return { conversations, isLoading, error, pagination, refetch };

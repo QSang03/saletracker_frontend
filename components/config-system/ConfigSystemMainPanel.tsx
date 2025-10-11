@@ -19,10 +19,11 @@ const SECTION_TITLES: Record<string, string> = {
   zalo_contact_sync: "ĐỒNG BỘ DANH BẠ ZALO",
   zalo_conversation_name_updater: "CẬP NHẬT TÊN CUỘC TRÒ CHUYỆN ZALO",
   product_management: "QUẢN LÝ SẢN PHẨM",
+  zalo_chat: "CHAT ZALO",
   // Thêm các section khác nếu cần
 };
 
-const SECTION_ALLOWED = ["system", "debt", "campaign", "transaction", "customer_greeting", "auto_reply", "order_v2", "semantic_index", "zalo_contact_sync", "zalo_conversation_name_updater", "product_management"];
+const SECTION_ALLOWED = ["system", "debt", "campaign", "transaction", "customer_greeting", "auto_reply", "order_v2", "semantic_index", "zalo_contact_sync", "zalo_conversation_name_updater", "product_management", "zalo_chat"];
 
 interface ConfigSystemMainPanelProps {
   allConfigs: any[];

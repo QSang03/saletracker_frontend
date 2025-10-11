@@ -19,6 +19,7 @@ interface UseMultiUserConversationsResult {
   isLoading: boolean;
   error: string | null;
   totalCount: number;
+  refetch: (silent?: boolean) => void;
 }
 
 export function useMultiUserConversations(
@@ -29,8 +30,9 @@ export function useMultiUserConversations(
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
   const abortRef = useRef<AbortController | null>(null);
+  const refreshRef = useRef(0);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (silent = false) => {
     if (params.userIds.length === 0) {
       setConversations([]);
       setTotalCount(0);
@@ -45,7 +47,10 @@ export function useMultiUserConversations(
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    setIsLoading(true);
+    // Chỉ set loading state nếu không phải silent mode
+    if (!silent) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -114,6 +119,7 @@ export function useMultiUserConversations(
         setError(err.message || 'Failed to fetch conversations');
       }
     } finally {
+      // Luôn clear loading state để tránh animation bị stuck
       if (!abortController.signal.aborted) {
         setIsLoading(false);
       }
@@ -143,11 +149,17 @@ export function useMultiUserConversations(
     };
   }, [fetchData]);
 
+  const refetch = useCallback((silent = false) => {
+    refreshRef.current++;
+    fetchData(silent);
+  }, [fetchData]);
+
   return {
     conversations,
     isLoading,
     error,
     totalCount,
+    refetch,
   };
 }
 

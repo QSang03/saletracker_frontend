@@ -6,11 +6,14 @@ export type SearchType = 'all' | 'conversations' | 'messages' | 'contacts' | 'fi
 export interface UseSearchParams {
   q: string;
   user_id?: number | null;
+  user_ids?: number[];
   type?: SearchType;
   limit?: number;
   exact_match?: boolean;
   case_sensitive?: boolean;
   include_archived?: boolean;
+  conversation_page?: number;
+  message_page?: number;
 }
 
 export interface SearchResultItem {
@@ -27,12 +30,19 @@ export interface UseSearchResult<T = any> {
 function buildQuery(params: UseSearchParams): string {
   const q = new URLSearchParams();
   q.set('q', params.q);
-  if (params.user_id) q.set('user_id', String(params.user_id));
+  
+  // Always use user_ids parameter
+  if (params.user_ids && params.user_ids.length > 0) {
+    q.set('user_ids', params.user_ids.join(','));
+  }
+  
   if (params.type) q.set('type', params.type);
   if (params.limit) q.set('limit', String(params.limit));
   if (params.exact_match !== undefined) q.set('exact_match', String(params.exact_match));
   if (params.case_sensitive !== undefined) q.set('case_sensitive', String(params.case_sensitive));
   if (params.include_archived !== undefined) q.set('include_archived', String(params.include_archived));
+  if (params.conversation_page) q.set('conversation_page', String(params.conversation_page));
+  if (params.message_page) q.set('message_page', String(params.message_page));
   const qs = q.toString();
   return qs ? `?${qs}` : '';
 }
@@ -46,8 +56,12 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+
   const fetchData = useCallback(async () => {
-    if (!params) return;
+    const currentParams = paramsRef.current;
+    if (!currentParams) return;
 
     // Always abort any in-flight request when params change
     if (abortRef.current) abortRef.current.abort();
@@ -61,7 +75,7 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
       const token = getAccessToken();
       if (!token) throw new Error('No access token available');
 
-      const qs = buildQuery(params);
+      const qs = buildQuery(currentParams);
       const url = `${process.env.NEXT_PUBLIC_BACKEND_URL}/web/search${qs}`;
       const res = await fetch(url, {
         method: 'GET',
@@ -86,7 +100,7 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
     } finally {
       setIsLoading(false);
     }
-  }, [params]);
+  }, []);
 
   useEffect(() => {
     const q = params?.q?.trim();
@@ -122,7 +136,7 @@ export function useSearch<T = any>(params: UseSearchParams | null): UseSearchRes
       }
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [params?.q, params?.user_id, params?.type, params?.limit, fetchData]);
+  }, [params?.q, params?.user_id, params?.user_ids, params?.type, params?.limit, params?.conversation_page, params?.message_page]);
 
   const refetch = useCallback(() => {
     refreshRef.current++;

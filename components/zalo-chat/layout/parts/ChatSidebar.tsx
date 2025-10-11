@@ -9,6 +9,7 @@ import { useDynamicPermission } from '@/hooks/useDynamicPermission';
 import { AuthContext } from '@/contexts/AuthContext';
 import { EmployeeFilterModal } from './EmployeeFilterModal';
 import { useSearch } from '@/hooks/zalo-chat/useSearch';
+import { useAutoRefresh } from '@/hooks/zalo-chat/useAutoRefresh';
 
 interface ChatSidebarProps {
   userId: number;
@@ -104,11 +105,14 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
       setPage(1);
       setHasMore(true);
       setAllConversations([]);
-      setRefreshKey(prev => prev + 1);
+      // Chỉ tăng refreshKey khi không có employee filter (để tránh duplicate calls)
+      if (!hasEmployeeFilter) {
+        setRefreshKey(prev => prev + 1);
+      }
       // Clear selection ngay khi filter thay đổi
       onSelectConversation(null);
     }
-  }, [filterKey, onSelectConversation]);
+  }, [filterKey, hasEmployeeFilter, onSelectConversation]);
 
   // Immediate search for multi-word queries
   useEffect(() => {
@@ -146,36 +150,52 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   }, [isSearchMode]);
 
   // Dùng hook khác nhau tùy theo có employee filter hay không
-  // Hook cho single user (không có employee filter)
-  const singleUserResult = useConversations({
-    userId: targetUserId,
+  // Chỉ gọi hook cần thiết để tránh duplicate calls
+  
+  // Memoize params để tránh duplicate calls
+  const singleUserParams = useMemo(() => ({
+    userId: hasEmployeeFilter ? -1 : targetUserId, // Disable khi có employee filter (dùng -1 thay vì undefined)
     isManager: isManager && !isAdmin && !isViewRole,
     page,
     limit: LIMIT,
     search: search || undefined,
     conversation_type: conversationType,
-    sort_by: 'last_message_timestamp',
-    sort_order: 'desc',
+    sort_by: 'last_message_timestamp' as const,
+    sort_order: 'desc' as const,
     has_unread: null,
-    refreshKey,
-  });
+    refreshKey: hasEmployeeFilter ? 0 : refreshKey, // Không refresh khi disable
+  }), [hasEmployeeFilter, targetUserId, isManager, isAdmin, isViewRole, page, search, conversationType, refreshKey]);
 
-  // Hook cho multi users (có employee filter)
-  const multiUserResult = useMultiUserConversations({
-    userIds: selectedEmployeeIds,
+  const multiUserParams = useMemo(() => ({
+    userIds: !hasEmployeeFilter ? [] : selectedEmployeeIds, // Disable khi không có employee filter
     page,
     limit: LIMIT,
     search: search || undefined,
     conversation_type: conversationType,
-    sort_by: 'last_message_timestamp',
-    sort_order: 'desc',
-    refreshKey,
-  });
+    sort_by: 'last_message_timestamp' as const,
+    sort_order: 'desc' as const,
+    refreshKey: !hasEmployeeFilter ? 0 : refreshKey, // Không refresh khi disable
+  }), [hasEmployeeFilter, selectedEmployeeIds, page, search, conversationType, refreshKey]);
+
+  // Luôn gọi cả 2 hooks để tuân thủ Rules of Hooks
+  const singleUserResult = useConversations(singleUserParams);
+  const multiUserResult = useMultiUserConversations(multiUserParams);
 
   // Chọn result phù hợp
-  const { conversations: fetched, isLoading, error, pagination } = hasEmployeeFilter 
+  const { conversations: fetched, isLoading, error, pagination, refetch } = hasEmployeeFilter 
     ? { ...multiUserResult, pagination: null }
     : singleUserResult;
+
+  // Auto-refresh conversations list (only when not in search mode)
+  useAutoRefresh({
+    onRefresh: () => {
+      if (!isSearchMode && refetch) {
+        // Silent mode: không hiện loading animation khi auto-refresh
+        refetch(true);
+      }
+    },
+    enabled: !isSearchMode,
+  });
 
   // append trang mới tại chỗ (không refetch từ đầu)
   useEffect(() => {
@@ -454,6 +474,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
                 <SearchResults
                   query={memoizedDebouncedQuery}
                   userId={targetUserId}
+                  selectedEmployeeIds={selectedEmployeeIds}
                   onPickConversation={(conversation) => {
                     // If conversation is already full object from search results
                     if (conversation && typeof conversation === 'object') {
@@ -899,27 +920,91 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 }
 
 // Inline component to render search results using /web/search
-function SearchResults({ query, userId, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; onPickConversation: (conversation: any) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
+function SearchResults({ query, userId, selectedEmployeeIds, onPickConversation, onSearchMessageClick, activeSearchMessageId, setActiveSearchMessageId }: { query: string; userId?: number | undefined; selectedEmployeeIds?: number[]; onPickConversation: (conversation: any) => void; onSearchMessageClick?: (conversationId: number, messageId: number, messagePosition: number, totalMessagesInConversation?: number) => void; activeSearchMessageId: number | null; setActiveSearchMessageId: (id: number | null) => void; }) {
+  // State for managing pagination and accumulated results
+  const [conversationPage, setConversationPage] = useState(1);
+  const [messagePage, setMessagePage] = useState(1);
+  const [allConversations, setAllConversations] = useState<any[]>([]);
+  const [allMessages, setAllMessages] = useState<any[]>([]);
+  
   // Memoize params to prevent unnecessary re-renders
   const params = useMemo(() => {
     if (!query || query.trim().length === 0) return null;
     const charCount = query.trim().length;
     if (charCount < 4) return null;
-    return { q: query.trim(), user_id: userId ?? undefined, type: 'all' as const, limit: 50 };
-  }, [query, userId]);
+    
+    // Use selectedEmployeeIds if available, otherwise fall back to userId
+    let targetUserIds = userId ? [userId] : undefined;
+    if (selectedEmployeeIds && selectedEmployeeIds.length > 0) {
+      targetUserIds = selectedEmployeeIds;
+    }
+    
+    return { 
+      q: query.trim(), 
+      user_ids: targetUserIds, 
+      type: 'all' as const, 
+      limit: 5, // Show 5 results per page
+      conversation_page: conversationPage,
+      message_page: messagePage
+    };
+  }, [query, userId, selectedEmployeeIds, conversationPage, messagePage]);
   
   const { data, isLoading, error } = useSearch<any>(params);
+  
+  // Reset accumulated results only when query changes (not selectedEmployeeIds)
+  // params change will trigger useSearch automatically
+  useEffect(() => {
+    if (query.trim().length >= 4) {
+      setAllConversations([]);
+      setAllMessages([]);
+      setConversationPage(1);
+      setMessagePage(1);
+    }
+  }, [query]);
+  
+  // Accumulate results when new data comes in
+  useEffect(() => {
+    if (data?.results) {
+      if (data.results.conversations && data.results.conversations.length > 0) {
+        setAllConversations(prev => {
+          // If it's page 1, replace all. Otherwise append
+          if (conversationPage === 1) {
+            return data.results.conversations;
+          } else {
+            // Avoid duplicates by checking IDs
+            const existingIds = new Set(prev.map((c: any) => c.id));
+            const newConversations = data.results.conversations.filter((c: any) => !existingIds.has(c.id));
+            return [...prev, ...newConversations];
+          }
+        });
+      }
+      
+      if (data.results.messages && data.results.messages.length > 0) {
+        setAllMessages(prev => {
+          // If it's page 1, replace all. Otherwise append
+          if (messagePage === 1) {
+            return data.results.messages;
+          } else {
+            // Avoid duplicates by checking IDs
+            const existingIds = new Set(prev.map((m: any) => m.id));
+            const newMessages = data.results.messages.filter((m: any) => !existingIds.has(m.id));
+            return [...prev, ...newMessages];
+          }
+        });
+      }
+    }
+  }, [data, conversationPage, messagePage]);
 
   return (
     <div className="p-4">
       {isLoading && <div className="text-sm text-gray-500">Đang tìm kiếm…</div>}
       {error && <div className="text-xs text-red-500">{error}</div>}
 
-      {data?.results?.conversations?.length > 0 && (
+      {allConversations.length > 0 && (
         <div className="mb-6">
           <div className="text-sm font-medium text-gray-700 mb-2">Cuộc trò chuyện</div>
           <div className="flex flex-col">
-            {data.results.conversations.map((c: any) => (
+            {allConversations.map((c: any) => (
               <button
                 key={c.id}
                 className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors rounded-lg"
@@ -936,28 +1021,80 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
                       />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-xs font-medium">
-                        {(c.conversation_name || c.name || 'U').charAt(0).toUpperCase()}
+                        {(c.conversation_name || c.name || 'U').replace(/^(PrivateChat_|privatechat_)/i, '').charAt(0).toUpperCase()}
                       </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 truncate">{String(c.conversation_name || c.name || '')}</div>
-                    {typeof c.last_message?.content === 'string' && (
-                      <div className="text-xs text-gray-500 truncate">{c.last_message.content}</div>
+                    <div className="font-medium text-gray-900 truncate">
+                      {String(c.conversation_name || c.name || '').replace(/^(PrivateChat_|privatechat_)/i, '')}
+                    </div>
+                    {c.last_message?.content && (
+                      <div className="text-xs text-gray-500 truncate">
+                        {(() => {
+                          try {
+                            // Check if it's an image message
+                            if (c.last_message.content_type === 'IMAGE' && typeof c.last_message.content === 'string') {
+                              try {
+                                const parsed = JSON.parse(c.last_message.content);
+                                if (parsed.imageUrl) {
+                                  return (
+                                    <div className="flex items-center gap-1">
+                                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      <span>Hình ảnh</span>
+                                    </div>
+                                  );
+                                }
+                              } catch {}
+                            }
+                            
+                            // Handle text content
+                            let contentStr = '';
+                            if (typeof c.last_message.content === 'string') {
+                              try {
+                                const parsed = JSON.parse(c.last_message.content);
+                                contentStr = String(parsed?.text || parsed?.title || parsed?.description || '');
+                              } catch {
+                                contentStr = String(c.last_message.content);
+                              }
+                            } else if (typeof c.last_message.content === 'object' && c.last_message.content !== null) {
+                              const content: any = c.last_message.content;
+                              contentStr = String(content?.text || content?.title || content?.description || '');
+                            } else {
+                              contentStr = String(c.last_message.content || '');
+                            }
+                            
+                            return contentStr || 'Chưa có tin nhắn';
+                          } catch {
+                            return 'Tin nhắn không có nội dung';
+                          }
+                        })()}
+                      </div>
                     )}
                   </div>
                 </div>
               </button>
             ))}
           </div>
+          {data?.pagination?.conversation_total_pages > conversationPage && (
+            <button
+              onClick={() => setConversationPage(prev => prev + 1)}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Đang tải...' : 'Xem thêm cuộc hội thoại'}
+            </button>
+          )}
         </div>
       )}
 
-      {data?.results?.messages?.length > 0 && (
+      {allMessages.length > 0 && (
         <div className="mb-6">
           <div className="text-sm font-medium text-gray-700 mb-2">Tin nhắn</div>
           <div className="flex flex-col -mx-4">
-            {data.results.messages.map((m: any) => (
+            {allMessages.map((m: any) => (
               <button
                 key={m.id}
                 className={`w-full text-left py-3 transition-colors flex items-start gap-3 ${
@@ -1046,22 +1183,18 @@ function SearchResults({ query, userId, onPickConversation, onSearchMessageClick
               </button>
             ))}
           </div>
+          {data?.pagination?.message_total_pages > messagePage && (
+            <button
+              onClick={() => setMessagePage(prev => prev + 1)}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium mx-4"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Đang tải...' : 'Xem thêm tin nhắn'}
+            </button>
+          )}
         </div>
       )}
 
-      {data?.results?.contacts?.length > 0 && (
-        <div className="mb-6">
-          <div className="text-sm font-medium text-gray-700 mb-2">Danh bạ</div>
-          <div className="flex flex-col">
-            {data.results.contacts.map((ct: any) => (
-              <div key={ct.id} className="px-3 py-2 rounded-lg hover:bg-gray-50">
-                <div className="font-medium text-gray-900">{String(ct.display_name || ct.name || '')}</div>
-                {ct.zalo_id && <div className="text-xs text-gray-500">{ct.zalo_id}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
