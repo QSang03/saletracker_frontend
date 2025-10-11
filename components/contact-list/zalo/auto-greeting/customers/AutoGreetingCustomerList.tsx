@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Settings,
@@ -164,9 +164,7 @@ const AutoGreetingCustomerList: React.FC<
   });
 
   // State for users and departments
-  const [users, setUsers] = useState<Array<{ value: number; label: string }>>([]);
-  const [departments, setDepartments] = useState<Array<{ value: number; label: string }>>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [departments, setDepartments] = useState<Array<{ value: number; label: string; users: Array<{ value: number; label: string }> }>>([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
 
   // Edit customer states
@@ -206,6 +204,8 @@ const AutoGreetingCustomerList: React.FC<
           dateFilter: saved.dateFilter || "",
           activeFilter: saved.activeFilter || "all",
           pageSize: saved.itemsPerPage || 10,
+          userId: saved.userId ? Number(saved.userId) : undefined,
+          departmentId: saved.departmentId ? Number(saved.departmentId) : undefined,
         }));
         setSearchTerm(saved.searchTerm || "");
         setStatusFilter(saved.statusFilter || "all");
@@ -234,6 +234,8 @@ const AutoGreetingCustomerList: React.FC<
       saveData.activeFilter = filters.activeFilter;
     if (filters.pageSize && filters.pageSize !== 10)
       saveData.itemsPerPage = filters.pageSize;
+    if (filters.userId) saveData.userId = filters.userId;
+    if (filters.departmentId) saveData.departmentId = filters.departmentId;
 
     if (Object.keys(saveData).length > 0) {
       localStorage.setItem("auto-greeting-filters", JSON.stringify(saveData));
@@ -247,10 +249,9 @@ const AutoGreetingCustomerList: React.FC<
     loadSystemConfig();
   }, []);
 
-  // Load users và departments khi currentUser đã sẵn sàng
+  // Load departments khi currentUser đã sẵn sàng
   useEffect(() => {
     if (currentUser && isAdminOrView()) {
-      loadUsers();
       loadDepartments();
     }
   }, [currentUser]);
@@ -259,6 +260,65 @@ const AutoGreetingCustomerList: React.FC<
   useEffect(() => {
     loadCustomers();
   }, [filters]);
+
+  // ✅ Lấy tất cả employees từ tất cả departments
+  const allEmployeeOptions = useMemo(() => {
+    return departments.reduce((acc, dept) => {
+      if (!dept || !Array.isArray(dept.users)) return acc;
+      dept.users.forEach((user) => {
+        if (!user) return;
+        const value = String(user.value);
+        const label = user.label || value;
+        if (!acc.find((emp) => emp.value === value)) {
+          acc.push({ label, value });
+        }
+      });
+      return acc;
+    }, [] as { label: string; value: string }[]);
+  }, [departments]);
+
+  // ✅ Filter employees theo departments đã chọn
+  const filteredEmployeeOptions = useMemo(() => {
+    if (!filters.departmentId) {
+      return allEmployeeOptions; // Nếu không chọn department nào, hiển thị tất cả
+    }
+
+    const selectedDepartmentId = String(filters.departmentId);
+    
+    // Lọc employees theo department đã chọn
+    const filtered = departments
+      .filter((dept) => dept && String(dept.value) === selectedDepartmentId)
+      .reduce((acc, dept) => {
+        dept.users.forEach((user) => {
+          if (!acc.find((emp) => emp.value === user.value.toString())) {
+            acc.push({ label: user.label, value: user.value.toString() });
+          }
+        });
+        return acc;
+      }, [] as { label: string; value: string }[]);
+
+    return filtered;
+  }, [filters.departmentId, departments, allEmployeeOptions]);
+
+  // ✅ Dynamic department options: when employee is selected, only include department that contains that employee
+  const departmentOptions = useMemo(() => {
+    const all = departments.map((d) => ({
+      label: d.label,
+      value: d.value.toString(),
+      users: d.users,
+    }));
+    
+    if (!filters.userId) {
+      return all.map(({ label, value }) => ({ label, value }));
+    }
+    
+    const selectedEmployeeId = String(filters.userId);
+    const subset = all.filter((dept) =>
+      dept.users.some((u) => String(u.value) === selectedEmployeeId)
+    );
+    
+    return subset.map(({ label, value }) => ({ label, value }));
+  }, [departments, filters.userId]);
 
   // Bulk selection logic
   const selectedCustomers = customers.filter((customer) =>
@@ -281,14 +341,37 @@ const AutoGreetingCustomerList: React.FC<
       const activeFilter = (newFilters.activeFilter ?? prev.activeFilter) as string;
 
       // Handle employee filter (single selection from multiselect)
-      const userId = Array.isArray(newFilters.employees)
+      let userId = Array.isArray(newFilters.employees)
         ? (newFilters.employees.length > 0 ? Number(newFilters.employees[0]) : undefined)
         : prev.userId;
 
       // Handle department filter (single selection from multiselect)
-      const departmentId = Array.isArray(newFilters.departments)
+      let departmentId = Array.isArray(newFilters.departments)
         ? (newFilters.departments.length > 0 ? Number(newFilters.departments[0]) : undefined)
         : prev.departmentId;
+
+      // ✅ LOGIC MỚI: Khi chọn nhân viên → cập nhật phòng ban
+      if (userId && !departmentId) {
+        // Nếu chọn nhân viên nhưng chưa chọn phòng ban, tự động chọn phòng ban của nhân viên đó
+        const foundDept = departments.find((d) => 
+          d.users?.some((user) => Number(user.value) === userId)
+        );
+        if (foundDept) {
+          departmentId = Number(foundDept.value);
+        }
+      }
+
+      // ✅ LOGIC MỚI: Khi chọn phòng ban → kiểm tra nhân viên có thuộc phòng ban không
+      if (departmentId && userId) {
+        const selectedDept = departments.find((d) => Number(d.value) === departmentId);
+        if (selectedDept) {
+          const employeeBelongsToDept = selectedDept.users?.some((u) => Number(u.value) === userId);
+          if (!employeeBelongsToDept) {
+            // Nếu nhân viên không thuộc phòng ban mới chọn, xóa nhân viên
+            userId = undefined;
+          }
+        }
+      }
 
       // Handle days filter (quantity field)
       const daysFilter = newFilters.quantity !== undefined
@@ -455,38 +538,11 @@ const AutoGreetingCustomerList: React.FC<
     }
   };
 
-  const loadUsers = async () => {
-    try {
-      setLoadingUsers(true);
-      const token = getAccessToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users?limit=1000`, {
-        headers: {
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const userOptions = (data.data || []).map((user: any) => ({
-          value: user.id,
-          label: user.zaloName || user.fullName || user.username || `User ${user.id}`,
-        }));
-        setUsers(userOptions);
-      } else {
-        console.error("Failed to load users");
-      }
-    } catch (error) {
-      console.error("Error loading users:", error);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
   const loadDepartments = async () => {
     try {
       setLoadingDepartments(true);
       const token = getAccessToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/departments?limit=1000`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/filter-options`, {
         headers: {
           ...(token && { Authorization: `Bearer ${token}` }),
         },
@@ -494,9 +550,14 @@ const AutoGreetingCustomerList: React.FC<
 
       if (response.ok) {
         const data = await response.json();
-        const deptOptions = (data.data || []).map((dept: any) => ({
-          value: dept.id,
-          label: dept.name,
+        // Lấy departments với users bên trong từ filter-options
+        const deptOptions = (data.departments || []).map((dept: any) => ({
+          value: dept.value,
+          label: dept.label,
+          users: (dept.users || []).map((user: any) => ({
+            value: user.value,
+            label: user.label,
+          })),
         }));
         setDepartments(deptOptions);
       } else {
@@ -881,8 +942,8 @@ const AutoGreetingCustomerList: React.FC<
           { value: "reminder", label: "Cần nhắc nhở" },
           { value: "normal", label: "Bình thường" },
         ]}
-        availableEmployees={users}
-        availableDepartments={departments}
+        availableEmployees={filteredEmployeeOptions}
+        availableDepartments={departmentOptions}
         quantityLabel="Số ngày từ tin nhắn cuối"
         defaultQuantity={0}
         page={filters.page}
