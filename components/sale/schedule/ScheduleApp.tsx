@@ -1918,11 +1918,14 @@ export default function CompleteScheduleApp() {
         return config.slots.some((slot) => {
           const timeMatch = slot.start_time <= time && slot.end_time > time;
           const dayMatch = slot.day_of_week === dayOfWeek || !slot.day_of_week;
-          // ✅ THÊM: Kiểm tra applicable_date
-          const dateMatch =
-            !slot.applicable_date ||
-            !specificDate ||
-            slot.applicable_date === specificDate;
+          
+          // ✅ SỬA: Logic kiểm tra applicable_date
+          let dateMatch = true;
+          if (slot.applicable_date && specificDate) {
+            // Nếu slot có ngày cụ thể, chỉ hiển thị khi khớp chính xác
+            dateMatch = slot.applicable_date === specificDate;
+          }
+          // Nếu slot không có applicable_date, dùng logic day_of_week
 
           return timeMatch && dayMatch && dateMatch;
         });
