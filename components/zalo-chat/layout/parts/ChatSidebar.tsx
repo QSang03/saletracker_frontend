@@ -40,7 +40,6 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh key
-  const savedScrollPosRef = useRef<number>(0); // Lưu scroll position khi auto-refresh
 
   // Search mode state
   const [isSearchMode, setIsSearchMode] = useState(false);
@@ -191,10 +190,6 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   useAutoRefresh({
     onRefresh: () => {
       if (!isSearchMode && refetch) {
-        // Lưu scroll position trước khi refetch
-        if (listRef.current) {
-          savedScrollPosRef.current = listRef.current.scrollTop;
-        }
         // Silent mode: không hiện loading animation khi auto-refresh
         refetch(true);
       }
@@ -206,24 +201,10 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   useEffect(() => {
     if (!fetched) return;
     
-    // Với multi-user, hỗ trợ pagination dựa trên số lượng items trả về
+    // Với multi-user, không hỗ trợ pagination (đã load tất cả)
     if (hasEmployeeFilter) {
-      setAllConversations(prev => {
-        // Nếu page = 1 (reset), thay thế hoàn toàn
-        if (page === 1) {
-          return fetched;
-        }
-        
-        // Nếu page > 1, append và de-dup
-        const map = new Map<number | string, Conversation>();
-        for (const x of prev) map.set(x.id, x);
-        for (const x of fetched) map.set(x.id, x);
-        return Array.from(map.values());
-      });
-      
-      // Estimate hasMore: nếu số conversations >= LIMIT * số nhân viên, có thể còn nhiều hơn
-      const expectedMinCount = LIMIT * selectedEmployeeIds.length;
-      setHasMore(fetched.length >= expectedMinCount);
+      setAllConversations(fetched);
+      setHasMore(false); // Không có pagination cho multi-user
     } else {
       setAllConversations(prev => {
         // Nếu page = 1 (reset), thay thế hoàn toàn
@@ -244,17 +225,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         setHasMore(fetched.length === LIMIT);
       }
     }
-    
-    // Restore scroll position sau khi auto-refresh (chỉ khi page = 1)
-    if (page === 1 && savedScrollPosRef.current > 0) {
-      requestAnimationFrame(() => {
-        if (listRef.current) {
-          listRef.current.scrollTop = savedScrollPosRef.current;
-          savedScrollPosRef.current = 0; // Reset sau khi restore
-        }
-      });
-    }
-  }, [fetched, pagination, page, hasEmployeeFilter, selectedEmployeeIds.length]);
+  }, [fetched, pagination, page, hasEmployeeFilter]);
 
   // Notify parent when conversations change
   useEffect(() => {
@@ -292,7 +263,6 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
         // 3. Không đang loading
         // 4. Đã có conversations (tránh trigger khi mới mount)
         if (entries[0].isIntersecting && hasMore && !isLoading && allConversations.length > 0) {
-          console.log('🔄 Intersection observer triggered, loading more conversations. Page:', page, '-> Page:', page + 1);
           setPage(p => p + 1);
         }
       },
@@ -301,7 +271,7 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, isLoading, allConversations.length, isSearchMode, refreshKey, hasEmployeeFilter, page]);
+  }, [hasMore, isLoading, allConversations.length, isSearchMode, refreshKey]);
 
   // Use conversations directly from API (already filtered by backend)
   const conversations = allConversations;
