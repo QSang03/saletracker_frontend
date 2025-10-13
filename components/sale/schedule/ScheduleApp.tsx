@@ -171,23 +171,31 @@ const weekDays = [
 
 const LAST_SLOT_END = "17:45";
 
+// Hoisted helper to format a Date as local YYYY-MM-DD. Must be defined before any usage.
+function formatDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function CompleteScheduleApp() {
   // Permission check
   const { user, getAllUserRoles } = usePermission();
   const { isViewRole } = useViewRole();
-  
+
   // ✅ SỬA: Tạo roomId theo tuần hiện tại với prefix môi trường để tách biệt dev/production
   const roomId = useMemo(() => {
     const now = new Date();
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay()); // Chủ nhật
-    
+
     // Tách biệt hoàn toàn giữa dev và production
     const env = process.env.NODE_ENV || 'development';
     const envPrefix = env === 'production' ? 'prod' : 'dev';
-    
+
     // ✅ BỎ timestamp để giữ nguyên room khi F5, chỉ đổi khi đổi tuần
-    return `${envPrefix}:schedule:week:${startOfWeek.toISOString().split('T')[0]}`;
+    return `${envPrefix}:schedule:week:${formatDateStr(startOfWeek)}`;
   }, []);
 
   // Schedule collaboration
@@ -387,7 +395,7 @@ export default function CompleteScheduleApp() {
   const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
   const [editingSchedule, setEditingSchedule] =
     useState<DepartmentSchedule | null>(null);
-  
+
   // Edit history modal state
   const [isEditHistoryModalOpen, setIsEditHistoryModalOpen] = useState(false);
   const [selectedUserForHistory, setSelectedUserForHistory] = useState<{
@@ -402,7 +410,7 @@ export default function CompleteScheduleApp() {
     // Find user info from edit sessions or preview patches
     const userSession = Array.from(editSessions.values()).find(session => session.userId === userId);
     const userPatch = Array.from(previewPatches.values()).find(patch => patch.userId === userId);
-    
+
     if (userSession || userPatch) {
       const userInfo = userSession || userPatch!;
       // Get department name from departments array
@@ -419,10 +427,10 @@ export default function CompleteScheduleApp() {
   // Focus target for auto-scroll/highlight
   const [focusTarget, setFocusTarget] = useState<
     | {
-        date: string; // YYYY-MM-DD
-        time?: string; // HH:mm (start of slot)
-        scheduleId?: string;
-      }
+      date: string; // YYYY-MM-DD
+      time?: string; // HH:mm (start of slot)
+      scheduleId?: string;
+    }
     | null
   >(null);
 
@@ -479,9 +487,9 @@ export default function CompleteScheduleApp() {
     const prevMonth = new Date(year, month, 0); // ngày cuối tháng trước
     for (let i = startDay - 1; i >= 0; i--) {
       const day = prevMonth.getDate() - i;
-      calendar.push({ 
-        date: day, 
-        isCurrentMonth: false, 
+      calendar.push({
+        date: day,
+        isCurrentMonth: false,
         isPrevMonth: true,
         actualMonth: month - 1, // Tháng thực tế (0-indexed)
         actualYear: month === 0 ? year - 1 : year // Nếu tháng 0 thì năm trước
@@ -490,9 +498,9 @@ export default function CompleteScheduleApp() {
 
     // Current month days
     for (let day = 1; day <= daysInMonth; day++) {
-      calendar.push({ 
-        date: day, 
-        isCurrentMonth: true, 
+      calendar.push({
+        date: day,
+        isCurrentMonth: true,
         isPrevMonth: false,
         actualMonth: month, // Tháng hiện tại (0-indexed)
         actualYear: year
@@ -502,9 +510,9 @@ export default function CompleteScheduleApp() {
     // Next month days
     const remaining = 42 - calendar.length;
     for (let day = 1; day <= remaining; day++) {
-      calendar.push({ 
-        date: day, 
-        isCurrentMonth: false, 
+      calendar.push({
+        date: day,
+        isCurrentMonth: false,
         isPrevMonth: false,
         actualMonth: month + 1, // Tháng tiếp theo (0-indexed)
         actualYear: month === 11 ? year + 1 : year // Nếu tháng 11 thì năm sau
@@ -530,10 +538,10 @@ export default function CompleteScheduleApp() {
   const updateDepartmentSelections = useCallback(
     (departmentId: number, selections: DepartmentSelections) => {
       console.log('[ScheduleApp] updateDepartmentSelections called:', { departmentId, selections });
-      
+
       setDepartmentSelections((prev) => {
         const newMap = new Map(prev);
-        
+
         // Check if this is a deselection (empty selections)
         const isEmptySlots = !selections.timeSlots || selections.timeSlots.length === 0;
         const isEmptyDays = !selections.days || selections.days.length === 0;
@@ -546,31 +554,31 @@ export default function CompleteScheduleApp() {
           newMap.delete(departmentId);
         } else {
           // Luôn set (kể cả empty) khi đang edit mode
-            newMap.set(departmentId, selections);
+          newMap.set(departmentId, selections);
         }
-        
+
         // Send cell selections to Redis for real-time collaboration
         if (user && isDataReady) {
           const currentSelections = Array.from(newMap.entries()).reduce((acc, [deptId, sel]) => {
             acc[deptId] = sel;
             return acc;
           }, {} as Record<string, any>);
-          
+
           // Tạo danh sách các ô đang được chỉnh sửa
           const editingCells: string[] = [];
           for (const [deptId, selection] of newMap.entries()) {
             if (selection.timeSlots && selection.timeSlots.length > 0) {
               for (const timeSlot of selection.timeSlots) {
                 const fieldId = makeTimeSlotFieldId(
-                  timeSlot.day_of_week!, 
-                  timeSlot.start_time, 
+                  timeSlot.day_of_week!,
+                  timeSlot.start_time,
                   timeSlot.applicable_date
                 );
                 editingCells.push(fieldId);
               }
             }
           }
-          
+
           const payload = {
             departmentSelections: currentSelections,
             selectedDepartment,
@@ -578,18 +586,18 @@ export default function CompleteScheduleApp() {
             editingCells, // Thêm thông tin các ô đang chỉnh sửa
             userId: user.id,
           };
-          
 
-          
+
+
           sendCellSelections(payload);
         } else {
           console.log('[ScheduleApp] Not sending cell selections:', { user: !!user, isDataReady });
         }
-        
+
         return newMap;
       });
     },
-  [user, isDataReady, selectedDepartment, activeView, sendCellSelections, isEditMode]
+    [user, isDataReady, selectedDepartment, activeView, sendCellSelections, isEditMode]
   );
 
   const turnOffBulk = useCallback(() => {
@@ -609,40 +617,40 @@ export default function CompleteScheduleApp() {
   // ✅ THÊM: Handler chuyên dụng để xóa chỉ selections của chính mình
   const handleClearAllMine = useCallback(() => {
     console.log('[ScheduleApp] handleClearAllMine: Clearing only own selections');
-    
+
     // ✅ SỬA: Xóa hoàn toàn tất cả selections của user hiện tại
     const currentSelections = getCurrentDepartmentSelections();
     const allFieldIds: string[] = [];
-    
+
     // Thu thập tất cả fieldIds cần clear
     if (currentSelections.timeSlots.length > 0) {
       currentSelections.timeSlots.forEach(slot => {
         if (slot.day_of_week) {
           const weekDates = getWeekDates();
           const dayIndex = dowToUi(slot.day_of_week);
-          const specificDate = slot.applicable_date || weekDates[dayIndex]?.toISOString().split("T")[0];
+          const specificDate = slot.applicable_date || (weekDates[dayIndex] ? formatDateStr(weekDates[dayIndex]) : undefined);
           const fieldId = makeTimeSlotFieldId(dayIndex, slot.start_time, specificDate);
           allFieldIds.push(fieldId);
         }
       });
     }
-    
+
     if (currentSelections.days.length > 0) {
       currentSelections.days.forEach(day => {
         const fieldId = `day-${day.date}-${day.month}-${day.year}`;
         allFieldIds.push(fieldId);
       });
     }
-    
+
     console.log('[ScheduleApp] Clearing fieldIds:', allFieldIds);
-    
+
     // 1) Xóa local state của chính mình
     setDepartmentSelections(new Map());
     setSelectedDepartment(null);
     setIsBulkMode(false);
     setBulkScheduleConfig(prev => ({ ...prev, enabled: false }));
     setBulkPreview({ weeks: [], months: [] });
-    
+
     // ✅ SỬA: Reset drag states
     setDragState({
       isDragging: false,
@@ -650,7 +658,7 @@ export default function CompleteScheduleApp() {
       currentSlot: null,
       isSelecting: false,
     });
-    
+
     setMonthlyDragState({
       isDragging: false,
       startDay: null,
@@ -663,9 +671,9 @@ export default function CompleteScheduleApp() {
       // Xóa key chính
       localStorage.removeItem(storageKey);
       console.log('[ScheduleApp] Cleared main storage key:', storageKey);
-      
+
       // ✅ SỬA: Không cần flag, sẽ xóa hoàn toàn Redis
-      
+
       // ✅ THÊM: Xóa tất cả keys liên quan đến schedule selections
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
@@ -679,13 +687,13 @@ export default function CompleteScheduleApp() {
           keysToRemove.push(key);
         }
       }
-      
+
       // Xóa tất cả keys tìm thấy
       keysToRemove.forEach(key => {
         localStorage.removeItem(key);
         console.log('[ScheduleApp] Cleared related storage key:', key);
       });
-      
+
       console.log('[ScheduleApp] Total cleared keys:', keysToRemove.length + 1);
     } catch (error) {
       console.error('[ScheduleApp] Error clearing local storage:', error);
@@ -703,10 +711,10 @@ export default function CompleteScheduleApp() {
       selectedDepartment: null,
       activeView,
     };
-    
+
     // Gửi payload rỗng để xóa hết selections trong Redis
     sendCellSelections(emptyPayload);
-    
+
     // ✅ THÊM: Đợi một chút rồi gửi lại để đảm bảo Redis đã clear
     setTimeout(() => {
       sendCellSelections(emptyPayload);
@@ -715,13 +723,7 @@ export default function CompleteScheduleApp() {
     toast.success("Đã xóa tất cả các ô bạn đang chọn.");
   }, [sendCellSelections, activeView, setDepartmentSelections, setSelectedDepartment, setIsBulkMode, setBulkScheduleConfig, setBulkPreview, user, storageKey, clearMySelections, getCurrentDepartmentSelections, getWeekDates, makeTimeSlotFieldId, dowToUi]);
 
-  // Utils for focus/scroll
-  const formatDateStr = useCallback((d: Date) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }, []);
+  // Utils for focus/scroll (formatDateStr hoisted above)
 
   // Auto-scroll to target cell when focusTarget or view changes
   useEffect(() => {
@@ -949,7 +951,7 @@ export default function CompleteScheduleApp() {
       if (isPastDay(date, month, year)) {
         return true;
       }
-      
+
       // ✅ THÊM: Kiểm tra xung đột với lịch đã lưu từ phòng ban khác
       const daySchedules = getSchedulesForDay(date, month, year);
       const hasScheduleConflict = daySchedules.some(
@@ -958,37 +960,37 @@ export default function CompleteScheduleApp() {
           schedule.department.id !== selectedDepartment &&
           (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
-      
+
       if (hasScheduleConflict) return true;
-      
+
       // ✅ THÊM: Kiểm tra xung đột với selections đang có của các phòng ban khác
       // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót xung đột
       for (const [deptId, selections] of departmentSelections) {
         if (deptId !== selectedDepartment) {
           const hasSelectionConflict = selections.days.some(
             (day) =>
-              day.date === date && 
-              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.date === date &&
+              (day.month === month || day.month === month - 1 || day.month === month + 1) &&
               day.year === year
           );
           if (hasSelectionConflict) return true;
         }
       }
-      
+
       // ✅ THÊM: Kiểm tra xung đột với selections từ Redis (người khác đang chọn)
       // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế
       for (const [userId, remoteSelections] of cellSelections) {
         if (userId === user?.id) continue; // Skip own selections
-        
+
         const remoteDeptSelections = remoteSelections.departmentSelections;
         if (!remoteDeptSelections) continue;
-        
+
         for (const [deptId, selections] of Object.entries(remoteDeptSelections)) {
           const typedSelections = selections as any;
           if (typedSelections.days && typedSelections.days.some(
             (day: any) =>
-              day.date === date && 
-              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.date === date &&
+              (day.month === month || day.month === month - 1 || day.month === month + 1) &&
               day.year === year
           )) {
             return true;
@@ -1037,13 +1039,13 @@ export default function CompleteScheduleApp() {
         return;
       }
       const dayHasExisting = isDayHasExistingSchedule(date, month, year);
-  if (dayHasExisting && !(isEditMode && editingSchedule && postModalEditEnabled)) {
+      if (dayHasExisting && !(isEditMode && editingSchedule && postModalEditEnabled)) {
         toast.error("Ngày này đã có lịch hoạt động trong hệ thống, không thể chỉnh sửa");
         return;
       }
-      
+
       // ✅ THÊM: Kiểm tra ngày bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
-  if (isDayBlockedByExistingSchedule(date, month, year) && !(isEditMode && editingSchedule && postModalEditEnabled)) {
+      if (isDayBlockedByExistingSchedule(date, month, year) && !(isEditMode && editingSchedule && postModalEditEnabled)) {
         toast.error(
           "Ngày này đã có lịch hoạt động của phòng ban khác, không thể chỉnh sửa"
         );
@@ -1057,7 +1059,7 @@ export default function CompleteScheduleApp() {
       );
 
       // ✅ SỬA: Nếu đã chọn rồi thì bắt đầu drag mode để quét (không xóa ngay)
-  if (existingIndex !== -1 || (dayHasExisting && isEditMode && editingSchedule && postModalEditEnabled)) {
+      if (existingIndex !== -1 || (dayHasExisting && isEditMode && editingSchedule && postModalEditEnabled)) {
         // Nếu đang postModal edit: toggle ngay lập tức (xóa) thay vì vào drag
         if (isEditMode && editingSchedule && postModalEditEnabled) {
           const currentSelections2 = getCurrentDepartmentSelections();
@@ -1082,16 +1084,16 @@ export default function CompleteScheduleApp() {
       }
 
       // ✅ SỬA: Nếu chưa chọn thì thêm vào
-  const newDays = [ ...currentSelections.days, { date, month, year, department_id: selectedDepartment } ];
+      const newDays = [...currentSelections.days, { date, month, year, department_id: selectedDepartment }];
 
       updateDepartmentSelections(selectedDepartment, {
         ...currentSelections,
         days: newDays,
       });
-  // NEW: Start edit session immediately to lock the cell for others (month view only)
-  const fieldId = `day-${date}-${month}-${year}`;
-  startEditSession(fieldId, 'calendar_cell', { date, month, year });
-      
+      // NEW: Start edit session immediately to lock the cell for others (month view only)
+      const fieldId = `day-${date}-${month}-${year}`;
+      startEditSession(fieldId, 'calendar_cell', { date, month, year });
+
       toast.success("Đã thêm ngày này vào lịch");
     },
     [
@@ -1115,9 +1117,9 @@ export default function CompleteScheduleApp() {
       const currentSelections = getCurrentDepartmentSelections();
       // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót
       return currentSelections.days.some(
-        (day) => day.date === date && 
-        (day.month === month || day.month === month - 1 || day.month === month + 1) && 
-        day.year === year
+        (day) => day.date === date &&
+          (day.month === month || day.month === month - 1 || day.month === month + 1) &&
+          day.year === year
       );
     },
     [getCurrentDepartmentSelections]
@@ -1131,8 +1133,8 @@ export default function CompleteScheduleApp() {
           selections.days &&
           selections.days.some(
             (day) =>
-              day.date === date && 
-              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.date === date &&
+              (day.month === month || day.month === month - 1 || day.month === month + 1) &&
               day.year === year
           )
         ) {
@@ -1143,7 +1145,7 @@ export default function CompleteScheduleApp() {
       // ✅ SỬA: Check remote selections from Redis - Kiểm tra cả tháng hiện tại và tháng thực tế
       for (const [userId, remoteSelections] of cellSelections) {
         if (userId === user?.id) continue; // Skip own selections
-        
+
         const remoteDeptSelections = remoteSelections.departmentSelections;
         if (!remoteDeptSelections) continue;
 
@@ -1151,15 +1153,15 @@ export default function CompleteScheduleApp() {
           const typedSelections = selections as any;
           if (typedSelections.days && typedSelections.days.some(
             (day: any) =>
-              day.date === date && 
-              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.date === date &&
+              (day.month === month || day.month === month - 1 || day.month === month + 1) &&
               day.year === year
           )) {
             return { isSelected: true, departmentId: parseInt(deptId), userId };
           }
         }
       }
-      
+
       return { isSelected: false, departmentId: null, userId: null };
     },
     [departmentSelections, cellSelections, user]
@@ -1183,8 +1185,8 @@ export default function CompleteScheduleApp() {
     }
 
     // ✅ THÊM: Log để debug
-    console.log('[handleDayMouseUp] Processing mouse up:', { 
-      isDragging: monthlyDragState.isDragging, 
+    console.log('[handleDayMouseUp] Processing mouse up:', {
+      isDragging: monthlyDragState.isDragging,
       selectedDepartment,
       startDay: monthlyDragState.startDay,
       currentDay: monthlyDragState.currentDay
@@ -1192,7 +1194,7 @@ export default function CompleteScheduleApp() {
 
     const currentSelections = getCurrentDepartmentSelections();
     const range = getMonthlyDragSelectionRange();
-    
+
     // ✅ THÊM: Log range
     console.log('[handleDayMouseUp] Drag range:', range);
 
@@ -1247,51 +1249,51 @@ export default function CompleteScheduleApp() {
     // ✅ THÊM: Xóa edit sessions và clear selections trong Redis cho các ngày bị toggle off
     const removedDays: string[] = [];
     const addedDays: string[] = [];
-    
+
     // So sánh selections cũ và mới để xác định ngày nào bị xóa
     currentSelections.days.forEach(oldDay => {
       // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót
-      const exists = newDays.some(newDay => 
+      const exists = newDays.some(newDay =>
         newDay.date === oldDay.date &&
         (newDay.month === oldDay.month || newDay.month === oldDay.month - 1 || newDay.month === oldDay.month + 1) &&
         newDay.year === oldDay.year
       );
-      
+
       if (!exists) {
         // Ngày này bị xóa - tạo fieldId để clear
         const fieldId = `day-${oldDay.date}-${oldDay.month}-${oldDay.year}`;
         removedDays.push(fieldId);
       }
     });
-    
+
     // So sánh selections mới và cũ để xác định ngày nào được thêm
     newDays.forEach(newDay => {
       // ✅ SỬA: Kiểm tra cả tháng hiện tại và tháng thực tế để tránh bỏ sót
-      const exists = currentSelections.days.some(oldDay => 
+      const exists = currentSelections.days.some(oldDay =>
         oldDay.date === newDay.date &&
         (oldDay.month === newDay.month || oldDay.month === newDay.month - 1 || oldDay.month === newDay.month + 1) &&
         oldDay.year === newDay.year
       );
-      
+
       if (!exists) {
         // Ngày này được thêm - tạo fieldId để track
         const fieldId = `day-${newDay.date}-${newDay.month}-${newDay.year}`;
         addedDays.push(fieldId);
       }
     });
-    
+
     // Cập nhật selections trong localStorage
     updateDepartmentSelections(selectedDepartment, {
       ...currentSelections,
       days: newDays,
     });
-    
+
     // ✅ THÊM: Clear edit sessions và selections trong Redis cho các ngày bị xóa
     if (removedDays.length > 0 && clearMySelections) {
       console.log('[ScheduleApp] Clearing edit sessions for removed days:', removedDays);
       clearMySelections('explicit', removedDays);
     }
-    
+
     // ✅ THÊM: Start edit sessions cho các ngày mới được thêm
     if (addedDays.length > 0) {
       addedDays.forEach(fieldId => {
@@ -1299,7 +1301,7 @@ export default function CompleteScheduleApp() {
         const match = fieldId.match(/day-(\d+)-(\d+)-(\d+)/);
         if (match) {
           const [, date, month, year] = match;
-          
+
           startEditSession(fieldId, 'calendar_cell', {
             date: parseInt(date),
             month: parseInt(month),
@@ -1461,8 +1463,7 @@ export default function CompleteScheduleApp() {
   const handleEditSchedule = useCallback(
     (schedule: DepartmentSchedule) => {
       console.log(
-        `[EditSchedule Debug] Attempting to edit schedule for department ${
-          schedule.department!.id
+        `[EditSchedule Debug] Attempting to edit schedule for department ${schedule.department!.id
         }:`,
         {
           isDataReady,
@@ -1547,7 +1548,7 @@ export default function CompleteScheduleApp() {
       });
 
       setIsCreateDialogOpen(true);
-  setPostModalEditEnabled(true);
+      setPostModalEditEnabled(true);
 
       toast.success(
         "Đã vào chế độ chỉnh sửa. Bạn có thể thay đổi lịch trên calendar và thông tin trong form."
@@ -1565,7 +1566,7 @@ export default function CompleteScheduleApp() {
       isLoadingDepartments,
       departmentSelections,
       currentMonth,
-  setPostModalEditEnabled,
+      setPostModalEditEnabled,
     ]
   );
 
@@ -1599,8 +1600,7 @@ export default function CompleteScheduleApp() {
       setSelectedDepartment(newDepartmentId);
 
       toast.success(
-        `Đã chuyển lịch sang phòng ban: ${
-          departments.find((d) => d.id === newDepartmentId)?.name
+        `Đã chuyển lịch sang phòng ban: ${departments.find((d) => d.id === newDepartmentId)?.name
         }`
       );
     },
@@ -1619,7 +1619,7 @@ export default function CompleteScheduleApp() {
 
       if (isEditMode && editingSchedule) {
         // Nếu user xóa hết mọi selections => chỉ cần xóa lịch cũ rồi kết thúc
-        const allEmpty = Array.from(departmentSelections.values()).every(sel => (sel.days?.length||0) === 0 && (sel.timeSlots?.length||0) === 0);
+        const allEmpty = Array.from(departmentSelections.values()).every(sel => (sel.days?.length || 0) === 0 && (sel.timeSlots?.length || 0) === 0);
         if (allEmpty) {
           try {
             await ScheduleService.remove(editingSchedule.id);
@@ -1652,8 +1652,8 @@ export default function CompleteScheduleApp() {
 
       const promises: Promise<any>[] = [];
       let totalSchedulesCreated = 0;
-  const createdSchedules: any[] = []; // sẽ dùng để optimistic update & broadcast
-  const lockedFieldIds: string[] = []; // track các fieldId edit-session đang giữ để release
+      const createdSchedules: any[] = []; // sẽ dùng để optimistic update & broadcast
+      const lockedFieldIds: string[] = []; // track các fieldId edit-session đang giữ để release
 
       departmentSelections.forEach((selections, departmentId) => {
         if (selections.days.length === 0 && selections.timeSlots.length === 0)
@@ -1673,19 +1673,17 @@ export default function CompleteScheduleApp() {
 
           Object.entries(groupedByDate).forEach(([dateKey, slots]) => {
             const scheduleName = isBulkMode
-              ? `${formData.name || "Lịch hàng loạt"} - ${department.name} (${
-                  dateKey !== "general"
-                    ? new Date(dateKey).toLocaleDateString("vi-VN")
-                    : "Tổng quát"
-                })`
+              ? `${formData.name || "Lịch hàng loạt"} - ${department.name} (${dateKey !== "general"
+                ? new Date(dateKey).toLocaleDateString("vi-VN")
+                : "Tổng quát"
+              })`
               : `${formData.name || `Lịch khung giờ - ${department.name}`}`;
 
             const scheduleData: CreateDepartmentScheduleDto = {
               name: scheduleName,
               description:
                 formData.description ||
-                `Lịch hoạt động khung giờ cho ${department.name}${
-                  isBulkMode ? " (Tạo hàng loạt)" : ""
+                `Lịch hoạt động khung giờ cho ${department.name}${isBulkMode ? " (Tạo hàng loạt)" : ""
                 }`,
               department_id: departmentId,
               status: ScheduleStatus.ACTIVE,
@@ -1703,7 +1701,7 @@ export default function CompleteScheduleApp() {
                       const targetDayIndex = dowToUi(slot.day_of_week!);
                       const applicableDate =
                         getWeekDates()[targetDayIndex] || new Date();
-                      return applicableDate.toISOString().split("T")[0];
+                      return formatDateStr(applicableDate);
                     })(),
                   activity_description: formData.description,
                 })),
@@ -1718,7 +1716,7 @@ export default function CompleteScheduleApp() {
                   if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
                     const cfg = schedule.schedule_config as any;
                     (cfg?.dates || []).forEach((d: any) => {
-                      lockedFieldIds.push(`day-${d.day_of_month}-${(d.month||1)-1}-${d.year}`);
+                      lockedFieldIds.push(`day-${d.day_of_month}-${(d.month || 1) - 1}-${d.year}`);
                     });
                   } else if (schedule.schedule_type === ScheduleType.HOURLY_SLOTS) {
                     const cfg = schedule.schedule_config as any;
@@ -1740,17 +1738,15 @@ export default function CompleteScheduleApp() {
 
         if (selections.days.length > 0) {
           const scheduleName = isBulkMode
-            ? `${formData.name || "Lịch hàng loạt"} - ${department.name} (${
-                selections.days.length
-              } ngày)`
+            ? `${formData.name || "Lịch hàng loạt"} - ${department.name} (${selections.days.length
+            } ngày)`
             : `${formData.name || `Lịch theo ngày - ${department.name}`}`;
 
           const scheduleData: CreateDepartmentScheduleDto = {
             name: scheduleName,
             description:
               formData.description ||
-              `Lịch hoạt động theo ngày cho ${department.name}${
-                isBulkMode ? " (Tạo hàng loạt)" : ""
+              `Lịch hoạt động theo ngày cho ${department.name}${isBulkMode ? " (Tạo hàng loạt)" : ""
               }`,
             department_id: departmentId,
             status: ScheduleStatus.ACTIVE,
@@ -1773,7 +1769,7 @@ export default function CompleteScheduleApp() {
                 if (schedule.schedule_type === ScheduleType.DAILY_DATES) {
                   const cfg = schedule.schedule_config as any;
                   (cfg?.dates || []).forEach((d: any) => {
-                    lockedFieldIds.push(`day-${d.day_of_month}-${(d.month||1)-1}-${d.year}`);
+                    lockedFieldIds.push(`day-${d.day_of_month}-${(d.month || 1) - 1}-${d.year}`);
                   });
                 }
               }
@@ -1790,15 +1786,15 @@ export default function CompleteScheduleApp() {
       if (createdSchedules.length > 0) {
         setSchedules((prev) => {
           // tránh thêm trùng nếu fetch ngay sau đó
-            const existingIds = new Set(prev.map((s: any) => s.id));
-            const merged = [...prev];
-            for (const s of createdSchedules) {
-              if (!existingIds.has(s.id)) merged.push(s);
-            }
-            return merged;
+          const existingIds = new Set(prev.map((s: any) => s.id));
+          const merged = [...prev];
+          for (const s of createdSchedules) {
+            if (!existingIds.has(s.id)) merged.push(s);
+          }
+          return merged;
         });
-  // Ngừng edit-session cho các ô đã chuyển thành schedule thật
-  lockedFieldIds.forEach(fid => stopEditSession(fid));
+        // Ngừng edit-session cho các ô đã chuyển thành schedule thật
+        lockedFieldIds.forEach(fid => stopEditSession(fid));
       }
 
       // Reset states
@@ -1846,8 +1842,8 @@ export default function CompleteScheduleApp() {
         isBulkMode
           ? `Tạo thành công ${totalSchedulesCreated} lịch hàng loạt!`
           : isEditMode
-          ? "Cập nhật lịch hoạt động thành công!"
-          : "Lưu lịch hoạt động thành công!"
+            ? "Cập nhật lịch hoạt động thành công!"
+            : "Lưu lịch hoạt động thành công!"
       );
     } catch (error: any) {
       console.error("Error saving schedule:", error);
@@ -1855,8 +1851,8 @@ export default function CompleteScheduleApp() {
         isBulkMode
           ? "Không thể tạo lịch hàng loạt"
           : isEditMode
-          ? "Không thể cập nhật lịch hoạt động"
-          : "Không thể lưu lịch hoạt động"
+            ? "Không thể cập nhật lịch hoạt động"
+            : "Không thể lưu lịch hoạt động"
       );
     } finally {
       setIsSavingSchedule(false);
@@ -1896,14 +1892,14 @@ export default function CompleteScheduleApp() {
         return merged;
       });
     } else if (shouldFetch) {
-        (async () => {
-          try {
-            const data = await ScheduleService.findAll({ limit: 10000 });
-            setSchedules(data.data);
-          } catch (e) {
-            console.error('Fetch schedules after meta.schedulesCreated failed', e);
-          }
-        })();
+      (async () => {
+        try {
+          const data = await ScheduleService.findAll({ limit: 10000 });
+          setSchedules(data.data);
+        } catch (e) {
+          console.error('Fetch schedules after meta.schedulesCreated failed', e);
+        }
+      })();
     }
   }, [cellSelections, setSchedules]);
 
@@ -2032,8 +2028,8 @@ export default function CompleteScheduleApp() {
         if (!visibleDepartments.includes(deptId)) {
           const hasSelection = selections.days.some(
             (day) =>
-              day.date === date && 
-              (day.month === month || day.month === month - 1 || day.month === month + 1) && 
+              day.date === date &&
+              (day.month === month || day.month === month - 1 || day.month === month + 1) &&
               day.year === year
           );
           if (hasSelection) return { isBlocked: true, departmentId: deptId };
@@ -2084,7 +2080,7 @@ export default function CompleteScheduleApp() {
       // ✅ SỬA: Sử dụng tháng và năm thực tế từ calendar data
       const year = actualYear || currentMonth.getFullYear();
       const month = actualMonth !== undefined ? actualMonth : currentMonth.getMonth();
-      
+
       const currentDate = new Date(year, month, date);
       const isSunday = currentDate.getDay() === 0;
 
@@ -2109,24 +2105,24 @@ export default function CompleteScheduleApp() {
       // ✅ SỬA: Kiểm tra nếu chính mình đang chọn ngày này thì bắt đầu drag mode để quét
       if (isDaySelected(date, month, year) && selectedDepartment) {
         console.log('[ScheduleApp] User clicking on own selected day, starting drag mode for deselection');
-        
+
         // ✅ SỬA: Sử dụng tháng thực tế của ngày này, không phải currentMonth
         const fieldId = `day-${date}-${month}-${year}`;
-        
+
         // Start edit session
         startEditSession(fieldId, 'calendar_cell', {
           date,
           month: month,
           year,
         });
-        
+
         setMonthlyDragState({
           isDragging: true,
           startDay: { date, month: month, year },
           currentDay: { date, month: month, year },
           isSelecting: false, // false = sẽ xóa các ô được quét
         });
-        
+
         toast.info("Đang ở chế độ quét để xóa - kéo để chọn các ngày cần xóa");
         return;
       }
@@ -2142,7 +2138,7 @@ export default function CompleteScheduleApp() {
           clearMySelections('explicit', [fieldId]);
           return;
         }
-        
+
         const lockedByUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
         const userName = lockedByUser?.userName || lockedBy.userName || 'Unknown User';
         toast.error(`Ngày này đang được chỉnh sửa bởi ${userName}`);
@@ -2153,9 +2149,9 @@ export default function CompleteScheduleApp() {
       const isCurrentlySelected = isDaySelected(date, month, year);
 
       // ✅ THÊM: Log để debug
-      console.log('[handleDayMouseDown] Starting drag:', { 
-        date, month, year, 
-        isCurrentlySelected, 
+      console.log('[handleDayMouseDown] Starting drag:', {
+        date, month, year,
+        isCurrentlySelected,
         fieldId,
         isSelecting: !isCurrentlySelected
       });
@@ -2173,9 +2169,9 @@ export default function CompleteScheduleApp() {
         currentDay: { date, month: month, year },
         isSelecting: !isCurrentlySelected,
       });
-      
+
       // ✅ THÊM: Log sau khi set state
-      console.log('[handleDayMouseDown] Drag state set:', { 
+      console.log('[handleDayMouseDown] Drag state set:', {
         isDragging: true,
         startDay: { date, month: month, year },
         currentDay: { date, month: month, year },
@@ -2218,10 +2214,10 @@ export default function CompleteScheduleApp() {
         if (!newlySelectedDaysRef.current.has(fieldKey)) {
           // 🚫 Skip if field locked by another user
           const lockFieldId = `day-${date}-${month}-${year}`;
-            const lockedBy = getFieldLockedBy(lockFieldId);
-            if (lockedBy && lockedBy.userId !== user?.id) {
-              return; // another user holds the lock
-            }
+          const lockedBy = getFieldLockedBy(lockFieldId);
+          if (lockedBy && lockedBy.userId !== user?.id) {
+            return; // another user holds the lock
+          }
           // Check interaction constraints (mirror canInteract logic but simplified for performance)
           if (
             !isPastDay(date, month, year) &&
@@ -2288,7 +2284,7 @@ export default function CompleteScheduleApp() {
     const maxDate = startDate <= endDate ? endDate : startDate;
 
     // ✅ THÊM: Log để debug
-    console.log('[getMonthlyDragSelectionRange] Calculating range:', { 
+    console.log('[getMonthlyDragSelectionRange] Calculating range:', {
       start: { date: start.date, month: start.month, year: start.year },
       end: { date: end.date, month: end.month, year: end.year },
       minDate: minDate.toISOString(),
@@ -2322,25 +2318,25 @@ export default function CompleteScheduleApp() {
         !isBlockedByHidden
       ) {
         // ✅ THÊM: Kiểm tra tất cả các điều kiện để quyết định có thể chọn hay không
-        const canSelect = 
+        const canSelect =
           !isDayConflicted(date, month, year) &&
           !isDayHasExistingSchedule(date, month, year) &&
           !isDayBlockedByExistingSchedule(date, month, year);
-        
+
         const daySchedules = getSchedulesForDay(date, month, year);
         const hasExistingSchedules = daySchedules.length > 0;
-        
+
         // ✅ THÊM: Kiểm tra ngày đang được chọn bởi người khác
         const { isSelected: isSelectedByOther, userId: otherUserId } = isDaySelectedByAnyDept(
           date, month, year
         );
         const isSelectedByOtherUser = isSelectedByOther && otherUserId !== user?.id;
 
-  // 🔒 Check lock owner
-  const fieldId = `day-${date}-${month}-${year}`;
-  const lockedBy = getFieldLockedBy(fieldId);
-  const isLockedByOther = lockedBy && lockedBy.userId !== user?.id;
-        
+        // 🔒 Check lock owner
+        const fieldId = `day-${date}-${month}-${year}`;
+        const lockedBy = getFieldLockedBy(fieldId);
+        const isLockedByOther = lockedBy && lockedBy.userId !== user?.id;
+
         // ✅ THÊM: Log để debug từng ngày
         console.log(`[getMonthlyDragSelectionRange] Day ${date}/${month + 1}/${year}:`, {
           canSelect,
@@ -2353,9 +2349,9 @@ export default function CompleteScheduleApp() {
           isSelectedByOther,
           otherUserId
         });
-        
+
         // ✅ SỬA: Chỉ thêm vào range nếu có thể chọn và không bị người khác chọn
-  if (canSelect && !hasExistingSchedules && !isSelectedByOtherUser && !isLockedByOther) {
+        if (canSelect && !hasExistingSchedules && !isSelectedByOtherUser && !isLockedByOther) {
           range.push({ date, month, year });
           console.log(`[getMonthlyDragSelectionRange] ✅ Added day ${date}/${month + 1}/${year} to range`);
         } else {
@@ -2380,7 +2376,7 @@ export default function CompleteScheduleApp() {
     isDayBlockedByHiddenDepartment,
     isDaySelectedByAnyDept,
     user,
-  getFieldLockedBy,
+    getFieldLockedBy,
     getSchedulesForDay, // ✅ THÊM: Dependency này cần thiết
   ]);
 
@@ -2396,9 +2392,9 @@ export default function CompleteScheduleApp() {
 
       // ✅ SỬA: Sử dụng getMonthlyDragSelectionRange để chỉ hiển thị preview cho những ngày thực sự có thể chọn
       const range = getMonthlyDragSelectionRange();
-      return range.some(day => 
-        day.date === date && 
-        day.month === month && 
+      return range.some(day =>
+        day.date === date &&
+        day.month === month &&
         day.year === year
       );
     },
@@ -2433,12 +2429,12 @@ export default function CompleteScheduleApp() {
     [getCurrentDepartmentSelections]
   );
 
-  
+
 
   const isTimeSlotSelectedByAnyDept = useCallback(
     (dayIndex: number, time: string, specificDate: string) => {
       const dayOfWeek = uiToDow(dayIndex);
-      
+
       // Check local selections first
       for (const [deptId, selections] of departmentSelections) {
         if (
@@ -2461,7 +2457,7 @@ export default function CompleteScheduleApp() {
         if (userId === user?.id) {
           continue; // Skip own selections
         }
-        
+
         const remoteDeptSelections = remoteSelections.departmentSelections;
         if (!remoteDeptSelections) {
           continue;
@@ -2480,7 +2476,7 @@ export default function CompleteScheduleApp() {
           }
         }
       }
-      
+
       return { isSelected: false, departmentId: null, userId: null };
     },
     [departmentSelections, cellSelections, user]
@@ -2537,35 +2533,35 @@ export default function CompleteScheduleApp() {
       if (isPastTimeSlot(dayIndex, time, specificDate)) return;
       if (isTimeSlotConflicted(dayIndex, time, specificDate)) return;
       if (isSlotHasExistingSchedule(dayIndex, time, specificDate)) return;
-      
+
       // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
       if (isSlotBlockedByExistingSchedule(dayIndex, time, specificDate)) return;
-      
+
       // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại (bất kỳ phòng ban nào)
       const slotSchedules = getSchedulesForSlot(dayIndex, time, specificDate);
       if (slotSchedules.length > 0) return;
-      
+
       const { isBlocked } = isSlotBlockedByHiddenDepartment(
         dayIndex,
         time,
         specificDate
       );
       if (isBlocked) return;
-      
+
       const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
         isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
       if (isSelectedByOther && otherUserId !== user?.id) return; // ✅ SỬA: Chỉ cho phép chọn ô của chính mình
-      
+
       // Kiểm tra ô đang được chỉnh sửa bởi user khác (dùng khóa chuẩn hoá)
       const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
       const lockedBy = getFieldLockedBy(fieldId);
       if (lockedBy && lockedBy.userId !== user?.id) return; // ✅ SỬA: Chỉ cho phép chỉnh sửa ô của chính mình
-      
+
       if (dragState.isDragging && dragState.startSlot) {
         const startDate = weekDates[dragState.startSlot.day]
           .toISOString()
           .split("T")[0];
-        const currentDate = weekDates[dayIndex].toISOString().split("T")[0];
+        const currentDate = formatDateStr(weekDates[dayIndex]);
         if (startDate !== currentDate) return; // Không cho drag qua ngày khác
       }
       if (dragState.isDragging) {
@@ -2620,12 +2616,12 @@ export default function CompleteScheduleApp() {
         // **Bỏ qua giờ nghỉ trưa**
         if (time >= "12:00" && time < "13:30") continue;
         const weekDates = getWeekDates();
-        const specificDate = weekDates[day]?.toISOString().split("T")[0];
+        const specificDate = formatDateStr(weekDates[day]!);
         if (isPastTimeSlot(day, time, specificDate)) continue;
         if (isTimeSlotConflicted(day, time, specificDate)) continue;
         // ✅ SỬA: Chỉ kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
         if (isSlotBlockedByExistingSchedule(day, time, specificDate)) continue;
-        
+
         // ✅ THÊM: Kiểm tra ô có schedule đã tồn tại (bất kỳ phòng ban nào)
         const slotSchedules = getSchedulesForSlot(day, time, specificDate);
         if (slotSchedules.length > 0) continue;
@@ -2638,7 +2634,7 @@ export default function CompleteScheduleApp() {
         const { isSelected: isSelectedByOther, departmentId: otherDeptId, userId: otherUserId } =
           isTimeSlotSelectedByAnyDept(day, time, specificDate);
         if (isSelectedByOther && otherUserId !== user?.id) continue; // ✅ SỬA: Chỉ cho phép chọn ô của chính mình
-        
+
         // Kiểm tra ô đang được chỉnh sửa bởi user khác (dùng khóa chuẩn hoá)
         const fieldId = makeTimeSlotFieldId(day, time, specificDate);
         const lockedBy = getFieldLockedBy(fieldId);
@@ -2683,7 +2679,7 @@ export default function CompleteScheduleApp() {
         isConflicted: isTimeSlotConflicted(
           dayIndex,
           time,
-          weekDates[dayIndex].toISOString().split("T")[0]
+          formatDateStr(weekDates[dayIndex])
         ),
         isBlockedByHidden: isSlotBlockedByHiddenDepartment(
           dayIndex,
@@ -2728,7 +2724,7 @@ export default function CompleteScheduleApp() {
         );
         return;
       }
-      
+
       // ✅ THÊM: Kiểm tra ô bị chặn bởi lịch đã có (bất kỳ phòng ban nào)
       if (isSlotBlockedByExistingSchedule(dayIndex, time, specificDate)) {
         toast.error(
@@ -2741,7 +2737,7 @@ export default function CompleteScheduleApp() {
         isTimeSlotConflicted(
           dayIndex,
           time,
-          weekDates[dayIndex].toISOString().split("T")[0]
+          formatDateStr(weekDates[dayIndex])
         )
       ) {
         toast.error("Ô này đang được sử dụng bởi phòng ban khác");
@@ -2764,11 +2760,11 @@ export default function CompleteScheduleApp() {
         // Nếu chính mình đang chọn ô này, thì cho phép bắt đầu drag để quét
         if (otherUserId === user?.id) {
           console.log('[ScheduleApp] User starting drag from own selected cell, will toggle selection during drag');
-          
+
           // Không xóa ngay - để cho phép drag để quét
           // Logic toggle sẽ được xử lý trong handleTimeSlotMouseUp
         }
-        
+
         // Nếu người khác đang chọn ô này
         if (otherDeptId !== selectedDepartment) {
           const otherDeptName = departments.find(
@@ -2789,7 +2785,7 @@ export default function CompleteScheduleApp() {
           clearMySelections('explicit', [fieldId]);
           return;
         }
-        
+
         const lockedByUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
         const userName = lockedByUser?.userName || lockedBy.userName || 'Unknown User';
         toast.error(`Ô này đang được chỉnh sửa bởi ${userName}`);
@@ -2863,23 +2859,23 @@ export default function CompleteScheduleApp() {
         const endTime = timeSlots[timeSlots.indexOf(time) + 1] || LAST_SLOT_END;
         const dayOfWeek = uiToDow(day);
         const weekDates = getWeekDates();
-        const applicableDate = weekDates[day].toISOString().split("T")[0];
-        
+        const applicableDate = formatDateStr(weekDates[day]!);
+
         // Kiểm tra xem ô này đã được chọn chưa
         const exists = newTimeSlots.some(
-          (slot) => 
-            slot.day_of_week === dayOfWeek && 
+          (slot) =>
+            slot.day_of_week === dayOfWeek &&
             slot.start_time === time &&
             (!slot.applicable_date ||
               !applicableDate ||
               slot.applicable_date === applicableDate)
         );
-        
+
         if (exists) {
           // Nếu ô đã chọn thì xóa (toggle off)
           newTimeSlots = newTimeSlots.filter(
             (slot) =>
-              !(slot.day_of_week === dayOfWeek && 
+              !(slot.day_of_week === dayOfWeek &&
                 slot.start_time === time &&
                 (!slot.applicable_date ||
                   !applicableDate ||
@@ -2902,23 +2898,23 @@ export default function CompleteScheduleApp() {
         const endTime = timeSlots[timeSlots.indexOf(time) + 1] || LAST_SLOT_END;
         const dayOfWeek = uiToDow(day);
         const weekDates = getWeekDates();
-        const applicableDate = weekDates[day].toISOString().split("T")[0];
-        
+        const applicableDate = formatDateStr(weekDates[day]!);
+
         // Kiểm tra xem ô này đã được chọn chưa
         const exists = newTimeSlots.some(
-          (slot) => 
-            slot.day_of_week === dayOfWeek && 
+          (slot) =>
+            slot.day_of_week === dayOfWeek &&
             slot.start_time === time &&
             (!slot.applicable_date ||
               !applicableDate ||
               slot.applicable_date === applicableDate)
         );
-        
+
         if (exists) {
           // Nếu ô đã chọn thì xóa (toggle off)
           newTimeSlots = newTimeSlots.filter(
             (slot) =>
-              !(slot.day_of_week === dayOfWeek && 
+              !(slot.day_of_week === dayOfWeek &&
                 slot.start_time === time &&
                 (!slot.applicable_date ||
                   !applicableDate ||
@@ -2940,55 +2936,55 @@ export default function CompleteScheduleApp() {
     // ✅ THÊM: Xóa edit sessions và clear selections trong Redis cho các ô bị toggle off
     const removedSlots: string[] = [];
     const addedSlots: string[] = [];
-    
+
     // So sánh selections cũ và mới để xác định ô nào bị xóa
     currentSelections.timeSlots.forEach(oldSlot => {
-      const exists = newTimeSlots.some(newSlot => 
+      const exists = newTimeSlots.some(newSlot =>
         newSlot.day_of_week === oldSlot.day_of_week &&
         newSlot.start_time === oldSlot.start_time &&
         (!newSlot.applicable_date || !oldSlot.applicable_date || newSlot.applicable_date === oldSlot.applicable_date)
       );
-      
-              if (!exists && oldSlot.day_of_week) {
-          // Ô này bị xóa - tạo fieldId để clear
-          const weekDates = getWeekDates();
-          const dayIndex = dowToUi(oldSlot.day_of_week);
-          const specificDate = oldSlot.applicable_date || weekDates[dayIndex]?.toISOString().split("T")[0];
-          const fieldId = makeTimeSlotFieldId(dayIndex, oldSlot.start_time, specificDate);
-          removedSlots.push(fieldId);
-        }
+
+      if (!exists && oldSlot.day_of_week) {
+        // Ô này bị xóa - tạo fieldId để clear
+        const weekDates = getWeekDates();
+        const dayIndex = dowToUi(oldSlot.day_of_week);
+        const specificDate = oldSlot.applicable_date || formatDateStr(weekDates[dayIndex]);
+        const fieldId = makeTimeSlotFieldId(dayIndex, oldSlot.start_time, specificDate);
+        removedSlots.push(fieldId);
+      }
     });
-    
+
     // So sánh selections mới và cũ để xác định ô nào được thêm
     newTimeSlots.forEach(newSlot => {
-      const exists = currentSelections.timeSlots.some(oldSlot => 
+      const exists = currentSelections.timeSlots.some(oldSlot =>
         oldSlot.day_of_week === newSlot.day_of_week &&
         oldSlot.start_time === newSlot.start_time &&
         (!oldSlot.applicable_date || !newSlot.applicable_date || oldSlot.applicable_date === newSlot.applicable_date)
       );
-      
-              if (!exists && newSlot.day_of_week) {
-          // Ô này được thêm - tạo fieldId để track
-          const weekDates = getWeekDates();
-          const dayIndex = dowToUi(newSlot.day_of_week);
-          const specificDate = newSlot.applicable_date || weekDates[dayIndex]?.toISOString().split("T")[0];
-          const fieldId = makeTimeSlotFieldId(dayIndex, newSlot.start_time, specificDate);
-          addedSlots.push(fieldId);
-        }
+
+      if (!exists && newSlot.day_of_week) {
+        // Ô này được thêm - tạo fieldId để track
+        const weekDates = getWeekDates();
+        const dayIndex = dowToUi(newSlot.day_of_week);
+        const specificDate = newSlot.applicable_date || formatDateStr(weekDates[dayIndex]);
+        const fieldId = makeTimeSlotFieldId(dayIndex, newSlot.start_time, specificDate);
+        addedSlots.push(fieldId);
+      }
     });
-    
+
     // Cập nhật selections trong localStorage
     updateDepartmentSelections(selectedDepartment, {
       ...currentSelections,
       timeSlots: newTimeSlots,
     });
-    
+
     // ✅ THÊM: Clear edit sessions và selections trong Redis cho các ô bị xóa
     if (removedSlots.length > 0 && clearMySelections) {
       console.log('[ScheduleApp] Clearing edit sessions for removed slots:', removedSlots);
       clearMySelections('explicit', removedSlots);
     }
-    
+
     // ✅ THÊM: Start edit sessions cho các ô mới được thêm
     if (addedSlots.length > 0) {
       addedSlots.forEach(fieldId => {
@@ -2997,7 +2993,7 @@ export default function CompleteScheduleApp() {
         if (match) {
           const [, dayOfWeek, time, specificDate] = match;
           const dayIndex = dowToUi(parseInt(dayOfWeek));
-          
+
           startEditSession(fieldId, 'calendar_cell', {
             dayIndex,
             time,
@@ -3048,7 +3044,7 @@ export default function CompleteScheduleApp() {
     const handleMouseMove = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const calendarCell = target.closest('[data-slot-date], [data-day-date]');
-      
+
       if (calendarCell) {
         // Lấy thông tin cell đang hover
         let cellInfo = {};
@@ -3062,7 +3058,7 @@ export default function CompleteScheduleApp() {
           const [year, month, day] = date.split('-').map(Number);
           cellInfo = { date: day, month: month - 1, year, cellType: 'day' };
         }
-        
+
         const currentDepartment = selectedDepartment ? departments.find((d) => d.id === selectedDepartment) : null;
         const presenceData = {
           userId: user.id,
@@ -3070,19 +3066,19 @@ export default function CompleteScheduleApp() {
           departmentId: currentDepartment?.id || user.departments?.[0]?.id || 0,
           departmentName: currentDepartment?.name || user.departments?.[0]?.name || 'Unknown',
           avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
-          position: { 
-            x: e.clientX, 
+          position: {
+            x: e.clientX,
             y: e.clientY,
             ...cellInfo
           },
           isEditing: false,
           lastSeen: new Date().toISOString(),
         };
-        
+
         console.log('[Frontend] Sending presence data:', presenceData);
         console.log('[Frontend] User name being sent:', presenceData.userName);
         console.log('[Frontend] Department name being sent:', presenceData.departmentName);
-        
+
         sendPresence(presenceData);
       }
     };
@@ -3090,14 +3086,14 @@ export default function CompleteScheduleApp() {
     // Thêm tracking cho click events để hiển thị selection
     const handleCellClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      
+
       // Tìm tất cả các loại cell có thể click
       const calendarCell = target.closest('[data-slot-date], [data-day-date], .time-slot, .day-cell, td[data-day], td[data-time]');
-      
+
       if (calendarCell) {
         // Gửi thông tin về cell được click
         let cellInfo = {};
-        
+
         // Kiểm tra các data attributes khác nhau
         if (calendarCell.hasAttribute('data-slot-date')) {
           const date = calendarCell.getAttribute('data-slot-date')!;
@@ -3118,7 +3114,7 @@ export default function CompleteScheduleApp() {
           // Fallback: gửi thông tin cơ bản
           cellInfo = { cellType: 'unknown', action: 'clicked' };
         }
-        
+
         const currentDepartment = selectedDepartment ? departments.find((d) => d.id === selectedDepartment) : null;
         const presenceData = {
           userId: user.id,
@@ -3126,15 +3122,15 @@ export default function CompleteScheduleApp() {
           departmentId: currentDepartment?.id || user.departments?.[0]?.id || 0,
           departmentName: currentDepartment?.name || user.departments?.[0]?.name || 'Unknown',
           avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
-          position: { 
-            x: e.clientX, 
+          position: {
+            x: e.clientX,
             y: e.clientY,
             ...cellInfo
           },
           isEditing: true, // Đánh dấu là đang tương tác
           lastSeen: new Date().toISOString(),
         };
-        
+
         sendPresence(presenceData);
       }
     };
@@ -3145,7 +3141,7 @@ export default function CompleteScheduleApp() {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         handleMouseMove(e);
-        
+
         // Gửi mouse position real-time
         if (user) {
           const currentDepartment = selectedDepartment ? departments.find((d) => d.id === selectedDepartment) : null;
@@ -3155,8 +3151,8 @@ export default function CompleteScheduleApp() {
             departmentId: currentDepartment?.id || user.departments?.[0]?.id || 0,
             departmentName: currentDepartment?.name || user.departments?.[0]?.name || 'Unknown',
             avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
-            position: { 
-              x: e.clientX, 
+            position: {
+              x: e.clientX,
               y: e.clientY,
               cellType: 'timeSlot' as const,
               action: 'move' as const
@@ -3193,8 +3189,8 @@ export default function CompleteScheduleApp() {
         departmentId: currentDepartment?.id || user.departments?.[0]?.id || 0,
         departmentName: currentDepartment?.name || user.departments?.[0]?.name || 'Unknown',
         avatar_zalo: user.avatarZalo, // ✅ THÊM: Avatar Zalo của user
-        position: { 
-          x: 0, 
+        position: {
+          x: 0,
           y: 0,
           cellType: 'timeSlot' as const,
           action: 'move' as const
@@ -3316,11 +3312,11 @@ export default function CompleteScheduleApp() {
   useEffect(() => {
     if (isDataReady && user) {
       console.log('[ScheduleApp] Loading cell selections from Redis for room:', roomId);
-      
+
       // ✅ SỬA: Không clear local state khi mount, chỉ load từ Redis
       // setDepartmentSelections(new Map());
       // setSelectedDepartment(null);
-      
+
       getCellSelections();
     }
   }, [isDataReady, user, getCellSelections, roomId]);
@@ -3337,7 +3333,7 @@ export default function CompleteScheduleApp() {
             const now = new Date();
             const startOfWeek = new Date(now);
             startOfWeek.setDate(now.getDate() - now.getDay());
-            return startOfWeek.toISOString().split('T')[0];
+            return formatDateStr(startOfWeek);
           })(),
         };
         localStorage.setItem(storageKey, JSON.stringify(dataToSave));
@@ -3359,15 +3355,15 @@ export default function CompleteScheduleApp() {
           const isRecent = Date.now() - parsed.timestamp < 60 * 60 * 1000;
           const currentWeekStart = new Date();
           currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay());
-          const isSameWeek = parsed.weekStart === currentWeekStart.toISOString().split('T')[0];
-          
+          const isSameWeek = parsed.weekStart === formatDateStr(currentWeekStart);
+
           // ✅ SỬA: Không restore nếu local state đã trống (user đã xóa)
           if (departmentSelections.size === 0) {
             console.log('[ScheduleApp] Local state is empty, not restoring from localStorage');
             localStorage.removeItem(storageKey);
             return;
           }
-          
+
           if (isRecent && isSameWeek && parsed.departmentSelections) {
             console.log('[ScheduleApp] Restoring from local storage:', storageKey, parsed);
             const restoredSelections = new Map(
@@ -3399,13 +3395,13 @@ export default function CompleteScheduleApp() {
       if (departmentSelections.size === 0) {
         return;
       }
-      
+
       // Find our own selections and restore them
       let foundOwnSelections = false;
       for (const [userId, selections] of cellSelections) {
         if (userId === user?.id && selections.departmentSelections) {
           console.log('[ScheduleApp] Found own selections, restoring:', selections);
-          
+
           // ✅ SỬA: Chỉ restore khi local state trống hoặc có sự thay đổi từ Redis
           setDepartmentSelections(prev => {
             // Nếu local state đã có selections, chỉ merge những gì mới từ Redis
@@ -3428,22 +3424,22 @@ export default function CompleteScheduleApp() {
               return newDepartmentSelections;
             }
           });
-          
+
           // Restore selected department
           if (selections.selectedDepartment) {
             setSelectedDepartment(selections.selectedDepartment);
           }
-          
+
           foundOwnSelections = true;
           break;
         }
       }
-      
+
       // ✅ SỬA: Không clear local state nếu đang có selections
       if (!foundOwnSelections && departmentSelections.size === 0) {
         console.log('[ScheduleApp] No own selections found and local state is empty, keeping current state');
       }
-      
+
       // Keep other users' selections in cellSelections state (don't clear them)
       const otherUsersSelections = Array.from(cellSelections.entries()).filter(([userId]) => userId !== user?.id);
       console.log('[ScheduleApp] Other users selections:', otherUsersSelections);
@@ -3485,16 +3481,16 @@ export default function CompleteScheduleApp() {
 
     const handleBeforeUnload = () => {
       // Chỉ xóa khi mình đang chỉnh sửa (có selections)
-      const hasOwnSelections = departmentSelections && 
+      const hasOwnSelections = departmentSelections &&
         Object.keys(departmentSelections).length > 0;
-      
+
       if (hasOwnSelections && user?.id) {
         console.log('[ScheduleApp] F5 detected, clearing own selections for user:', user.id);
-        
+
         // Clear local state immediately
         setDepartmentSelections(new Map());
         setSelectedDepartment(null);
-        
+
         // ✅ THÊM: Xóa local storage
         try {
           localStorage.removeItem(storageKey);
@@ -3502,24 +3498,24 @@ export default function CompleteScheduleApp() {
         } catch (error) {
           console.error('[ScheduleApp] Error clearing local storage:', error);
         }
-        
+
         // Tạo danh sách các ô đang được chỉnh sửa để xóa
         const editingCells: string[] = [];
         for (const [deptId, selection] of departmentSelections.entries()) {
           if (selection.timeSlots && selection.timeSlots.length > 0) {
             for (const timeSlot of selection.timeSlots) {
               const fieldId = makeTimeSlotFieldId(
-                timeSlot.day_of_week!, 
-                timeSlot.start_time, 
+                timeSlot.day_of_week!,
+                timeSlot.start_time,
                 timeSlot.applicable_date
               );
               editingCells.push(fieldId);
             }
           }
         }
-        
+
         console.log('[ScheduleApp] Clearing cells for user', user.id, ':', editingCells);
-        
+
         if (clearMySelections) {
           clearMySelections('leave', editingCells);
         } else {
@@ -3558,7 +3554,7 @@ export default function CompleteScheduleApp() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       // Chỉ remove event listeners, không gọi handleBeforeUnload khi unmount
       window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -3595,8 +3591,7 @@ export default function CompleteScheduleApp() {
 
       // key để chống duplicate trong cùng 1 targetMap
       const k = (s: TimeSlot) =>
-        `${s.applicable_date ?? ""}|${s.day_of_week}|${s.start_time}|${
-          s.end_time
+        `${s.applicable_date ?? ""}|${s.day_of_week}|${s.start_time}|${s.end_time
         }`;
       const existing = new Set(dest.timeSlots.map(k));
 
@@ -3629,7 +3624,7 @@ export default function CompleteScheduleApp() {
         // Bỏ CN nếu muốn
         if (bulkScheduleConfig.skipWeekends && dayIdx === 6) continue;
 
-        const dateStr = tgtWeekDates[dayIdx]?.toISOString().split("T")[0];
+        const dateStr = formatDateStr(tgtWeekDates[dayIdx]!);
         if (!dateStr) continue;
 
         // Bỏ qua các xung đột / quá khứ nếu được cấu hình
@@ -3837,13 +3832,10 @@ export default function CompleteScheduleApp() {
     setDepartmentSelections(newBulkSelections);
 
     toast.success(
-      `Đã tạo lịch hàng loạt: ${periods.length} ${
-        bulkScheduleConfig.type === "weeks" ? "tuần" : "tháng"
-      } x ${
-        currentSelections.timeSlots.length + currentSelections.days.length
-      } mục = ${
-        periods.length *
-        (currentSelections.timeSlots.length + currentSelections.days.length)
+      `Đã tạo lịch hàng loạt: ${periods.length} ${bulkScheduleConfig.type === "weeks" ? "tuần" : "tháng"
+      } x ${currentSelections.timeSlots.length + currentSelections.days.length
+      } mục = ${periods.length *
+      (currentSelections.timeSlots.length + currentSelections.days.length)
       } items tổng cộng`
     );
   }, [
@@ -3884,10 +3876,10 @@ export default function CompleteScheduleApp() {
           <CursorIndicator key={presence.userId} presence={presence} />
         ))}
       </AnimatePresence>
-      
+
       {/* Cell selection indicators for other users */}
       <CellSelectionIndicator presences={presences} />
-      
+
       <div className="max-w-full p-5 mx-auto">
         {/* Header */}
         <motion.div
@@ -3918,14 +3910,14 @@ export default function CompleteScheduleApp() {
                   <PresenceList presences={Array.from(presences.values())} maxDisplay={3} />
                 )}
               </div>
-              
 
-              
+
+
               {/* Typing Indicators */}
               {previewPatches.size > 0 && (
                 <TypingIndicator patches={Array.from(previewPatches.values())} />
               )}
-              
+
               <Button
                 onClick={() =>
                   setActiveView(activeView === "week" ? "month" : "week")
@@ -3945,7 +3937,7 @@ export default function CompleteScheduleApp() {
                   </span>
                 )}
               </Button>
-              
+
 
             </div>
           </div>
@@ -4035,44 +4027,44 @@ export default function CompleteScheduleApp() {
                         </span>
                       </Button>
 
-                    {isBulkMode && (
-                      <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border">
-                        <Select value={bulkScheduleConfig.type} disabled>
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="weeks">Tuần</SelectItem>
-                            <SelectItem value="months">Tháng</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      {isBulkMode && (
+                        <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border">
+                          <Select value={bulkScheduleConfig.type} disabled>
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="weeks">Tuần</SelectItem>
+                              <SelectItem value="months">Tháng</SelectItem>
+                            </SelectContent>
+                          </Select>
 
-                        <Input
-                          type="number"
-                          min="1"
-                          max="12"
-                          value={bulkScheduleConfig.count}
-                          onChange={(e) =>
-                            setBulkScheduleConfig((prev) => ({
-                              ...prev,
-                              count: Math.max(
-                                1,
-                                Math.min(12, parseInt(e.target.value) || 1)
-                              ),
-                            }))
-                          }
-                          className="w-20"
-                        />
+                          <Input
+                            type="number"
+                            min="1"
+                            max="12"
+                            value={bulkScheduleConfig.count}
+                            onChange={(e) =>
+                              setBulkScheduleConfig((prev) => ({
+                                ...prev,
+                                count: Math.max(
+                                  1,
+                                  Math.min(12, parseInt(e.target.value) || 1)
+                                ),
+                              }))
+                            }
+                            className="w-20"
+                          />
 
-                        <span className="text-sm text-slate-600">
-                          {bulkScheduleConfig.type === "weeks"
-                            ? "tuần tiếp theo"
-                            : "tháng tiếp theo"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                    )}
+                          <span className="text-sm text-slate-600">
+                            {bulkScheduleConfig.type === "weeks"
+                              ? "tuần tiếp theo"
+                              : "tháng tiếp theo"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -4100,17 +4092,15 @@ export default function CompleteScheduleApp() {
                         variant="outline"
                         size="sm"
                         disabled={!canEdit}
-                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 ${
-                          !canEdit ? "opacity-50 cursor-not-allowed" : ""
-                        } ${!canView ? "grayscale opacity-30" : ""} ${
-                          isSelected
+                        className={`flex-1 justify-start gap-2 h-auto py-2 transition-all hover:scale-105 ${!canEdit ? "opacity-50 cursor-not-allowed" : ""
+                          } ${!canView ? "grayscale opacity-30" : ""} ${isSelected
                             ? `${color.light} ${color.border} ${color.text} border-2 ring-2 ring-blue-300 shadow-md`
                             : hasSelections
-                            ? `${color.light} ${color.border} border-2 shadow-sm`
-                            : canEdit
-                            ? "hover:bg-slate-50 hover:shadow-sm"
-                            : ""
-                        }`}
+                              ? `${color.light} ${color.border} border-2 shadow-sm`
+                              : canEdit
+                                ? "hover:bg-slate-50 hover:shadow-sm"
+                                : ""
+                          }`}
                         onClick={() => {
                           if (!canEdit) {
                             if (!canView) {
@@ -4132,18 +4122,16 @@ export default function CompleteScheduleApp() {
                       >
                         <div className="flex items-center gap-2">
                           <div
-                            className={`w-3 h-3 mr-2 rounded-full ${
-                              color.bg
-                            } shadow-sm ${!canView ? "grayscale" : ""}`}
+                            className={`w-3 h-3 mr-2 rounded-full ${color.bg
+                              } shadow-sm ${!canView ? "grayscale" : ""}`}
                           />
                           <span
-                            className={`truncate text-sm ${
-                              !canView
+                            className={`truncate text-sm ${!canView
                                 ? "text-gray-400"
                                 : !canEdit
-                                ? "text-gray-600"
-                                : ""
-                            }`}
+                                  ? "text-gray-600"
+                                  : ""
+                              }`}
                           >
                             {dept.name}
                           </span>
@@ -4173,11 +4161,10 @@ export default function CompleteScheduleApp() {
                         variant="ghost"
                         size="sm"
                         disabled={!canView}
-                        className={`p-1 h-8 w-8 ${
-                          canView
+                        className={`p-1 h-8 w-8 ${canView
                             ? "hover:bg-slate-100"
                             : "opacity-30 cursor-not-allowed grayscale"
-                        }`}
+                          }`}
                         onClick={() => {
                           if (!canView) {
                             toast.error(
@@ -4196,9 +4183,8 @@ export default function CompleteScheduleApp() {
                           <Eye className="w-4 h-4 text-green-600" />
                         ) : (
                           <EyeOff
-                            className={`w-4 h-4 ${
-                              canView ? "text-slate-400" : "text-gray-300"
-                            }`}
+                            className={`w-4 h-4 ${canView ? "text-slate-400" : "text-gray-300"
+                              }`}
                           />
                         )}
                       </Button>
@@ -4215,15 +4201,13 @@ export default function CompleteScheduleApp() {
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-4 h-4 rounded-full ${
-                        getDepartmentColor(selectedDepartment).bg
-                      } shadow-sm`}
+                      className={`w-4 h-4 rounded-full ${getDepartmentColor(selectedDepartment).bg
+                        } shadow-sm`}
                     />
                     <div className="flex-1">
                       <p
-                        className={`text-sm font-medium ${
-                          getSelectedDepartmentColor().text
-                        }`}
+                        className={`text-sm font-medium ${getSelectedDepartmentColor().text
+                          }`}
                       >
                         Phòng ban đang chọn:{" "}
                         {
@@ -4245,17 +4229,17 @@ export default function CompleteScheduleApp() {
                         selectedDepartment
                           ? !isDepartmentEditable(selectedDepartment)
                           : !(
-                              isAdmin ||
-                              isScheduler ||
-                              userManagerDepartmentSlugs.length > 0
-                            )
+                            isAdmin ||
+                            isScheduler ||
+                            userManagerDepartmentSlugs.length > 0
+                          )
                       }
                       onClick={() => {
                         const canEdit = selectedDepartment
                           ? isDepartmentEditable(selectedDepartment)
                           : isAdmin ||
-                            isScheduler ||
-                            userManagerDepartmentSlugs.length > 0;
+                          isScheduler ||
+                          userManagerDepartmentSlugs.length > 0;
                         if (!canEdit) {
                           toast.error(
                             "Bạn không có quyền thao tác phòng ban này"
@@ -4409,11 +4393,10 @@ export default function CompleteScheduleApp() {
                     <span className="font-medium min-w-[200px] text-center">
                       {activeView === "week"
                         ? `${weekDates[0].toLocaleDateString(
-                            "vi-VN"
-                          )} - ${weekDates[6].toLocaleDateString("vi-VN")}`
-                        : `Tháng ${
-                            currentMonth.getMonth() + 1
-                          }, ${currentMonth.getFullYear()}`}
+                          "vi-VN"
+                        )} - ${weekDates[6].toLocaleDateString("vi-VN")}`
+                        : `Tháng ${currentMonth.getMonth() + 1
+                        }, ${currentMonth.getFullYear()}`}
                     </span>
 
                     <Button
@@ -4476,19 +4459,17 @@ export default function CompleteScheduleApp() {
                               className="grid grid-cols-8 border-b hover:bg-slate-25"
                             >
                               <div
-                                className={`p-2 text-center border-r min-h-[50px] flex flex-col justify-center ${
-                                  time >= "12:00" && time < "13:30"
+                                className={`p-2 text-center border-r min-h-[50px] flex flex-col justify-center ${time >= "12:00" && time < "13:30"
                                     ? "bg-rose-100"
                                     : "bg-slate-50"
-                                }`}
+                                  }`}
                               >
                                 {/* Hiển thị range time với background màu */}
                                 <div
-                                  className={`rounded px-2 py-1 text-xs font-medium ${
-                                    time >= "12:00" && time < "13:30"
+                                  className={`rounded px-2 py-1 text-xs font-medium ${time >= "12:00" && time < "13:30"
                                       ? "bg-rose-200 text-rose-800"
                                       : "bg-blue-100 text-blue-800"
-                                  }`}
+                                    }`}
                                 >
                                   {formatTimeRange(
                                     time,
@@ -4620,70 +4601,60 @@ export default function CompleteScheduleApp() {
                                     data-slot-date={specificDate}
                                     data-time={time}
                                     className={`p-1 border-r last:border-r-0 min-h-[40px] relative
-                                    ${
-                                      dayIndex === 6 // Chủ nhật
+                                    ${dayIndex === 6 // Chủ nhật
                                         ? "bg-gray-200 opacity-50 cursor-not-allowed"
                                         : isLunchBreak
-                                        ? "bg-gray-200 opacity-50 cursor-not-allowed"
-                                        : isPast // Thêm styling cho slot quá khứ
-                                        ? "bg-gray-200 opacity-50 cursor-not-allowed"
-                                        : isBlockedByHidden
-                                        ? "bg-gray-200 opacity-50 cursor-not-allowed border-dashed border-gray-400"
-                                        : isSelectedByAny &&
-                                          selectedByDeptId !==
-                                            selectedDepartment // **THÊM ĐIỀU KIỆN NÀY**
-                                        ? "bg-orange-200 opacity-60 cursor-not-allowed border-orange-200 border-2"
-                                        : hasExistingSchedule // ✅ THÊM: Styling cho ô đã có lịch
-                                        ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
-                                        : isConflicted &&
-                                          !isLunchBreak &&
-                                          !isPast
-                                        ? "cursor-not-allowed opacity-90"
-                                        : canInteract
-                                        ? "cursor-pointer"
-                                        : "cursor-not-allowed"
-                                    }
-                                    ${
-                                      isPreviewSelection
-                                        ? `${
-                                            getSelectedDepartmentColor().light
-                                          } ${
-                                            getSelectedDepartmentColor().border
-                                          } border-2 shadow-md opacity-70 scale-105`
+                                          ? "bg-gray-200 opacity-50 cursor-not-allowed"
+                                          : isPast // Thêm styling cho slot quá khứ
+                                            ? "bg-gray-200 opacity-50 cursor-not-allowed"
+                                            : isBlockedByHidden
+                                              ? "bg-gray-200 opacity-50 cursor-not-allowed border-dashed border-gray-400"
+                                              : isSelectedByAny &&
+                                                selectedByDeptId !==
+                                                selectedDepartment // **THÊM ĐIỀU KIỆN NÀY**
+                                                ? "bg-orange-200 opacity-60 cursor-not-allowed border-orange-200 border-2"
+                                                : hasExistingSchedule // ✅ THÊM: Styling cho ô đã có lịch
+                                                  ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
+                                                  : isConflicted &&
+                                                    !isLunchBreak &&
+                                                    !isPast
+                                                    ? "cursor-not-allowed opacity-90"
+                                                    : canInteract
+                                                      ? "cursor-pointer"
+                                                      : "cursor-not-allowed"
+                                      }
+                                    ${isPreviewSelection
+                                        ? `${getSelectedDepartmentColor().light
+                                        } ${getSelectedDepartmentColor().border
+                                        } border-2 shadow-md opacity-70 scale-105`
                                         : isPreviewDeselection
-                                        ? "bg-red-100 border-red-300 border-2 opacity-70 scale-95"
-                                        : isSelectedByCurrentDept &&
-                                          selectedDepartment
-                                        ? `${
-                                            getSelectedDepartmentColor().light
-                                          } ${
-                                            getSelectedDepartmentColor().border
-                                          } border-2 shadow-md hover:scale-105`
-                                        : isSelectedByAny && selectedByDeptId
-                                        ? `${
-                                            getDepartmentColor(selectedByDeptId)
-                                              .light
-                                          } ${
-                                            getDepartmentColor(selectedByDeptId)
-                                              .border
-                                          } border-2 shadow-sm`
-                                        : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
-                                        ? `${
-                                            getDepartmentColor(blockedByDeptId)
-                                              .light
-                                          } opacity-30 border-dashed`
-                                        : slotSchedules.length > 0
-                                        ? "bg-gray-100"
-                                        : selectedDepartment && !isConflicted
-                                        ? "hover:bg-gray-50 hover:border-blue-200 hover:shadow-sm"
-                                        : "hover:bg-slate-50"
-                                    } ${
-                                      focusTarget &&
-                                      focusTarget.date === specificDate &&
-                                      focusTarget.time === time
+                                          ? "bg-red-100 border-red-300 border-2 opacity-70 scale-95"
+                                          : isSelectedByCurrentDept &&
+                                            selectedDepartment
+                                            ? `${getSelectedDepartmentColor().light
+                                            } ${getSelectedDepartmentColor().border
+                                            } border-2 shadow-md hover:scale-105`
+                                            : isSelectedByAny && selectedByDeptId
+                                              ? `${getDepartmentColor(selectedByDeptId)
+                                                .light
+                                              } ${getDepartmentColor(selectedByDeptId)
+                                                .border
+                                              } border-2 shadow-sm`
+                                              : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
+                                                ? `${getDepartmentColor(blockedByDeptId)
+                                                  .light
+                                                } opacity-30 border-dashed`
+                                                : slotSchedules.length > 0
+                                                  ? "bg-gray-100"
+                                                  : selectedDepartment && !isConflicted
+                                                    ? "hover:bg-gray-50 hover:border-blue-200 hover:shadow-sm"
+                                                    : "hover:bg-slate-50"
+                                      } ${focusTarget &&
+                                        focusTarget.date === specificDate &&
+                                        focusTarget.time === time
                                         ? "ring-2 ring-blue-400"
                                         : ""
-                                    }`}
+                                      }`}
                                     onMouseDown={(e) => {
                                       if (!canInteract) return;
                                       const isRestrict = isEditMode && postModalEditEnabled && !!editingSchedule;
@@ -4704,26 +4675,26 @@ export default function CompleteScheduleApp() {
                                         toast.success("Đã bỏ khung giờ khỏi lịch");
                                         return;
                                       }
-                                      
+
                                       // ✅ THÊM: Logic mới - Nhấn giữ để quét từ ô đã chọn
                                       if (isSelectedByCurrentDept && selectedDepartment) {
                                         console.log('[ScheduleApp] User starting drag from selected cell, will toggle selection during drag');
-                                        
+
                                         // Bắt đầu drag với mode toggle (không xóa ngay)
                                         const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
-                                        
+
                                         // Start edit session
                                         startEditSession(fieldId, 'calendar_cell', {
                                           dayIndex,
                                           time,
                                           date: specificDate,
                                         });
-                                        
+
                                         // Gọi handleTimeSlotMouseDown với mode toggle
                                         handleTimeSlotMouseDown(dayIndex, time, specificDate, e);
                                         return;
                                       }
-                                      
+
                                       // Check if field is locked by another user
                                       const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
                                       if (isFieldLocked(fieldId)) {
@@ -4733,14 +4704,14 @@ export default function CompleteScheduleApp() {
                                           return;
                                         }
                                       }
-                                      
+
                                       // Start edit session
                                       startEditSession(fieldId, 'calendar_cell', {
                                         dayIndex,
                                         time,
                                         date: specificDate,
                                       });
-                                      
+
                                       handleTimeSlotMouseDown(dayIndex, time, specificDate, e);
                                     }}
                                     onMouseEnter={() =>
@@ -4785,7 +4756,7 @@ export default function CompleteScheduleApp() {
                                         <EyeOff className="w-4 h-4 text-slate-500 opacity-60" />
                                       </div>
                                     )}
-                                    
+
                                     {/* ✅ THÊM: Hiển thị cho ô đã có lịch bị khóa */}
                                     {hasExistingSchedule && (
                                       <div className="absolute inset-0 bg-red-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-red-300 border-dashed">
@@ -4797,7 +4768,7 @@ export default function CompleteScheduleApp() {
                                         </div>
                                       </div>
                                     )}
-                                    
+
                                     {/* Selection indicators */}
                                     {isSelectedByCurrentDept &&
                                       selectedDepartment &&
@@ -4806,16 +4777,13 @@ export default function CompleteScheduleApp() {
                                           initial={{ scale: 0, opacity: 0 }}
                                           animate={{ scale: 1, opacity: 1 }}
                                           exit={{ scale: 0, opacity: 0 }}
-                                          className={`absolute inset-0 ${
-                                            getSelectedDepartmentColor().light
-                                          } bg-opacity-30 rounded flex items-center justify-center border-2 ${
-                                            getSelectedDepartmentColor().border
-                                          }`}
+                                          className={`absolute inset-0 ${getSelectedDepartmentColor().light
+                                            } bg-opacity-30 rounded flex items-center justify-center border-2 ${getSelectedDepartmentColor().border
+                                            }`}
                                         >
                                           <CheckCircle
-                                            className={`w-5 h-5 ${
-                                              getSelectedDepartmentColor().text
-                                            } bg-white rounded-full shadow-sm`}
+                                            className={`w-5 h-5 ${getSelectedDepartmentColor().text
+                                              } bg-white rounded-full shadow-sm`}
                                           />
                                         </motion.div>
                                       )}
@@ -4824,17 +4792,17 @@ export default function CompleteScheduleApp() {
                                     {(() => {
                                       // Kiểm tra ô được chọn bởi user khác
                                       const { isSelected: isSelectedByRemote, userId: remoteUserId, departmentId: remoteDeptId } = isTimeSlotSelectedByAnyDept(dayIndex, time, specificDate);
-                                      
+
                                       // Kiểm tra ô đang được chỉnh sửa bởi user khác
                                       const fieldId = makeTimeSlotFieldId(dayIndex, time, specificDate);
                                       const lockedBy = getFieldLockedBy(fieldId);
-                                      
+
                                       // Nếu ô được chọn HOẶC đang được chỉnh sửa bởi user khác
                                       if ((isSelectedByRemote && remoteUserId && remoteUserId !== user?.id) || lockedBy) {
                                         // Lấy thông tin user
                                         let targetUser = null;
                                         let title = '';
-                                        
+
                                         if (isSelectedByRemote && remoteUserId) {
                                           targetUser = Array.from(presences.values()).find(p => p.userId === remoteUserId);
                                           title = `Được chọn bởi ${targetUser?.userName || 'Unknown'}`;
@@ -4842,7 +4810,7 @@ export default function CompleteScheduleApp() {
                                           targetUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
                                           title = `Đang chỉnh sửa bởi ${targetUser?.userName || lockedBy.userName}`;
                                         }
-                                        
+
                                         if (targetUser || lockedBy) {
                                           // Lấy tên user từ nhiều nguồn
                                           let userName = 'Unknown';
@@ -4856,11 +4824,11 @@ export default function CompleteScheduleApp() {
                                             const dept = departments.find(d => d.id === lockedBy.departmentId);
                                             userName = dept ? `${dept.name} User` : 'Unknown User';
                                           }
-                                          
+
                                           // ✅ THÊM: Lấy màu của phòng ban đang chọn ô này
                                           // Lấy department ID từ nhiều nguồn khác nhau
                                           let deptId = null;
-                                          
+
                                           if (isSelectedByRemote && remoteDeptId) {
                                             // Nếu ô được chọn bởi user khác, dùng trực tiếp department ID từ isTimeSlotSelectedByAnyDept
                                             deptId = remoteDeptId;
@@ -4868,17 +4836,17 @@ export default function CompleteScheduleApp() {
                                             // Nếu ô đang bị khóa, lấy department ID từ lock
                                             deptId = lockedBy.departmentId;
                                           }
-                                          
+
                                           // Nếu không có deptId, dùng selectedByDeptId làm fallback
                                           if (!deptId) {
                                             deptId = selectedByDeptId;
                                           }
-                                          
+
                                           const deptColor = deptId ? getDepartmentColor(deptId) : null;
-                                          
+
                                           // ✅ THÊM: Debug log
                                           console.log('[Weekly Remote indicators] DayIndex:', dayIndex, 'Time:', time, 'remoteDeptId:', remoteDeptId, 'lockedBy:', lockedBy?.userId, 'deptId:', deptId, 'deptColor:', deptColor);
-                                          
+
                                           return (
                                             <motion.div
                                               initial={{ scale: 0, opacity: 0 }}
@@ -4903,16 +4871,13 @@ export default function CompleteScheduleApp() {
                                     {/* Drag preview */}
                                     {isPreviewSelection && (
                                       <div
-                                        className={`absolute inset-0 ${
-                                          getSelectedDepartmentColor().light
-                                        } bg-opacity-50 rounded flex items-center justify-center border-2 ${
-                                          getSelectedDepartmentColor().border
-                                        } border-dashed animate-pulse`}
+                                        className={`absolute inset-0 ${getSelectedDepartmentColor().light
+                                          } bg-opacity-50 rounded flex items-center justify-center border-2 ${getSelectedDepartmentColor().border
+                                          } border-dashed animate-pulse`}
                                       >
                                         <Plus
-                                          className={`w-4 h-4 ${
-                                            getSelectedDepartmentColor().text
-                                          } opacity-70`}
+                                          className={`w-4 h-4 ${getSelectedDepartmentColor().text
+                                            } opacity-70`}
                                         />
                                       </div>
                                     )}
@@ -4927,25 +4892,22 @@ export default function CompleteScheduleApp() {
                                     {(() => {
                                       // Chỉ hiển thị khi đang drag và ô này trong drag range
                                       if (!dragState.isDragging || !isInDragRange) return null;
-                                      
+
                                       // Xác định trạng thái hiện tại của ô
                                       const isCurrentlySelected = isTimeSlotSelected(dayIndex, time, specificDate);
-                                      
+
                                       // Hiển thị dấu + cho ô chưa chọn, dấu X cho ô đã chọn
                                       if (!isCurrentlySelected) {
                                         // Ô chưa chọn - hiển thị dấu +
                                         return (
                                           <div
-                                            className={`absolute inset-0 ${
-                                              getSelectedDepartmentColor().light
-                                            } bg-opacity-50 rounded flex items-center justify-center border-2 ${
-                                              getSelectedDepartmentColor().border
-                                            } border-dashed animate-pulse`}
+                                            className={`absolute inset-0 ${getSelectedDepartmentColor().light
+                                              } bg-opacity-50 rounded flex items-center justify-center border-2 ${getSelectedDepartmentColor().border
+                                              } border-dashed animate-pulse`}
                                           >
                                             <Plus
-                                              className={`w-4 h-4 ${
-                                                getSelectedDepartmentColor().text
-                                              } opacity-70`}
+                                              className={`w-4 h-4 ${getSelectedDepartmentColor().text
+                                                } opacity-70`}
                                             />
                                           </div>
                                         );
@@ -4990,50 +4952,50 @@ export default function CompleteScheduleApp() {
                         // ✅ SỬA: Sử dụng tháng và năm thực tế của ngày này
                         const actualMonth = (day as any).actualMonth !== undefined ? (day as any).actualMonth : currentMonth.getMonth();
                         const actualYear = (day as any).actualYear !== undefined ? (day as any).actualYear : currentMonth.getFullYear();
-                        
+
                         const isSelectedByCurrentDept = day.isCurrentMonth
                           ? isDaySelected(
-                              day.date,
-                              actualMonth,
-                              actualYear
-                            )
+                            day.date,
+                            actualMonth,
+                            actualYear
+                          )
                           : false;
                         const {
                           isSelected: isSelectedByAny,
                           departmentId: selectedByDeptId,
                           userId: selectedByUserId,
                         } = day.isCurrentMonth
-                          ? isDaySelectedByAnyDept(
+                            ? isDaySelectedByAnyDept(
                               day.date,
                               actualMonth,
                               actualYear
                             )
-                          : { isSelected: false, departmentId: null, userId: null };
+                            : { isSelected: false, departmentId: null, userId: null };
 
                         const {
                           isBlocked: isBlockedByHidden,
                           departmentId: blockedByDeptId,
                         } = day.isCurrentMonth
-                          ? isDayBlockedByHiddenDepartment(
+                            ? isDayBlockedByHiddenDepartment(
                               day.date,
                               actualMonth,
                               actualYear
                             )
-                          : { isBlocked: false, departmentId: null };
+                            : { isBlocked: false, departmentId: null };
                         const daySchedules = day.isCurrentMonth
                           ? getSchedulesForDay(
-                              day.date,
-                              actualMonth,
-                              actualYear
-                            )
+                            day.date,
+                            actualMonth,
+                            actualYear
+                          )
                           : [];
 
                         const hasExistingSchedule = day.isCurrentMonth
                           ? isDayHasExistingSchedule(
-                              day.date,
-                              actualMonth,
-                              actualYear
-                            )
+                            day.date,
+                            actualMonth,
+                            actualYear
+                          )
                           : false;
 
                         // ✅ Cho phép chỉnh sửa (xóa) các ngày đã thuộc lịch đang chỉnh sửa sau khi đóng modal
@@ -5070,12 +5032,12 @@ export default function CompleteScheduleApp() {
                           );
                         // ✅ SỬA: Tách biệt logic hiển thị và logic tương tác
                         // Logic hiển thị: luôn hiển thị các ô đang được chọn (không phụ thuộc vào selectedDepartment)
-                        const isSelectedByAnyDept = 
+                        const isSelectedByAnyDept =
                           isSelectedByAny && selectedByDeptId;
-                        
+
                         // ✅ THÊM: Logic hiển thị cho các ô đang được chọn (không phụ thuộc vào selectedDepartment)
                         const shouldAlwaysShow = isSelectedByAnyDept;
-                        
+
                         // ✅ THÊM: Log để debug logic hiển thị
                         if (isSelectedByAny && selectedByDeptId) {
                           console.log(`[Calendar] Day ${day.date}/${actualMonth + 1}/${actualYear}:`, {
@@ -5087,7 +5049,7 @@ export default function CompleteScheduleApp() {
                             shouldAlwaysShow
                           });
                         }
-                        
+
                         // Logic tương tác: chỉ cho phép tương tác với những ô có thể chọn
                         const canInteract = !isSunday && !isConflicted && !isPast && !isBlockedByHidden &&
                           (() => {
@@ -5126,58 +5088,50 @@ export default function CompleteScheduleApp() {
                               "0"
                             )}`}
                             className={`min-h-[80px] p-2 border-r border-b transition-all relative hover:shadow-sm
-                              ${
-                                !day.isCurrentMonth
-                                  ? "bg-slate-50 text-slate-400"
-                                  : isPast
+                              ${!day.isCurrentMonth
+                                ? "bg-slate-50 text-slate-400"
+                                : isPast
                                   ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50"
                                   : isSunday
-                                  ? "bg-red-50 text-red-400 cursor-not-allowed opacity-60"
-                                  : isBlockedByHidden
-                                  ? "bg-slate-200 opacity-40 cursor-not-allowed border-dashed border-slate-400"
-                                  : isSelectedByCurrentDept &&
-                                    selectedDepartment
-                                  ? `${getSelectedDepartmentColor().light} ${
-                                      getSelectedDepartmentColor().border
-                                    } border-2 shadow-lg cursor-pointer transform hover:scale-105`
-                                  : isSelectedByAnyDept && selectedByDeptId // ✅ SỬA: Hiển thị theo màu của phòng ban khác
-                                  ? `${
-                                      getDepartmentColor(selectedByDeptId).light
-                                    } opacity-60 cursor-not-allowed ${
-                                      getDepartmentColor(selectedByDeptId).border
-                                    } border-2`
-                                  : isEditableExistingScheduleDay
-                                  ? "bg-amber-50 border-amber-300 border-2 cursor-pointer hover:bg-amber-100"
-                                  : hasExistingSchedule // ✅ THÊM: Styling cho ngày đã có lịch (không thể chỉnh sửa)
-                                  ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
-                                  : isConflicted
-                                  ? "cursor-not-allowed opacity-90"
-                                  : isSelectedByAny && selectedByDeptId && !isSelectedByAnyDept
-                                  ? `${
-                                      getDepartmentColor(selectedByDeptId).light
-                                    } ${
-                                      getDepartmentColor(selectedByDeptId)
-                                        .border
-                                    } border-2 cursor-pointer shadow-sm`
-                                  : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
-                                  ? `${
-                                      getDepartmentColor(blockedByDeptId).light
-                                    } opacity-30 border-dashed`
-                                  : daySchedules.length > 0
-                                  ? "bg-green-50 cursor-pointer hover:bg-green-100"
-                                  : selectedDepartment && !isConflicted
-                                  ? "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
-                                  : "hover:bg-slate-50"
-                              } ${
-                                focusTarget &&
+                                    ? "bg-red-50 text-red-400 cursor-not-allowed opacity-60"
+                                    : isBlockedByHidden
+                                      ? "bg-slate-200 opacity-40 cursor-not-allowed border-dashed border-slate-400"
+                                      : isSelectedByCurrentDept &&
+                                        selectedDepartment
+                                        ? `${getSelectedDepartmentColor().light} ${getSelectedDepartmentColor().border
+                                        } border-2 shadow-lg cursor-pointer transform hover:scale-105`
+                                        : isSelectedByAnyDept && selectedByDeptId // ✅ SỬA: Hiển thị theo màu của phòng ban khác
+                                          ? `${getDepartmentColor(selectedByDeptId).light
+                                          } opacity-60 cursor-not-allowed ${getDepartmentColor(selectedByDeptId).border
+                                          } border-2`
+                                          : isEditableExistingScheduleDay
+                                            ? "bg-amber-50 border-amber-300 border-2 cursor-pointer hover:bg-amber-100"
+                                            : hasExistingSchedule // ✅ THÊM: Styling cho ngày đã có lịch (không thể chỉnh sửa)
+                                              ? "bg-red-100 opacity-70 cursor-not-allowed border-red-300 border-2"
+                                              : isConflicted
+                                                ? "cursor-not-allowed opacity-90"
+                                                : isSelectedByAny && selectedByDeptId && !isSelectedByAnyDept
+                                                  ? `${getDepartmentColor(selectedByDeptId).light
+                                                  } ${getDepartmentColor(selectedByDeptId)
+                                                    .border
+                                                  } border-2 cursor-pointer shadow-sm`
+                                                  : isBlockedByHidden && blockedByDeptId // ✅ STYLING CHO HIDDEN DEPARTMENT
+                                                    ? `${getDepartmentColor(blockedByDeptId).light
+                                                    } opacity-30 border-dashed`
+                                                    : daySchedules.length > 0
+                                                      ? "bg-green-50 cursor-pointer hover:bg-green-100"
+                                                      : selectedDepartment && !isConflicted
+                                                        ? "hover:bg-blue-50 hover:border-blue-200 cursor-pointer"
+                                                        : "hover:bg-slate-50"
+                              } ${focusTarget &&
                                 focusTarget.date === `${actualYear}-${String(
                                   actualMonth + 1
                                 ).padStart(2, "0")}-${String(day.date).padStart(
                                   2,
                                   "0"
                                 )}`
-                                  ? "ring-2 ring-blue-400"
-                                  : ""
+                                ? "ring-2 ring-blue-400"
+                                : ""
                               }`}
                             onMouseDown={(e) => {
                               if (canInteract) {
@@ -5200,14 +5154,14 @@ export default function CompleteScheduleApp() {
                             }}
                             onMouseEnter={() => {
                               // ✅ THÊM: Log để debug
-                              console.log('[Calendar onMouseEnter] Day:', { 
-                                date: day.date, 
-                                isCurrentMonth: day.isCurrentMonth, 
+                              console.log('[Calendar onMouseEnter] Day:', {
+                                date: day.date,
+                                isCurrentMonth: day.isCurrentMonth,
                                 canInteract,
                                 daySchedulesLength: daySchedules.length,
                                 isDragging: monthlyDragState.isDragging
                               });
-                              
+
                               // ✅ SỬA: Chỉ gọi handleDayMouseEnter cho những ngày có thể tương tác
                               if (canInteract) {
                                 console.log('[Calendar onMouseEnter] Calling handleDayMouseEnter');
@@ -5236,25 +5190,23 @@ export default function CompleteScheduleApp() {
                             {/* Day number */}
                             <div
                               className={`font-medium text-sm mb-1 
-                              ${
-                                day.date === new Date().getDate() &&
-                                currentMonth.getMonth() ===
+                              ${day.date === new Date().getDate() &&
+                                  currentMonth.getMonth() ===
                                   new Date().getMonth() &&
-                                currentMonth.getFullYear() ===
+                                  currentMonth.getFullYear() ===
                                   new Date().getFullYear() &&
-                                day.isCurrentMonth &&
-                                !isSunday
+                                  day.isCurrentMonth &&
+                                  !isSunday
                                   ? "text-white bg-blue-600 rounded-full w-6 h-6 flex items-center justify-center shadow-md"
                                   : isSelectedByCurrentDept &&
                                     selectedDepartment &&
                                     !isSunday
-                                  ? `${
-                                      getSelectedDepartmentColor().text
+                                    ? `${getSelectedDepartmentColor().text
                                     } font-bold`
-                                  : isSunday
-                                  ? "w-6 h-6 text-red-400"
-                                  : "w-6 h-6"
-                              }`}
+                                    : isSunday
+                                      ? "w-6 h-6 text-red-400"
+                                      : "w-6 h-6"
+                                }`}
                             >
                               {day.date}
                               {(() => {
@@ -5279,16 +5231,13 @@ export default function CompleteScheduleApp() {
                                 if (isPreviewSelection) {
                                   return (
                                     <div
-                                      className={`absolute inset-0 ${
-                                        getSelectedDepartmentColor().light
-                                      } bg-opacity-50 rounded flex items-center justify-center border-2 ${
-                                        getSelectedDepartmentColor().border
-                                      } border-dashed animate-pulse`}
+                                      className={`absolute inset-0 ${getSelectedDepartmentColor().light
+                                        } bg-opacity-50 rounded flex items-center justify-center border-2 ${getSelectedDepartmentColor().border
+                                        } border-dashed animate-pulse`}
                                     >
                                       <Plus
-                                        className={`w-4 h-4 ${
-                                          getSelectedDepartmentColor().text
-                                        } opacity-70`}
+                                        className={`w-4 h-4 ${getSelectedDepartmentColor().text
+                                          } opacity-70`}
                                       />
                                     </div>
                                   );
@@ -5309,7 +5258,7 @@ export default function CompleteScheduleApp() {
                                 <EyeOff className="w-3 h-3 text-slate-500 opacity-60" />
                               </div>
                             )}
-                            
+
                             {/* ✅ THÊM: Hiển thị cho ngày đã có lịch bị khóa */}
                             {hasExistingSchedule && (
                               <div className="absolute top-1 right-1 bg-red-100 bg-opacity-80 rounded flex items-center justify-center border-2 border-red-300 border-dashed p-1">
@@ -5362,9 +5311,8 @@ export default function CompleteScheduleApp() {
                               !isSunday && (
                                 <div className="absolute top-1 right-1 bg-white rounded-full shadow-md">
                                   <CheckCircle
-                                    className={`w-5 h-5 ${
-                                      getSelectedDepartmentColor().text
-                                    } border-2 border-white rounded-full`}
+                                    className={`w-5 h-5 ${getSelectedDepartmentColor().text
+                                      } border-2 border-white rounded-full`}
                                   />
                                 </div>
                               )}
@@ -5374,20 +5322,20 @@ export default function CompleteScheduleApp() {
                               // ✅ SỬA: Sử dụng tháng và năm thực tế của ngày này
                               const actualMonth = (day as any).actualMonth !== undefined ? (day as any).actualMonth : currentMonth.getMonth();
                               const actualYear = (day as any).actualYear !== undefined ? (day as any).actualYear : currentMonth.getFullYear();
-                              
+
                               // Kiểm tra ngày được chọn bởi user khác
                               const { isSelected: isSelectedByRemote, userId: remoteUserId, departmentId: remoteDeptId } = isDaySelectedByAnyDept(day.date, actualMonth, actualYear);
-                              
+
                               // Kiểm tra ngày đang được chỉnh sửa bởi user khác
                               const fieldId = `day-${day.date}-${actualMonth}-${actualYear}`;
                               const lockedBy = getFieldLockedBy(fieldId);
-                              
+
                               // Nếu ngày được chọn HOẶC đang được chỉnh sửa bởi user khác
                               if ((isSelectedByRemote && remoteUserId && remoteUserId !== user?.id) || lockedBy) {
                                 // Lấy thông tin user
                                 let targetUser = null;
                                 let title = '';
-                                
+
                                 if (isSelectedByRemote && remoteUserId) {
                                   targetUser = Array.from(presences.values()).find(p => p.userId === remoteUserId);
                                   title = `Được chọn bởi ${targetUser?.userName || 'Unknown'}`;
@@ -5395,7 +5343,7 @@ export default function CompleteScheduleApp() {
                                   targetUser = Array.from(presences.values()).find(p => p.userId === lockedBy.userId);
                                   title = `Đang chỉnh sửa bởi ${targetUser?.userName || lockedBy.userName}`;
                                 }
-                                
+
                                 if (targetUser || lockedBy) {
                                   // Lấy tên user từ nhiều nguồn
                                   let userName = 'Unknown';
@@ -5409,11 +5357,11 @@ export default function CompleteScheduleApp() {
                                     const dept = departments.find(d => d.id === lockedBy.departmentId);
                                     userName = dept ? `${dept.name} User` : 'Unknown User';
                                   }
-                                  
+
                                   // ✅ THÊM: Lấy màu của phòng ban đang chọn ô này
                                   // Lấy department ID từ nhiều nguồn khác nhau
                                   let deptId = null;
-                                  
+
                                   if (isSelectedByRemote && remoteDeptId) {
                                     // Nếu ô được chọn bởi user khác, dùng trực tiếp department ID từ isDaySelectedByAnyDept
                                     deptId = remoteDeptId;
@@ -5421,17 +5369,17 @@ export default function CompleteScheduleApp() {
                                     // Nếu ô đang bị khóa, lấy department ID từ lock
                                     deptId = lockedBy.departmentId;
                                   }
-                                  
+
                                   // Nếu không có deptId, dùng selectedByDeptId làm fallback
                                   if (!deptId) {
                                     deptId = selectedByDeptId;
                                   }
-                                  
+
                                   const deptColor = deptId ? getDepartmentColor(deptId) : null;
-                                  
+
                                   // ✅ THÊM: Debug log
                                   console.log('[Remote indicators] Day:', day.date, 'remoteDeptId:', remoteDeptId, 'lockedBy:', lockedBy?.userId, 'deptId:', deptId, 'deptColor:', deptColor);
-                                  
+
                                   return (
                                     <motion.div
                                       initial={{ scale: 0, opacity: 0 }}
@@ -5458,28 +5406,25 @@ export default function CompleteScheduleApp() {
                               // ✅ SỬA: Sử dụng tháng và năm thực tế của ngày này
                               const actualMonth = (day as any).actualMonth !== undefined ? (day as any).actualMonth : currentMonth.getMonth();
                               const actualYear = (day as any).actualYear !== undefined ? (day as any).actualYear : currentMonth.getFullYear();
-                              
+
                               // Chỉ hiển thị khi đang drag và ngày này trong drag range
                               if (!monthlyDragState.isDragging || !isDayInMonthlyDragRange(day.date, actualMonth, actualYear)) return null;
-                              
+
                               // Xác định trạng thái hiện tại của ngày
                               const isCurrentlySelected = isDaySelected(day.date, actualMonth, actualYear);
-                              
+
                               // Hiển thị dấu + cho ngày chưa chọn, dấu X cho ngày đã chọn
                               if (!isCurrentlySelected) {
                                 // Ngày chưa chọn - hiển thị dấu +
                                 return (
                                   <div
-                                    className={`absolute inset-0 ${
-                                      getSelectedDepartmentColor().light
-                                    } bg-opacity-50 rounded flex items-center justify-center border-2 ${
-                                      getSelectedDepartmentColor().border
-                                    } border-dashed animate-pulse`}
+                                    className={`absolute inset-0 ${getSelectedDepartmentColor().light
+                                      } bg-opacity-50 rounded flex items-center justify-center border-2 ${getSelectedDepartmentColor().border
+                                      } border-dashed animate-pulse`}
                                   >
                                     <Plus
-                                      className={`w-4 h-4 ${
-                                        getSelectedDepartmentColor().text
-                                      } opacity-70`}
+                                      className={`w-4 h-4 ${getSelectedDepartmentColor().text
+                                        } opacity-70`}
                                     />
                                   </div>
                                 );
@@ -5559,10 +5504,10 @@ export default function CompleteScheduleApp() {
                                           <span key={idx}>
                                             {day.date}/{day.month + 1}
                                             {idx <
-                                            Math.min(
-                                              2,
-                                              selections.days.length - 1
-                                            )
+                                              Math.min(
+                                                2,
+                                                selections.days.length - 1
+                                              )
                                               ? ", "
                                               : ""}
                                           </span>
@@ -5588,7 +5533,7 @@ export default function CompleteScheduleApp() {
                                           <div>
                                             {
                                               weekDays[
-                                                dowToUi(slot.day_of_week!)
+                                              dowToUi(slot.day_of_week!)
                                               ]
                                             }{" "}
                                             {slot.start_time}-{slot.end_time}
@@ -5679,46 +5624,44 @@ export default function CompleteScheduleApp() {
                             )
                           }
                         >
-                        <span className="flex items-center gap-2">
-                          <Save className="w-4 h-4" />
-                          {isAdmin ||
-                          isScheduler ||
-                          userManagerDepartmentSlugs.length > 0
-                            ? isEditMode
-                              ? `Cập nhật lịch`
-                              : isBulkMode
-                              ? `Lưu lịch hàng loạt (${
-                                  bulkScheduleConfig.count
-                                } ${
-                                  bulkScheduleConfig.type === "weeks"
+                          <span className="flex items-center gap-2">
+                            <Save className="w-4 h-4" />
+                            {isAdmin ||
+                              isScheduler ||
+                              userManagerDepartmentSlugs.length > 0
+                              ? isEditMode
+                                ? `Cập nhật lịch`
+                                : isBulkMode
+                                  ? `Lưu lịch hàng loạt (${bulkScheduleConfig.count
+                                  } ${bulkScheduleConfig.type === "weeks"
                                     ? "tuần"
                                     : "tháng"
-                                })`
-                              : `Lưu lịch (${departmentSelections.size} phòng ban)`
-                            : "Bạn không có quyền lưu lịch"}
-                        </span>
-                      </Button>
-                        )}
+                                  })`
+                                  : `Lưu lịch (${departmentSelections.size} phòng ban)`
+                              : "Bạn không có quyền lưu lịch"}
+                          </span>
+                        </Button>
+                      )}
 
-                                              {!isViewRole && (
-                          <Button
-                            onClick={handleClearAllMine}
-                            variant="outline"
-                            disabled={
-                              !(
-                                isAdmin ||
-                                isScheduler ||
-                                userManagerDepartmentSlugs.length > 0
-                              )
-                            }
-                            className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="flex items-center gap-2">
-                              <X className="w-4 h-4" />
-                              Xóa tất cả
-                            </span>
-                          </Button>
-                        )}
+                      {!isViewRole && (
+                        <Button
+                          onClick={handleClearAllMine}
+                          variant="outline"
+                          disabled={
+                            !(
+                              isAdmin ||
+                              isScheduler ||
+                              userManagerDepartmentSlugs.length > 0
+                            )
+                          }
+                          className="w-full hover:bg-red-50 hover:border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="flex items-center gap-2">
+                            <X className="w-4 h-4" />
+                            Xóa tất cả
+                          </span>
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -5768,23 +5711,21 @@ export default function CompleteScheduleApp() {
                               whileHover={{ scale: 1.02 }}
                             >
                               <Card
-                                className={`cursor-pointer transition-all hover:shadow-md border-l-4 ${
-                                  color.border
-                                } ${
-                                  schedule.status !== ScheduleStatus.ACTIVE
+                                className={`cursor-pointer transition-all hover:shadow-md border-l-4 ${color.border
+                                  } ${schedule.status !== ScheduleStatus.ACTIVE
                                     ? "opacity-60"
                                     : ""
-                                }`}
+                                  }`}
                                 onClick={() => focusScheduleInCalendar(schedule)}
                               >
                                 <CardContent className="p-3">
                                   {/* Header với tên lịch và badge trạng thái */}
                                   <div className="flex items-start gap-2 mb-2">
                                     <div className="flex-1 min-w-0" style={{ maxWidth: 'calc(100% - 120px)' }}>
-                                      <h4 
-                                        className="font-medium text-sm mb-1 line-clamp-2 leading-tight overflow-hidden text-ellipsis" 
+                                      <h4
+                                        className="font-medium text-sm mb-1 line-clamp-2 leading-tight overflow-hidden text-ellipsis"
                                         title={schedule.name}
-                                        style={{ 
+                                        style={{
                                           wordBreak: 'break-word',
                                           display: '-webkit-box',
                                           WebkitLineClamp: 2,
@@ -5797,8 +5738,8 @@ export default function CompleteScheduleApp() {
                                         <div
                                           className={`w-2 h-2 rounded-full flex-shrink-0 ${color.bg}`}
                                         />
-                                        <span 
-                                          className="text-xs text-slate-500 truncate" 
+                                        <span
+                                          className="text-xs text-slate-500 truncate"
                                           title={schedule.department?.name}
                                           style={{ maxWidth: '120px' }}
                                         >
@@ -5811,22 +5752,22 @@ export default function CompleteScheduleApp() {
                                       <Badge
                                         variant={
                                           schedule.status ===
-                                          ScheduleStatus.ACTIVE
+                                            ScheduleStatus.ACTIVE
                                             ? "active"
                                             : schedule.status ===
                                               ScheduleStatus.EXPIRED
-                                            ? "destructive"
-                                            : "secondary"
+                                              ? "destructive"
+                                              : "secondary"
                                         }
                                         className="text-[10px] px-1.5 py-0.5 whitespace-nowrap"
                                       >
                                         {schedule.status === ScheduleStatus.ACTIVE
                                           ? "Hoạt động"
                                           : schedule.status === ScheduleStatus.INACTIVE
-                                          ? "Đã xác nhận"
-                                          : schedule.status === ScheduleStatus.EXPIRED
-                                          ? "Hết hạn"
-                                          : "Đã xác nhận"}
+                                            ? "Đã xác nhận"
+                                            : schedule.status === ScheduleStatus.EXPIRED
+                                              ? "Hết hạn"
+                                              : "Đã xác nhận"}
                                       </Badge>
                                     </div>
                                   </div>
@@ -5834,7 +5775,7 @@ export default function CompleteScheduleApp() {
                                   <div className="flex items-center gap-4 text-xs text-slate-500 mb-2">
                                     <span className="flex items-center gap-1">
                                       {schedule.schedule_type ===
-                                      ScheduleType.HOURLY_SLOTS ? (
+                                        ScheduleType.HOURLY_SLOTS ? (
                                         <span className="flex items-center gap-1">
                                           <Clock className="w-3 h-3" />
                                           {
@@ -5870,10 +5811,10 @@ export default function CompleteScheduleApp() {
                                                   {uniqueDates.length > 1
                                                     ? `${uniqueDates.length} ngày cụ thể`
                                                     : new Date(
-                                                        uniqueDates[0]!
-                                                      ).toLocaleDateString(
-                                                        "vi-VN"
-                                                      )}
+                                                      uniqueDates[0]!
+                                                    ).toLocaleDateString(
+                                                      "vi-VN"
+                                                    )}
                                                   )
                                                 </span>
                                               );
@@ -5929,10 +5870,10 @@ export default function CompleteScheduleApp() {
                                               !isDataReady
                                                 ? "Đang tải thông tin..."
                                                 : isDepartmentEditable(
-                                                    schedule.department!.id
-                                                  )
-                                                ? "Chỉnh sửa lịch"
-                                                : "Bạn không có quyền chỉnh sửa lịch này"
+                                                  schedule.department!.id
+                                                )
+                                                  ? "Chỉnh sửa lịch"
+                                                  : "Bạn không có quyền chỉnh sửa lịch này"
                                             }
                                           >
                                             {!isDataReady ? (
@@ -5956,50 +5897,50 @@ export default function CompleteScheduleApp() {
                                               !isDataReady
                                                 ? "Đang tải thông tin..."
                                                 : isDepartmentEditable(
-                                                    schedule.department!.id
-                                                  )
-                                                ? "Xóa lịch"
-                                                : "Bạn không có quyền xóa lịch này"
+                                                  schedule.department!.id
+                                                )
+                                                  ? "Xóa lịch"
+                                                  : "Bạn không có quyền xóa lịch này"
                                             }
                                             onClick={async (e) => {
-                                          e.stopPropagation();
-                                          if (
-                                            !isDepartmentEditable(
-                                              schedule.department!.id
-                                            )
-                                          ) {
-                                            toast.error(
-                                              "Bạn không có quyền xóa lịch hoạt động này"
-                                            );
-                                            return;
-                                          }
-                                          if (
-                                            window.confirm(
-                                              "Bạn có chắc chắn muốn xóa lịch này?"
-                                            )
-                                          ) {
-                                            try {
-                                              await ScheduleService.remove(
-                                                schedule.id
-                                              );
-                                              toast.success(
-                                                "Xóa lịch thành công"
-                                              );
-                                              const data =
-                                                await ScheduleService.findAll();
-                                              setSchedules(data.data);
-                                            } catch (error) {
-                                              toast.error("Không thể xóa lịch");
-                                            }
-                                          }
-                                        }}
-                                      >
-                                        {!isDataReady ? (
-                                          <Loader2 className="w-3 h-3 animate-spin" />
-                                        ) : (
-                                          <Trash2 className="w-3 h-3" />
-                                        )}
-                                      </Button>
+                                              e.stopPropagation();
+                                              if (
+                                                !isDepartmentEditable(
+                                                  schedule.department!.id
+                                                )
+                                              ) {
+                                                toast.error(
+                                                  "Bạn không có quyền xóa lịch hoạt động này"
+                                                );
+                                                return;
+                                              }
+                                              if (
+                                                window.confirm(
+                                                  "Bạn có chắc chắn muốn xóa lịch này?"
+                                                )
+                                              ) {
+                                                try {
+                                                  await ScheduleService.remove(
+                                                    schedule.id
+                                                  );
+                                                  toast.success(
+                                                    "Xóa lịch thành công"
+                                                  );
+                                                  const data =
+                                                    await ScheduleService.findAll();
+                                                  setSchedules(data.data);
+                                                } catch (error) {
+                                                  toast.error("Không thể xóa lịch");
+                                                }
+                                              }
+                                            }}
+                                          >
+                                            {!isDataReady ? (
+                                              <Loader2 className="w-3 h-3 animate-spin" />
+                                            ) : (
+                                              <Trash2 className="w-3 h-3" />
+                                            )}
+                                          </Button>
                                         </>
                                       )}
                                     </div>
@@ -6070,7 +6011,7 @@ export default function CompleteScheduleApp() {
                       }}
                       placeholder="Nhập tên lịch..."
                     />
-                    
+
                     {/* Live Preview */}
                     {(() => {
                       const patch = getPreviewPatchForField('schedule-name');
@@ -6115,9 +6056,8 @@ export default function CompleteScheduleApp() {
                               >
                                 <div className="flex items-center gap-2">
                                   <div
-                                    className={`w-3 h-3 rounded-full ${
-                                      getDepartmentColor(dept.id).bg
-                                    } ${!canSelect ? "grayscale" : ""}`}
+                                    className={`w-3 h-3 rounded-full ${getDepartmentColor(dept.id).bg
+                                      } ${!canSelect ? "grayscale" : ""}`}
                                   />
                                   <span
                                     className={
@@ -6175,7 +6115,7 @@ export default function CompleteScheduleApp() {
                     placeholder="Mô tả chi tiết về lịch hoạt động..."
                     rows={3}
                   />
-                  
+
                   {/* Live Preview */}
                   {(() => {
                     const patch = getPreviewPatchForField('schedule-description');
@@ -6440,7 +6380,7 @@ export default function CompleteScheduleApp() {
             onSelectActivity={(activity) => {
               // Debug: Log ra thông tin để kiểm tra
               console.log('[ScheduleApp] onSelectActivity called:', activity);
-              
+
               // Xử lý khi user chọn 1 dòng trong modal
               if (activity.date) {
                 console.log('[ScheduleApp] Setting focusTarget:', {
@@ -6448,14 +6388,14 @@ export default function CompleteScheduleApp() {
                   time: activity.time,
                   scheduleId: activity.fieldId,
                 });
-                
+
                 // Set focusTarget để scroll đến ô
                 setFocusTarget({
                   date: activity.date,
                   time: activity.time,
                   scheduleId: activity.fieldId,
                 });
-                
+
                 // Chuyển view và tháng/tuần nếu cần
                 if (activity.time) {
                   // Có time = tuần view
