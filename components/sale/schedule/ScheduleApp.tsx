@@ -1917,13 +1917,14 @@ export default function CompleteScheduleApp() {
           const start = normalizeTime(slot.start_time);
           const end = normalizeTime(slot.end_time);
           const timeMatch = (!!start && start <= time) && (!!end && end > time);
-          const dayMatch = slot.day_of_week === dayOfWeek || !slot.day_of_week;
-          // ✅ THÊM: Kiểm tra applicable_date
-          // Some records may have full timestamps; compare only YYYY-MM-DD
+          // Compare dates as YYYY-MM-DD only
           const normalizeDate = (d?: string) => (d ? d.slice(0, 10) : d);
           const slotDate = normalizeDate(slot.applicable_date);
           const cellDate = normalizeDate(specificDate);
+          const hasSpecificDate = !!slotDate;
           const dateMatch = !slotDate || !cellDate || slotDate === cellDate;
+          // If slot has a specific date and it matches the cell date, don't require day_of_week to match
+          const dayMatch = (hasSpecificDate && slotDate === cellDate) || slot.day_of_week === dayOfWeek || !slot.day_of_week;
 
           return timeMatch && dayMatch && dateMatch;
         });
@@ -1987,13 +1988,18 @@ export default function CompleteScheduleApp() {
 
         const config = schedule.schedule_config as HourlySlotsConfig;
         return config.slots.some((slot) => {
-          const timeMatch = slot.start_time <= time && slot.end_time > time;
-          const dayMatch = slot.day_of_week === dayOfWeek || !slot.day_of_week;
-          // ✅ THÊM: Kiểm tra applicable_date
-          const dateMatch =
-            !slot.applicable_date ||
-            !specificDate ||
-            slot.applicable_date === specificDate;
+          // Normalize time to HH:mm
+          const normalizeTime = (t?: string) => (t ? t.slice(0, 5) : t);
+          const start = normalizeTime(slot.start_time);
+          const end = normalizeTime(slot.end_time);
+          const timeMatch = (!!start && start <= time) && (!!end && end > time);
+          // Normalize date to YYYY-MM-DD
+          const normalizeDate = (d?: string) => (d ? d.slice(0, 10) : d);
+          const slotDate = normalizeDate(slot.applicable_date);
+          const cellDate = normalizeDate(specificDate);
+          const hasSpecificDate = !!slotDate;
+          const dateMatch = !slotDate || !cellDate || slotDate === cellDate;
+          const dayMatch = (hasSpecificDate && slotDate === cellDate) || slot.day_of_week === dayOfWeek || !slot.day_of_week;
 
           return timeMatch && dayMatch && dateMatch;
         });
@@ -2558,9 +2564,7 @@ export default function CompleteScheduleApp() {
       if (lockedBy && lockedBy.userId !== user?.id) return; // ✅ SỬA: Chỉ cho phép chỉnh sửa ô của chính mình
 
       if (dragState.isDragging && dragState.startSlot) {
-        const startDate = weekDates[dragState.startSlot.day]
-          .toISOString()
-          .split("T")[0];
+        const startDate = formatDateStr(weekDates[dragState.startSlot.day]);
         const currentDate = formatDateStr(weekDates[dayIndex]);
         if (startDate !== currentDate) return; // Không cho drag qua ngày khác
       }
@@ -4484,9 +4488,7 @@ export default function CompleteScheduleApp() {
                               </div>
 
                               {Array.from({ length: 7 }, (_, dayIndex) => {
-                                const specificDate = weekDates[dayIndex]
-                                  .toISOString()
-                                  .split("T")[0];
+                                const specificDate = formatDateStr(weekDates[dayIndex]);
                                 const isSelectedByCurrentDept =
                                   isTimeSlotSelected(
                                     dayIndex,
