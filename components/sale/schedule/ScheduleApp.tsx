@@ -922,7 +922,7 @@ export default function CompleteScheduleApp() {
         (schedule) =>
           schedule.department &&
           schedule.department.id === selectedDepartment &&
-          schedule.status === ScheduleStatus.ACTIVE &&
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE) &&
           // ✅ THÊM: Loại trừ schedule đang edit
           (!isEditMode ||
             !editingSchedule ||
@@ -938,7 +938,7 @@ export default function CompleteScheduleApp() {
       const daySchedules = getSchedulesForDay(date, month, year);
       return daySchedules.some(
         (schedule) =>
-          schedule.status === ScheduleStatus.ACTIVE
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
     },
     [getSchedulesForDay]
@@ -956,7 +956,7 @@ export default function CompleteScheduleApp() {
         (schedule) =>
           schedule.department &&
           schedule.department.id !== selectedDepartment &&
-          schedule.status === ScheduleStatus.ACTIVE
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
       
       if (hasScheduleConflict) return true;
@@ -1916,16 +1916,18 @@ export default function CompleteScheduleApp() {
 
         const config = schedule.schedule_config as HourlySlotsConfig;
         return config.slots.some((slot) => {
-          const timeMatch = slot.start_time <= time && slot.end_time > time;
+          // Normalize time strings to HH:mm to tolerate HH:mm:ss stored in DB
+          const normalizeTime = (t?: string) => (t ? t.slice(0, 5) : t);
+          const start = normalizeTime(slot.start_time);
+          const end = normalizeTime(slot.end_time);
+          const timeMatch = (!!start && start <= time) && (!!end && end > time);
           const dayMatch = slot.day_of_week === dayOfWeek || !slot.day_of_week;
-          
-          // ✅ SỬA: Logic kiểm tra applicable_date
-          let dateMatch = true;
-          if (slot.applicable_date && specificDate) {
-            // Nếu slot có ngày cụ thể, chỉ hiển thị khi khớp chính xác
-            dateMatch = slot.applicable_date === specificDate;
-          }
-          // Nếu slot không có applicable_date, dùng logic day_of_week
+          // ✅ THÊM: Kiểm tra applicable_date
+          // Some records may have full timestamps; compare only YYYY-MM-DD
+          const normalizeDate = (d?: string) => (d ? d.slice(0, 10) : d);
+          const slotDate = normalizeDate(slot.applicable_date);
+          const cellDate = normalizeDate(specificDate);
+          const dateMatch = !slotDate || !cellDate || slotDate === cellDate;
 
           return timeMatch && dayMatch && dateMatch;
         });
@@ -1943,7 +1945,7 @@ export default function CompleteScheduleApp() {
         (schedule) =>
           schedule.department &&
           schedule.department.id === selectedDepartment &&
-          schedule.status === ScheduleStatus.ACTIVE &&
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE) &&
           // ✅ THÊM: Loại trừ schedule đang edit
           (!isEditMode ||
             !editingSchedule ||
@@ -1959,7 +1961,7 @@ export default function CompleteScheduleApp() {
       const slotSchedules = getSchedulesForSlot(dayIndex, time, specificDate);
       return slotSchedules.some(
         (schedule) =>
-          schedule.status === ScheduleStatus.ACTIVE
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
     },
     [getSchedulesForSlot]
@@ -2006,7 +2008,7 @@ export default function CompleteScheduleApp() {
         (schedule) =>
           schedule.department &&
           !visibleDepartments.includes(schedule.department.id) &&
-          schedule.status === ScheduleStatus.ACTIVE
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
 
       if (hiddenScheduleForThisSlot) {
@@ -2055,7 +2057,7 @@ export default function CompleteScheduleApp() {
         (schedule) =>
           schedule.department &&
           !visibleDepartments.includes(schedule.department.id) &&
-          schedule.status === ScheduleStatus.ACTIVE
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
 
       if (hiddenSchedule) {
@@ -2495,7 +2497,7 @@ export default function CompleteScheduleApp() {
         (schedule) =>
           schedule.department &&
           schedule.department.id !== selectedDepartment &&
-          schedule.status === ScheduleStatus.ACTIVE
+          (schedule.status === ScheduleStatus.ACTIVE || schedule.status === ScheduleStatus.INACTIVE)
       );
 
       if (hasScheduleConflict) return true;
@@ -5820,8 +5822,9 @@ export default function CompleteScheduleApp() {
                                       >
                                         {schedule.status === ScheduleStatus.ACTIVE
                                           ? "Hoạt động"
-                                          : schedule.status ===
-                                            ScheduleStatus.EXPIRED
+                                          : schedule.status === ScheduleStatus.INACTIVE
+                                          ? "Đã xác nhận"
+                                          : schedule.status === ScheduleStatus.EXPIRED
                                           ? "Hết hạn"
                                           : "Đã xác nhận"}
                                       </Badge>
