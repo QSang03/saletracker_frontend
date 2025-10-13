@@ -185,47 +185,49 @@ export default function ChatSidebar({ userId, activeConversationId, onSelectConv
   const { conversations: fetched, isLoading, error, pagination, refetch } = hasEmployeeFilter 
     ? { ...multiUserResult, pagination: null }
     : singleUserResult;
+  
+  // Get hasMore from appropriate source
+  const hasMoreData = hasEmployeeFilter ? multiUserResult.hasMore : (pagination && typeof pagination.total_pages === 'number' && typeof pagination.page === 'number' ? pagination.page < pagination.total_pages : false);
 
-  // Auto-refresh conversations list (only when not in search mode)
+  // Auto-refresh conversations list (only when not in search mode and not filtering employees)
   useAutoRefresh({
     onRefresh: () => {
-      if (!isSearchMode && refetch) {
+      if (!isSearchMode && !showEmployeeFilterModal && refetch) {
         // Silent mode: không hiện loading animation khi auto-refresh
         refetch(true);
       }
     },
-    enabled: !isSearchMode,
+    enabled: !isSearchMode && !showEmployeeFilterModal,
   });
 
   // append trang mới tại chỗ (không refetch từ đầu)
   useEffect(() => {
     if (!fetched) return;
     
-    // Với multi-user, không hỗ trợ pagination (đã load tất cả)
-    if (hasEmployeeFilter) {
-      setAllConversations(fetched);
-      setHasMore(false); // Không có pagination cho multi-user
-    } else {
-      setAllConversations(prev => {
-        // Nếu page = 1 (reset), thay thế hoàn toàn
-        if (page === 1) {
-          return fetched;
-        }
-        
-        // Nếu page > 1, append và de-dup
-        const map = new Map<number | string, Conversation>();
-        for (const x of prev) map.set(x.id, x);
-        for (const x of fetched) map.set(x.id, x);
-        return Array.from(map.values());
-      });
+    setAllConversations(prev => {
+      // Nếu page = 1 (reset), thay thế hoàn toàn
+      if (page === 1) {
+        return fetched;
+      }
+      
+      // Nếu page > 1, append và de-dup
+      const map = new Map<number | string, Conversation>();
+      for (const x of prev) map.set(x.id, x);
+      for (const x of fetched) map.set(x.id, x);
+      return Array.from(map.values());
+    });
 
+    // Update hasMore based on data source
+    if (hasEmployeeFilter) {
+      setHasMore(hasMoreData);
+    } else {
       if (pagination && typeof pagination.total_pages === 'number' && typeof pagination.page === 'number') {
         setHasMore(pagination.page < pagination.total_pages);
       } else {
         setHasMore(fetched.length === LIMIT);
       }
     }
-  }, [fetched, pagination, page, hasEmployeeFilter]);
+  }, [fetched, pagination, page, hasEmployeeFilter, hasMoreData]);
 
   // Notify parent when conversations change
   useEffect(() => {

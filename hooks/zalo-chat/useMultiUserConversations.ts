@@ -19,6 +19,7 @@ interface UseMultiUserConversationsResult {
   isLoading: boolean;
   error: string | null;
   totalCount: number;
+  hasMore: boolean;
   refetch: (silent?: boolean) => void;
 }
 
@@ -29,6 +30,7 @@ export function useMultiUserConversations(
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [hasMore, setHasMore] = useState<boolean>(false);
   const abortRef = useRef<AbortController | null>(null);
   const refreshRef = useRef(0);
 
@@ -36,6 +38,7 @@ export function useMultiUserConversations(
     if (params.userIds.length === 0) {
       setConversations([]);
       setTotalCount(0);
+      setHasMore(false);
       setIsLoading(false);
       return;
     }
@@ -86,14 +89,17 @@ export function useMultiUserConversations(
         }
 
         const result = await response.json();
-        return result.data || [];
+        return {
+          data: result.data || [],
+          pagination: result.pagination || null
+        };
       });
 
       // Đợi tất cả API calls hoàn thành
       const allResults = await Promise.all(fetchPromises);
 
       // Merge tất cả conversations lại
-      const mergedConversations: Conversation[] = allResults.flat();
+      const mergedConversations: Conversation[] = allResults.flatMap(r => r.data);
 
       // Remove duplicates (cùng zalo_conversation_id)
       const uniqueConversations = mergedConversations.reduce((acc, conv) => {
@@ -110,8 +116,16 @@ export function useMultiUserConversations(
         return timeB - timeA;
       });
 
+      // Determine hasMore: true if ANY user has more pages
+      const anyUserHasMore = allResults.some(result => {
+        if (!result.pagination) return false;
+        const { page, total_pages } = result.pagination;
+        return page < total_pages;
+      });
+
       setConversations(uniqueConversations);
       setTotalCount(uniqueConversations.length);
+      setHasMore(anyUserHasMore);
       setError(null);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -159,6 +173,7 @@ export function useMultiUserConversations(
     isLoading,
     error,
     totalCount,
+    hasMore,
     refetch,
   };
 }
