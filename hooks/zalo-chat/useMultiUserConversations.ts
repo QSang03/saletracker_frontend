@@ -62,8 +62,9 @@ export function useMultiUserConversations(
         throw new Error('No access token');
       }
 
-      // Gọi API cho từng user ID
-      const fetchPromises = params.userIds.map(async (userId) => {
+      // Gọi API tuần tự cho từng user ID để tránh quá tải database connections
+      const allResults = [];
+      for (const userId of params.userIds) {
         const queryParams = new URLSearchParams();
         queryParams.set('user_id', String(userId));
         queryParams.set('page', String(params.page || 1));
@@ -89,14 +90,11 @@ export function useMultiUserConversations(
         }
 
         const result = await response.json();
-        return {
+        allResults.push({
           data: result.data || [],
           pagination: result.pagination || null
-        };
-      });
-
-      // Đợi tất cả API calls hoàn thành
-      const allResults = await Promise.all(fetchPromises);
+        });
+      }
 
       // Merge tất cả conversations lại
       const mergedConversations: Conversation[] = allResults.flatMap(r => r.data);
