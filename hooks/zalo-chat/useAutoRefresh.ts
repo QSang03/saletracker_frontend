@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 export interface UseAutoRefreshOptions {
@@ -24,6 +24,12 @@ export interface UseAutoRefreshOptions {
    * @default 'zalo_chat_auto_refresh_interval'
    */
   configName?: string;
+  
+  /**
+   * Whether to only refresh when the tab is visible
+   * @default true
+   */
+  onlyWhenVisible?: boolean;
 }
 
 export interface UseAutoRefreshReturn {
@@ -40,7 +46,7 @@ export interface UseAutoRefreshReturn {
 
 /**
  * Hook that automatically refreshes data at a configurable interval from system_config
- * without disrupting user interaction
+ * without disrupting user interaction. Only refreshes when tab is visible.
  * 
  * @param options - Configuration options for auto-refresh
  * @returns Object with triggerRefresh function
@@ -50,14 +56,37 @@ export function useAutoRefresh({
   enabled = true,
   defaultInterval = 30,
   configName = 'zalo_chat_auto_refresh_interval',
+  onlyWhenVisible = true,
 }: UseAutoRefreshOptions): UseAutoRefreshReturn {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const onRefreshRef = useRef(onRefresh);
+  const [isVisible, setIsVisible] = useState(true);
   
   // Always update the ref to the latest callback
   useEffect(() => {
     onRefreshRef.current = onRefresh;
   }, [onRefresh]);
+  
+  // Track page visibility using Page Visibility API
+  useEffect(() => {
+    if (!onlyWhenVisible) {
+      return;
+    }
+    
+    const handleVisibilityChange = () => {
+      setIsVisible(!document.hidden);
+    };
+    
+    // Set initial state
+    setIsVisible(!document.hidden);
+    
+    // Listen to visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [onlyWhenVisible]);
   
   // Fetch the refresh interval from system config
   const { value: configValue } = useSystemConfig(enabled ? configName : null);
@@ -79,11 +108,19 @@ export function useAutoRefresh({
       return;
     }
     
+    // Don't set up interval if page is not visible (when onlyWhenVisible is true)
+    if (onlyWhenVisible && !isVisible) {
+      return;
+    }
+    
     // Set up the auto-refresh interval
     intervalRef.current = setInterval(() => {
-      onRefreshRef.current();
+      // Only execute refresh if page is visible (when onlyWhenVisible is true)
+      if (!onlyWhenVisible || !document.hidden) {
+        onRefreshRef.current();
+      }
     }, intervalMs);
-  }, [enabled, intervalMs, intervalSeconds]);
+  }, [enabled, intervalMs, intervalSeconds, onlyWhenVisible, isVisible]);
   
   // Manual trigger function - executes refresh and resets timer
   const triggerRefresh = useCallback(() => {
@@ -110,6 +147,24 @@ export function useAutoRefresh({
       }
     };
   }, [startInterval]);
+  
+  // Restart interval when visibility changes (only if onlyWhenVisible is true)
+  useEffect(() => {
+    if (!onlyWhenVisible) {
+      return;
+    }
+    
+    if (isVisible) {
+      // Tab became visible - restart the interval
+      startInterval();
+    } else {
+      // Tab became hidden - clear the interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+  }, [isVisible, onlyWhenVisible, startInterval]);
   
   return { triggerRefresh, resetTimer };
 }
