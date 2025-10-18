@@ -20,10 +20,10 @@ const RegexCheckModal: React.FC<RegexCheckModalProps> = ({ isOpen, onClose }) =>
     const parts = [
       `^\\s*[-–•*]?\\s*(?<code>[A-Z0-9][A-Z0-9_\\-\\.+]+?)\\s*`,
       sep,
-      `(?<name>[^;；؛﹔︔]+?)\\s*`,
+     `(?<name>[^;；؛﹔︔]+?)\\s*`,
       sep,
-      `(?<price>(?:\\d{4,}(?:[.,]\\d+)?|\\d{1,3}(?:,\\d{3})*(?:[.,]\\d+)?)(?:\\s*(?:k|tr|triệu|m|vnd|vnđ|đ))?)`,
-      `(?:[^;；；﹔︔]*)?`,
+     `(?=[^;；；﹔︔]*?(?<price>(?:\\d{4,}(?:[.,]\\d+)?|\\d{1,3}(?:,\\d{3})*(?:[.,]\\d+)?)(?:\\s*(?:k|tr|triệu|m|vnd|vnđ|đ))?))`,
+     `[^;；；﹔︔]*`,
       `(?:`,
       sep,
       `(?:(?:(?:sl|số\\s*l(?:ư|u)ợng|so\\s*luong|soluong|qty|x)\\s*[:：=]?\\s*)?(?<qty>\\d+(?:[.,]\\d+)?))?`,
