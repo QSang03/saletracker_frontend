@@ -10,45 +10,7 @@ interface RegexCheckModalProps {
 const RegexCheckModal: React.FC<RegexCheckModalProps> = ({ isOpen, onClose }) => {
   const [input, setInput] = useState<string>("");
   const [results, setResults] = useState<Array<any>>([]);
-  const [copyStatus, setCopyStatus] = useState<Record<number, string>>({});
-
-  // Robust clipboard copy: try navigator.clipboard, otherwise fallback to textarea+execCommand
-  const copyToClipboard = async (text: string) => {
-    if (!text) return false;
-    // Try modern API first
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-    } catch (e) {
-      // ignore and try fallback
-    }
-
-    // Fallback method
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      // Avoid scrolling to bottom
-      ta.style.position = "fixed";
-      ta.style.top = "0";
-      ta.style.left = "0";
-      ta.style.width = "1px";
-      ta.style.height = "1px";
-      ta.style.padding = "0";
-      ta.style.border = "none";
-      ta.style.outline = "none";
-      ta.style.boxShadow = "none";
-      ta.style.background = "transparent";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
-      return ok;
-    } catch (e) {
-      return false;
-    }
-  };
+  // (copy functionality removed)
 
   // Build JS regex equivalent based on the Python pattern described by the user
   const pattern = useMemo(() => {
@@ -150,33 +112,11 @@ const RegexCheckModal: React.FC<RegexCheckModalProps> = ({ isOpen, onClose }) =>
                   <div key={idx} className={`p-2 rounded mb-2 ${r.ok ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-mono break-words">{r.line}</div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm font-semibold">
-                          {r.ok ? (
-                            <span className="text-green-700">Đúng cú pháp</span>
-                          ) : (
-                            <span className="text-red-700">Sai cú pháp</span>
-                          )}
-                        </div>
-                        {r.ok && (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={async () => {
-                                const ok = await copyToClipboard(String(r.line));
-                                if (ok) {
-                                  setCopyStatus((s) => ({ ...s, [idx]: "Đã sao chép cú pháp" }));
-                                } else {
-                                  setCopyStatus((s) => ({ ...s, [idx]: "Không thể sao chép" }));
-                                }
-                                setTimeout(() => setCopyStatus((s) => ({ ...s, [idx]: "" })), 1500);
-                              }}
-                            >
-                              Sao chép cú pháp
-                            </Button>
-                            <div className="text-xs text-green-600">{copyStatus[idx] ?? ""}</div>
-                          </div>
+                      <div className="text-sm font-semibold">
+                        {r.ok ? (
+                          <span className="text-green-700">Đúng cú pháp</span>
+                        ) : (
+                          <span className="text-red-700">Sai cú pháp</span>
                         )}
                       </div>
                     </div>
