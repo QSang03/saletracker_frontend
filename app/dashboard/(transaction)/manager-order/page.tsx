@@ -1356,11 +1356,11 @@ function ManagerOrderContent() {
               variant="outline"
               onClick={() => setIsRegexCheckOpen(true)}
               className="text-sm flex items-center gap-2 hover:bg-blue-50"
+              title="Kiểm tra cú pháp"
             >
               <span className="flex items-center gap-1">
-                {/* reuse MessageCircle or use Hash icon if available */}
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 10h10M7 14h10M10 7v10M14 7v10" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Kiểm tra regex
+                Kiểm tra cú pháp
               </span>
             </Button>
           </div>

@@ -10,6 +10,7 @@ interface RegexCheckModalProps {
 const RegexCheckModal: React.FC<RegexCheckModalProps> = ({ isOpen, onClose }) => {
   const [input, setInput] = useState<string>("");
   const [results, setResults] = useState<Array<any>>([]);
+  const [copyStatus, setCopyStatus] = useState<Record<number, string>>({});
 
   // Build JS regex equivalent based on the Python pattern described by the user
   const pattern = useMemo(() => {
@@ -74,7 +75,7 @@ const RegexCheckModal: React.FC<RegexCheckModalProps> = ({ isOpen, onClose }) =>
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeAndClear(); }}>
-      <DialogContent className="max-w-3xl w-full">
+    <DialogContent className="!max-w-[60vw] w-full">
         <DialogHeader>
           <DialogTitle>Kiểm tra cú pháp Dòng sản phẩm</DialogTitle>
         </DialogHeader>
@@ -121,17 +122,37 @@ const RegexCheckModal: React.FC<RegexCheckModalProps> = ({ isOpen, onClose }) =>
                     </div>
                     {r.error && <div className="text-xs text-red-600 mt-1">{r.error}</div>}
 
-                    {/* Collapsible details */}
                     {r.ok && (
-                      <details className="mt-2 text-sm">
-                        <summary className="cursor-pointer select-none text-blue-600">Chi tiết</summary>
-                        <div className="mt-2">
-                          <div><strong>Mã:</strong> {r.groups?.code ?? r.groups?._code ?? "-"}</div>
-                          <div><strong>Tên:</strong> {r.groups?.name ?? "-"}</div>
-                          <div><strong>Giá:</strong> {r.groups?.price ?? "-"}</div>
-                          <div><strong>SL:</strong> {r.groups?.qty ?? "-"}</div>
+                      <div className="mt-2 text-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(String(r.line));
+                                setCopyStatus((s) => ({ ...s, [idx]: "Đã sao chép cú pháp" }));
+                                setTimeout(() => setCopyStatus((s) => ({ ...s, [idx]: "" })), 1500);
+                              } catch {
+                                setCopyStatus((s) => ({ ...s, [idx]: "Không thể sao chép" }));
+                                setTimeout(() => setCopyStatus((s) => ({ ...s, [idx]: "" })), 1500);
+                              }
+                            }}
+                          >
+                            Copy cú pháp
+                          </Button>
+                          <div className="text-xs text-green-600">{copyStatus[idx] ?? ""}</div>
                         </div>
-                      </details>
+
+                        <div>
+                          <div className="mt-0">
+                            <div><strong>Mã:</strong> {r.groups?.code ?? r.groups?._code ?? "-"}</div>
+                            <div><strong>Tên:</strong> {r.groups?.name ?? "-"}</div>
+                            <div><strong>Giá:</strong> {r.groups?.price ?? "-"}</div>
+                            <div><strong>SL:</strong> {r.groups?.qty ?? "-"}</div>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ))
