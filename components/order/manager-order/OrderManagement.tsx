@@ -67,6 +67,7 @@ import HideOrderDetailModal from "./HideOrderDetailModal";
 import BulkHideModal from "./BulkHideModal";
 import ViewNotesHistoryModal from "./ViewNotesHistoryModal";
 import QuoteReplyModal from "./QuoteReplyModal";
+import RegexCheckModal from "./RegexCheckModal";
 import { SendHistoryView } from "./SendHistoryView";
 import { POrderDynamic } from "../POrderDynamic";
 import EmojiRenderer from "@/components/common/EmojiRenderer";
@@ -371,6 +372,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
   // Inquiry Presets modal state
   const [isInquiryPresetsModalOpen, setIsInquiryPresetsModalOpen] =
     useState(false);
+  // Regex check modal state
+  const [isRegexCheckOpen, setIsRegexCheckOpen] = useState(false);
 
   // Bulk selection states
   const [selectedOrderIds, setSelectedOrderIds] = useState<
@@ -2469,6 +2472,8 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
                               Mã đơn: {viewingDetail?.id ?? "N/A"}
                             </p>
 
+                            {/* Regex check moved to page header (do not render here) */}
+
                             {/* Conversation type badge (Nhóm chat / Cá Nhân) */}
                             {(() => {
                               // Normalize metadata (support string or object) and new format
@@ -3838,6 +3843,9 @@ const OrderManagement: React.FC<OrderManagementProps> = ({
         loading={loading}
         checkContactBlocked={checkContactBlocked}
       />
+
+      {/* Regex check modal */}
+      <RegexCheckModal isOpen={isRegexCheckOpen} onClose={() => setIsRegexCheckOpen(false)} />
 
       {/* Product Detail Modal */}
       <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
